@@ -1,0 +1,2 @@
+#!/bin/bash
+sudo docker run --publish-all --rm --detach --name flood -t flood 
