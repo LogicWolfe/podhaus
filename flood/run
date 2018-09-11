@@ -1,2 +1,10 @@
 #!/bin/bash
-sudo docker run --publish-all --rm --detach --name flood -t flood 
+sudo docker run \
+    --publish=42000:3000/tcp \
+    --mount='type=bind,source=/Users/nathan/tmp/data,destination=/data' \
+    --mount='type=volume,source=flood-db,destination=/flood-db' \
+    --rm \
+    --detach \
+    --name flood \
+    --tty \
+    flood 
