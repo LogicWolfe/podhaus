@@ -1,0 +1,18 @@
+#!/bin/bash
+sudo docker run \
+  --name=unifi \
+  --rm \
+  --detach \
+  --mount='type=volume,source=unifi,destination=/unifi' \
+  --net=host \
+  unifi
+
+# This uses host networking so no need to map ports. This only works on Linux.
+# Not using host networking would add challenges to discovery. These are the ports in use:
+# --publish 3478:3478/udp \
+# --publish 10001:10001/udp \
+# --publish 8080:8080 \
+# --publish 8443:8443 \
+# --publish 8843:8843 \
+# --publish 8880:8880 \
+# --publish 6789:6789 \
