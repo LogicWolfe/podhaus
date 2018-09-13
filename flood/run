@@ -1,8 +1,10 @@
 #!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
 sudo docker run \
     --publish=42000:3000/tcp \
-    --mount='type=bind,source=/Users/nathan/tmp/data,destination=/data' \
-    --mount='type=volume,source=flood-db,destination=/flood-db' \
+    --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
+    --mount="type=volume,source=flood-db,destination=/flood-db" \
     --rm \
     --detach \
     --name flood \
