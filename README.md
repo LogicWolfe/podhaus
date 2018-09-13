@@ -46,6 +46,8 @@ Secrets:        $PLEX_CLAIM_TOKEN
 
 ### Notes
 
+To generate a claim token go to: https://www.plex.tv/claim/
+
 Currently attempting to use macvlan networking to register itself as a new host on the network.
 **This isn't working** from my mac, maybe more luck with Linux or switch to host networking. Also,
 possible to bridge if necessary with further configuration.
