@@ -2,10 +2,11 @@
 
 ## Flood
 
-| Web interface | 42000                                      |
-| Volumes       | flood-db                                   |
-| Environment   | $MEDIA_DIR                                 |
-| Secrets       |                                            |
+```
+Web interface:  42000
+Volumes:        flood-db
+Environment:    $MEDIA_DIR
+```
 
 ### Notes
 
@@ -16,11 +17,11 @@ It also seems to be possible to kickstart it by running `ls /data`.
 
 ## UniFi
 
-| Web interface | 8443                                       |
-| Volumes       | unifi                                      |
-| Environment   | $TZ                                        |
-| Secrets       |                                            |
-
+```
+Web interface:  8443
+Volumes:        unifi
+Environment:    $TZ
+```
 ### Notes
 
 This uses host networking, which is only available in Linux. Actual ports in use are:
@@ -35,10 +36,12 @@ This uses host networking, which is only available in Linux. Actual ports in use
 
 ## Plex
 
-| Web interface | 32400                                      |
-| Volumes       | plex-config, plex-transcode                |
-| Environment   | $TZ, $MEDIA_DIR                            |
-| Secrets       | $PLEX_CLAIM_TOKEN                          |
+```
+Web interface:  32400
+Volumes:        plex-config
+Environment:    $TZ, $MEDIA_DIR
+Secrets:        $PLEX_CLAIM_TOKEN
+```
 
 ### Notes
 
