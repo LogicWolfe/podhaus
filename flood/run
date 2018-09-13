@@ -5,6 +5,7 @@ sudo docker run \
     --publish=42000:3000/tcp \
     --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
     --mount="type=volume,source=flood-db,destination=/flood-db" \
+    --env FLOOD_SECRET=$FLOOD_SECRET \
     --rm \
     --detach \
     --name flood \

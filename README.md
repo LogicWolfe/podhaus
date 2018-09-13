@@ -6,6 +6,7 @@
 Web interface:  42000
 Volumes:        flood-db
 Environment:    $MEDIA_DIR
+Secrets:        $FLOOD_SECRET
 ```
 
 ### Notes
