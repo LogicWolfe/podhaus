@@ -1,10 +1,10 @@
 #!/bin/bash
 source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
-docker run \
+sudo docker run \
     --detach \
     --rm \
     --name plex \
-    --network=physical \
+    --network=host \
     --env TZ="$TZ" \
     --env PLEX_CLAIM="$PLEX_CLAIM_TOKEN" \
     --hostname PodHaus.plex \
