@@ -2,13 +2,13 @@
 source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
 sudo docker run \
     --detach \
-    --rm \
-    --name plex \
-    --network=host \
-    --env TZ="$TZ" \
     --env PLEX_CLAIM="$PLEX_CLAIM_TOKEN" \
+    --env TZ="$TZ" \
     --hostname PodHaus.plex \
     --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
     --mount="type=tmpfs,destination=/transcode" \
     --mount="type=volume,source=plex-config,destination=/config" \
+    --name plex \
+    --network=host \
+    --restart=unless-stopped \
     plex

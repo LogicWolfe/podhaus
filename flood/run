@@ -2,12 +2,12 @@
 source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
 
 sudo docker run \
-    --publish=42000:3000/tcp \
+    --detach \
+    --env FLOOD_SECRET=$FLOOD_SECRET \
     --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
     --mount="type=volume,source=flood-db,destination=/flood-db" \
-    --env FLOOD_SECRET=$FLOOD_SECRET \
-    --rm \
-    --detach \
     --name flood \
+    --publish=42000:3000/tcp \
+    --restart=unless-stopped \
     --tty \
     flood 
