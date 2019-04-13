@@ -3,8 +3,7 @@
 # every time the containers are run or restarted.
 FROM plexinc/pms-docker:plexpass
 
-# Install Mesa libraries for GPU transcoding
+# Install drivers for GPU transcoding
 RUN \
   apt-get update && \
-  apt-get -y install libgl1-mesa-glx libgl1-mesa-dri && \
-  rm -rf /var/lib/apt/lists/*
+  apt-get -y install libgl1-mesa-glx libgl1-mesa-dri i965-va-driver vainfo

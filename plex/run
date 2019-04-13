@@ -1,12 +1,14 @@
 #!/bin/bash
 source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
-xhost + 
+
+# sudo chmod 777 /dev/dri /dev/dri/card0 /dev/dri/renderD128
+
 sudo docker run \
     --detach \
-    --device=/dev/dri:/dev/dri \
+    --device /dev/dri/card0:/dev/dri/card0 \
+    --device /dev/dri/renderD128:/dev/dri/renderD128 \
     --env PLEX_CLAIM="$PLEX_CLAIM_TOKEN" \
     --env TZ="$TZ" \
-    --env DISPLAY="$DISPLAY" \
     --hostname PodHaus.plex \
     --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
     --mount="type=tmpfs,destination=/transcode" \
