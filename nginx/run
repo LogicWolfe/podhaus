@@ -1,0 +1,11 @@
+#!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
+sudo docker run \
+    --detach \
+    --name nginx \
+    --net=dockernet \
+    --publish=80:80/tcp \
+    --restart=unless-stopped \
+    --tty \
+    nginx 

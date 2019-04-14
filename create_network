@@ -1,0 +1,2 @@
+#!/bin/bash
+docker network create -d bridge --subnet 172.16.42.0/24 --gateway 172.16.42.1 dockernet
