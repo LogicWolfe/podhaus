@@ -7,6 +7,7 @@ sudo docker run \
     --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
     --mount="type=volume,source=flood-db,destination=/flood-db" \
     --name flood \
+    --net=dockernet \
     --publish=42000:3000/tcp \
     --restart=unless-stopped \
     --tty \
