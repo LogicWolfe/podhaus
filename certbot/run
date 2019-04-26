@@ -1,0 +1,21 @@
+#!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
+sudo docker run \
+    --detach \
+    --name certbot \
+    --restart=unless-stopped \
+    --mount="type=volume,source=letsencrypt,destination=/etc/letsencrypt" \
+    --tty \
+    certbot
+
+
+certbot certonly \
+  --non-interactive \
+  --expand \
+  --agree-tos \
+  --keep-until-expiring \
+  --dns-dnsimple \
+  --dns-dnsimple-credentials /srv/certbot/dnsimple.ini \
+  -d torrent.pod.haus \
+  -d unifi.pod.haus

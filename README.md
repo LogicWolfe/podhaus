@@ -5,6 +5,7 @@
 ```
 Web interface:  42000
 Volumes:        flood-db
+Network:        dockernet
 Environment:    $MEDIA_DIR
 Secrets:        $FLOOD_SECRET
 ```
@@ -42,6 +43,20 @@ Web interface:  32400
 Volumes:        plex-config
 Environment:    $TZ, $MEDIA_DIR
 Secrets:        $PLEX_CLAIM_TOKEN
+```
+
+## Certbot
+
+```
+Volumes:        letsencrypt
+Build Secrets:  $DNSIMPLE_API_TOKEN
+```
+
+## Nginx
+
+```
+Volumes:        letsencrypt
+Network:        dockernet
 ```
 
 ### Notes
