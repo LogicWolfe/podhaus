@@ -4,8 +4,10 @@ source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_ru
 sudo docker run \
     --detach \
     --name nginx \
+    --mount="type=volume,source=letsencrypt,destination=/etc/letsencrypt,readonly" \
     --net=dockernet \
     --publish=80:80/tcp \
+    --publish=443:443/tcp \
     --restart=unless-stopped \
     --tty \
     nginx 
