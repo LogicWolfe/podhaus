@@ -9,13 +9,3 @@ sudo docker run \
     --tty \
     certbot
 
-
-certbot certonly \
-  --non-interactive \
-  --expand \
-  --agree-tos \
-  --keep-until-expiring \
-  --dns-dnsimple \
-  --dns-dnsimple-credentials /srv/certbot/dnsimple.ini \
-  -d torrent.pod.haus \
-  -d unifi.pod.haus
