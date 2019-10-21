@@ -16,4 +16,5 @@ CMD while true; do \
     --dns-dnsimple-credentials /srv/certbot/dnsimple.ini \
     -d torrent.pod.haus \
     -d unifi.pod.haus;\
+    -d reviewer.pod.haus;\
   sleep 86400; done
