@@ -3,7 +3,7 @@ source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_ru
 
 sudo docker run \
   --detach \
-  --mount="type=bind,source=$REVIEWER_DATA_DIR,destination=/data" \
+  --mount="type=volume,source=reviewer,destination=/data" \
   --name reviewer \
   --network=host \
   --restart=unless-stopped \
