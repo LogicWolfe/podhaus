@@ -14,7 +14,6 @@ CMD while true; do \
     --keep-until-expiring \
     --dns-dnsimple \
     --dns-dnsimple-credentials /srv/certbot/dnsimple.ini \
-    -d torrent.pod.haus \
-    -d unifi.pod.haus;\
-    -d reviewer.pod.haus;\
+    -d '*.pod.haus' \
+    -d pod.haus \
   sleep 86400; done
