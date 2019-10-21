@@ -15,5 +15,5 @@ CMD while true; do \
     --dns-dnsimple \
     --dns-dnsimple-credentials /srv/certbot/dnsimple.ini \
     -d '*.pod.haus' \
-    -d pod.haus \
+    -d pod.haus; \
   sleep 86400; done
