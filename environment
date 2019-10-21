@@ -1,2 +1,3 @@
 MEDIA_DIR="/mnt/Drobo5N/Public/"
 TZ="Australia/Perth"
+REVIEWER_DATA_DIR="/docker_data/reviewer"

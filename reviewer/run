@@ -1,0 +1,12 @@
+#!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
+sudo docker run \
+  --detach \
+  --mount="type=bind,source=$REVIEWER_DATA_DIR,destination=/data" \
+  --name reviewer \
+  --network=host \
+  --restart=unless-stopped \
+  --net=host \
+  --restart=unless-stopped \
+  reviewer
