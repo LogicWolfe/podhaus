@@ -1,0 +1,4 @@
+#!/bin/bash
+docker stop cloudflare-ddns && docker rm cloudflare-ddns
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/run
+

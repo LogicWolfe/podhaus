@@ -1,0 +1,10 @@
+#!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
+docker run \
+  --detach \
+  --name cloudflare-ddns \
+  --restart=unless-stopped \
+  -e API_KEY=$CLOUDFLARE_API_KEY \
+  --tty \
+  cloudflare-ddns

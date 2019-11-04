@@ -1,0 +1,3 @@
+#!/bin/bash
+docker stop cloudflare-ddns
+docker rm cloudflare-ddns
