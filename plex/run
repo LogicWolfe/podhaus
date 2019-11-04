@@ -9,7 +9,7 @@ sudo docker run \
     --device /dev/dri/renderD128:/dev/dri/renderD128 \
     --env PLEX_CLAIM="$PLEX_CLAIM_TOKEN" \
     --env TZ="$TZ" \
-    --hostname PodHaus.plex \
+    --hostname $PLEX_NAME \
     --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
     --mount="type=tmpfs,destination=/transcode" \
     --mount="type=volume,source=plex-config,destination=/config" \

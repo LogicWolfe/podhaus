@@ -1,0 +1,3 @@
+MEDIA_DIR="/mnt/media"
+TZ="America/Edmonton"
+PLEX_NAME="PineLake.plex"
