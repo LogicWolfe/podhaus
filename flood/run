@@ -4,6 +4,7 @@ source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_ru
 sudo docker run \
     --detach \
     --env FLOOD_SECRET=$FLOOD_SECRET \
+    --env GID=$VIDEO_GID \
     --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
     --mount="type=volume,source=flood-db,destination=/flood-db" \
     --name flood \
