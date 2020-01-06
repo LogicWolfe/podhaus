@@ -1,0 +1,4 @@
+#!/bin/bash
+docker stop flood && docker rm flood
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/run
+
