@@ -10,7 +10,7 @@ sudo docker run \
     --env PLEX_GID="$VIDEO_GID" \
     --hostname "$PLEX_NAME" \
     --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
-    --mount="type=tmpfs,destination=/transcode" \
+    --mount="type=bind,source=$TRANSCODE_DIR,destination=/transcode" \
     --mount="type=volume,source=plex-config,destination=/config" \
     --name plex \
     --network=host \
