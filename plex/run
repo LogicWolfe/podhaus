@@ -2,17 +2,20 @@
 source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
 
 sudo docker run \
-    --detach \
-    --device /dev/dri/card0:/dev/dri/card0 \
-    --device /dev/dri/renderD128:/dev/dri/renderD128 \
-    --env PLEX_CLAIM="$PLEX_CLAIM_TOKEN" \
-    --env TZ="$TZ" \
-    --env PLEX_GID="$VIDEO_GID" \
-    --hostname "$PLEX_NAME" \
-    --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
-    --mount="type=bind,source=$TRANSCODE_DIR,destination=/transcode" \
-    --mount="type=volume,source=plex-config,destination=/config" \
-    --name plex \
-    --network=host \
-    --restart=unless-stopped \
-    plex
+  --log-driver=splunk \
+  --log-opt splunk-url=$HUMIO_URL \
+  --log-opt splunk-token=$HUMIO_INGEST_TOKEN \
+  --detach \
+  --device /dev/dri/card0:/dev/dri/card0 \
+  --device /dev/dri/renderD128:/dev/dri/renderD128 \
+  --env PLEX_CLAIM="$PLEX_CLAIM_TOKEN" \
+  --env TZ="$TZ" \
+  --env PLEX_GID="$VIDEO_GID" \
+  --hostname "$PLEX_NAME" \
+  --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
+  --mount="type=bind,source=$TRANSCODE_DIR,destination=/transcode" \
+  --mount="type=volume,source=plex-config,destination=/config" \
+  --name plex \
+  --network=host \
+  --restart=unless-stopped \
+  plex

@@ -2,14 +2,17 @@
 source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
 
 sudo docker run \
-    --detach \
-    --env FLOOD_SECRET=$FLOOD_SECRET \
-    --env GID=$VIDEO_GID \
-    --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
-    --mount="type=volume,source=flood-db,destination=/flood-db" \
-    --name flood \
-    --net=dockernet \
-    --publish=42000:3000/tcp \
-    --restart=unless-stopped \
-    --tty \
-    flood 
+  --log-driver=splunk \
+  --log-opt splunk-url=$HUMIO_URL \
+  --log-opt splunk-token=$HUMIO_INGEST_TOKEN \
+  --detach \
+  --env FLOOD_SECRET=$FLOOD_SECRET \
+  --env GID=$VIDEO_GID \
+  --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
+  --mount="type=volume,source=flood-db,destination=/flood-db" \
+  --name flood \
+  --net=dockernet \
+  --publish=42000:3000/tcp \
+  --restart=unless-stopped \
+  --tty \
+  flood

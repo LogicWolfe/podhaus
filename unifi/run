@@ -2,6 +2,9 @@
 source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
 
 sudo docker run \
+  --log-driver=splunk \
+  --log-opt splunk-url=$HUMIO_URL \
+  --log-opt splunk-token=$HUMIO_INGEST_TOKEN \
   --detach \
   --env TZ="$TZ" \
   --mount='type=volume,source=unifi,destination=/unifi' \
