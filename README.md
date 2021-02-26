@@ -49,7 +49,7 @@ Secrets:        $PLEX_CLAIM_TOKEN
 
 ```
 Volumes:        letsencrypt
-Build Secrets:  $DNSIMPLE_API_TOKEN
+Build Secrets:  $CLOUDFLARE_API_TOKEN
 ```
 
 ## Nginx
