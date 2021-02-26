@@ -1,3 +1,1 @@
-#!/bin/bash
-docker stop reviewer
-docker rm reviewer
+../stop

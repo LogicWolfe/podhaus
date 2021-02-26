@@ -1,4 +1,1 @@
-#!/bin/bash
-docker stop reviewer && docker rm reviewer
-source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/run
-
+../restart

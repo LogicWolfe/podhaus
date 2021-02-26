@@ -1,3 +1,1 @@
-#!/bin/bash
-docker stop plex && docker rm plex
-source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/run
+../restart
