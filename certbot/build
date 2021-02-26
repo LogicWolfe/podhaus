@@ -1,4 +1,4 @@
 #!/bin/bash
 docker pull python
 source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
-sudo docker build --build-arg dnsimple_api_token=${DNSIMPLE_API_TOKEN} -t certbot .
+sudo docker build --build-arg cloudflare_api_token=${CLOUDFLARE_API_TOKEN} -t certbot .

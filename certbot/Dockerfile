@@ -1,10 +1,10 @@
 FROM python:latest
 RUN pip install certbot
-RUN pip install certbot-dns-dnsimple
+RUN pip install certbot-dns-cloudflare
 RUN mkdir /srv/certbot
-ARG dnsimple_api_token
-RUN echo "dns_dnsimple_token = $dnsimple_api_token" > /srv/certbot/dnsimple.ini
-RUN chmod 0600 /srv/certbot/dnsimple.ini
+ARG cloudflare_api_token
+RUN echo "dns_cloudflare_api_token = $cloudflare_api_token" > /srv/certbot/cloudflare.ini
+RUN chmod 0600 /srv/certbot/cloudflare.ini
 WORKDIR /srv/certbot
 CMD while true; do \
   certbot certonly \
@@ -12,8 +12,8 @@ CMD while true; do \
     --expand \
     --agree-tos \
     --keep-until-expiring \
-    --dns-dnsimple \
-    --dns-dnsimple-credentials /srv/certbot/dnsimple.ini \
+    --dns-cloudflare \
+    --dns-cloudflare-credentials /srv/certbot/cloudflare.ini \
     -d '*.pod.haus' \
     -d pod.haus; \
   sleep 86400; done
