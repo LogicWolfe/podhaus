@@ -1,7 +1,5 @@
 #!/bin/bash
-NAME=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && printf '%s\n' "${PWD##*/}" )
-PATH=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )
+PROJECT_PATH=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )
 
-docker stop $NAME && docker rm $NAME
-source $PATH/stop
-source $PATH/run
+$PROJECT_PATH/stop
+$PROJECT_PATH/run
