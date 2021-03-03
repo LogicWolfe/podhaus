@@ -4,5 +4,7 @@ for d in */ ; do
   cd $d
   ln -s ../restart restart
   ln -s ../stop stop
+  ln -s ../build build
+  ln -s ../connect connect
   cd ..
 done
