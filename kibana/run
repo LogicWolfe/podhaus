@@ -5,6 +5,9 @@ sudo docker run \
   --detach \
   --name kibana \
   --net dockernet \
-  --link elastic:elasticsearch \
+  --link elasticsearch:elasticsearch \
+  --log-driver=elastic/elastic-logging-plugin:7.11.1 \
+  --log-opt hosts="http://localhost:9200" \
+  --log-opt index="dockerlogs-%{+yyyy.MM}" \
   -p 5601:5601 \
   kibana

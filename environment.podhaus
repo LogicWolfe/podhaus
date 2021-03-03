@@ -2,4 +2,3 @@ MEDIA_DIR="/mnt/Kangaroo/Pouch"
 TRANSCODE_DIR="/mnt/Kangaroo/Pouch/transcode"
 TZ="Australia/Perth"
 VIDEO_GID="44"
-HUMIO_URL=https://cloud.humio.com:443
