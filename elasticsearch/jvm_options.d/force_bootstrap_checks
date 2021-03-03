@@ -1,0 +1,2 @@
+# Force bootstrap checks even though it's a single node cluster
+-es.enforce.bootstrap.checks=true
