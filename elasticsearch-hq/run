@@ -1,0 +1,10 @@
+#!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
+sudo docker run \
+  --detach \
+  --net dockernet \
+  -p 5000:5000 \
+  --name elasticsearch-hq \
+  --env HQ_DEFAULT_URL="http://elasticsearch:9200" \
+  elasticsearch-hq
