@@ -5,6 +5,7 @@ sudo docker run \
   --detach \
   --name elasticsearch \
   --net dockernet \
+  --restart=unless-stopped \
   -p 9200:9200 \
   -p 9300:9300 \
   -e "discovery.type=single-node" \
