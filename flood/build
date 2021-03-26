@@ -1,2 +1,1 @@
-#!/bin/bash
-sudo docker build -t flood .
+../build

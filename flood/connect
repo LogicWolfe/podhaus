@@ -1,2 +1,1 @@
-#!/bin/bash
-sudo docker exec -it flood /bin/sh
+../connect
