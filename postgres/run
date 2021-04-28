@@ -1,0 +1,11 @@
+#!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
+sudo docker run \
+  --detach \
+  --name postgres \
+  --restart=unless-stopped \
+  -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD\
+  -p 5432:5432 \
+  --mount="type=volume,source=postgres-data,destination=/var/lib/postgresql/data" \
+  postgres
