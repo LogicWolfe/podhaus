@@ -1,0 +1,22 @@
+#!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
+#   --privileged \ this might be necessary to use local devices
+sudo docker run \
+  --detach \
+  --name home-assistant \
+  --restart=unless-stopped \
+  --env TZ=$TZ \
+  --network=host \
+  --mount="type=volume,source=home-assistant-config,destination=/config" \
+  home-assistant
+
+
+# docker run -d \
+#   --name homeassistant \
+#   --privileged \
+#   --restart=unless-stopped \
+#   -e TZ=MY_TIME_ZONE \
+#   --mount="type=volume,source=home-assistant-config,destination=/config" \
+#   --network=host \
+#   ghcr.io/home-assistant/home-assistant:stable
