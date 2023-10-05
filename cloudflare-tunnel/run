@@ -1,0 +1,10 @@
+#!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
+sudo docker run \
+  --detach \
+  --name cloudflare-tunnel \
+  --net=dockernet \
+  --restart=unless-stopped \
+  --tty \
+  cloudflare-tunnel tunnel --no-autoupdate run --token $CLOUDFLARE_TUNNEL_TOKEN
