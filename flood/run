@@ -14,4 +14,4 @@ sudo docker run \
   --publish=42000:3000/tcp \
   --restart=unless-stopped \
   --tty \
-  flood
+  flood --auth=none --rtsocket=/tmp/rtorrent.sock
