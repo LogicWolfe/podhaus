@@ -1,3 +1,2 @@
-FROM wonderfall/rtorrent-flood
-COPY rootfs /
+FROM jesec/rtorrent-flood
 CMD ["run.sh"]

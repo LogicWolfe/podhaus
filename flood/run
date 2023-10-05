@@ -3,10 +3,12 @@ source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_ru
 
 sudo docker run \
   --detach \
+  --env HOME=/flood-db \
   --env FLOOD_SECRET=$FLOOD_SECRET \
   --env GID=$VIDEO_GID \
   --mount="type=bind,source=$MEDIA_DIR,destination=/data" \
   --mount="type=volume,source=flood-db,destination=/flood-db" \
+  -u 1000:1001 \
   --name flood \
   --net=dockernet \
   --publish=42000:3000/tcp \
