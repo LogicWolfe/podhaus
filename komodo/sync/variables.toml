@@ -1,0 +1,8 @@
+# Non-secret variables shared across stacks.
+# Add variables here as services are migrated to Komodo.
+# Secrets come from 1Password via komodo-op — don't put secrets here.
+#
+# Format:
+#   [[variable]]
+#   name = "VAR_NAME"
+#   value = "value"

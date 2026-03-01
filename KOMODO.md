@@ -195,31 +195,39 @@ No `sudo` needed — user is in the docker group.
 - [x] Komodo UI → Settings → Variables shows 14 variables (4 bootstrap + 10 from vault)
 - [x] Naming confirmed: `OP__KOMODO__<ITEM-NAME>__<FIELD-LABEL>` pattern
 
-### 4. Create and deploy Paperless-ngx
-
-- [ ] Write `paperless/docker-compose.yml` (webserver, postgres, redis, tika, gotenberg)
-- [ ] Create Stack in Komodo pointing at compose file
-- [ ] Deploy and verify
-- [ ] Configure Cloudflare Tunnel route
-
-### 5. Convert remaining podhaus services
-
-- [ ] For each service: convert run script → compose file → Komodo Stack → verify
-- [ ] When cloudflare-tunnel is running as a Komodo Stack: remove `dockernet` and `networks` from `komodo/ferretdb.compose.yaml` (core is on dockernet temporarily so the legacy tunnel container can reach it; once the tunnel is a Komodo Stack on the same compose network, this is unnecessary)
-
-### 6. Set up Resource Sync
+### 4. Set up Resource Sync
 
 - [ ] Write TOML for servers, stacks, variables
 - [ ] Structure: `servers.toml` defines both podhaus and pinelake (pinelake address TBD)
 - [ ] `podhaus-stacks.toml` for current services
 - [ ] Create Resource Sync in Komodo, verify
 
-### 7. Clean up old infrastructure
+### 5. Migrate Cloudflare Tunnel to Komodo
+
+- [ ] Write `cloudflare-tunnel/docker-compose.yml` (replaces run script + Dockerfile)
+- [ ] Add stack definition to `podhaus-stacks.toml`
+- [ ] `CLOUDFLARE_TUNNEL_TOKEN` secret via 1Password → Komodo variable
+- [ ] Deploy via Resource Sync and verify tunnel is routing traffic
+- [ ] Remove `dockernet` and `networks` from `komodo/ferretdb.compose.yaml` (Core no longer needs dockernet once the tunnel is a Komodo Stack on the same compose network)
+- [ ] Stop and remove the old cloudflare-tunnel container
+
+### 6. Create and deploy Paperless-ngx
+
+- [ ] Write `paperless/docker-compose.yml` (webserver, postgres, redis, tika, gotenberg)
+- [ ] Create Stack in Komodo pointing at compose file
+- [ ] Deploy and verify
+- [ ] Configure Cloudflare Tunnel route
+
+### 7. Convert remaining podhaus services
+
+- [ ] For each service: convert run script → compose file → Komodo Stack → verify
+
+### 8. Clean up old infrastructure
 
 - [ ] Remove run scripts, before_run, management scripts, secrets/encryption tooling
 - [ ] Update CLAUDE.md and README.md
 
-### 8. (Later) Add pinelake
+### 9. (Later) Add pinelake
 
 - [ ] Install Tailscale on both machines if not already running
 - [ ] Install Docker on pinelake (Docker Desktop or OrbStack for macOS)
