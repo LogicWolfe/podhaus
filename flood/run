@@ -11,6 +11,7 @@ sudo docker run \
   -u 1000:1001 \
   --name flood \
   --net=dockernet \
+  --ip 172.18.0.42 \
   --publish=42000:3000/tcp \
   --restart=unless-stopped \
   --tty \
