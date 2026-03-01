@@ -204,12 +204,25 @@ onenote-md-exporter.exe --all-notebooks --output C:\OneNoteExport
 
 ## Phase 3: Import into Paperless-ngx
 
+### Tagging Strategy
+
+The upload script tags imported documents with their OneNote source context:
+
+- **Notebook tags** (e.g. "Work", "Personal") — top-level organizational tags.
+- **Section tags** (e.g. "Taxes", "Immigration") — finer categorization within notebooks.
+
+These are flat tags (no nesting). They give you the ability to filter by original OneNote location without polluting your tag system.
+
+### Linking Related Files
+
+For OneNote pages that have attachments, the script uses Paperless-ngx's **document link** custom field to create navigable relationships between the page's markdown note and its attachments. In the web UI, linked documents appear as clickable references — you can jump between related files directly.
+
+The script processes one OneNote page at a time: upload all files for that page, wait for them to be consumed and assigned document IDs, then set the document link field on each one pointing to the others. This requires polling the API for task completion since document consumption is asynchronous.
+
 ### Upload Script
 
-A Python script walks the exported folder tree and uploads each file to Paperless-ngx via the REST API, preserving the organizational structure as tags. Notebook names and section names each become a tag, so a document at `Work/Taxes/2024-return.pdf` gets tagged with both "Work" and "Taxes".
-
 ```python
-import requests, os, sys
+import requests, time
 from pathlib import Path
 
 PAPERLESS_URL = "https://paperless.yourdomain.com"
@@ -217,35 +230,117 @@ API_TOKEN = "your-api-token-here"
 EXPORT_DIR = Path("C:/OneNoteExport")
 
 headers = {"Authorization": f"Token {API_TOKEN}"}
+tag_cache = {}
 
 def get_or_create_tag(name):
-    # Check if tag exists, create if not
+    if name.lower() in tag_cache:
+        return tag_cache[name.lower()]
     resp = requests.get(f"{PAPERLESS_URL}/api/tags/",
         params={"name__iexact": name}, headers=headers)
     results = resp.json()["results"]
     if results:
+        tag_cache[name.lower()] = results[0]["id"]
         return results[0]["id"]
     resp = requests.post(f"{PAPERLESS_URL}/api/tags/",
         json={"name": name}, headers=headers)
+    tag_id = resp.json()["id"]
+    tag_cache[name.lower()] = tag_id
+    return tag_id
+
+def get_or_create_custom_field(name, data_type="documentlink"):
+    resp = requests.get(f"{PAPERLESS_URL}/api/custom_fields/",
+        params={"name__iexact": name}, headers=headers)
+    results = resp.json()["results"]
+    if results:
+        return results[0]["id"]
+    resp = requests.post(f"{PAPERLESS_URL}/api/custom_fields/",
+        json={"name": name, "data_type": data_type}, headers=headers)
     return resp.json()["id"]
 
+def upload_and_get_doc_id(filepath, title, tag_ids):
+    """Upload a file and wait for consumption to complete. Returns document ID."""
+    with open(filepath, "rb") as f:
+        resp = requests.post(
+            f"{PAPERLESS_URL}/api/documents/post_document/",
+            headers=headers,
+            data={"title": title, "tags": tag_ids},
+            files={"document": f},
+        )
+    task_id = resp.json()
+    # Poll for task completion
+    while True:
+        time.sleep(2)
+        resp = requests.get(
+            f"{PAPERLESS_URL}/api/tasks/?task_id={task_id}",
+            headers=headers)
+        tasks = resp.json()
+        if not tasks:
+            continue
+        task = tasks[0] if isinstance(tasks, list) else tasks
+        if task.get("status") == "SUCCESS":
+            return task["related_document"]
+        if task.get("status") == "FAILURE":
+            print(f"FAILED: {filepath} - {task.get('result')}")
+            return None
+
+def link_documents(doc_ids, field_id):
+    """Set document link field on each document, pointing to all others in the group."""
+    for doc_id in doc_ids:
+        others = [d for d in doc_ids if d != doc_id]
+        resp = requests.patch(
+            f"{PAPERLESS_URL}/api/documents/{doc_id}/",
+            headers=headers,
+            json={"custom_fields": [{"field": field_id, "value": others}]},
+        )
+        if resp.status_code != 200:
+            print(f"Failed to link doc {doc_id}: {resp.text}")
+
+# Create the "Related Documents" custom field once
+link_field_id = get_or_create_custom_field("Related Documents")
+
+# Group files by their parent page
+# Export structure: Notebook/Section/Page.md + Page_attachments/file.pdf
+page_files = {}
 for filepath in EXPORT_DIR.rglob("*"):
     if filepath.is_dir():
         continue
     parts = filepath.relative_to(EXPORT_DIR).parts
+    page_dir = filepath.parent
+    if page_dir.name.endswith("_attachments"):
+        page_name = page_dir.name.removesuffix("_attachments")
+        section_dir = page_dir.parent
+    else:
+        page_name = filepath.stem
+        section_dir = filepath.parent
     notebook = parts[0] if len(parts) > 1 else "Unsorted"
-    section = parts[1] if len(parts) > 2 else None
+    section = section_dir.name if section_dir != EXPORT_DIR else None
+    key = (notebook, section, page_name)
+    if key not in page_files:
+        page_files[key] = []
+    page_files[key].append(filepath)
+
+# Upload page by page, linking related documents
+for (notebook, section, page_name), files in page_files.items():
     tag_ids = [get_or_create_tag(notebook)]
-    if section:
+    if section and section != notebook:
         tag_ids.append(get_or_create_tag(section))
-    with open(filepath, "rb") as f:
-        requests.post(
-            f"{PAPERLESS_URL}/api/documents/post_document/",
-            headers=headers,
-            data={"title": filepath.stem, "tags": tag_ids},
-            files={"document": f},
-        )
+
+    print(f"Uploading: {notebook}/{section}/{page_name} ({len(files)} files)")
+
+    # Upload all files for this page and collect document IDs
+    doc_ids = []
+    for filepath in files:
+        doc_id = upload_and_get_doc_id(filepath, filepath.stem, tag_ids)
+        if doc_id:
+            doc_ids.append(doc_id)
+
+    # Link documents together if the page had multiple files
+    if len(doc_ids) > 1:
+        link_documents(doc_ids, link_field_id)
+        print(f"  Linked {len(doc_ids)} documents")
 ```
+
+The script is deliberately sequential — one page at a time, waiting for each file to be consumed before moving on. This is slower than a bulk fire-and-forget upload but ensures every document has an ID before linking. For a large OneNote collection, expect this to run for several hours.
 
 ### How Markdown Files Are Handled
 
@@ -323,15 +418,50 @@ rclone sync /path/to/paperless-export onedrive:Paperless-Backup --progress
 
 After the initial full upload, subsequent syncs are incremental. Rclone compares file size and modification time, and only uploads documents that are new or changed. Since Paperless originals are immutable once ingested, the bulk of your data stays static — only newly added documents and the updated `manifest.json` get uploaded each night.
 
-### Step 3: Schedule the Sync
+### Step 3: Schedule and Monitor with Uptime Kuma
 
-Add rclone to the same cron schedule, running after the export completes:
+Create a push monitor in Uptime Kuma to verify backups are completing successfully:
+
+1. In Uptime Kuma, add a new monitor with type **Push (Passive)**.
+2. Set the heartbeat interval to **90000 seconds** (~25 hours) — this gives your daily cron a few hours of grace period.
+3. Copy the push URL (e.g. `https://uptime.yourdomain.com/api/push/xxxxxxxx`).
+
+Create a backup script that only reports success to Uptime Kuma if both the export and the sync complete without errors. If either step fails, it reports the failure immediately rather than waiting for the heartbeat to expire:
 
 ```bash
-# Example crontab entry: export at 2am, sync at 3am
-0 2 * * * docker compose -f /path/to/docker-compose.yml exec -T webserver document_exporter /path/to/paperless-export
-0 3 * * * rclone sync /path/to/paperless-export onedrive:Paperless-Backup --log-file /var/log/rclone-paperless.log
+#!/bin/bash
+# /usr/local/bin/paperless-backup.sh
+
+PUSH_URL="https://uptime.yourdomain.com/api/push/xxxxxxxx"
+COMPOSE_FILE="/path/to/docker-compose.yml"
+EXPORT_DIR="/path/to/paperless-export"
+LOG_FILE="/var/log/rclone-paperless.log"
+
+# Step 1: Export
+docker compose -f "$COMPOSE_FILE" exec -T webserver document_exporter "$EXPORT_DIR"
+if [ $? -ne 0 ]; then
+    curl -s "${PUSH_URL}?status=down&msg=Export+failed"
+    exit 1
+fi
+
+# Step 2: Sync to OneDrive
+rclone sync "$EXPORT_DIR" onedrive:Paperless-Backup --log-file "$LOG_FILE"
+if [ $? -ne 0 ]; then
+    curl -s "${PUSH_URL}?status=down&msg=Rclone+sync+failed"
+    exit 1
+fi
+
+# Both succeeded
+curl -s "${PUSH_URL}?status=up&msg=OK"
 ```
+
+Schedule it nightly via cron:
+
+```bash
+0 2 * * * /usr/local/bin/paperless-backup.sh
+```
+
+If the script doesn't check in within 25 hours, or if it checks in with a failure status, Uptime Kuma triggers an alert through whatever notification channels you have configured (email, Telegram, etc.).
 
 ### How OneDrive Provides Versioning
 
