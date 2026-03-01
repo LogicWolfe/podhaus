@@ -1,0 +1,71 @@
+version: "3.9"
+services:
+  # flood:
+  #   hostname: flood
+  #   image: jesec/flood
+  #   user: 501:20
+  #   restart: unless-stopped
+  #   command: --allowedpath /data
+  #   tty: true
+  #   environment:
+  #     HOME: /config
+  #   volumes:
+  #     - type: volume
+  #       source: flood
+  #       target: /config
+  #     - type: volume
+  #       source: media
+  #       target: /data
+  #   ports:
+  #     - 0.0.0.0:3000:3000
+
+  nginx:
+    restart: unless-stopped
+    tty: true
+    image: nginx
+    volumes:
+    - type: volume
+      source: letsencrypt
+      target: /etc/letsencrypt
+      read_only: true
+    ports:
+      - 0.0.0.0:80:80
+      - 0.0.0.0:443:443
+
+
+  # rtorrent:
+  #   hostname: rtorrent
+  #   image: jesec/rtorrent
+  #   user: 501:20
+  #   restart: unless-stopped
+  #   command: -o network.port_range.set=6881-6881,system.daemon.set=true
+  #   tty: true
+  #   environment:
+  #     HOME: /config
+  #   volumes:
+  #     - type: volume
+  #       source: flood
+  #       target: /config
+  #     - type: bind
+  #       source: ${MEDIA_DIR}
+  #       target: /data
+  #   ports:
+  #     - 0.0.0.0:6881:6881
+
+volumes:
+  flood:
+    driver_opts:
+      type: "nfs"
+      o: "addr=${NFS_HOST},nolock,soft,rw"
+      device: ":${DOCKER_VOLUME_PATH}/flood"
+  letsencrypt:
+    driver_opts:
+      type: "nfs"
+      o: "addr=${NFS_HOST},nolock,soft,rw"
+      device: ":${DOCKER_VOLUME_PATH}/letsencrypt"
+  media:
+    driver_opts:
+      type: "nfs"
+      o: "addr=${NFS_HOST},nolock,soft,rw"
+      device: ":${DOCKER_VOLUME_PATH}"
+  
