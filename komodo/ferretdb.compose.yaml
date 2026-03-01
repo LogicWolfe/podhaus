@@ -67,6 +67,7 @@ services:
       TZ: ${TZ}
     volumes:
       - ${COMPOSE_KOMODO_BACKUPS_PATH}:/backups
+      - ${COMPOSE_KOMODO_SYNC_PATH}:/syncs/podhaus
 
   periphery:
     container_name: komodo-periphery

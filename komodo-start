@@ -2,5 +2,64 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+
 op run --env-file komodo/compose.env -- \
   docker compose -p komodo -f komodo/ferretdb.compose.yaml --env-file komodo/compose.env up -d
+
+echo "Waiting for Komodo Core..."
+until curl -sf -o /dev/null http://localhost:9120/; do
+  sleep 2
+done
+echo "Komodo Core is ready"
+
+api_key=$(op read "op://Homelab/Komodo API OnePassword Sync/username")
+api_secret=$(op read "op://Homelab/Komodo API OnePassword Sync/credential")
+
+komodo_api() {
+  local endpoint="$1" payload="$2"
+  curl -sf -X POST "http://localhost:9120/${endpoint}" \
+    -H "Content-Type: application/json" \
+    -H "X-Api-Key: ${api_key}" \
+    -H "X-Api-Secret: ${api_secret}" \
+    -d "$payload"
+}
+
+seed_variable() {
+  local name="$1" value="$2"
+  local create_payload update_payload
+  create_payload=$(jq -n --arg n "$name" --arg v "$value" \
+    '{type: "CreateVariable", params: {name: $n, value: $v, is_secret: true}}')
+  update_payload=$(jq -n --arg n "$name" --arg v "$value" \
+    '{type: "UpdateVariableValue", params: {name: $n, value: $v}}')
+  komodo_api write "$create_payload" > /dev/null 2>&1 || \
+    komodo_api write "$update_payload" > /dev/null
+  echo "  ${name}"
+}
+
+echo "Seeding 1Password variables into Komodo..."
+seed_variable "ONEPASSWORD_CREDENTIALS" \
+  "$(op document get "Homelab Credentials File" --vault Homelab)"
+seed_variable "ONEPASSWORD_CONNECT_TOKEN" \
+  "$(op read "op://Homelab/Homelab Access Token Komodo/credential")"
+seed_variable "ONEPASSWORD_API_KEY" "$api_key"
+seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
+
+echo "Creating Resource Sync..."
+komodo_api write '{
+  "type": "CreateResourceSync",
+  "params": {
+    "name": "podhaus",
+    "config": {
+      "files_on_host": true,
+      "resource_path": ["."]
+    }
+  }
+}' > /dev/null 2>&1 || true
+
+echo "Running sync..."
+komodo_api execute '{
+  "type": "RunSync",
+  "params": { "sync": "podhaus" }
+}' > /dev/null
+
+echo "Done"

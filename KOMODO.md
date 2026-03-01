@@ -165,17 +165,35 @@ No `sudo` needed — user is in the docker group.
 
 ### 2. Set up 1Password Connect
 
-- [ ] Create a dedicated "Komodo" vault in 1Password
-- [ ] Set up 1Password Connect Server integration
-- [ ] Download `1password-credentials.json`
-- [ ] Create a Service Account with read access to the vault
-- [ ] Populate vault with secrets (use server-prefixed naming for per-server values)
+#### 2a. Define onepassword stack in Resource Sync TOML (Claude)
 
-### 3. Deploy 1Password Connect + komodo-op as a Komodo Stack
+- [x] `komodo/sync/podhaus-stacks.toml` — onepassword stack with inline compose (`file_contents`)
+- [x] 3-service compose: `op-connect-api`, `op-connect-sync`, `komodo-op`
+- [x] `1password-credentials.json` injected via compose `configs` from `OP_CREDENTIALS` env var — never written to disk
+- [x] 4 secrets via `[[VARIABLE]]` interpolation in stack environment
+- [x] `deploy = true` so Resource Sync triggers deployment
 
-- [ ] Create `onepassword/docker-compose.yml` with all 3 containers
-- [ ] Mount `1password-credentials.json` (git-ignored)
-- [ ] Create Stack in Komodo, deploy, verify secrets appear in Komodo Variables
+#### 2b. Bootstrap variable seeding in komodo-start (Claude)
+
+- [x] `komodo-start` waits for Core to be healthy after startup
+- [x] Reads API key/secret from 1Password via `op read`
+- [x] Seeds 4 Komodo Variables via the Core API: `ONEPASSWORD_CREDENTIALS`, `ONEPASSWORD_CONNECT_TOKEN`, `ONEPASSWORD_API_KEY`, `ONEPASSWORD_API_SECRET`
+- [x] Idempotent — creates on first run, updates on subsequent runs
+
+#### 2c. Resource Sync automation in komodo-start (Claude)
+
+- [x] Mount `komodo/sync/` into Core container at `/syncs/podhaus`
+- [x] `komodo-start` creates "podhaus" ResourceSync (`files_on_host`, `resource_path: ["."]`)
+- [x] `komodo-start` triggers `RunSync` after variable seeding
+
+### 3. Deploy and verify 1Password Connect + komodo-op
+
+- [x] Run `./komodo-start` — seeds variables, creates Resource Sync, triggers sync
+- [x] Resource Sync creates and deploys onepassword stack automatically
+- [x] `docker logs op-connect-api` — successfully serving vault item requests
+- [x] `docker logs komodo-op` — synced 10 secrets, 0 errors
+- [x] Komodo UI → Settings → Variables shows 14 variables (4 bootstrap + 10 from vault)
+- [x] Naming confirmed: `OP__KOMODO__<ITEM-NAME>__<FIELD-LABEL>` pattern
 
 ### 4. Create and deploy Paperless-ngx
 
