@@ -1,0 +1,11 @@
+#!/bin/bash
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+
+sudo docker run \
+  --detach \
+  --name owntone \
+  --network=host \
+  --restart=unless-stopped \
+  --tty \
+  owntone
+
