@@ -1,0 +1,10 @@
+[[server]]
+name = "podhaus"
+description = "Primary home server (Linux)"
+tags = ["podhaus"]
+
+[server.config]
+address = "https://periphery:8120"
+enabled = true
+disk_warning = 85.0
+disk_critical = 95.0

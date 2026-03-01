@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+op run --env-file komodo/compose.env -- \
+  docker compose -p komodo -f komodo/ferretdb.compose.yaml --env-file komodo/compose.env pull
+op run --env-file komodo/compose.env -- \
+  docker compose -p komodo -f komodo/ferretdb.compose.yaml --env-file komodo/compose.env up -d

@@ -4,3 +4,4 @@ secrets
 *.sync-conflict-*
 .syncthing.*.tmp
 dbase_and_logs/
+OP_SERVICE_ACCOUNT_TOKEN

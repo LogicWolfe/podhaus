@@ -88,3 +88,51 @@ Defined in environment files (`environment.podhaus`, `environment.pinelake`):
 ## docker-compose.yml
 
 Mostly vestigial. Only nginx is defined as an active service. The repo primarily uses individual `run` scripts instead.
+
+---
+
+## Komodo (migration in progress)
+
+Infrastructure is being migrated from individual `docker run` scripts to [Komodo](https://komo.do), a container management platform. See `KOMODO.md` for the full migration plan and progress.
+
+### Architecture
+
+Komodo Core runs on podhaus as the single control plane. Periphery agents run on each managed server. Secrets are stored in 1Password and injected at startup via `op run`.
+
+```
+komodo/
+  ferretdb.compose.yaml   # Komodo stack: postgres, ferretdb, core, periphery
+  compose.env             # Config + op:// secret references
+```
+
+### Secrets management
+
+Secrets use 1Password Service Accounts with `op run` for injection:
+
+- `compose.env` contains `op://Homelab/...` references (safe to commit)
+- `op run --env-file compose.env` resolves references into process env vars
+- The compose file uses `${VAR}` interpolation to pass resolved values into containers
+- `OP_SERVICE_ACCOUNT_TOKEN` file provides the service account credential (git-ignored)
+
+### Helper scripts
+
+| Script | Description |
+|---|---|
+| `komodo-start` | Resolve secrets via `op run`, start all containers |
+| `komodo-stop` | Stop and remove all containers |
+| `komodo-status` | Show container status |
+| `komodo-upgrade` | Pull latest images and restart |
+
+### Containers
+
+| Container | Image | Purpose |
+|---|---|---|
+| `komodo-core` | `ghcr.io/moghtech/komodo-core` | API + web UI (port 9120) |
+| `komodo-periphery` | `ghcr.io/moghtech/komodo-periphery` | Local agent, Docker socket access |
+| `komodo-ferretdb` | `ghcr.io/ferretdb/ferretdb` | MongoDB-compatible API over Postgres |
+| `komodo-postgres` | `ghcr.io/ferretdb/postgres-documentdb` | Backing store for FerretDB |
+
+### Access
+
+- Web UI: `https://komodo.pod.haus` (via Cloudflare Tunnel)
+- komodo-core is temporarily on `dockernet` so the legacy tunnel container can reach it
