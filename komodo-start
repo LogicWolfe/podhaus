@@ -44,38 +44,4 @@ seed_variable "ONEPASSWORD_CONNECT_TOKEN" \
 seed_variable "ONEPASSWORD_API_KEY" "$api_key"
 seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
 
-echo "Creating Resource Sync..."
-komodo_api write '{
-  "type": "CreateResourceSync",
-  "params": {
-    "name": "podhaus",
-    "config": {
-      "files_on_host": true,
-      "resource_path": ["."]
-    }
-  }
-}' > /dev/null 2>&1 || true
-
-echo "Running initial sync..."
-komodo_api execute '{
-  "type": "RunSync",
-  "params": { "sync": "podhaus" }
-}' > /dev/null
-
-echo "Waiting for komodo-op to sync secrets..."
-while true; do
-  count=$(komodo_api read '{"type": "ListVariables", "params": {}}' | jq 'length')
-  if [ "$count" -gt 4 ]; then
-    echo "  ${count} variables found (komodo-op has synced)"
-    break
-  fi
-  sleep 5
-done
-
-echo "Running second sync..."
-komodo_api execute '{
-  "type": "RunSync",
-  "params": { "sync": "podhaus" }
-}' > /dev/null
-
-echo "Done"
+./komodo-sync

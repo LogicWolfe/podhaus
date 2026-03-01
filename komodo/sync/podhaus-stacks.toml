@@ -64,3 +64,63 @@ OP_SERVICE_ACCOUNT_TOKEN=[[ONEPASSWORD_CONNECT_TOKEN]]
 KOMODO_API_KEY=[[ONEPASSWORD_API_KEY]]
 KOMODO_API_SECRET=[[ONEPASSWORD_API_SECRET]]
 """
+
+[[stack]]
+name = "cloudflare-tunnel"
+description = "Cloudflare Tunnel (locally managed) for external access"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+file_contents = '''
+configs:
+  tunnel-credentials:
+    environment: TUNNEL_CREDENTIALS
+  tunnel-config:
+    content: |
+      tunnel: cc68c7c9-1dad-42aa-af04-46119d3e515f
+      credentials-file: /etc/cloudflared/credentials.json
+      ingress:
+        - hostname: komodo.pod.haus
+          service: http://komodo-core:9120
+        - hostname: torrent.pod.haus
+          service: http://flood:3000
+        - hostname: home.pod.haus
+          service: http://172.18.0.1:8123
+        - hostname: kangaroo.pod.haus
+          service: https://nginx:443
+          originRequest:
+            noTLSVerify: true
+        - hostname: sync.pod.haus
+          service: https://nginx:443
+          originRequest:
+            noTLSVerify: true
+        - hostname: unifi.pod.haus
+          service: https://nginx:443
+          originRequest:
+            noTLSVerify: true
+        - service: http_status:404
+
+services:
+  cloudflare-tunnel:
+    container_name: cloudflare-tunnel
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    configs:
+      - source: tunnel-credentials
+        target: /etc/cloudflared/credentials.json
+      - source: tunnel-config
+        target: /etc/cloudflared/config.yml
+    networks:
+      - dockernet
+
+networks:
+  dockernet:
+    external: true
+'''
+
+environment = """
+TUNNEL_CREDENTIALS=[[OP__KOMODO__CLOUDFLARE_TUNNEL_CREDENTIALS__CREDENTIAL]]
+"""

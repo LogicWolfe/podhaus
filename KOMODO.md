@@ -204,13 +204,17 @@ No `sudo` needed — user is in the docker group.
 
 ### 5. Migrate Cloudflare Tunnel to Komodo
 
-- [ ] Write `cloudflare-tunnel/docker-compose.yml` (replaces run script + Dockerfile)
-- [ ] Add stack definition to `podhaus-stacks.toml`
-- [ ] `CLOUDFLARE_TUNNEL_TOKEN` secret via 1Password → Komodo variable
-- [ ] Deploy via Resource Sync and verify tunnel is routing traffic
-- [ ] Remove `dockernet` and `networks` from `komodo/ferretdb.compose.yaml` (Core no longer needs dockernet once the tunnel is a Komodo Stack on the same compose network)
-- [ ] Stop and remove the old cloudflare-tunnel container
+Switched from remotely-managed (token-based) to locally-managed tunnel with ingress rules in git.
 
+- [x] Add cloudflare-tunnel stack to `podhaus-stacks.toml` (inline compose with Docker configs)
+- [x] Credentials JSON stored in 1Password as a login field, injected via komodo-op → `TUNNEL_CREDENTIALS`
+- [x] Config.yml defined inline via compose `configs` `content:` — ingress rules in git
+- [x] Clean up stale nginx configs (`c.conf`, `reviewer.conf`)
+- [x] Create locally-managed tunnel and store credentials in 1Password
+- [x] Set up DNS CNAMEs for new tunnel UUID
+- [x] Stop old tunnel, deploy new stack via Resource Sync, verify routing
+- [x] Delete old tunnel (`PodHaus` / `f1ad8313`) via `cloudflared tunnel delete`
+- [x] Delete stale DNS CNAME records from Cloudflare (`c.pod.haus` removed, `reviewer.pod.haus` already gone)
 ### 6. Create and deploy Paperless-ngx
 
 - [ ] Write `paperless/docker-compose.yml` (webserver, postgres, redis, tika, gotenberg)
@@ -221,6 +225,8 @@ No `sudo` needed — user is in the docker group.
 ### 7. Convert remaining podhaus services
 
 - [ ] For each service: convert run script → compose file → Komodo Stack → verify
+- [ ] Fix home.pod.haus tunnel routing: HA returns 400 on `X-Forwarded-For` from untrusted sources. Add `http:` section to HA's `configuration.yaml` with dockernet subnet (`172.18.0.0/16`) in `trusted_proxies`.
+- [ ] Fix unifi.pod.haus tunnel routing
 
 ### 8. Clean up old infrastructure
 
