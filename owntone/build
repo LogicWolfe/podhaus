@@ -1,0 +1,4 @@
+#!/bin/bash
+docker pull ubuntu:22.04
+source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_run
+sudo docker build -t owntone .

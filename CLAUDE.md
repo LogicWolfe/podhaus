@@ -7,7 +7,8 @@ Docker container infrastructure for home servers deployed to podhaus (pod.haus) 
 - Each service has its own directory containing a `run` script and optionally a `Dockerfile` and config files
 - Containers are started with `sudo docker run` via individual `run` scripts — not docker-compose
 - Container names always match their directory name (derived via `${PWD##*/}`)
-- Root-level management scripts (`build`, `stop`, `connect`, `restart`) are symlinked into service directories
+- Root-level management scripts (`build`, `stop`, `connect`, `restart`) are symlinked into service directories by `create_symlinks`
+- Some services override these symlinks with custom scripts when they need different behavior (e.g. owntone has a custom `build` that pulls the base image first, and a custom `connect` with a hardcoded container name)
 
 ## Conventions
 
