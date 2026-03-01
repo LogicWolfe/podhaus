@@ -4,11 +4,13 @@ source $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/../before_ru
 #   --privileged \ this might be necessary to use local devices
 sudo docker run \
   --detach \
+  --privileged \
   --name home-assistant \
   --restart=unless-stopped \
   --env TZ=$TZ \
   --network=host \
   --mount="type=volume,source=home-assistant-config,destination=/config" \
+  -v /run/dbus:/run/dbus:ro \
   home-assistant
 
 

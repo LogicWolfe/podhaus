@@ -1,2 +1,2 @@
 FROM homeassistant/home-assistant:stable
-COPY www/* /www/
+#COPY www/* /www/
