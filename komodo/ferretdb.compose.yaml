@@ -82,6 +82,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /proc:/proc
       - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
+      - ${COMPOSE_KOMODO_STACKS_PATH}:/etc/komodo/stacks
 
 networks:
   dockernet:

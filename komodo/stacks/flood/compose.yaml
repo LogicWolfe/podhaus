@@ -1,0 +1,24 @@
+services:
+  flood:
+    container_name: flood
+    image: jesec/rtorrent-flood
+    restart: unless-stopped
+    command: --auth=none --rtsocket=/tmp/rtorrent.sock
+    user: "1000:1001"
+    environment:
+      HOME: /flood-db
+      FLOOD_SECRET: ${FLOOD_SECRET}
+      GID: "44"
+    volumes:
+      - flood-db:/flood-db
+      - /mnt/NFSPouch:/data
+    networks:
+      - dockernet
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  flood-db:
+    external: true

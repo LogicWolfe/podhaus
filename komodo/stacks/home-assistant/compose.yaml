@@ -1,0 +1,16 @@
+services:
+  home-assistant:
+    container_name: home-assistant
+    image: homeassistant/home-assistant:stable
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - home-assistant-config:/config
+      - /run/dbus:/run/dbus:ro
+
+volumes:
+  home-assistant-config:
+    external: true

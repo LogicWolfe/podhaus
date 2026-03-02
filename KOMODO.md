@@ -244,14 +244,23 @@ HA uses `homeassistant/home-assistant:stable` upstream image (Dockerfile adds no
 - [x] Update CLAUDE.md to reflect Komodo-based architecture
 - [x] Update KOMODO.md to reflect completed migration
 
-### 6. Create and deploy Paperless-ngx
+### 6. Migrate stack definitions from inline TOML to separate compose files
 
-- [ ] Write `paperless/docker-compose.yml` (webserver, postgres, redis, tika, gotenberg)
-- [ ] Create Stack in Komodo pointing at compose file
+- [x] Create `komodo/stacks/<name>/compose.yaml` for each stack (onepassword, cloudflare-tunnel, flood, home-assistant)
+- [x] Add Periphery volume mount for stacks directory in `ferretdb.compose.yaml`
+- [x] Add `COMPOSE_KOMODO_STACKS_PATH` to `compose.env`
+- [x] Update `podhaus-stacks.toml` to use `files_on_host = true` + `run_directory` instead of `file_contents`
+- [x] Restart Komodo infrastructure, sync, verify all stacks running
+- [x] Update CLAUDE.md and KOMODO.md
+
+### 7. Create and deploy Paperless-ngx
+
+- [ ] Create `komodo/stacks/paperless/compose.yaml` (webserver, postgres, redis, tika, gotenberg)
+- [ ] Add `[[stack]]` entry to `podhaus-stacks.toml` with `files_on_host = true`
 - [ ] Deploy and verify
 - [ ] Configure Cloudflare Tunnel route
 
-### 7. (Later) Add pinelake
+### 8. (Later) Add pinelake
 
 - [ ] Install Tailscale on both machines if not already running
 - [ ] Install Docker on pinelake (Docker Desktop or OrbStack for macOS)
@@ -267,7 +276,7 @@ Things to keep in mind now that affect the podhaus setup:
 
 - **TOML structure**: split stacks by server now so the pattern is established
 - **Secret naming**: use server-prefixed names for per-server secrets from the start
-- **Compose file reuse**: if a service runs on both servers (e.g. cloudflare-tunnel), the same compose file can be used with different server assignments and environment variables in TOML
+- **Compose file reuse**: if a service runs on both servers (e.g. cloudflare-tunnel), the same compose file in `komodo/stacks/` can be used with different server assignments and environment variables in TOML
 - **Tailscale**: if not already running on podhaus, add it as a service stack or host service. The existing `c.pod.haus` nginx proxy (100.100.99.23) suggests Tailscale is already in use
 
 ## Files Removed (step 5f — completed)
@@ -288,7 +297,8 @@ All legacy service directories, Dockerfiles, run scripts, management scripts, an
 3. All Komodo stacks running: onepassword, cloudflare-tunnel, flood, home-assistant
 4. `torrent.pod.haus` — Flood UI loads, existing torrents intact
 5. `home.pod.haus` — HA loads without 400 errors
-6. `kangaroo.pod.haus`, `sync.pod.haus`, `unifi.pod.haus` — route directly through tunnel
+6. `kangaroo.pod.haus`, `sync.pod.haus` — route directly through tunnel
+   - **Known issue**: `unifi.pod.haus` not working after nginx removal. Tunnel routes to `https://10.0.0.2:443` with `noTLSVerify: true` but the UniFi appliance may not be reachable from the tunnel container on dockernet, or may require different routing.
 7. Resource Sync TOML in git matches running state
 8. No legacy `docker run` containers remain
 9. Everything restarts automatically after a podhaus reboot

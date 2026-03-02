@@ -1,0 +1,49 @@
+configs:
+  op-credentials:
+    environment: OP_CREDENTIALS
+
+services:
+  op-connect-api:
+    container_name: op-connect-api
+    image: 1password/connect-api:latest
+    restart: unless-stopped
+    configs:
+      - source: op-credentials
+        target: /home/opuser/.op/1password-credentials.json
+    volumes:
+      - op-connect-data:/home/opuser/.op/data
+
+  op-connect-sync:
+    container_name: op-connect-sync
+    image: 1password/connect-sync:latest
+    restart: unless-stopped
+    configs:
+      - source: op-credentials
+        target: /home/opuser/.op/1password-credentials.json
+    volumes:
+      - op-connect-data:/home/opuser/.op/data
+
+  komodo-op:
+    container_name: komodo-op
+    image: ghcr.io/0dragosh/komodo-op:latest
+    restart: unless-stopped
+    depends_on:
+      - op-connect-api
+    networks:
+      - default
+      - dockernet
+    environment:
+      OP_CONNECT_HOST: http://op-connect-api:8080
+      OP_VAULT: hjpenq2avoprqh2u3hqxap3jjq
+      OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN}
+      KOMODO_HOST: http://komodo-core:9120
+      KOMODO_API_KEY: ${KOMODO_API_KEY}
+      KOMODO_API_SECRET: ${KOMODO_API_SECRET}
+      SYNC_INTERVAL: 1m
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  op-connect-data:

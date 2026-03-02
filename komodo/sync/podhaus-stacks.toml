@@ -6,57 +6,8 @@ deploy = true
 
 [stack.config]
 server = "podhaus"
-file_contents = '''
-configs:
-  op-credentials:
-    environment: OP_CREDENTIALS
-
-services:
-  op-connect-api:
-    container_name: op-connect-api
-    image: 1password/connect-api:latest
-    restart: unless-stopped
-    configs:
-      - source: op-credentials
-        target: /home/opuser/.op/1password-credentials.json
-    volumes:
-      - op-connect-data:/home/opuser/.op/data
-
-  op-connect-sync:
-    container_name: op-connect-sync
-    image: 1password/connect-sync:latest
-    restart: unless-stopped
-    configs:
-      - source: op-credentials
-        target: /home/opuser/.op/1password-credentials.json
-    volumes:
-      - op-connect-data:/home/opuser/.op/data
-
-  komodo-op:
-    container_name: komodo-op
-    image: ghcr.io/0dragosh/komodo-op:latest
-    restart: unless-stopped
-    depends_on:
-      - op-connect-api
-    networks:
-      - default
-      - dockernet
-    environment:
-      OP_CONNECT_HOST: http://op-connect-api:8080
-      OP_VAULT: hjpenq2avoprqh2u3hqxap3jjq
-      OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN}
-      KOMODO_HOST: http://komodo-core:9120
-      KOMODO_API_KEY: ${KOMODO_API_KEY}
-      KOMODO_API_SECRET: ${KOMODO_API_SECRET}
-      SYNC_INTERVAL: 1m
-
-networks:
-  dockernet:
-    external: true
-
-volumes:
-  op-connect-data:
-'''
+files_on_host = true
+run_directory = "/etc/komodo/stacks/onepassword"
 
 environment = """
 OP_CREDENTIALS=[[ONEPASSWORD_CREDENTIALS]]
@@ -73,49 +24,8 @@ deploy = true
 
 [stack.config]
 server = "podhaus"
-file_contents = '''
-configs:
-  tunnel-credentials:
-    environment: TUNNEL_CREDENTIALS
-  tunnel-config:
-    content: |
-      tunnel: cc68c7c9-1dad-42aa-af04-46119d3e515f
-      credentials-file: /etc/cloudflared/credentials.json
-      ingress:
-        - hostname: komodo.pod.haus
-          service: http://komodo-core:9120
-        - hostname: torrent.pod.haus
-          service: http://flood:3000
-        - hostname: home.pod.haus
-          service: http://172.18.0.1:8123
-        - hostname: kangaroo.pod.haus
-          service: http://10.0.0.25:8080
-        - hostname: sync.pod.haus
-          service: http://172.18.0.1:8384
-        - hostname: unifi.pod.haus
-          service: https://10.0.0.2:443
-          originRequest:
-            noTLSVerify: true
-        - service: http_status:404
-
-services:
-  cloudflare-tunnel:
-    container_name: cloudflare-tunnel
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
-    configs:
-      - source: tunnel-credentials
-        target: /etc/cloudflared/credentials.json
-      - source: tunnel-config
-        target: /etc/cloudflared/config.yml
-    networks:
-      - dockernet
-
-networks:
-  dockernet:
-    external: true
-'''
+files_on_host = true
+run_directory = "/etc/komodo/stacks/cloudflare-tunnel"
 
 environment = """
 TUNNEL_CREDENTIALS=[[OP__KOMODO__CLOUDFLARE_TUNNEL_CREDENTIALS__CREDENTIAL]]
@@ -129,32 +39,8 @@ deploy = true
 
 [stack.config]
 server = "podhaus"
-file_contents = '''
-services:
-  flood:
-    container_name: flood
-    image: jesec/rtorrent-flood
-    restart: unless-stopped
-    command: --auth=none --rtsocket=/tmp/rtorrent.sock
-    user: "1000:1001"
-    environment:
-      HOME: /flood-db
-      FLOOD_SECRET: ${FLOOD_SECRET}
-      GID: "44"
-    volumes:
-      - flood-db:/flood-db
-      - /mnt/NFSPouch:/data
-    networks:
-      - dockernet
-
-networks:
-  dockernet:
-    external: true
-
-volumes:
-  flood-db:
-    external: true
-'''
+files_on_host = true
+run_directory = "/etc/komodo/stacks/flood"
 
 environment = """
 FLOOD_SECRET=[[OP__KOMODO__FLOOD_SECRET__PASSWORD]]
@@ -168,24 +54,8 @@ deploy = true
 
 [stack.config]
 server = "podhaus"
-file_contents = '''
-services:
-  home-assistant:
-    container_name: home-assistant
-    image: homeassistant/home-assistant:stable
-    restart: unless-stopped
-    privileged: true
-    network_mode: host
-    environment:
-      TZ: ${TZ}
-    volumes:
-      - home-assistant-config:/config
-      - /run/dbus:/run/dbus:ro
-
-volumes:
-  home-assistant-config:
-    external: true
-'''
+files_on_host = true
+run_directory = "/etc/komodo/stacks/home-assistant"
 
 environment = """
 TZ=[[TZ]]

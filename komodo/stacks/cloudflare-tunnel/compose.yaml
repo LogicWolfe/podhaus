@@ -1,0 +1,41 @@
+configs:
+  tunnel-credentials:
+    environment: TUNNEL_CREDENTIALS
+  tunnel-config:
+    content: |
+      tunnel: cc68c7c9-1dad-42aa-af04-46119d3e515f
+      credentials-file: /etc/cloudflared/credentials.json
+      ingress:
+        - hostname: komodo.pod.haus
+          service: http://komodo-core:9120
+        - hostname: torrent.pod.haus
+          service: http://flood:3000
+        - hostname: home.pod.haus
+          service: http://172.18.0.1:8123
+        - hostname: kangaroo.pod.haus
+          service: http://10.0.0.25:8080
+        - hostname: sync.pod.haus
+          service: http://172.18.0.1:8384
+        - hostname: unifi.pod.haus
+          service: https://10.0.0.2:443
+          originRequest:
+            noTLSVerify: true
+        - service: http_status:404
+
+services:
+  cloudflare-tunnel:
+    container_name: cloudflare-tunnel
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    configs:
+      - source: tunnel-credentials
+        target: /etc/cloudflared/credentials.json
+      - source: tunnel-config
+        target: /etc/cloudflared/config.yml
+    networks:
+      - dockernet
+
+networks:
+  dockernet:
+    external: true
