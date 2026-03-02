@@ -1,6 +1,0 @@
-MEDIA_DIR="/mnt/media"
-TRANSCODE_DIR="/tmp"
-TZ="America/Edmonton"
-PLEX_NAME="PineLake.plex"
-DOMAIN="pinelake.haus"
-VIDEO_GID="44"

@@ -1,5 +1,0 @@
-MEDIA_DIR="/mnt/Pouch"
-TRANSCODE_DIR="/mnt/Pouch/transcode"
-TZ="Australia/Perth"
-VIDEO_GID="44"
-ADMIN_EMAIL="nathan@nathanbaxter.com"

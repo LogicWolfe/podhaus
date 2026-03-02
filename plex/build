@@ -1,3 +1,0 @@
-#!/bin/bash
-docker pull plexinc/pms-docker:plexpass
-docker build -t plex .

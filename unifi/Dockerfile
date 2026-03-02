@@ -1,3 +1,0 @@
-FROM jacobalberty/unifi:latest
-
-

@@ -1,4 +1,0 @@
-#!/bin/bash
-NAME=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && printf '%s\n' "${PWD##*/}" )
-echo Building $NAME...
-sudo docker build -t $NAME .

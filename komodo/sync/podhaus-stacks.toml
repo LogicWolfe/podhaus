@@ -89,15 +89,11 @@ configs:
         - hostname: home.pod.haus
           service: http://172.18.0.1:8123
         - hostname: kangaroo.pod.haus
-          service: https://nginx:443
-          originRequest:
-            noTLSVerify: true
+          service: http://10.0.0.25:8080
         - hostname: sync.pod.haus
-          service: https://nginx:443
-          originRequest:
-            noTLSVerify: true
+          service: http://172.18.0.1:8384
         - hostname: unifi.pod.haus
-          service: https://nginx:443
+          service: https://10.0.0.2:443
           originRequest:
             noTLSVerify: true
         - service: http_status:404
@@ -123,4 +119,74 @@ networks:
 
 environment = """
 TUNNEL_CREDENTIALS=[[OP__KOMODO__CLOUDFLARE_TUNNEL_CREDENTIALS__CREDENTIAL]]
+"""
+
+[[stack]]
+name = "flood"
+description = "rtorrent + Flood web UI for torrents"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+file_contents = '''
+services:
+  flood:
+    container_name: flood
+    image: jesec/rtorrent-flood
+    restart: unless-stopped
+    command: --auth=none --rtsocket=/tmp/rtorrent.sock
+    user: "1000:1001"
+    environment:
+      HOME: /flood-db
+      FLOOD_SECRET: ${FLOOD_SECRET}
+      GID: "44"
+    volumes:
+      - flood-db:/flood-db
+      - /mnt/NFSPouch:/data
+    networks:
+      - dockernet
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  flood-db:
+    external: true
+'''
+
+environment = """
+FLOOD_SECRET=[[OP__KOMODO__FLOOD_SECRET__PASSWORD]]
+"""
+
+[[stack]]
+name = "home-assistant"
+description = "Home Assistant home automation"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+file_contents = '''
+services:
+  home-assistant:
+    container_name: home-assistant
+    image: homeassistant/home-assistant:stable
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - home-assistant-config:/config
+      - /run/dbus:/run/dbus:ro
+
+volumes:
+  home-assistant-config:
+    external: true
+'''
+
+environment = """
+TZ=[[TZ]]
 """

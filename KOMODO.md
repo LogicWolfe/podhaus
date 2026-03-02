@@ -44,7 +44,7 @@ The setup also needs to support managing **pinelake** (a Mac Mini at a remote lo
 ### Networking
 
 **podhaus:**
-- `dockernet` bridge (172.16.42.0/24) — shared external network for cross-stack communication
+- `dockernet` bridge (172.18.0.0/16) — shared external network for cross-stack communication
 - Each compose stack gets its own internal network
 - Tailscale for connectivity to pinelake
 
@@ -76,35 +76,17 @@ Secrets are available globally in Komodo. Server-specific secrets use naming con
 ```
 podhaus/
   komodo/
-    ferretdb.compose.yaml
-    compose.env
+    ferretdb.compose.yaml       # Komodo Core infrastructure (not managed by ResourceSync)
+    compose.env                 # Komodo config with op:// references
     sync/
-      servers.toml              # Both server definitions
-      variables.toml            # Non-secret variables
-      podhaus-stacks.toml       # Stacks assigned to podhaus
-      pinelake-stacks.toml      # Stacks assigned to pinelake (later)
-  onepassword/
-    docker-compose.yml
-    .gitignore                  # ignores 1password-credentials.json
-  cloudflare-tunnel/
-    docker-compose.yml
-  nginx/
-    docker-compose.yml
-    Dockerfile, conf.d/
-  paperless/
-    docker-compose.yml          # All 5 containers
+      servers.toml              # Server definitions
+      variables.toml            # Non-secret variables (MEDIA_DIR, TZ)
+      podhaus-stacks.toml       # All stack definitions (inline compose via file_contents)
+  paperless/                    # Paperless-ngx (future)
     PHASE1.md, migration guide
-  plex/
-    docker-compose.yml
-    Dockerfile
-  home-assistant/
-    docker-compose.yml
-  flood/
-    docker-compose.yml
-  ... (other services)
 ```
 
-TOML Resource Sync files split by server — each stack's TOML specifies which server it deploys to. Compose files are reusable across servers if needed (same compose, different server assignment in TOML).
+All stack compose definitions are inline in `podhaus-stacks.toml` via `file_contents` (shows as "UI defined" in Komodo). Secrets flow from 1Password → komodo-op → Komodo Variables → `[[VARIABLE]]` interpolation in stack environment.
 
 ## Implementation Steps (Podhaus First)
 
@@ -195,14 +177,7 @@ No `sudo` needed — user is in the docker group.
 - [x] Komodo UI → Settings → Variables shows 14 variables (4 bootstrap + 10 from vault)
 - [x] Naming confirmed: `OP__KOMODO__<ITEM-NAME>__<FIELD-LABEL>` pattern
 
-### 4. Set up Resource Sync
-
-- [ ] Write TOML for servers, stacks, variables
-- [ ] Structure: `servers.toml` defines both podhaus and pinelake (pinelake address TBD)
-- [ ] `podhaus-stacks.toml` for current services
-- [ ] Create Resource Sync in Komodo, verify
-
-### 5. Migrate Cloudflare Tunnel to Komodo
+### 4. Migrate Cloudflare Tunnel to Komodo
 
 Switched from remotely-managed (token-based) to locally-managed tunnel with ingress rules in git.
 
@@ -215,6 +190,60 @@ Switched from remotely-managed (token-based) to locally-managed tunnel with ingr
 - [x] Stop old tunnel, deploy new stack via Resource Sync, verify routing
 - [x] Delete old tunnel (`PodHaus` / `f1ad8313`) via `cloudflared tunnel delete`
 - [x] Delete stale DNS CNAME records from Cloudflare (`c.pod.haus` removed, `reviewer.pod.haus` already gone)
+
+### 5. Migrate remaining services, retire nginx, clean up
+
+Services to migrate: flood, home-assistant (only 2 services are still running as legacy containers).
+
+Retired services (not running or no longer needed): certbot, nginx, plex, unifi (now appliance), elasticsearch, elasticsearch-hq, kibana, owntone, reviewer, cloudflare-ddns, postgres (standalone).
+
+#### 5a. Add Komodo variables
+
+- [x] Add `MEDIA_DIR=/mnt/NFSPouch` to `variables.toml` (NFS4, replacing CIFS `/mnt/Pouch`)
+- [x] Add `TZ=Australia/Perth` to `variables.toml`
+- [x] Run sync to register variables
+
+#### 5b. Create Flood Secret in 1Password
+
+- [x] Read `FLOOD_SECRET` from legacy `secrets` file
+- [x] Create `Flood Secret` item in Homelab vault via `op item create`
+- [x] Verify komodo-op syncs it as `OP__KOMODO__FLOOD_SECRET__PASSWORD`
+
+#### 5c. Migrate flood to Komodo stack
+
+Flood uses `jesec/rtorrent-flood` upstream image directly (Dockerfile adds nothing). Entrypoint is `/sbin/tini -- flood`, which starts rtorrent as a child process. Config lives at `/flood-db/.rtorrent.rc` (rtorrent reads `$HOME/.rtorrent.rc`, and `HOME=/flood-db`). All session state (`.torrent`, `.torrent.rtorrent`, `.torrent.libtorrent_resume`) is in the `flood-db` Docker volume.
+
+- [x] Add flood stack to `podhaus-stacks.toml` (inline compose, `flood-db` volume external, `/mnt/NFSPouch:/data` bind mount)
+- [x] Stop old flood container
+- [x] Deploy via `komodo-sync` — 168 torrents loaded from session, Flood UI serving on port 3000, NFS4 mount confirmed
+
+#### 5d. Migrate home-assistant to Komodo stack
+
+HA uses `homeassistant/home-assistant:stable` upstream image (Dockerfile adds nothing). All config in `home-assistant-config` volume at `/config/`. Needs trusted proxies fix for Cloudflare Tunnel routing (400 on X-Forwarded-For from dockernet 172.18.0.0/16).
+
+- [x] Append `http:` trusted_proxies section to `/var/lib/docker/volumes/home-assistant-config/_data/configuration.yaml`
+- [x] Add home-assistant stack to `podhaus-stacks.toml` (inline compose, volume external, host network, privileged)
+- [x] Stop old home-assistant container
+- [x] Deploy via `komodo-sync` — HA running, web UI responds 200
+- [ ] Verify `home.pod.haus` loads without 400 errors (user to test)
+
+#### 5e. Update tunnel ingress and retire nginx
+
+- [x] Verify LAN reachability from tunnel container (10.0.0.25 returns 200 from dockernet)
+- [x] Update cloudflare-tunnel ingress: route kangaroo/syncthing/unifi directly to backends
+- [x] Destroy + redeploy tunnel stack to pick up config changes
+- [x] Stop and remove nginx and certbot containers
+
+#### 5f. Delete legacy files and clean up
+
+- [x] Remove all retired service directories (certbot, cloudflare-ddns, cloudflare-tunnel, elasticsearch, elasticsearch-hq, kibana, nginx, owntone, plex, postgres, reviewer, unifi, forked-daapd)
+- [x] Clean flood/ and home-assistant/ dirs (removed entirely — all config is inline in TOML or in Docker volumes)
+- [x] Remove root-level management scripts (build, stop, connect, restart, create_symlinks, create_network, before_run, encrypt_secrets, decrypt_secrets)
+- [x] Remove environment templates (environment.podhaus, environment.pinelake)
+- [x] Remove stale stopped containers and prune unused Docker images (992.7MB reclaimed)
+- [x] Update CLAUDE.md to reflect Komodo-based architecture
+- [x] Update KOMODO.md to reflect completed migration
+
 ### 6. Create and deploy Paperless-ngx
 
 - [ ] Write `paperless/docker-compose.yml` (webserver, postgres, redis, tika, gotenberg)
@@ -222,18 +251,7 @@ Switched from remotely-managed (token-based) to locally-managed tunnel with ingr
 - [ ] Deploy and verify
 - [ ] Configure Cloudflare Tunnel route
 
-### 7. Convert remaining podhaus services
-
-- [ ] For each service: convert run script → compose file → Komodo Stack → verify
-- [ ] Fix home.pod.haus tunnel routing: HA returns 400 on `X-Forwarded-For` from untrusted sources. Add `http:` section to HA's `configuration.yaml` with dockernet subnet (`172.18.0.0/16`) in `trusted_proxies`.
-- [ ] Fix unifi.pod.haus tunnel routing
-
-### 8. Clean up old infrastructure
-
-- [ ] Remove run scripts, before_run, management scripts, secrets/encryption tooling
-- [ ] Update CLAUDE.md and README.md
-
-### 9. (Later) Add pinelake
+### 7. (Later) Add pinelake
 
 - [ ] Install Tailscale on both machines if not already running
 - [ ] Install Docker on pinelake (Docker Desktop or OrbStack for macOS)
@@ -252,36 +270,12 @@ Things to keep in mind now that affect the podhaus setup:
 - **Compose file reuse**: if a service runs on both servers (e.g. cloudflare-tunnel), the same compose file can be used with different server assignments and environment variables in TOML
 - **Tailscale**: if not already running on podhaus, add it as a service stack or host service. The existing `c.pod.haus` nginx proxy (100.100.99.23) suggests Tailscale is already in use
 
-## Files to Create
+## Files Removed (step 5f — completed)
 
-- `komodo/ferretdb.compose.yaml` — Komodo compose (from upstream)
-- `komodo/compose.env` — Komodo configuration
-- `komodo/sync/servers.toml` — both server definitions (pinelake address placeholder)
-- `komodo/sync/podhaus-stacks.toml` — podhaus stack definitions
-- `komodo/sync/pinelake-stacks.toml` — pinelake stack definitions (initially empty/minimal)
-- `komodo/sync/variables.toml` — non-secret variables
-- `onepassword/docker-compose.yml` — 1Password Connect + komodo-op
-- `onepassword/.gitignore` — ignore credentials file
-- `paperless/docker-compose.yml` — Paperless-ngx full stack
-- Compose files for each existing service
-
-## Files to Remove (after full podhaus migration)
-
-- `before_run`, `build`, `stop`, `connect`, `restart`, `create_symlinks`
-- `environment`, `environment.podhaus`, `environment.pinelake`
-- `secrets`, `encrypt_secrets`, `decrypt_secrets`, `secrets.podhaus.gpg`, `secrets.pinelake.gpg`
-- `run` scripts in each service directory
-- Symlinks in service directories
-
-## Files to Modify
-
-- `CLAUDE.md` — new workflow: Komodo, TOML resource sync, 1Password, Tailscale
-- `README.md` — updated architecture, setup, service docs
-- `.gitignore` — add `onepassword/1password-credentials.json`
+All legacy service directories, Dockerfiles, run scripts, management scripts, and environment templates have been removed. See git log for the full list.
 
 ## Post-Deploy Manual Steps
 
-- **Cloudflare Tunnel routes**: configure in Zero Trust dashboard
 - **Paperless web UI**: Fastmail IMAP config, mail rules, admin password
 - **SwiftPaperless iOS**: server URL + Cloudflare service token headers
 - **Komodo backup procedure**: scheduled daily DB backup
@@ -291,9 +285,12 @@ Things to keep in mind now that affect the podhaus setup:
 
 1. Komodo UI accessible, podhaus server showing metrics
 2. 1Password secrets visible in Komodo Settings → Variables
-3. Paperless-ngx running as a Komodo Stack at `https://paperless.pod.haus`
-4. All migrated podhaus services running and healthy
-5. Resource Sync TOML in git matches running state
-6. Everything restarts automatically after a podhaus reboot
-7. Komodo DB backup procedure running on schedule
-8. (Later) pinelake server appears in Komodo, shows online/offline correctly
+3. All Komodo stacks running: onepassword, cloudflare-tunnel, flood, home-assistant
+4. `torrent.pod.haus` — Flood UI loads, existing torrents intact
+5. `home.pod.haus` — HA loads without 400 errors
+6. `kangaroo.pod.haus`, `sync.pod.haus`, `unifi.pod.haus` — route directly through tunnel
+7. Resource Sync TOML in git matches running state
+8. No legacy `docker run` containers remain
+9. Everything restarts automatically after a podhaus reboot
+10. (Later) Paperless-ngx running at `https://paperless.pod.haus`
+11. (Later) pinelake server appears in Komodo, shows online/offline correctly

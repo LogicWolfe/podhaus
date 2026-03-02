@@ -1,5 +1,0 @@
-#!/bin/bash
-PROJECT_PATH=$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )
-
-$PROJECT_PATH/stop
-$PROJECT_PATH/run

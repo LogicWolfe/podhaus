@@ -1,8 +1,9 @@
-# Non-secret variables shared across stacks.
-# Add variables here as services are migrated to Komodo.
-# Secrets come from 1Password via komodo-op — don't put secrets here.
-#
-# Format:
-#   [[variable]]
-#   name = "VAR_NAME"
-#   value = "value"
+[[variable]]
+name = "MEDIA_DIR"
+value = "/mnt/NFSPouch"
+description = "NFS4 mount for media storage on kangaroo NAS"
+
+[[variable]]
+name = "TZ"
+value = "Australia/Perth"
+description = "Timezone for all services"

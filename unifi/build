@@ -1,3 +1,0 @@
-#!/bin/bash
-docker pull jacobalberty/unifi
-docker build -t unifi .
