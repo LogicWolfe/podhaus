@@ -1,0 +1,113 @@
+[
+  {
+    "id": "bab0b3866c0dc4b1f516a74d7595ca80",
+    "name": "bastion.pinelake.haus",
+    "type": "A",
+    "content": "165.227.27.154",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 900,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2019-11-24T05:14:06.287736Z",
+    "modified_on": "2019-11-24T05:14:06.287736Z"
+  },
+  {
+    "id": "918eb2d9706940cdb499c570082eaf33",
+    "name": "local.pinelake.haus",
+    "type": "A",
+    "content": "192.168.1.5",
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 120,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2019-11-24T05:14:18.404499Z",
+    "modified_on": "2019-11-24T05:14:18.404499Z"
+  },
+  {
+    "id": "0bdde89408da63dfe741122a78c69adb",
+    "name": "pinelake.haus",
+    "type": "A",
+    "content": "170.203.223.236",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-03-18T01:50:01.154071Z",
+    "modified_on": "2022-07-26T06:45:07.436692Z"
+  },
+  {
+    "id": "2ce547649e6fe6cf7bb84e9d61364c44",
+    "name": "relay.pinelake.haus",
+    "type": "A",
+    "content": "164.92.89.155",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2024-08-20T02:47:41.630391Z",
+    "modified_on": "2024-08-20T02:47:41.630391Z"
+  },
+  {
+    "id": "e14350133b1af9501db0c74a191fad65",
+    "name": "home.pinelake.haus",
+    "type": "CNAME",
+    "content": "fec5ca76-b634-4185-bdb2-f85c38b1b570.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-01-21T17:29:44.005982Z",
+    "modified_on": "2026-01-21T17:29:44.005982Z"
+  },
+  {
+    "id": "74f58e16ebb11ec18317aee17a9a82b7",
+    "name": "sync.pinelake.haus",
+    "type": "CNAME",
+    "content": "fec5ca76-b634-4185-bdb2-f85c38b1b570.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-01-13T20:06:56.543508Z",
+    "modified_on": "2026-01-13T20:06:56.543508Z"
+  },
+  {
+    "id": "2fe512c6b2dfd5e9e8319af826079f27",
+    "name": "torrent.pinelake.haus",
+    "type": "CNAME",
+    "content": "fec5ca76-b634-4185-bdb2-f85c38b1b570.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-01-08T17:18:58.979953Z",
+    "modified_on": "2026-01-08T17:18:58.979953Z"
+  }
+]

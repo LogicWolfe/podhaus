@@ -1,0 +1,19 @@
+[
+  {
+    "id": "1e464a1a7c116aead6c6d4574c528cb4",
+    "name": "logicwolfe.com",
+    "type": "CNAME",
+    "content": "nathanbaxter.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-02-08T07:52:25.089418Z",
+    "modified_on": "2021-02-08T07:52:25.089418Z"
+  }
+]

@@ -1,0 +1,100 @@
+[
+  {
+    "id": "e8cb39d4170fcb92a0466b10965458ad",
+    "name": "fm1._domainkey.fractalseed.com",
+    "type": "CNAME",
+    "content": "fm1.fractalseed.com.dkim.fmhosted.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2022-09-02T01:05:45.496735Z",
+    "modified_on": "2022-09-02T01:05:45.496735Z"
+  },
+  {
+    "id": "e974830c0d558e7aedd50489c012d006",
+    "name": "fm2._domainkey.fractalseed.com",
+    "type": "CNAME",
+    "content": "fm2.fractalseed.com.dkim.fmhosted.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2022-09-02T01:06:03.319923Z",
+    "modified_on": "2022-09-02T01:06:03.319923Z"
+  },
+  {
+    "id": "24d7de886e0ee17eb0e3f31e1382ee51",
+    "name": "fm3._domainkey.fractalseed.com",
+    "type": "CNAME",
+    "content": "fm3.fractalseed.com.dkim.fmhosted.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2022-09-02T01:06:17.835527Z",
+    "modified_on": "2022-09-02T01:06:17.835527Z"
+  },
+  {
+    "id": "4d64c18e44594aebfcb62caee37b5b95",
+    "name": "fractalseed.com",
+    "type": "MX",
+    "content": "in2-smtp.messagingengine.com",
+    "priority": 20,
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2022-09-02T01:05:10.777985Z",
+    "modified_on": "2022-09-02T01:05:10.777985Z"
+  },
+  {
+    "id": "4afeb8c5a285bc371f4d31982d5faaa9",
+    "name": "fractalseed.com",
+    "type": "MX",
+    "content": "in1-smtp.messagingengine.com",
+    "priority": 10,
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2022-09-02T01:04:50.222743Z",
+    "modified_on": "2022-09-02T01:04:50.222743Z"
+  },
+  {
+    "id": "eb90728a4a35466274a94fd907bfe587",
+    "name": "fractalseed.com",
+    "type": "TXT",
+    "content": "v=spf1 include:spf.messagingengine.com ?all",
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2022-09-02T01:06:39.603139Z",
+    "modified_on": "2022-09-02T01:06:39.603139Z"
+  }
+]

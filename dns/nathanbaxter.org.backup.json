@@ -1,0 +1,22 @@
+[
+  {
+    "id": "b2461278b599dd97aabab3a71d08c94d",
+    "name": "nathanbaxter.org",
+    "type": "URI",
+    "content": "1 \"nathanbaxter.com\"",
+    "priority": 1,
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "data": {
+      "target": "nathanbaxter.com",
+      "weight": 1
+    },
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-02-08T07:40:31.260997Z",
+    "modified_on": "2021-02-08T07:40:31.260997Z"
+  }
+]

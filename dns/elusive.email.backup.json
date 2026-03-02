@@ -1,0 +1,100 @@
+[
+  {
+    "id": "83c132b13dee481c0b44d64b94d8923e",
+    "name": "fm1._domainkey.elusive.email",
+    "type": "CNAME",
+    "content": "fm1.elusive.email.dkim.fmhosted.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-10-31T10:08:31.542888Z",
+    "modified_on": "2021-10-31T10:08:31.542888Z"
+  },
+  {
+    "id": "17c4f91447eba565731f052ddc7d5d49",
+    "name": "fm2._domainkey.elusive.email",
+    "type": "CNAME",
+    "content": "fm2.elusive.email.dkim.fmhosted.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-10-31T10:08:59.478079Z",
+    "modified_on": "2021-10-31T10:08:59.478079Z"
+  },
+  {
+    "id": "43a5d95add90dd2dc6226b884cdc210e",
+    "name": "fm3._domainkey.elusive.email",
+    "type": "CNAME",
+    "content": "fm3.elusive.email.dkim.fmhosted.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-10-31T10:09:19.942026Z",
+    "modified_on": "2021-10-31T10:09:19.942026Z"
+  },
+  {
+    "id": "f82bdf2d60ca095ad16c6f05f6f6738a",
+    "name": "elusive.email",
+    "type": "MX",
+    "content": "in2-smtp.messagingengine.com",
+    "priority": 20,
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-10-31T10:08:05.644977Z",
+    "modified_on": "2021-10-31T10:08:05.644977Z"
+  },
+  {
+    "id": "6b51a112ca76a8e9ffc699bb7e87cd8e",
+    "name": "elusive.email",
+    "type": "MX",
+    "content": "in1-smtp.messagingengine.com",
+    "priority": 10,
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-10-31T10:07:41.392778Z",
+    "modified_on": "2021-10-31T10:07:41.392778Z"
+  },
+  {
+    "id": "488da36c369911ba1f6636bd702c3c54",
+    "name": "elusive.email",
+    "type": "TXT",
+    "content": "v=spf1 include:spf.messagingengine.com ?all",
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-10-31T10:09:39.033111Z",
+    "modified_on": "2021-10-31T10:09:39.033111Z"
+  }
+]
