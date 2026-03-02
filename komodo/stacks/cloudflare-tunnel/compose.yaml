@@ -20,6 +20,8 @@ configs:
           service: https://10.0.0.1:443
           originRequest:
             noTLSVerify: true
+        - hostname: paperless.pod.haus
+          service: http://paperless:8000
         - service: http_status:404
 
 services:

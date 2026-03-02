@@ -82,11 +82,11 @@ podhaus/
       servers.toml              # Server definitions
       variables.toml            # Non-secret variables (MEDIA_DIR, TZ)
       podhaus-stacks.toml       # All stack definitions (inline compose via file_contents)
-  paperless/                    # Paperless-ngx (future)
-    PHASE1.md, migration guide
+  paperless/                    # Paperless-ngx
+    onenote-to-paperless-migration-guide.md
 ```
 
-All stack compose definitions are inline in `podhaus-stacks.toml` via `file_contents` (shows as "UI defined" in Komodo). Secrets flow from 1Password → komodo-op → Komodo Variables → `[[VARIABLE]]` interpolation in stack environment.
+Stack compose definitions live in `komodo/stacks/<name>/compose.yaml`, mounted into Periphery at `/etc/komodo/stacks/`. Stacks use `files_on_host = true` + `run_directory` in TOML. Secrets flow from 1Password → komodo-op → Komodo Variables → `[[VARIABLE]]` interpolation in stack environment.
 
 ## Implementation Steps (Podhaus First)
 
@@ -269,10 +269,14 @@ Note: Uses `api_version: "legacy"` for UniFi provider due to a `metadata` serial
 
 ### 8. Create and deploy Paperless-ngx
 
-- [ ] Create `komodo/stacks/paperless/compose.yaml` (webserver, postgres, redis, tika, gotenberg)
-- [ ] Add `[[stack]]` entry to `podhaus-stacks.toml` with `files_on_host = true`
-- [ ] Deploy and verify
-- [ ] Configure Cloudflare Tunnel route
+- [x] Create `komodo/stacks/paperless/compose.yaml` (webserver, postgres, redis, tika, gotenberg)
+- [x] Add `[[stack]]` entry to `podhaus-stacks.toml` with `files_on_host = true`
+- [x] Add Cloudflare Tunnel ingress rule for `paperless.pod.haus`
+- [x] Add `paperless` CNAME to `dns/dnsconfig.js`
+- [x] Create 3 secrets in 1Password (secret key, postgres password, admin password)
+- [x] Deploy via `komodo-sync` (volumes created automatically by Docker Compose)
+- [x] Destroy + redeploy cloudflare-tunnel, push DNS
+- [x] Verify 5 containers running, `https://paperless.pod.haus` returns 302 to login
 
 ### 9. (Later) Add pinelake
 
@@ -308,12 +312,12 @@ All legacy service directories, Dockerfiles, run scripts, management scripts, an
 
 1. Komodo UI accessible, podhaus server showing metrics
 2. 1Password secrets visible in Komodo Settings → Variables
-3. All Komodo stacks running: onepassword, cloudflare-tunnel, flood, home-assistant
+3. All Komodo stacks running: onepassword, cloudflare-tunnel, flood, home-assistant, paperless
 4. `torrent.pod.haus` — Flood UI loads, existing torrents intact
 5. `home.pod.haus` — HA loads without 400 errors
 6. `kangaroo.pod.haus`, `sync.pod.haus`, `unifi.pod.haus` — route directly through tunnel
 7. Resource Sync TOML in git matches running state
 8. No legacy `docker run` containers remain
 9. Everything restarts automatically after a podhaus reboot
-10. (Later) Paperless-ngx running at `https://paperless.pod.haus`
+10. Paperless-ngx running at `https://paperless.pod.haus` — 5 containers, login works
 11. (Later) pinelake server appears in Komodo, shows online/offline correctly

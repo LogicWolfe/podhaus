@@ -21,4 +21,3 @@ networks:
 
 volumes:
   flood-db:
-    external: true

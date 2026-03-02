@@ -1,0 +1,93 @@
+services:
+  paperless-postgres:
+    container_name: paperless-postgres
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: paperless
+      POSTGRES_PASSWORD: ${PAPERLESS_POSTGRES_PASSWORD}
+    volumes:
+      - paperless-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperless"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dockernet
+
+  paperless-redis:
+    container_name: paperless-redis
+    image: redis:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dockernet
+
+  paperless-tika:
+    container_name: paperless-tika
+    image: apache/tika:latest
+    restart: unless-stopped
+    networks:
+      - dockernet
+
+  paperless-gotenberg:
+    container_name: paperless-gotenberg
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    command: gotenberg --chromium-disable-javascript=true --chromium-allow-list=file:///tmp/.*
+    networks:
+      - dockernet
+
+  paperless:
+    container_name: paperless
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    restart: unless-stopped
+    depends_on:
+      paperless-postgres:
+        condition: service_healthy
+      paperless-redis:
+        condition: service_healthy
+      paperless-tika:
+        condition: service_started
+      paperless-gotenberg:
+        condition: service_started
+    environment:
+      PAPERLESS_REDIS: redis://paperless-redis:6379
+      PAPERLESS_DBHOST: paperless-postgres
+      PAPERLESS_DBPORT: "5432"
+      PAPERLESS_DBNAME: paperless
+      PAPERLESS_DBUSER: paperless
+      PAPERLESS_DBPASS: ${PAPERLESS_POSTGRES_PASSWORD}
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY}
+      PAPERLESS_ADMIN_USER: nathan
+      PAPERLESS_ADMIN_PASSWORD: ${PAPERLESS_ADMIN_PASSWORD}
+      PAPERLESS_URL: https://paperless.pod.haus
+      PAPERLESS_CSRF_TRUSTED_ORIGINS: https://paperless.pod.haus
+      PAPERLESS_ALLOWED_HOSTS: paperless.pod.haus
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_TIKA_ENABLED: "true"
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://paperless-gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://paperless-tika:9998
+      PAPERLESS_EMAIL_TASK_CRON: "*/10 * * * *"
+      PAPERLESS_CONSUMER_ENABLE_BARCODES: "true"
+      PAPERLESS_TIME_ZONE: ${TZ}
+    volumes:
+      - paperless-data:/usr/src/paperless/data
+      - paperless-media:/usr/src/paperless/media
+    networks:
+      - dockernet
+
+volumes:
+  paperless-pgdata:
+  paperless-data:
+  paperless-media:
+
+networks:
+  dockernet:
+    external: true

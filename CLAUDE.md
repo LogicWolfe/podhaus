@@ -9,11 +9,14 @@ Docker container infrastructure for home servers deployed to podhaus (pod.haus) 
 - Stack metadata and environment in `komodo/sync/podhaus-stacks.toml` (references compose files via `files_on_host = true`)
 - Secrets flow from 1Password → komodo-op → Komodo Variables → `[[VARIABLE]]` interpolation in stack environments
 - Non-secret variables defined in `komodo/sync/variables.toml`
+- Volumes are declared in compose files without `external: true` — Docker Compose creates them on first deploy
 - `komodo-start` bootstraps everything: starts Core, seeds variables, creates ResourceSync, triggers sync
 
 ## Networking
 
 - `dockernet`: bridge network at 172.18.0.0/16 for cross-stack communication
+- Containers reference each other by container name (Docker DNS), never by static IP
+- Static IPs are only for LAN devices (e.g. UniFi gateway at 10.0.0.1) or host-network services
 - Services needing device access use `network_mode: host` (e.g. home-assistant)
 - Cloudflare Tunnel routes `*.pod.haus` subdomains directly to backends (no nginx)
 
