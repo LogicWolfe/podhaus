@@ -17,7 +17,7 @@ configs:
         - hostname: sync.pod.haus
           service: http://172.18.0.1:8384
         - hostname: unifi.pod.haus
-          service: https://10.0.0.2:443
+          service: https://10.0.0.1:443
           originRequest:
             noTLSVerify: true
         - service: http_status:404

@@ -253,14 +253,28 @@ HA uses `homeassistant/home-assistant:stable` upstream image (Dockerfile adds no
 - [x] Restart Komodo infrastructure, sync, verify all stacks running
 - [x] Update CLAUDE.md and KOMODO.md
 
-### 7. Create and deploy Paperless-ngx
+### 7. DNSControl for full DNS management
+
+Declarative DNS management across Cloudflare (public) and UniFi (local split-horizon).
+
+- [x] Fix tunnel ingress IP for `unifi.pod.haus` (`10.0.0.2` → `10.0.0.1`)
+- [x] Back up existing Cloudflare DNS records to `dns/pod.haus.backup.json`
+- [x] Create DNSControl config: `dns/dnsconfig.js`, `dns/creds.json`, `dns/.env`
+- [x] Create helper scripts: `dns-preview`, `dns-push`
+- [x] Clean up stale Cloudflare records (sunshine, plex, localhost, wildcard, alligator A, bilby A)
+- [x] Create UniFi local DNS records for split-horizon (unifi, alligator, bilby)
+- [x] Verify `dns-preview` shows 0 corrections
+
+Note: Uses `api_version: "legacy"` for UniFi provider due to a `metadata` serialization bug in DNSControl v4.35.0's new Integration API support.
+
+### 8. Create and deploy Paperless-ngx
 
 - [ ] Create `komodo/stacks/paperless/compose.yaml` (webserver, postgres, redis, tika, gotenberg)
 - [ ] Add `[[stack]]` entry to `podhaus-stacks.toml` with `files_on_host = true`
 - [ ] Deploy and verify
 - [ ] Configure Cloudflare Tunnel route
 
-### 8. (Later) Add pinelake
+### 9. (Later) Add pinelake
 
 - [ ] Install Tailscale on both machines if not already running
 - [ ] Install Docker on pinelake (Docker Desktop or OrbStack for macOS)
@@ -297,8 +311,7 @@ All legacy service directories, Dockerfiles, run scripts, management scripts, an
 3. All Komodo stacks running: onepassword, cloudflare-tunnel, flood, home-assistant
 4. `torrent.pod.haus` — Flood UI loads, existing torrents intact
 5. `home.pod.haus` — HA loads without 400 errors
-6. `kangaroo.pod.haus`, `sync.pod.haus` — route directly through tunnel
-   - **Known issue**: `unifi.pod.haus` not working after nginx removal. Tunnel routes to `https://10.0.0.2:443` with `noTLSVerify: true` but the UniFi appliance may not be reachable from the tunnel container on dockernet, or may require different routing.
+6. `kangaroo.pod.haus`, `sync.pod.haus`, `unifi.pod.haus` — route directly through tunnel
 7. Resource Sync TOML in git matches running state
 8. No legacy `docker run` containers remain
 9. Everything restarts automatically after a podhaus reboot

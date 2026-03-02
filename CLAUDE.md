@@ -30,6 +30,10 @@ Docker container infrastructure for home servers deployed to podhaus (pod.haus) 
 - `komodo-stop` — shut down Komodo Core
 - `komodo-status` — show Komodo container status
 - `komodo-upgrade` — pull latest images and restart
+- `dns/dnsconfig.js` — DNSControl zone declarations (Cloudflare + UniFi)
+- `dns/creds.json` — DNSControl provider credentials (env var refs, no secrets)
+- `dns-preview` — DNSControl dry-run script
+- `dns-push` — DNSControl apply script
 
 ## When adding a new service
 

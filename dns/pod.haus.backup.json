@@ -1,0 +1,397 @@
+[
+  {
+    "id": "fa9f00ed24ab0d5420e091189a787dae",
+    "name": "alligator.pod.haus",
+    "type": "A",
+    "content": "10.0.0.42",
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2022-09-24T07:51:40.211334Z",
+    "modified_on": "2023-05-16T06:17:32.749195Z"
+  },
+  {
+    "id": "deb03a388a6075046580533adbfd5143",
+    "name": "bilby.pod.haus",
+    "type": "A",
+    "content": "100.74.207.110",
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-02-09T08:55:19.961665Z",
+    "modified_on": "2022-04-21T08:46:31.072Z"
+  },
+  {
+    "id": "f5995d2e81a7e0654d8dcbf2c047528f",
+    "name": "localhost.pod.haus",
+    "type": "A",
+    "content": "127.0.0.1",
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-02-08T07:44:11.564888Z",
+    "modified_on": "2021-02-08T07:44:11.564888Z"
+  },
+  {
+    "id": "fcc5016c210f98c95c44518288feeb02",
+    "name": "doggos.indigo.pod.haus",
+    "type": "CNAME",
+    "content": "x0y6bs3z.up.railway.app",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2025-09-13T04:50:51.303796Z",
+    "modified_on": "2025-09-13T04:50:51.303796Z"
+  },
+  {
+    "id": "a690aaca396443b96dfe7031e6a6ec33",
+    "name": "fm1._domainkey.pod.haus",
+    "type": "CNAME",
+    "content": "fm1.pod.haus.dkim.fmhosted.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-01-18T15:37:22.85859Z",
+    "modified_on": "2026-01-18T15:37:22.85859Z"
+  },
+  {
+    "id": "0669f66840c06eb214e22b8e25db11a7",
+    "name": "fm2._domainkey.pod.haus",
+    "type": "CNAME",
+    "content": "fm2.pod.haus.dkim.fmhosted.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-01-18T15:37:43.302555Z",
+    "modified_on": "2026-01-18T15:37:43.302555Z"
+  },
+  {
+    "id": "c4921386c1aa42100c582f39cced0a29",
+    "name": "fm3._domainkey.pod.haus",
+    "type": "CNAME",
+    "content": "fm3.pod.haus.dkim.fmhosted.com",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-01-18T15:38:03.106353Z",
+    "modified_on": "2026-01-18T15:38:03.106353Z"
+  },
+  {
+    "id": "2d9a95ae1133bf9bb4960ae54607f57c",
+    "name": "home.pod.haus",
+    "type": "CNAME",
+    "content": "cc68c7c9-1dad-42aa-af04-46119d3e515f.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-03-01T14:18:04.498629Z",
+    "modified_on": "2026-03-01T14:18:04.498629Z"
+  },
+  {
+    "id": "b58a4a4a57a2fa89b209b37c236cc474",
+    "name": "kangaroo.pod.haus",
+    "type": "CNAME",
+    "content": "cc68c7c9-1dad-42aa-af04-46119d3e515f.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-03-01T14:18:07.944527Z",
+    "modified_on": "2026-03-01T14:18:07.944527Z"
+  },
+  {
+    "id": "41547f49d48baa6733a20f80dc2b9469",
+    "name": "komodo.pod.haus",
+    "type": "CNAME",
+    "content": "cc68c7c9-1dad-42aa-af04-46119d3e515f.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-03-01T14:17:57.471589Z",
+    "modified_on": "2026-03-01T14:17:57.471589Z"
+  },
+  {
+    "id": "767efb220b1a82ce85dcc2154f485302",
+    "name": "plex.pod.haus",
+    "type": "CNAME",
+    "content": "app.plex.tv",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-02-08T08:14:13.091476Z",
+    "modified_on": "2021-02-08T08:14:13.091476Z"
+  },
+  {
+    "id": "0012354aa02f255f5ad6f0745b6b862b",
+    "name": "pm-bounces.pod.haus",
+    "type": "CNAME",
+    "content": "pm.mtasv.net",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2025-10-19T02:33:11.748024Z",
+    "modified_on": "2025-10-19T02:33:11.748024Z"
+  },
+  {
+    "id": "f723ce37f9753908ffed8e342b5e7868",
+    "name": "*.pod.haus",
+    "type": "CNAME",
+    "content": "alligator.pod.haus",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-07-29T04:14:21.245057Z",
+    "modified_on": "2022-09-24T07:52:23.657864Z"
+  },
+  {
+    "id": "7535c8ea8dcc8b53acdd30a4a9a76548",
+    "name": "sunshine.pod.haus",
+    "type": "CNAME",
+    "content": "f1ad8313-7da9-463c-95d3-88feb0371ad6.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2023-10-14T05:38:40.506782Z",
+    "modified_on": "2023-10-14T05:38:40.506782Z"
+  },
+  {
+    "id": "3956e12370990d2fada20ed0256d80f0",
+    "name": "sync.pod.haus",
+    "type": "CNAME",
+    "content": "cc68c7c9-1dad-42aa-af04-46119d3e515f.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-03-01T14:18:11.586617Z",
+    "modified_on": "2026-03-01T14:18:11.586617Z"
+  },
+  {
+    "id": "de0b4121fe9c2b519c48515eea5b2fec",
+    "name": "torrent.pod.haus",
+    "type": "CNAME",
+    "content": "cc68c7c9-1dad-42aa-af04-46119d3e515f.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-03-01T14:18:00.810701Z",
+    "modified_on": "2026-03-01T14:18:00.810701Z"
+  },
+  {
+    "id": "1645d3e5ef8f15f0f5d93180dca7a6f7",
+    "name": "unifi.pod.haus",
+    "type": "CNAME",
+    "content": "cc68c7c9-1dad-42aa-af04-46119d3e515f.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-03-01T14:18:16.148975Z",
+    "modified_on": "2026-03-01T14:18:16.148975Z"
+  },
+  {
+    "id": "ba34a82112f92645f2a554eb16604e74",
+    "name": "uptime.pod.haus",
+    "type": "CNAME",
+    "content": "j2pkgn87.up.railway.app",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2025-10-19T01:10:22.900873Z",
+    "modified_on": "2025-10-19T01:10:22.900873Z"
+  },
+  {
+    "id": "f54f7f556c0876d709364ef0ed7aff12",
+    "name": "yiayia.pod.haus",
+    "type": "CNAME",
+    "content": "06r38qgz.up.railway.app",
+    "proxiable": true,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2025-10-10T03:59:56.010142Z",
+    "modified_on": "2025-10-10T04:01:28.454616Z"
+  },
+  {
+    "id": "5d9c8c1db0be805bf1b7895d161e911b",
+    "name": "pod.haus",
+    "type": "MX",
+    "content": "in2-smtp.messagingengine.com",
+    "priority": 20,
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-02-08T07:44:11.553164Z",
+    "modified_on": "2026-01-18T15:35:19.54436Z"
+  },
+  {
+    "id": "487b8f939bd8a090afdce4ecefc65836",
+    "name": "pod.haus",
+    "type": "MX",
+    "content": "in1-smtp.messagingengine.com",
+    "priority": 10,
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2021-02-08T07:44:11.557636Z",
+    "modified_on": "2026-01-18T15:34:44.384003Z"
+  },
+  {
+    "id": "cd1092bf2da1afb1eddb92d0712ea943",
+    "name": "20260118155237pm._domainkey.pod.haus",
+    "type": "TXT",
+    "content": "\"k=rsa;p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCIH3KJg5M/6mLqrDZYGuTlo/giMs3jPAOQTDo0P98+Nn4/9+bJci69Gn+i+TUgJDtzftYVi+532+di1NQn2uaZiaw2IjSk1/kanoiexsSrge0oVXCGgAuMXkrWdHk5OO2S90dpmDho+enbWbuxdrOob7BfyZIkSmz6m9s37lW2fQIDAQAB\"",
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": "Postmark DKIM",
+    "tags": [],
+    "created_on": "2026-01-18T15:53:08.640359Z",
+    "modified_on": "2026-01-29T23:13:58.080899Z",
+    "comment_modified_on": "2026-01-29T23:13:58.080899Z"
+  },
+  {
+    "id": "699d394855d2b96604523add22aef0b4",
+    "name": "pod.haus",
+    "type": "TXT",
+    "content": "\"k=rsa;p=\"",
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-01-18T15:53:33.700991Z",
+    "modified_on": "2026-01-18T15:53:33.700991Z"
+  },
+  {
+    "id": "2452949bf7b358dfcae0fcf4cbde835f",
+    "name": "pod.haus",
+    "type": "TXT",
+    "content": "\"v=spf1 include:spf.messagingengine.com ?all\"",
+    "proxiable": false,
+    "proxied": false,
+    "ttl": 1,
+    "settings": {},
+    "meta": {},
+    "comment": null,
+    "tags": [],
+    "created_on": "2026-01-18T15:36:32.546936Z",
+    "modified_on": "2026-01-18T15:36:32.546936Z"
+  }
+]

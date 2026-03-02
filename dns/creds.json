@@ -1,0 +1,14 @@
+{
+  "cloudflare": {
+    "TYPE": "CLOUDFLAREAPI",
+    "apitoken": "$CLOUDFLARE_API_TOKEN"
+  },
+  "unifi": {
+    "TYPE": "UNIFI",
+    "host": "https://10.0.0.1",
+    "api_key": "$UNIFI_API_KEY",
+    "site": "default",
+    "skip_tls_verify": "true",
+    "api_version": "legacy"
+  }
+}
