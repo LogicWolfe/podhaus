@@ -67,7 +67,7 @@ services:
       TZ: ${TZ}
     volumes:
       - ${COMPOSE_KOMODO_BACKUPS_PATH}:/backups
-      - ${COMPOSE_KOMODO_SYNC_PATH}:/syncs/podhaus
+      - ${COMPOSE_KOMODO_REPO_PATH}:/syncs/podhaus
 
   periphery:
     container_name: komodo-periphery
@@ -82,7 +82,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /proc:/proc
       - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
-      - ${COMPOSE_KOMODO_STACKS_PATH}:/etc/komodo/stacks
+      - ${COMPOSE_KOMODO_REPO_PATH}:/etc/komodo/repo
 
 networks:
   dockernet:

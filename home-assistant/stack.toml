@@ -1,0 +1,14 @@
+[[stack]]
+name = "home-assistant"
+description = "Home Assistant home automation"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/home-assistant"
+
+environment = """
+TZ=[[TZ]]
+"""

@@ -1,0 +1,14 @@
+[[stack]]
+name = "flood"
+description = "rtorrent + Flood web UI for torrents"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/flood"
+
+environment = """
+FLOOD_SECRET=[[OP__KOMODO__FLOOD_SECRET__PASSWORD]]
+"""

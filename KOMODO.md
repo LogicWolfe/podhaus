@@ -75,18 +75,22 @@ Secrets are available globally in Komodo. Server-specific secrets use naming con
 
 ```
 podhaus/
+  cloudflare-tunnel/            # Each service has its own top-level directory
+    compose.yaml                #   Docker Compose definition
+    stack.toml                  #   Komodo stack metadata (server, env vars)
+  flood/
+  home-assistant/
+  onepassword/
+  paperless/
   komodo/
     ferretdb.compose.yaml       # Komodo Core infrastructure (not managed by ResourceSync)
     compose.env                 # Komodo config with op:// references
     sync/
       servers.toml              # Server definitions
       variables.toml            # Non-secret variables (MEDIA_DIR, TZ)
-      podhaus-stacks.toml       # All stack definitions (inline compose via file_contents)
-  paperless/                    # Paperless-ngx
-    onenote-to-paperless-migration-guide.md
 ```
 
-Stack compose definitions live in `komodo/stacks/<name>/compose.yaml`, mounted into Periphery at `/etc/komodo/stacks/`. Stacks use `files_on_host = true` + `run_directory` in TOML. Secrets flow from 1Password → komodo-op → Komodo Variables → `[[VARIABLE]]` interpolation in stack environment.
+The repo root is mounted into both Core (for ResourceSync to discover `stack.toml` files) and Periphery (to read `compose.yaml` files). Stacks use `files_on_host = true` + `run_directory` in TOML. Secrets flow from 1Password → komodo-op → Komodo Variables → `[[VARIABLE]]` interpolation in stack environment.
 
 ## Implementation Steps (Podhaus First)
 
@@ -236,7 +240,7 @@ HA uses `homeassistant/home-assistant:stable` upstream image (Dockerfile adds no
 
 #### 5f. Delete legacy files and clean up
 
-- [x] Remove all retired service directories (certbot, cloudflare-ddns, cloudflare-tunnel, elasticsearch, elasticsearch-hq, kibana, nginx, owntone, plex, postgres, reviewer, unifi, forked-daapd)
+- [x] Remove all retired service directories (certbot, cloudflare-ddns, cloudflare-tunnel, elasticsearch, elasticsearch-hq, kibana, nginx, owntone, plex, postgres, reviewer, unifi)
 - [x] Clean flood/ and home-assistant/ dirs (removed entirely — all config is inline in TOML or in Docker volumes)
 - [x] Remove root-level management scripts (build, stop, connect, restart, create_symlinks, create_network, before_run, encrypt_secrets, decrypt_secrets)
 - [x] Remove environment templates (environment.podhaus, environment.pinelake)

@@ -1,0 +1,14 @@
+[[stack]]
+name = "cloudflare-tunnel"
+description = "Cloudflare Tunnel (locally managed) for external access"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/cloudflare-tunnel"
+
+environment = """
+TUNNEL_CREDENTIALS=[[OP__KOMODO__CLOUDFLARE_TUNNEL_CREDENTIALS__CREDENTIAL]]
+"""

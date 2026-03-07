@@ -59,8 +59,6 @@ Secrets are stored as GPG-encrypted files per environment (`secrets.podhaus.gpg`
 
 **reviewer** — Build script references a path outside the repo. Nginx config exists but the service is broken.
 
-**forked-daapd** — Has config files and databases but no `run` script or Dockerfile. Replaced by owntone.
-
 **paperless** — Only contains a OneNote migration guide. No service files.
 
 ### External (nginx-proxied only)

@@ -1,0 +1,17 @@
+[[stack]]
+name = "paperless"
+description = "Paperless-ngx document management system"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/paperless"
+
+environment = """
+PAPERLESS_SECRET_KEY=[[OP__KOMODO__PAPERLESS_SECRET_KEY__PASSWORD]]
+PAPERLESS_POSTGRES_PASSWORD=[[OP__KOMODO__PAPERLESS_POSTGRES_PASSWORD__PASSWORD]]
+PAPERLESS_ADMIN_PASSWORD=[[OP__KOMODO__PAPERLESS_ADMIN_PASSWORD__PASSWORD]]
+TZ=[[TZ]]
+"""

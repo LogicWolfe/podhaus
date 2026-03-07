@@ -1,0 +1,17 @@
+[[stack]]
+name = "onepassword"
+description = "1Password Connect + komodo-op secret sync"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/onepassword"
+
+environment = """
+OP_CREDENTIALS=[[ONEPASSWORD_CREDENTIALS]]
+OP_SERVICE_ACCOUNT_TOKEN=[[ONEPASSWORD_CONNECT_TOKEN]]
+KOMODO_API_KEY=[[ONEPASSWORD_API_KEY]]
+KOMODO_API_SECRET=[[ONEPASSWORD_API_SECRET]]
+"""
