@@ -30,8 +30,12 @@
 
 ### Critical Identifiers (must be preserved)
 
-- `MachineIdentifier`: `9e4361f9-cdb9-4157-8bf9-f5b154d43ba9`
-- `ProcessedMachineIdentifier`: `35bc90b6511a4a3dd245b5d4f2f4896bb0bb4e49`
+- `MachineIdentifier`: `32664151-cc4f-4daf-8a99-84af2c04274b`
+- `ProcessedMachineIdentifier`: `e2edf17235c0f4f9b51578e13d7be476c88c1b67`
+- `AnonymousMachineIdentifier`: `4121b908-884b-4d23-b411-4e8a69eb3d45`
+- `PlexOnlineToken`: stored in Preferences.xml on Jump (originally from macOS `defaults read com.plexapp.plexmediaserver`)
+
+**Warning**: Native macOS Plex stores identity in BOTH `Preferences.xml` AND `com.plexapp.plexmediaserver` defaults. The defaults values are the real ones that plex.tv uses. The Preferences.xml values can be stale/different. Always verify against plex.tv: `curl -s "https://plex.tv/api/servers" -H "X-Plex-Token: <token>"` and match the `machineIdentifier` for your server.
 
 ## Design Decisions
 
@@ -81,7 +85,8 @@ A 4GB tmpfs mount at `/transcode` keeps transcode temp files in RAM. The existin
 ~/repos/podhaus/
 ├── plex/
 │   ├── compose.yaml     # Docker Compose definition
-│   └── MIGRATION.md     # This file
+│   ├── MIGRATION.md     # This file
+│   └── NFS.md           # NFS mount setup and benchmarks
 ├── flood/
 │   ├── compose.yaml
 │   └── stack.toml
@@ -100,13 +105,14 @@ No `.env` file or `${VAR}` interpolation — following the pattern of other comp
 services:
   plex:
     container_name: plex
+    hostname: Bilby
     image: plexinc/pms-docker:latest
     restart: unless-stopped
     network_mode: host
     environment:
       TZ: Australia/Perth
-      PLEX_UID: "501"
-      PLEX_GID: "20"
+      PLEX_UID: "1000"
+      PLEX_GID: "100"
       CHANGE_CONFIG_DIR_OWNERSHIP: "false"
     volumes:
       - /Users/Shared/Jump/plex:/config
@@ -117,11 +123,20 @@ services:
 
 When it's time to bring this into Komodo, add a `stack.toml`, adjust paths for Linux, and add UID/GID appropriate for the Linux host.
 
-### Bridge Mode Fallback (if host mode doesn't expose to LAN)
+### Troubleshooting: host networking not exposing to LAN
 
-Replace `network_mode: host` with explicit port mapping and `dockernet`:
+OrbStack's `network_mode: host` should expose ports on the Mac's LAN IP. If LAN clients can't reach Plex, the Docker runtime's host networking may not be working as expected (e.g. Colima's host mode only exposes inside the Linux VM, not on the Mac).
+
+In that case, switch to bridge mode with explicit port mapping and add `ADVERTISE_IP` so Plex knows its real LAN address:
 
 ```yaml
+services:
+  plex:
+    container_name: plex
+    hostname: Bilby
+    image: plexinc/pms-docker:latest
+    restart: unless-stopped
+    # network_mode: host  # disabled — using bridge with port mapping
     ports:
       - "32400:32400"
       - "1900:1900/udp"
@@ -131,12 +146,17 @@ Replace `network_mode: host` with explicit port mapping and `dockernet`:
       - "32412:32412/udp"
       - "32413:32413/udp"
       - "32414:32414/udp"
-    networks:
-      - dockernet
-
-networks:
-  dockernet:
-    external: true
+    environment:
+      TZ: Australia/Perth
+      PLEX_UID: "1000"
+      PLEX_GID: "100"
+      CHANGE_CONFIG_DIR_OWNERSHIP: "false"
+      ADVERTISE_IP: http://10.0.0.119:32400/
+    volumes:
+      - /Users/Shared/Jump/plex:/config
+      - /Users/Shared/Pouch:/Users/Shared/Pouch
+    tmpfs:
+      - /transcode:size=4g
 ```
 
 ## Execution

@@ -1,6 +1,7 @@
 services:
   plex:
     container_name: plex
+    hostname: Bilby
     image: plexinc/pms-docker:latest
     restart: unless-stopped
     network_mode: host
