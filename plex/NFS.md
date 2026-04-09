@@ -81,6 +81,18 @@ The full path (Mac NIC, switch, QNAP NIC) must support MTU 9000:
 
 Verify: `ifconfig en0 | grep mtu` should show `mtu 9000`.
 
+## macOS File Descriptor Limit
+
+Containers accessing NFS mounts through OrbStack's VirtioFS can exhaust the default macOS file descriptor soft limit (256). Media-scanning services like Plex easily hit 8000+ open fds during library scans.
+
+A LaunchDaemon at `/Library/LaunchDaemons/limit.maxfiles.plist` raises the limit to 524288 at boot:
+
+```
+sudo launchctl limit maxfiles 524288 524288
+```
+
+To verify: `launchctl limit maxfiles`
+
 ## Performance Benchmarks (April 2026)
 
 Tested with fio on the Mac mini (M1) over 10GbE with jumbo frames (MTU 9000).

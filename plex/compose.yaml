@@ -11,7 +11,38 @@ services:
       PLEX_GID: "100"
       CHANGE_CONFIG_DIR_OWNERSHIP: "false"
     volumes:
-      - /Users/Shared/Jump/plex:/config
-      - /Users/Shared/Pouch:/Users/Shared/Pouch
+      - jump:/config
+      - pouch:/Users/Shared/Pouch
     tmpfs:
       - /transcode:size=4g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:32400/identity > /dev/null && test -d /Users/Shared/Pouch/Movies && test -d /config/Library"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  plex-backup:
+    container_name: plex-backup
+    image: alpine:latest
+    command: ["/bin/sh", "/scripts/backup.sh"]
+    volumes:
+      - ./backup.sh:/scripts/backup.sh:ro
+      - jump:/config
+      - pouch:/pouch
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  jump:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=150,retrans=3,rw"
+      device: ":/Jump/plex"
+  pouch:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=150,retrans=3,nolock,rw"
+      device: ":/Pouch"

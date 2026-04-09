@@ -1,6 +1,8 @@
-# Plex Containerization Plan
+# Plex Containerization
 
-## Current State
+> **Status**: Running. Docker NFS volumes mount directly from OrbStack's VM to the NAS, bypassing macOS VirtioFS.
+
+## Pre-Migration State
 
 | | |
 |---|---|
@@ -28,14 +30,13 @@
 | Documentary TV | `/Users/Shared/Pouch/Documentary Series` (also at `/Volumes/Macintosh HD/Users/Shared/Pouch/Documentary Series`) |
 | Ελληνικές Ταινίες | `/Users/Shared/Pouch/Ελληνικές Ταινίες` |
 
-### Critical Identifiers (must be preserved)
+### Critical Identifiers
 
-- `MachineIdentifier`: `32664151-cc4f-4daf-8a99-84af2c04274b`
-- `ProcessedMachineIdentifier`: `e2edf17235c0f4f9b51578e13d7be476c88c1b67`
-- `AnonymousMachineIdentifier`: `4121b908-884b-4d23-b411-4e8a69eb3d45`
-- `PlexOnlineToken`: stored in Preferences.xml on Jump (originally from macOS `defaults read com.plexapp.plexmediaserver`)
-
-**Warning**: Native macOS Plex stores identity in BOTH `Preferences.xml` AND `com.plexapp.plexmediaserver` defaults. The defaults values are the real ones that plex.tv uses. The Preferences.xml values can be stale/different. Always verify against plex.tv: `curl -s "https://plex.tv/api/servers" -H "X-Plex-Token: <token>"` and match the `machineIdentifier` for your server.
+Canonical source is `Preferences.xml` on the Jump mount at `/Users/Shared/Jump/plex/Library/Application Support/Plex Media Server/Preferences.xml`. Verify with:
+```
+grep MachineIdentifier "/Users/Shared/Jump/plex/Library/Application Support/Plex Media Server/Preferences.xml"
+```
+Cross-check against plex.tv: `curl -s "https://plex.tv/api/servers" -H "X-Plex-Token: <token>"` — the `machineIdentifier` should match.
 
 ## Design Decisions
 
@@ -52,16 +53,19 @@ Two NAS mounts with very different performance profiles:
 
 The 44GB SQLite database lives on Jump. SQLite random IO latency over NFS will be higher than local SSD (~0.5-1ms vs ~0.01ms per round-trip), but Jump's smaller dedicated volume should have better IOPs than the 29TB media array. If library browsing or search becomes sluggish, config can be moved to local SSD later.
 
-### NFS mount on macOS, not inside Docker
+### Docker NFS volumes, not macOS bind mounts
 
-The NFS mount is managed on the macOS side at `/Users/Shared/Pouch`. The Docker container bind-mounts this macOS path. This means:
-- Other containers can trigger on inotify events from the same mount
-- Mount lifecycle is managed by macOS, not Docker
-- The mount path inside the container matches the host path, so all existing library paths in the Plex database remain valid with zero reconfiguration
+Both NFS mounts are Docker volumes that mount directly from OrbStack's Linux VM to the NAS (10.0.0.25) using NFSv4.1. This bypasses macOS's NFS client and OrbStack's VirtioFS file-sharing layer entirely.
+
+**Why:** After macOS sleep, VirtioFS caches stale inode references to NFS mount points. The container sees dead mounts even after restart, because the stale state lives in OrbStack's VM file-sharing layer. Docker NFS volumes avoid this — the Linux NFS client reconnects automatically on wake (v4.1 session recovery), and a container restart gets fresh mount handles if needed.
+
+**Trade-off:** Direct NFS from the VM goes through OrbStack's NAT at MTU 1500 (no jumbo frames), so peak sequential throughput is lower than macOS NFS with MTU 9000. For media streaming this is far more bandwidth than needed (4K remux peaks at ~12.5 MB/s).
+
+The macOS autofs NFS mounts in `/etc/auto_nfs` remain for Finder and other host tools.
 
 ### Identity mount for zero library reconfiguration
 
-The media volume is mounted as `/Users/Shared/Pouch:/Users/Shared/Pouch` — the container path matches the host path. Since all library paths in the Plex database are absolute paths under `/Users/Shared/Pouch`, they remain valid without any edits.
+The Pouch volume is mounted at `/Users/Shared/Pouch` inside the container — the same path as the old bind mount. All library paths in the Plex database remain valid with zero reconfiguration.
 
 ### Host network mode
 
@@ -84,9 +88,12 @@ A 4GB tmpfs mount at `/transcode` keeps transcode temp files in RAM. The existin
 ```
 ~/repos/podhaus/
 ├── plex/
-│   ├── compose.yaml     # Docker Compose definition
+│   ├── compose.yaml     # Docker Compose definition (Plex + backup sidecar + NFS volumes)
+│   ├── backup.sh        # Database backup with integrity check and auto-recovery
 │   ├── MIGRATION.md     # This file
 │   └── NFS.md           # NFS mount setup and benchmarks
+├── autoheal/
+│   └── compose.yaml     # Restarts unhealthy containers
 ├── flood/
 │   ├── compose.yaml
 │   └── stack.toml
@@ -99,175 +106,85 @@ No `stack.toml` — Komodo's ResourceSync auto-discovers and deploys any directo
 
 No `.env` file or `${VAR}` interpolation — following the pattern of other compose files in the repo (e.g. flood hardcodes `/mnt/NFSPouch:/data`), paths are written directly. The `MEDIA_DIR` variable in `variables.toml` is vestigial and unused by any current compose file.
 
-## Docker Compose (`plex/compose.yaml`)
-
-```yaml
-services:
-  plex:
-    container_name: plex
-    hostname: Bilby
-    image: plexinc/pms-docker:latest
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      TZ: Australia/Perth
-      PLEX_UID: "1000"
-      PLEX_GID: "100"
-      CHANGE_CONFIG_DIR_OWNERSHIP: "false"
-    volumes:
-      - /Users/Shared/Jump/plex:/config
-      - /Users/Shared/Pouch:/Users/Shared/Pouch
-    tmpfs:
-      - /transcode:size=4g
-```
-
-When it's time to bring this into Komodo, add a `stack.toml`, adjust paths for Linux, and add UID/GID appropriate for the Linux host.
-
 ### Troubleshooting: host networking not exposing to LAN
 
-OrbStack's `network_mode: host` should expose ports on the Mac's LAN IP. If LAN clients can't reach Plex, the Docker runtime's host networking may not be working as expected (e.g. Colima's host mode only exposes inside the Linux VM, not on the Mac).
-
-In that case, switch to bridge mode with explicit port mapping and add `ADVERTISE_IP` so Plex knows its real LAN address:
-
-```yaml
-services:
-  plex:
-    container_name: plex
-    hostname: Bilby
-    image: plexinc/pms-docker:latest
-    restart: unless-stopped
-    # network_mode: host  # disabled — using bridge with port mapping
-    ports:
-      - "32400:32400"
-      - "1900:1900/udp"
-      - "5353:5353/udp"
-      - "8324:8324"
-      - "32410:32410/udp"
-      - "32412:32412/udp"
-      - "32413:32413/udp"
-      - "32414:32414/udp"
-    environment:
-      TZ: Australia/Perth
-      PLEX_UID: "1000"
-      PLEX_GID: "100"
-      CHANGE_CONFIG_DIR_OWNERSHIP: "false"
-      ADVERTISE_IP: http://10.0.0.119:32400/
-    volumes:
-      - /Users/Shared/Jump/plex:/config
-      - /Users/Shared/Pouch:/Users/Shared/Pouch
-    tmpfs:
-      - /transcode:size=4g
-```
+OrbStack's `network_mode: host` should expose ports on the Mac's LAN IP. If LAN clients can't reach Plex, fall back to bridge mode with explicit port mapping and `ADVERTISE_IP: http://10.0.0.119:32400/`.
 
 ## Execution
 
 ### Phase 1: Prepare
 
-- [ ] Ensure OrbStack is running and `docker ps` works
-- [ ] Verify `/Users/Shared/Pouch` and `/Users/Shared/Jump` are NFS-mounted and accessible
-- [ ] Create config directory on Jump:
-  ```
-  mkdir -p "/Users/Shared/Jump/plex/Library/Application Support"
-  ```
+- [x] Ensure OrbStack is running and `docker ps` works
+- [x] Verify `/Users/Shared/Pouch` and `/Users/Shared/Jump` are NFS-mounted and accessible
+- [x] Create config directory on Jump
 
 ### Phase 2: Bulk Copy (Plex still running, minimises downtime)
 
-- [ ] Initial rsync of Plex data while Plex is still serving clients:
-  ```
-  rsync -avP \
-    "/Users/nathan/Library/Application Support/Plex Media Server/" \
-    "/Users/Shared/Jump/plex/Library/Application Support/Plex Media Server/"
-  ```
-  This will be inconsistent (database is live) but transfers the bulk of the 58GB.
+- [x] Initial rsync of Plex data while Plex is still serving clients
 
 ### Phase 3: Cut Over (downtime starts)
 
-- [ ] Disable Plex auto-start (remove from Login Items in System Settings)
-- [ ] Stop Plex:
-  ```
-  killall "Plex Media Server"
-  ```
-- [ ] Confirm all Plex processes are gone:
-  ```
-  ps aux | grep -i plex | grep -v grep
-  ```
-- [ ] Final rsync (consistent, only diffs):
-  ```
-  rsync -avP --delete \
-    "/Users/nathan/Library/Application Support/Plex Media Server/" \
-    "/Users/Shared/Jump/plex/Library/Application Support/Plex Media Server/"
-  ```
-- [ ] Verify Preferences.xml is present and correct:
-  ```
-  grep MachineIdentifier "/Users/Shared/Jump/plex/Library/Application Support/Plex Media Server/Preferences.xml"
-  ```
-  Should contain `MachineIdentifier="9e4361f9-cdb9-4157-8bf9-f5b154d43ba9"`
+- [x] Disable Plex auto-start
+- [x] Stop native Plex
+- [x] Final rsync to Jump
+- [x] Verify Preferences.xml present on Jump
 
 ### Phase 4: Start Container
 
-- [ ] If no `PlexOnlineToken` in Preferences.xml, get a claim token from https://plex.tv/claim (expires in 4 minutes, no quotes around the value). Pass it as a one-shot env var:
-  ```
-  cd ~/repos/podhaus/plex && PLEX_CLAIM=claim-xxxx docker compose up -d
-  ```
-  The `pms-docker` image reads `PLEX_CLAIM` from the environment. No need to persist it anywhere — it's only used on first start to exchange for a permanent `PlexOnlineToken` written into Preferences.xml.
-- [ ] If claim token isn't needed (existing token preserved), just start directly:
-  ```
-  cd ~/repos/podhaus/plex && docker compose up -d
-  ```
-- [ ] Check logs:
-  ```
-  docker logs -f plex
-  ```
+- [x] Start container with `docker compose up -d`
+- [x] Verify logs
 
 ### Phase 5: Verify
 
-- [ ] Web UI at `http://localhost:32400/web` — confirm server loads
-- [ ] Check identity endpoint:
-  ```
-  curl -s http://localhost:32400/identity
-  ```
-  Should return the correct `MachineIdentifier`
-- [ ] **LAN test**: from another device, access `http://10.0.0.119:32400/web`. If this fails, switch to bridge mode fallback.
-- [ ] Confirm server shows as "owned" at https://app.plex.tv
-- [ ] Test from a LAN client (phone, TV, etc.) — server should appear with the same name
-- [ ] Verify all 11 libraries show existing content without re-scanning
-- [ ] Test playback: direct play and transcoded content
-- [ ] Verify Trakttv and Sub-Zero plugins are operational
-- [ ] Check remote access: Settings > Remote Access
-- [ ] Run "Empty Trash", "Clean Bundles", "Optimize Database" from Settings > Troubleshooting
+- [x] Web UI loads at `http://localhost:32400/web`
+- [x] Identity endpoint returns correct MachineIdentifier
+- [x] LAN access confirmed
+- [x] Server shows as "owned" at https://app.plex.tv
+- [x] Libraries show existing content
+- [x] Playback works (direct play and transcode)
 
 ### Phase 6: Clean Up
 
-- [ ] No cleanup needed for claim token (passed as one-shot env var, not persisted)
-- [ ] Verify the documentary library path — one entry uses `/Volumes/Macintosh HD/Users/Shared/Pouch/Documentary Series` which is a full-path variant. May need updating if it doesn't resolve inside the container.
-- [ ] Keep the original data at `~/Library/Application Support/Plex Media Server/` as a rollback backup until confident
-- [ ] Commit `plex/compose.yaml` and `plex/MIGRATION.md` to podhaus repo
+- [x] Commit compose.yaml and migration docs to podhaus repo
+- [ ] Verify the documentary library path — one entry uses `/Volumes/Macintosh HD/Users/Shared/Pouch/Documentary Series` which won't resolve inside the container. Needs updating in Plex library settings.
 
-## Rollback
+## Post-Reinstall Recovery
 
-If anything goes wrong:
+After a clean macOS reinstall, the Plex data remains on the NAS. To restore:
 
-1. `cd ~/repos/podhaus/plex && docker compose down`
-2. Re-enable native Plex: open `/Applications/Plex Media Server.app`
-3. Original data is untouched at `~/Library/Application Support/Plex Media Server/`
+1. Install OrbStack
+2. Clone podhaus repo
+3. Start the containers: `cd ~/repos/podhaus/plex && docker compose up -d`
+4. Docker creates the NFS volumes and mounts directly from the VM — no host NFS setup needed for Plex
 
-## Known Risks
+macOS autofs mounts (`/etc/auto_nfs`) are still needed for Finder access and other tools — see [NFS.md](NFS.md).
 
-### OrbStack LAN accessibility
+## Health and Recovery
 
-OrbStack documentation is ambiguous about whether `--net=host` or `-p` port forwards are reachable from LAN devices (not just localhost). This must be verified in Phase 5 by testing from another device. If not reachable, the bridge mode fallback with explicit port mapping should work, or a lightweight socat/caddy reverse proxy on the Mac can forward traffic.
+### Sleep/wake resilience
 
-### Preferences.xml overwrite
+A healthcheck verifies Plex API, media mount, and config mount every 30s. If NFS drops after sleep:
 
-The official `pms-docker` first-run script merges into an existing Preferences.xml rather than overwriting — but only if the file exists before the container starts. The rsync in Phase 3 ensures this. If the file does get clobbered, restore from the backup at `~/Library/Application Support/Plex Media Server/Preferences.xml`.
+1. Linux NFS client auto-reconnects (NFSv4.1 session recovery) — healthcheck passes transparently
+2. If reconnection fails, 3 consecutive healthcheck failures mark the container unhealthy
+3. The `autoheal` container restarts Plex — Docker remounts NFS volumes with fresh handles
 
-### NFS mount availability
+### Database backup and auto-recovery
 
-If either NFS mount drops, the container loses access to config (Jump) or media (Pouch). The container's `restart: unless-stopped` policy will restart Plex if it crashes, but it won't fix a missing mount. Consider monitoring mount availability.
+The `plex-backup` sidecar runs daily:
 
-### Database performance on NFS
+1. Takes a snapshot via `sqlite3 .backup` (consistent, safe while Plex is running)
+2. Runs `PRAGMA integrity_check` on the snapshot
+3. If valid, promotes to `backup.db` on Pouch (different NAS volume from the live database on Jump)
+4. If integrity check fails twice, the live database is corrupt — restores from last good `backup.db` and restarts Plex
 
-The 44GB SQLite database on Jump (NFS) will have higher latency than local SSD. Jump's dedicated smaller volume should have better IOPs than Pouch, but if library browsing or search becomes sluggish, move the config to local SSD by updating the compose volume path and rsyncing the data.
+Manual recovery: `docker compose stop plex`, copy `backup.db` over the live database, `docker compose start plex`. See `backup.sh` for details.
+
+### Known risks
+
+**SQLite on NFS:** The 44GB Plex database on Jump (NFS) has a small corruption risk on unclean shutdown. NFSv4.1 locking is adequate for single-writer, but crash recovery depends on NFS write ordering. The daily verified backup limits worst-case data loss to 24 hours of watch history and metadata changes.
+
+**Database performance:** SQLite random I/O over NFS has higher latency than local SSD. If library browsing or search becomes sluggish, move config to local SSD by changing the `jump` volume definition and rsyncing the data.
 
 ## References
 
