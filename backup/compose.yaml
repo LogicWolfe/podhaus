@@ -1,0 +1,74 @@
+services:
+  backrest:
+    container_name: backrest
+    image: garethgeorge/backrest:latest
+    restart: unless-stopped
+    ports:
+      - 9898:9898
+    environment:
+      BACKREST_PORT: "0.0.0.0:9898"
+      BACKREST_CONFIG: /config/config.json
+      BACKREST_DATA: /data
+      BACKREST_RESTIC_COMMAND: /bin/restic
+      XDG_CACHE_HOME: /cache
+      TZ: ${TZ}
+      # Backrest shell hooks and ad-hoc restic runs can reach these
+      # directly without calling back into 1P.
+      RESTIC_REPOSITORY: /repos/podhaus
+      RESTIC_PASSWORD: ${RESTIC_REPO_PASSWORD}
+      POSTMARK_USERNAME: ${POSTMARK_USERNAME}
+      POSTMARK_CREDENTIAL: ${POSTMARK_CREDENTIAL}
+      POSTMARK_SERVER: ${POSTMARK_SERVER}
+      POSTMARK_PORT: ${POSTMARK_PORT}
+      # rclone's own RCLONE_CONFIG env var points to the rendered config
+      # file bind-mounted in below. See komodo-start — the file is
+      # rendered from 1P via op CLI so we don't try to squeeze a
+      # multi-line Secure Note through Komodo's env-file pipeline (which
+      # truncates at the first newline).
+      RCLONE_CONFIG: /rclone/rclone.conf
+    volumes:
+      - backrest-data:/data
+      - backrest-config:/config
+      - backrest-cache:/cache
+      # Source data to back up — read-only to prevent accidental writes.
+      # Other /Jump subdirs get added here as stacks come online.
+      - plex_jump:/userdata/plex:ro
+      # Restic repository target on Pouch.
+      - /mnt/pouch/backups:/repos/podhaus
+      # rclone config rendered on the host by komodo-start into
+      # /etc/komodo/rclone/rclone.conf. Bind-mounted read-only.
+      - /etc/komodo/rclone/rclone.conf:/rclone/rclone.conf:ro
+    # Backrest shell hooks need docker socket access to exec into other
+    # containers for live DB dumps (plex library, paperless pg, komodo pg).
+    # label:disable lifts SELinux confinement for that.
+    security_opt:
+      - label:disable
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9898/ > /dev/null"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  # Backrest state: small, latency-sensitive. Local disk for now under the
+  # same /Jump squash carve-out as komodo-postgres (see
+  # komodo/ferretdb.compose.yaml). Flip to NFS when the export mode is fixed.
+  backrest-data:
+  backrest-config:
+  backrest-cache:
+  # plex_jump is owned by the standalone plex compose project and holds
+  # the real /Jump/plex NFS mount. external: true tells compose to reuse
+  # the existing volume by name rather than creating a project-prefixed
+  # clone. Future stack volumes we want to back up get added here the
+  # same way (external refs, mounted read-only in the backrest service).
+  plex_jump:
+    external: true

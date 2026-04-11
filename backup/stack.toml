@@ -1,0 +1,19 @@
+[[stack]]
+name = "backup"
+description = "Backrest + restic + rclone off-site sync (backup gate per migration plan)"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/backup"
+
+environment = """
+TZ=[[TZ]]
+RESTIC_REPO_PASSWORD=[[OP__KOMODO__RESTIC_REPO_PASSWORD__CREDENTIAL]]
+POSTMARK_USERNAME=[[OP__KOMODO__POSTMARK_SMTP__USERNAME]]
+POSTMARK_CREDENTIAL=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
+POSTMARK_SERVER=[[OP__KOMODO__POSTMARK_SMTP__SERVER]]
+POSTMARK_PORT=[[OP__KOMODO__POSTMARK_SMTP__PORT]]
+"""
