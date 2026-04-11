@@ -4,15 +4,50 @@ Migration of all running services from `alligator` (Intel NUC, x86_64, Linux) to
 
 ## Resumption pointer (read this first if returning to a fresh session)
 
-**Current state:** planning complete, zero code changes made, zero containers touched. All architectural decisions locked. Credentials are the only blocker for execution.
+**Current state:** phases 1–5 executed on bilby. Komodo is live with autoheal, onepassword (Connect + komodo-op), backup (Backrest + restic + rclone), logging (Loki + Alloy + Grafana), and uptime-kuma stacks all running. Backup gate satisfied: first snapshot taken, restore drill clean, off-site OneDrive sync complete. **Alligator is still fully running and untouched** — nothing on alligator has been stopped.
 
 **Next action when resuming:**
 
-1. User completes the rclone OneDrive OAuth dance (see "rclone provisioning runbook" below) and stashes the result in 1Password Homelab as `rclone-onedrive-token`.
-2. Begin phase 1 (pre-flight cleanup) — credential-free, all local file edits.
-3. Proceed through phases 2–13 in order.
+1. **Fix the NAS squash issue** (user action on kangaroo) — this is the single biggest architectural deviation from the plan. `/Jump` currently uses `all_squash` (all writes land as UID 1000:100 regardless of container UID, and chown is denied), which breaks Docker's volume setup for any image that chowns its data dir at startup. We've carved out local-volume exceptions for komodo-postgres, komodo-ferretdb, paperless-postgres, op-connect-data, backrest state, loki-data, alloy-data, grafana-data, and uptime-kuma-data. Fix `/Jump` to stop squashing (set `no_root_squash` or equivalent on the kangaroo export for bilby's IP) and flip every local volume back to NFS via the compose files.
+2. **Begin phase 7** (stack migrations): flood → paperless → home-assistant. Each needs rsync of its existing volumes from alligator.
+3. **Phase 8** (Cloudflare tunnel cutover) immediately follows phase 7. Bilby's `cloudflare-tunnel` stack is pre-staged with `deploy = false` and the ingress rules for `logs.pod.haus` + `uptime.pod.haus` already merged into the config.
+4. **Phase 5b** (Kuma state migration from Railway) — Railway CLI dance.
+5. **Phase 9–13** after that.
 
-**Credentials status:** `railway-api-token` ✓, `postmark-smtp` ✓, `restic-repo-password` ✓, `rclone-onedrive-token` ✓.
+**Credentials status:** `railway-api-token` ✓, `postmark-smtp` ✓, `restic-repo-password` ✓, `rclone-onedrive-token` ✓ (all four surfaced as Komodo Variables via komodo-op).
+
+**Environment-specific blockers that forced workarounds** (all reversible, all documented in the compose files with comments):
+
+- **NAS `/Jump` squash** → local volumes for all database + state volumes (see NAS squash carve-out below).
+- **SELinux enforcing on Fedora Asahi** → `security_opt: label:disable` on every container that needs docker socket access or cross-label bind mount reads.
+- **`ghcr.io/0dragosh/komodo-op` mislabelled arm64 manifest** → built a local arm64 image from upstream source via `onepassword/komodo-op.Dockerfile`; compose pins `image: komodo-op:local-arm64` with `pull_policy: never`.
+- **Multi-line 1P Secure Notes don't round-trip through Komodo env files** (truncation at the first newline) → `komodo-start` renders `rclone.conf` on the host via `op CLI` and stacks bind-mount `/etc/komodo/rclone/rclone.conf` directly. Re-run `komodo-start` to refresh after token rotations.
+
+## NAS squash carve-out (temporary exception to "all state on NFS")
+
+The plan specifies "all container state on NFS, bilby is stateless." Executing phase 2 uncovered that kangaroo's `/Jump` export uses `all_squash` (or equivalent): every write lands as UID 1000 (`nathan`), GID 100 (`users`) regardless of the container's user, and `chown` against existing files silently fails with EPERM.
+
+Effect: any Docker NFS volume whose container image tries to chown its data directory at startup fails to create with `failed to chown ... operation not permitted`. Hit on:
+
+- `ghcr.io/ferretdb/postgres-documentdb` (chowns `/var/lib/postgresql/data` to uid 999)
+- `postgres:16` (same, for paperless-postgres)
+- `1password/connect-api` (chowns `/home/opuser/.op/data` to opuser)
+
+Affected volumes, all currently **local**:
+
+| Volume | Stack | Intended NFS path | Loss if bilby reimaged |
+|---|---|---|---|
+| `komodo_postgres-data` | komodo (bootstrap) | `/Jump/komodo/postgres` | Re-bootstrap from `komodo-start`; stack state regenerated via ResourceSync |
+| `komodo_ferretdb-state` | komodo (bootstrap) | `/Jump/komodo/ferretdb` | Same |
+| `onepassword_op-connect-data` | onepassword | `/Jump/onepassword` | Re-sync from 1P cloud; no data loss beyond cache |
+| `paperless_paperless-pgdata` | paperless | `/Jump/paperless/pgdata` | **Not yet in use** (paperless deployment deferred to phase 7) |
+| `backup_backrest-data`, `backrest-config`, `backrest-cache`, `backrest-rclone` | backup | `/Jump/backup/*` | Re-configure Backrest plans (restic repo + OneDrive copy remain intact on Pouch/OneDrive) |
+| `logging_loki-data`, `alloy-data`, `grafana-data` | logging | `/Jump/loki`, `/Jump/alloy`, `/Jump/grafana` | Lose local log history up to 30 days; Grafana dashboards must be re-created |
+| `uptime-kuma_uptime-kuma-data` | uptime-kuma | `/Jump/uptime-kuma` | Lose all monitor configs (migrate from Railway first if this matters) |
+
+**Volumes that remain NFS-backed** (no chown-on-startup behaviour, so they work through the squash): `flood_flood-db`, `home-assistant_home-assistant-config`, `paperless_paperless-data`, plus the pre-existing `plex_jump`.
+
+**Fix plan:** reconfigure kangaroo's `/Jump` NFS export to NOT squash (or to squash only root, keeping service UIDs intact). Each compose file has a `NOTE:` block above the affected volume block describing the intended NFS device path to flip back to. Once fixed: edit the compose files, `docker compose down` + `docker compose up -d` each affected stack (or destroy + redeploy via Komodo), and the data migrates back to NFS on next deploy. Pouch is unaffected — its export mode is different and has been working for paperless bind mounts and backrest's restic repo writes all along.
 
 ## Context
 
@@ -236,60 +271,65 @@ Phase 3 of `paperless/onenote-to-paperless.md` (the upload script that walks the
 
 ### 1. Pre-flight cleanup (no services touched yet)
 
-- [ ] Update `komodo/sync/variables.toml`: `MEDIA_DIR = /mnt/pouch`
-- [ ] Update `flood/compose.yaml`: replace hardcoded `/mnt/NFSPouch` with `${MEDIA_DIR}`, switch `flood-db` from local volume to NFS volume at `/Jump/flood/db/`
-- [ ] Pull untracked paperless scripts from alligator into this repo (`paperless/export-life.sh`, `export-remaining.sh`, `index-all.sh`, `index-life.sh`, `onenote-export`)
-- [ ] Convert `autoheal/` into a proper Komodo stack (`stack.toml`, change label mode to opt-in)
-- [ ] Audit healthchecks across compose files; document which containers will get `autoheal=true` labels
-- [ ] Set Docker daemon log driver caps (`log-driver: local`, `max-size=50m`, `max-file=3`) on bilby
-- [ ] Convert all remaining compose volumes from local to NFS-backed (`/Jump/<container>/...`): paperless, home-assistant, komodo, onepassword
+- [x] Update `komodo/sync/variables.toml`: `MEDIA_DIR = /mnt/pouch`
+- [x] Update `flood/compose.yaml`: replace hardcoded `/mnt/NFSPouch` with `${MEDIA_DIR}`, switch `flood-db` from local volume to NFS volume at `/Jump/flood/db/`
+- [x] Pull untracked paperless scripts from alligator into this repo (`paperless/export-life.sh`, `export-remaining.sh`, `index-all.sh`, `index-life.sh`, `onenote-export`). Also updated `onenote-export` OUTPUT_DIR from `/mnt/NFSPouch` to `/mnt/pouch` for bilby.
+- [x] Convert `autoheal/` into a proper Komodo stack (`stack.toml`, change label mode to opt-in)
+- [x] Audit healthchecks across compose files; document which containers will get `autoheal=true` labels
+- [x] Set Docker daemon log driver caps (`log-driver: local`, `max-size=50m`, `max-file=3`) on bilby. Applied via `/etc/docker/daemon.json`, dockerd restarted, plex returned healthy.
+- [x] Convert all remaining compose volumes from local to NFS-backed (`/Jump/<container>/...`): paperless, home-assistant, komodo, onepassword — **see NAS squash carve-out below**, several volumes reverted to local as a pragmatic exception.
 - [x] Decide on commit/PR strategy with user — commit directly to `main` as each step lands
 
 ### 2. Bootstrap Komodo on bilby (infra only, no stateful stacks yet)
 
-- [ ] Run `./komodo-start` — brings up komodo-core, postgres, ferretdb, periphery, 1Password Connect, komodo-op
-- [ ] Verify 1Password vault `hjpenq2avoprqh2u3hqxap3jjq` syncs into Komodo Variables
-- [ ] Verify bilby's Komodo Core can reach its local periphery and deploy a test stack
-- [ ] Verify komodo-postgres + komodo-ferretdb recover gracefully from a cold start while NFS is briefly unavailable (simulate)
+- [x] Run `./komodo-start` — brings up komodo-core, postgres, ferretdb, periphery, 1Password Connect, komodo-op. Required several environment-specific workarounds — see progress log for details.
+- [x] Verify 1Password vault `hjpenq2avoprqh2u3hqxap3jjq` syncs into Komodo Variables. komodo-op populates 24+ `OP__KOMODO__*` variables, including Secure Note content (`notesPlain` field).
+- [x] Verify bilby's Komodo Core can reach its local periphery and deploy a test stack. Deployed autoheal, onepassword, backup, logging, uptime-kuma via Komodo successfully.
+- [ ] Verify komodo-postgres + komodo-ferretdb recover gracefully from a cold start while NFS is briefly unavailable (simulate) — **no longer applies**, komodo-postgres and komodo-ferretdb use local volumes per the NAS squash carve-out.
 
 ### 3. Backup infrastructure (before any DB stack migrates)
 
-- [ ] Clean up stale `/mnt/pouch/backups/plex/` directory (plex-backup is being retired)
-- [ ] Create `backup/compose.yaml` + `stack.toml` — Backrest container, volumes for `/Jump` (read) and `/mnt/pouch/backups/` (write), mounted pre-hook script directory
-- [ ] Write pre-hook wrapper script: per-DB dump + `PRAGMA integrity_check`/`pg_restore --list` validation, 3× retry with 10s backoff, auto-restore from `restic dump latest` on SQLite failure, abort + alert on postgres failure
-- [ ] Retire `plex-backup` service from `plex/compose.yaml`, delete `plex/backup.sh`
-- [ ] Initialise encrypted restic repo at `/mnt/pouch/backups/` (password from 1Password via Komodo Variable)
-- [ ] Configure rclone with OneDrive backend (token from 1Password)
-- [ ] Wire Backrest → Shoutrrr → Postmark SMTP for backup event notifications
-- [ ] Run first full snapshot (just against `/Jump/plex/` initially — only state present on Jump at this point)
-- [ ] Run rclone sync to OneDrive; confirm first-upload size and integrity
-- [ ] **Restore drill**: `restic restore latest --tag plex --target /tmp/restore-test`, verify a known file matches source, delete scratch
-- [ ] Schedule nightly backup + nightly rclone sync via Backrest
+- [x] Clean up stale `/mnt/pouch/backups/plex/` directory (plex-backup is being retired). 3.1 GB of stale SQLite dumps removed.
+- [x] Create `backup/compose.yaml` + `stack.toml` — Backrest container, volumes for `/Jump/plex` (read-only via the `plex_jump` external volume) and `/mnt/pouch/backups/` (write), rclone config bind-mounted from `/etc/komodo/rclone/rclone.conf` on the host.
+- [ ] Write pre-hook wrapper script: per-DB dump + `PRAGMA integrity_check`/`pg_restore --list` validation, 3× retry with 10s backoff, auto-restore from `restic dump latest` on SQLite failure, abort + alert on postgres failure — **deferred to Backrest UI plan config** (user-driven setup once the stack is live).
+- [x] Retire `plex-backup` service from `plex/compose.yaml`, delete `plex/backup.sh`. Pulled forward from phase 3 into phase 2 because plex-backup's auto-created project network was squatting on 172.18.0.0/16 and blocking dockernet creation.
+- [x] Initialise encrypted restic repo at `/mnt/pouch/backups/` (password from 1Password via Komodo Variable). Repo id `857078229d`.
+- [x] Configure rclone with OneDrive backend (token from 1Password). Host-side render of `/etc/komodo/rclone/rclone.conf` via `op CLI` from the 1P Secure Note; bind-mounted read-only into Backrest. komodo-start now handles the render on bootstrap.
+- [ ] Wire Backrest → Shoutrrr → Postmark SMTP for backup event notifications — **deferred to Backrest UI config** (Postmark creds are available as env vars on the backrest container).
+- [x] Run first full snapshot (just against `/Jump/plex/` initially — only state present on Jump at this point). Snapshot `866cbd66`, 100.966 GiB source / 17.521 GiB stored, 7m35s.
+- [x] Run rclone sync to OneDrive; confirm first-upload size and integrity. 17.526 GiB / 1105 files / 19m14s to `onedrive:Backups/podhaus-restic/`.
+- [x] **Restore drill**: `restic restore latest --tag plex --target /tmp/restore-test`, verify a known file matches source, delete scratch. Preferences.xml restored from snapshot; `diff` vs live returns clean.
+- [ ] Schedule nightly backup + nightly rclone sync via Backrest — **deferred to Backrest UI plan config** (user-driven setup).
 
 ### 4. Logging infrastructure
 
-- [ ] Set Docker daemon log driver caps (`local` driver, `max-size=50m`, `max-file=3`)
-- [ ] Create `logging/compose.yaml` + `stack.toml` — Loki + Grafana Alloy + Grafana
-- [ ] Loki storage at `/Jump/loki/`, retention configured via Loki compactor (30 days)
-- [ ] Alloy scrapes all local containers via docker socket
-- [ ] Grafana exposed via new `logs.pod.haus` ingress rule in cloudflare-tunnel compose
-- [ ] Seed Grafana with a basic "all container logs" dashboard
-- [ ] Verify logs from existing plex container are flowing
+- [x] Set Docker daemon log driver caps (`local` driver, `max-size=50m`, `max-file=3`). Done in phase 1 batch, dockerd restarted.
+- [x] Create `logging/compose.yaml` + `stack.toml` — Loki + Grafana Alloy + Grafana
+- [x] Loki storage at `/Jump/loki/`, retention configured via Loki compactor (30 days). **Note:** actual storage is a local `loki-data` volume under the NAS squash carve-out, not `/Jump/loki/`.
+- [x] Alloy scrapes all local containers via docker socket. Loki queries return logs from komodo-postgres, autoheal, plex, etc.
+- [x] Grafana exposed via new `logs.pod.haus` ingress rule in cloudflare-tunnel compose. Tunnel itself still deploy = false until phase 8, but the ingress rule is in place for the cutover.
+- [ ] Seed Grafana with a basic "all container logs" dashboard — **deferred to Grafana UI** (admin/admin first-login will force a password change; dashboard provisioning can happen then).
+- [x] Verify logs from existing plex container are flowing. Confirmed via `curl http://loki:3100/loki/api/v1/query_range?query={host="bilby"}` returning plex + komodo + autoheal lines.
 
 ### 5. Uptime Kuma migration from Railway
 
 Preserves monitor configs, notification configs, and history via SQLite volume copy.
 
+**Split into two sub-phases:** infrastructure (5a, done autonomously) and state migration (5b, user-driven because it involves Railway CLI auth and stopping the live Railway instance).
+
+5a. Local stack (done):
+- [x] Create `uptime-kuma/compose.yaml` + `stack.toml` on bilby, state dir `uptime-kuma-data` local volume (not `/Jump/uptime-kuma/` — NAS squash carve-out), port 3001
+- [x] Deploy local Kuma stack via Komodo (empty fresh instance, healthcheck passing)
+- [x] Add `uptime.pod.haus → http://uptime-kuma:3001` to `cloudflare-tunnel/compose.yaml` ingress (staged; takes effect at the phase 8 cutover)
+
+5b. State migration + cutover (deferred, user-driven):
 - [ ] Install `railway` CLI on bilby (or run via container)
 - [ ] Authenticate with `railway-api-token` from 1Password
 - [ ] Identify the Kuma project + service + volume in Railway
-- [ ] Create `uptime-kuma/compose.yaml` + `stack.toml` on bilby, state dir `/Jump/uptime-kuma/`, port 3001
 - [ ] Stop Railway Kuma briefly OR use `sqlite3 .backup` for consistent live copy
 - [ ] `railway ssh` / `railway run` into Kuma container, `sqlite3 /app/data/kuma.db .backup /tmp/kuma-snapshot.db`, copy it out
-- [ ] Copy `kuma.db` and any other `/app/data` contents into `/Jump/uptime-kuma/` on bilby
-- [ ] Deploy local Kuma stack via Komodo
+- [ ] Copy `kuma.db` and any other `/app/data` contents into the bilby Kuma's `uptime-kuma-data` volume
 - [ ] Verify all monitors, notification configs, users restored correctly
-- [ ] Add `uptime.pod.haus → http://uptime-kuma:3001` to `cloudflare-tunnel/compose.yaml` ingress
 - [ ] Update `dns/dnsconfig.js` — remove the Railway CNAME for `uptime`, let the tunnel handle it (match the pattern used by other `*.pod.haus` hosts)
 - [ ] `dns-push` to apply
 - [ ] Verify `uptime.pod.haus` resolves to the new local instance
@@ -300,14 +340,17 @@ Preserves monitor configs, notification configs, and history via SQLite volume c
 
 ### 6. Arm64 compatibility spot-check
 
-Pull-test these on bilby before deploying stacks — everything else in the inventory is known-good multi-arch:
+Validated implicitly as each stack was deployed:
 
-- [ ] `jesec/rtorrent-flood`
-- [ ] `ghcr.io/0dragosh/komodo-op` (covered in phase 2 — will fail fast if no arm64)
-- [ ] `ghcr.io/ferretdb/postgres-documentdb`
-- [ ] `restic/restic`, `rclone/rclone`, `garethgeorge/backrest` (phase 3)
-- [ ] `grafana/loki`, `grafana/alloy`, `grafana/grafana` (phase 4)
-- [ ] `louislam/uptime-kuma` (phase 5)
+- [ ] `jesec/rtorrent-flood` — pending until flood is actually deployed in phase 7
+- [x] `ghcr.io/0dragosh/komodo-op` — **mislabelled multi-arch manifest**: upstream Dockerfile hardcodes `--platform=linux/amd64` + `GOARCH=amd64`, so the "arm64" tag is actually an amd64 image that crashes with exec format error on real aarch64. Worked around by building a native arm64 image locally from the same source (`onepassword/komodo-op.Dockerfile`).
+- [x] `ghcr.io/ferretdb/postgres-documentdb` — pulls cleanly, runs as expected; the failure we hit with this image was the NFS squash issue, not arm64
+- [x] `1password/connect-api`, `1password/connect-sync` — pulls cleanly
+- [x] `garethgeorge/backrest` — pulls cleanly, ships bundled `restic 0.18.1` and `rclone v1.73.2` for aarch64
+- [x] `grafana/loki`, `grafana/alloy`, `grafana/grafana` — pulls cleanly
+- [x] `louislam/uptime-kuma` — pulls cleanly
+- [x] `willfarrell/autoheal` — pulls cleanly
+- [x] `cloudflare/cloudflared` — pulls cleanly (smoke-tested even though the stack is deploy = false for now)
 
 ### 7. Stack migrations (smallest blast radius first)
 
@@ -475,8 +518,21 @@ Updates land here as decisions get made or steps complete.
 - Postmark SMTP credentials confirmed present in 1Password Homelab vault (`postmark-smtp` item, fields: `username`, `credential`, `server`, `port`). Rclone OneDrive token and restic repo password still to be provisioned.
 - Secret access pattern at execution time: Option 2 confirmed — all credentials surface as Komodo Variables via komodo-op, matching the existing secrets flow.
 - Restic repo password generated (48-char base64, ~288 bits entropy), staged into 1Password Homelab as `restic-repo-password` / `credential` field. Tmp file on bilby cleaned up. Emergency Kit annotation still to do as part of migration wrap-up.
-- Rclone OneDrive provisioning documented in a runbook section above; user to execute on laptop when they return to the migration. Did not achieve in this session.
+- Rclone OneDrive provisioning runbook executed: user picked **OneDrive Personal** (drive_id `397B8A27385EB8E3`) from the drive list during the OAuth dance. Config stashed in 1P Homelab as a **Secure Note** (`rclone-onedrive-token`, body accessible via `notesPlain`) rather than a Password field — better fit for the multi-line `[onedrive]` block.
 - All architectural decisions resolved. Phase 1 (pre-flight cleanup) is credential-free and ready to execute on user's go-ahead. Phases 2–4 need the rclone + restic password credentials in 1Password first.
 - Plex remote-access outage debugged and fixed (out-of-band from the migration proper). Root cause: `PublishServerOnPlexOnlineKey="0"` — Plex's master "Enable Remote Access" toggle was silently off, so every publish path was degenerate. Set the toggle + `ManualPortMappingMode=1` + `ManualPortMappingPort=32400` via Plex's `/:/prefs` API; verified external reachability and plex.tv direct + relay connections; user confirmed working over 5G. `plex/README.md` lessons-learned section rewritten. The fix currently lives only in the container-volume `Preferences.xml` on the NAS, which is exactly the fragility the config-as-code principle is meant to eliminate — follow-up added to the deferred list: templating `Preferences.xml` into the repo, to be done after Komodo bootstrap.
 - Config-as-code adopted as a first principle for the repo, documented in root `README.md` and captured in memory. Summary: any config that *can* live in the repo, *should*; secrets live in 1Password and are templated in at deploy time; container-volume-only state is not a substitute because the operational reality is those files eventually get lost. This is the guiding reason for the deferred Plex templating follow-up.
-- Rclone OneDrive OAuth dance completed. User picked OneDrive Personal (drive_id `397B8A27385EB8E3`) from the drive list. Config stashed in 1Password Homelab as `rclone-onedrive-token`, stored as a **Secure Note** rather than a Password field — the multi-line body is a better fit for the `[onedrive]` config block, and the field reference is `op://Homelab/rclone-onedrive-token/notesPlain`. Phase 3 wiring will need to verify komodo-op picks up Secure Notes (vs Password items) when we get there; if it doesn't, we either fall back to a Password field with manual escaping or sidecar the rclone config rendering outside the komodo-op path. All four migration credentials now ✓ ready — phase 1 is fully unblocked.
+- komodo-op DOES pick up Secure Notes — the `notesPlain` field surfaces as `OP__KOMODO__RCLONE_ONEDRIVE_TOKEN__NOTESPLAIN` alongside all the Password/Credential fields. But multi-line values still don't round-trip through Komodo's env-file pipeline (truncation at the first newline), so for the rclone config blob specifically we render it on the host via `op CLI` and bind-mount the file into the Backrest container. Pattern committed to `komodo-start`.
+- **Phase 1 pre-flight cleanup complete**: compose files for flood / home-assistant / paperless / onepassword / komodo (bootstrap) / autoheal / cloudflare-tunnel updated, autoheal promoted to a proper Komodo stack, paperless scripts pulled from alligator via SSH (SSH-to-alligator verified via op-unlock socket at 10.0.0.83), Docker daemon log-driver caps applied, plex verified healthy after the daemon restart. Committed as `d2d7346`.
+- **NAS `/Jump` squash discovered** during phase 2 bootstrap of komodo-postgres. kangaroo's export squashes all writes to 1000:100 and denies chown; any Docker NFS volume where the container image chowns its data dir at startup fails. Affected komodo-postgres, komodo-ferretdb, op-connect-data, backrest state, loki/alloy/grafana, uptime-kuma, and will affect paperless-postgres in phase 7. Carved out local-volume exceptions for all of them (documented inline in each compose file + in the NAS squash carve-out section above). `flood_flood-db`, `home-assistant_home-assistant-config`, `paperless-data` remain NFS-backed because their images don't chown. Fix plan: user reconfigures the kangaroo `/Jump` export to stop squashing; then flip compose files back to NFS.
+- **SELinux enforcing on Fedora Asahi** denies container access to `/var/run/docker.sock` (container_t vs container_var_run_t) and denies cross-label reads into bind-mounted config files. Applied `security_opt: label:disable` to komodo-core, komodo-periphery, autoheal, backrest, loki, alloy, grafana, and uptime-kuma. Host policy stays intact for everything else.
+- **Komodo first-boot chicken-and-egg**: komodo-start reads a pre-existing Komodo API key from `op://Homelab/Komodo API OnePassword Sync`, but on a fresh bilby DB no such key exists. Worked around by: (a) bring up the bootstrap compose directly via `op run`, (b) login to Komodo via `POST /auth` with `LoginLocalUser` + the admin password from 1P, (c) call `POST /user` with `{"type":"CreateApiKey","name":"bootstrap","expires":0}` to mint a new key, (d) write the new key + secret back to 1P via `op item edit`, (e) re-run `komodo-start` which now succeeds at the `seed_variable` step. This should be folded into `komodo-start` itself as an automatic first-boot path; deferred for now. Note the auth header expects the raw JWT (not `Bearer <jwt>`).
+- **komodo-op upstream arm64 image is mislabelled**: `ghcr.io/0dragosh/komodo-op`'s multi-arch manifest advertises an `arm64` variant, but its Dockerfile hardcodes `--platform=linux/amd64` + `GOARCH=amd64`, so the "arm64" tag is actually an amd64 image that crashes with `exec format error` on real aarch64. Built a native arm64 image locally from the same upstream source (`onepassword/komodo-op.Dockerfile`, tagged `komodo-op:local-arm64`). Compose pins the local tag with `pull_policy: never`. Consider upstreaming the Dockerfile fix.
+- **plex-backup retired early** (originally a phase 3 task): its project-default network was squatting on `172.18.0.0/16` and blocking the creation of `dockernet`. Pulled the retirement forward to phase 2. plex/compose.yaml edited to drop the service, `plex/backup.sh` deleted. SQLite dump + integrity check behaviour is supposed to roll into the Backrest pre-hook wrapper (still unwritten — deferred to post-deploy Backrest UI config).
+- **cloudflare-tunnel stays `deploy = false` on bilby until phase 8 cutover**. Running two cloudflared instances on the same tunnel ID creates active-active routing and breaks services whose backends only exist on one host. The stack compose now has ingress rules for `logs.pod.haus` + `uptime.pod.haus` pre-merged (they activate at cutover).
+- **Phase 2 bootstrap complete**: komodo-core, komodo-postgres, komodo-ferretdb, komodo-periphery, onepassword stack (op-connect-api, op-connect-sync, komodo-op), autoheal all running and healthy. 28 Komodo Variables populated by komodo-op from the 1P Homelab vault.
+- **Phase 3 backup stack complete**: Backrest deployed, restic repo `857078229d` initialised at `/mnt/pouch/backups/`, first snapshot `866cbd66` taken (100.966 GiB source / 17.521 GiB stored, 7m35s), restore drill of `Preferences.xml` matched source bit-for-bit, rclone sync to `onedrive:Backups/podhaus-restic/` finished at 17.526 GiB / 1105 files in 19m14s. Backup gate SATISFIED.
+- **Phase 4 logging stack complete**: Loki + Grafana Alloy + Grafana running. Alloy scrapes all local containers via docker socket; logs flowing into Loki (verified via query). Grafana healthy with Loki pre-provisioned as default datasource. Dashboards deferred to UI setup (first login is admin/admin).
+- **Phase 5a uptime-kuma scaffolding complete**: fresh empty Kuma instance running on bilby, state in a local volume, port 3001 exposed. Railway state migration (phase 5b) deferred — Railway Kuma stays live until user runs the railway CLI dance.
+- **Bind mount path quirk**: Komodo-managed stack run_directories are `/etc/komodo/repo/<stack>` which exists inside periphery via the bind mount from the repo root, but doesn't exist on the host. Docker daemon runs on the host and resolves bind mount sources from the host filesystem, so relative paths (`./loki-config.yaml`) in the compose resolve to non-existent host paths and Docker silently creates empty stub dirs as fallback. Fix: use absolute host paths (`/home/nathan/repos/podhaus/logging/loki-config.yaml`) in any compose file that bind-mounts repo-resident files. Same pattern as `backup/compose.yaml`'s `/etc/komodo/rclone/rclone.conf` mount. I tried a symlink fix first (`/etc/komodo/repo` → `/home/nathan/repos/podhaus`) but it broke Komodo's `create_dir` call on existing run_directories, so reverted.
+- **Alligator untouched**: nothing on alligator has been stopped, cloudflared on alligator is still the live tunnel, all pod.haus services currently route to alligator. The user explicitly scoped this batch as "set everything up on bilby, don't shut down alligator yet" — every stack on bilby runs in parallel with its alligator counterpart until the phase 7 + 8 cutover.
