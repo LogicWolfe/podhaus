@@ -6,3 +6,4 @@ secrets
 dbase_and_logs/
 OP_SERVICE_ACCOUNT_TOKEN
 dns/.env
+.claude/

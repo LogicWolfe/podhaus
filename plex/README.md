@@ -298,28 +298,30 @@ After `compose.yaml`, `healthcheck.sh`, and the updated `backup.sh` are in place
 
 Already verified in host setup step 4 above. If you skipped that, do it now. **Do not proceed if `MachineIdentifier` doesn't match `e2edf17235c0f4f9b51578e13d7be476c88c1b67`** — the init container will refuse to start the stack and you'll be debugging in the wrong place.
 
-### 2. Pre-populate `customConnections`
+### 2. Confirm remote-access settings are intact
 
-This is optional — on real Linux with `network_mode: host`, Plex correctly sees `enp*` / `10.0.0.119` and auto-publishes it. But setting it explicitly is defensive: it survives interface renaming, makes the published URL deterministic, and gives you a known-good plex.direct hostname.
-
-Mount Jump read-write briefly and patch the file with a one-shot init container (so we don't need NFS tools on the host):
+Three Plex preferences must be set for remote access to work on this host. They live in `Preferences.xml` on the NAS, so they persist across rebuilds — but verify before bringing the stack up:
 
 ```sh
-docker run --rm \
-  -v plex_jump:/config \
-  alpine:latest sh -c '
-    PREF="/config/Library/Application Support/Plex Media Server/Preferences.xml"
-    cp "$PREF" "$PREF.bak.$(date +%Y%m%d-%H%M%S)"
-    sed -i "s|<Preferences |<Preferences customConnections=\"https://10-0-0-119.08daece225664375a110630c19cfa1e5.plex.direct:32400,http://10.0.0.119:32400\" |" "$PREF"
-    grep -o "customConnections=\"[^\"]*\"" "$PREF"
-  '
+docker run --rm -v plex_jump:/config alpine:latest sh -c '
+  PREF="/config/Library/Application Support/Plex Media Server/Preferences.xml"
+  for k in PublishServerOnPlexOnlineKey ManualPortMappingMode ManualPortMappingPort; do
+    grep -o "$k=\"[^\"]*\"" "$PREF" || echo "$k MISSING"
+  done
+'
 ```
 
-Note this requires `plex_jump` to already exist as a Docker volume. Either run `docker compose up --no-start plex` first to create the volumes (without launching Plex), or run a `docker volume create` with the same NFS options manually.
+Expected output:
 
-Verification: the final `grep` should print the customConnections line you just added.
+```
+PublishServerOnPlexOnlineKey="1"
+ManualPortMappingMode="1"
+ManualPortMappingPort="32400"
+```
 
-If you get this wrong, restore from the timestamped `.bak` file the same script just made.
+If any are missing or wrong, fix them (see **Lessons Learned: remote access needs three settings** below for the full story and recovery steps). Do not proceed until they're correct.
+
+Do **not** pin `customConnections`, `PreferredNetworkInterface`, or `LanNetworksBandwidth` to the host LAN IP. The DHCP-reserved 10.0.0.119 has rotated before and pinning it just forces a rediscovery step on every host rebuild for zero functional benefit — Plex auto-detects the LAN interface on real Linux `network_mode: host`.
 
 ### 3. Bring up the stack
 
@@ -507,16 +509,54 @@ The previous healthcheck only ran `curl /identity` and `test -d` on the mount po
 
 The new `healthcheck.sh` checks all three. If any fail, the container is marked unhealthy and the restart policy (or autoheal, if enabled in `autoheal/`) kicks in. **Note that on real Linux, simple restart actually fixes things** — unlike the OrbStack situation where `docker restart` couldn't remount stale NFS volumes because the mounts lived on the VM host, not in the container namespace.
 
-### Why Preferences.xml needs `customConnections`
+### Remote access needs three settings (and one of them is the master kill switch)
 
-In principle, real-Linux `network_mode: host` lets Plex auto-detect the LAN interface. In practice, setting `customConnections` explicitly:
+Remote access was broken for a while after the container migration. The surface-level symptoms were `mappingState="Mapped - Not Published (Not Reachable)"`, `publicAddress=""`, and `POST https://plex.tv/servers.xml` returning HTTP 422. The actual root cause was buried three layers deep and it's worth documenting so the next version of me doesn't waste the time I did.
 
-- Survives interface renaming (Asahi's `enp*` naming can be unstable across kernel updates)
-- Makes the published URL deterministic and traceable
-- Uses the existing `plex.direct` hostname format with the existing `CertificateUUID`, so HTTPS works without certificate warnings
-- Costs nothing
+The three preferences that must be set in `Preferences.xml`:
 
-The format is `https://10-0-0-119.<CertificateUUID>.plex.direct:32400,http://10.0.0.119:32400` — comma-separated list, HTTPS plex.direct first, plain HTTP fallback. Plex publishes both to plex.tv.
+| Setting | Value | Why |
+|---|---|---|
+| `PublishServerOnPlexOnlineKey` | `1` | **The master "Enable Remote Access" toggle.** Lives in the unnamed `[]` pref group (not `[network]`), which is why it's easy to miss when grepping for network settings. Had silently been set to `0` — probably a leftover from the OrbStack era where remote access was deliberately disabled to stop the VM-bridge-IP publishing bug. When this is `0`, Plex does not run its publish flow at all. No public IP discovery, no port mapping, no reachability check. The 422s you see with this off are a degenerate heartbeat POST — they look like the real publish but they're not. |
+| `ManualPortMappingMode` | `1` | Tells Plex "skip UPnP port-mapping creation, trust the static port forward". Needed because Plex's UPnP IGD discovery uses multicast SSDP, which UniFi silently drops on this LAN — unicast NAT-PMP to the gateway works fine (Plex uses it to learn the public IP), but the UPnP `AddPortMapping` path never gets off the ground. Without manual mode, Plex doesn't know what port to advertise. |
+| `ManualPortMappingPort` | `32400` | The external port that the UniFi port forward points at. Paired with the mode above. |
+
+Setting `PublishServerOnPlexOnlineKey=1` alone is enough to make Plex *try* to publish. The other two are what make the publish *succeed* given that UniFi's SSDP multicast is filtered and Plex can't do UPnP auto-mapping.
+
+What we explicitly do **not** set:
+
+- `customConnections` — left empty. On real-Linux `network_mode: host`, Plex auto-detects `10.0.0.119` correctly and publishes the right `plex.direct` URL without help. Pinning it here hardcodes the DHCP-reserved host IP, which is a fragility we don't need.
+- `PreferredNetworkInterface` — left empty. Same reasoning: the value would be the host LAN IP, and we don't want IPs baked into preferences.
+- `LanNetworksBandwidth` — left empty. Defining a subnet here had zero observable effect on interface enumeration or publish behavior.
+
+### Diagnosing remote-access breakage
+
+If remote access breaks again, skip the UPnP rabbit hole and check these three prefs first:
+
+```sh
+docker exec plex sh -c 'grep -oE "(PublishServerOnPlexOnlineKey|ManualPortMappingMode|ManualPortMappingPort)=\"[^\"]*\"" \
+  "/config/Library/Application Support/Plex Media Server/Preferences.xml"'
+```
+
+Then watch for the actual publish flow in the log:
+
+```sh
+docker exec plex sh -c 'tail -f "/config/Library/Application Support/Plex Media Server/Logs/Plex Media Server.log"' \
+  | grep -iE "publish|mapping|nat|reachab|Published Mapping"
+```
+
+A healthy publish looks like this:
+
+```
+PublicAddressManager: Got public IP from v4.plex.tv: <your public IP>
+NAT: UPnP, getPublicIP didn't find usable IGD.               ← expected, SSDP is filtered
+NAT: PMP::getPublicIP, Received public IP from router: <same IP>  ← NAT-PMP unicast works
+MyPlex: Sending Server Info to myPlex (..., ip=<public IP>, port=32400)
+MyPlex: Published Mapping State response was 201             ← 201, NOT 422
+MyPlex: mapping state set to 'Mapped - Publishing'
+```
+
+An empty `ip=` or `port=0` in the `Sending Server Info` line means `ManualPortMappingMode/Port` isn't being honored — check `PublishServerOnPlexOnlineKey` first.
 
 ### Why the database lives on Jump (SSD), not Pouch (HDD)
 

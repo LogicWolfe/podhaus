@@ -2,6 +2,30 @@
 
 Docker container infrastructure for home servers. Currently deployed to **podhaus** (pod.haus) and **pinelake** (pinelake.haus).
 
+## Principles
+
+**Config as code.** Any configuration that *can* live in this repo, *should* live in this repo. That includes service preference files, identity/UUID strings, and anything else you'd lose sleep over if a container volume got wiped. Checked-in config is the safety net for the day a service blows up and you need to rebuild from scratch.
+
+Secrets never go in raw — they live in the 1Password Homelab vault and are templated into rendered config at deploy time (`op run --env-file`, `op inject`, or env-var substitution in init containers). The existing Komodo stack is the reference pattern: `komodo/compose.env` holds `op://Homelab/...` references, `op run` resolves them into environment variables, and compose interpolates them into the running container.
+
+The operational reality is that long-running stateful services (Plex is the canonical example) *will* eventually need a rebuild. Having the config in git turns that from a multi-hour recovery scramble into a clone-and-deploy. The corollary: if you find yourself arguing against checking config in because "the file drifts at runtime" or "it contains some secrets", the answer is to check it in AND solve the drift/secrets problem — not to leave it out. Narrow the enforcement scope (init container only templates the attrs we care about) if the service rewrites its own state.
+
+## NAS storage (kangaroo, 10.0.0.25)
+
+Two NFS exports, same host, different drives, different RAID arrays:
+
+| Export | Backing | Capacity | Best for |
+|---|---|---|---|
+| `/Jump` | 2× SATA SSD | 382 GB | Container state, databases, config — anything latency-sensitive |
+| `/Pouch` | 5× spinning HDD | 29 TB | Media libraries, document archives, backup repositories — anything big |
+
+Throughput is equivalent between the two (both CPU-limited on the NFS controller). The real difference is IOPS — Jump is dramatically faster for small-random access, with ~0.1 ms operation latency. Place workloads accordingly:
+
+- **Latency-sensitive → Jump.** Postgres/SQLite databases, application config trees, search indexes, anything that does many small reads and writes.
+- **Bulk throughput → Pouch.** Video libraries, document archives, backup chunks, anything sequential.
+
+Jump has 2 free bays for future SSD expansion if needed.
+
 Each service lives in its own directory with a `run` script that starts it via `sudo docker run`. Root-level shell scripts (`build`, `stop`, `connect`, `restart`) are symlinked into each service directory by `create_symlinks`.
 
 ## Setup
