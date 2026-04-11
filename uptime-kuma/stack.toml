@@ -1,0 +1,14 @@
+[[stack]]
+name = "uptime-kuma"
+description = "Uptime Kuma — service monitoring + alerting"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/uptime-kuma"
+
+environment = """
+TZ=[[TZ]]
+"""

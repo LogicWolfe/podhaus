@@ -1,0 +1,109 @@
+services:
+  loki:
+    container_name: loki
+    image: grafana/loki:latest
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yaml
+    # SELinux enforcing on Fedora Asahi denies cross-label reads into
+    # bind-mounted config files; label:disable lifts the confinement so
+    # loki can read its config.
+    security_opt:
+      - label:disable
+    # Absolute host paths intentional: Komodo-managed stacks have a
+    # run_directory that exists as a bind mount inside periphery but not
+    # on the host (docker daemon resolves bind sources from the host
+    # filesystem), so relative paths like ./loki-config.yaml don't work.
+    # Same pattern as backup/compose.yaml's /etc/komodo/rclone mount.
+    volumes:
+      - /home/nathan/repos/podhaus/logging/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    # No healthcheck: grafana/loki image is distroless (no shell, no
+    # wget), and the loki binary doesn't ship a ping subcommand we can
+    # call from HEALTHCHECK. alloy and grafana retry their loki
+    # connections on failure, so we rely on service_started rather
+    # than service_healthy below.
+
+  alloy:
+    container_name: alloy
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+    # SELinux enforcing on Fedora Asahi denies both cross-label writes
+    # to /var/run/docker.sock and cross-label reads into bind-mounted
+    # config files; label:disable covers both.
+    security_opt:
+      - label:disable
+    volumes:
+      - /home/nathan/repos/podhaus/logging/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      loki:
+        condition: service_started
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    # Alloy's base image is minimal Debian with no curl/wget/nc, so we
+    # use bash's /dev/tcp shortcut to open a socket to the metrics port
+    # as a liveness probe.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/12345' 2>/dev/null || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    # SELinux enforcing on Fedora Asahi denies cross-label reads into
+    # the bind-mounted datasources provisioning file; label:disable
+    # lifts the confinement.
+    security_opt:
+      - label:disable
+    # First-boot credentials: admin/admin. Grafana forces a password
+    # change on first login through the UI. Rotate once logs.pod.haus
+    # is wired up; no 1P item for this yet on purpose (no pinned
+    # password means no stale credential drift in the repo).
+    environment:
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: https://logs.pod.haus
+      TZ: ${TZ}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - /home/nathan/repos/podhaus/logging/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/loki.yaml:ro
+    depends_on:
+      loki:
+        condition: service_started
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/api/health > /dev/null"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  # Local volumes for the same /Jump squash carve-out as komodo-postgres
+  # (see komodo/ferretdb.compose.yaml). Flip to NFS when the export
+  # mode is fixed.
+  loki-data:
+  alloy-data:
+  grafana-data:
