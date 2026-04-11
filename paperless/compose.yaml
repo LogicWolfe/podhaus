@@ -113,12 +113,11 @@ services:
       - dockernet
 
 volumes:
+  # NOTE: paperless-pgdata is intentionally local, NOT NFS-backed — same
+  # NAS squash issue that affects komodo-postgres (see
+  # komodo/ferretdb.compose.yaml for details). Flip back to NFS at
+  # :/Jump/paperless/pgdata once kangaroo's /Jump export stops squashing.
   paperless-pgdata:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
-      device: ":/Jump/paperless/pgdata"
   paperless-data:
     driver: local
     driver_opts:

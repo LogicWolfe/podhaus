@@ -44,12 +44,9 @@ services:
       - ferretdb-state:/state
     environment:
       FERRETDB_POSTGRESQL_URL: postgres://${KOMODO_DB_USERNAME}:${KOMODO_DB_PASSWORD}@postgres:5432/postgres
-    healthcheck:
-      test: ["CMD-SHELL", "test -S /state/ferretdb.sock || nc -z localhost 27017"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    # No healthcheck — ferretdb image is distroless, no shell available
+    # to probe from inside. Komodo Core's own healthcheck covers the pair
+    # (Core depends on ferretdb so Core unhealthy == ferretdb broken).
 
   core:
     container_name: komodo-core
@@ -57,6 +54,11 @@ services:
     labels:
       komodo.skip:
     restart: unless-stopped
+    # SELinux enforcing on Fedora Asahi denies the container from reading
+    # the bind-mounted repo at /syncs/podhaus; label:disable lifts that
+    # so ResourceSync can scan the repo contents.
+    security_opt:
+      - label:disable
     depends_on:
       - ferretdb
     ports:
@@ -96,6 +98,11 @@ services:
     labels:
       komodo.skip:
     restart: unless-stopped
+    # SELinux enforcing on Fedora Asahi denies cross-label writes to
+    # /var/run/docker.sock; label:disable exempts the periphery container
+    # from SELinux confinement so it can talk to the Docker daemon.
+    security_opt:
+      - label:disable
     environment:
       KOMODO_PASSKEYS: ${KOMODO_PASSKEY}
       TZ: ${TZ}
@@ -110,15 +117,16 @@ networks:
     external: true
 
 volumes:
+  # NOTE: These are intentionally local volumes, NOT NFS-backed.
+  # The /Jump export on kangaroo uses all_squash (writes land as 1000:100
+  # regardless of container UID, chown is denied), which breaks the
+  # postgres entrypoint's `chown -R postgres:postgres $PGDATA` step.
+  # See alligator-bilby-migration.md "Deferred (non-blocking follow-ups)"
+  # for the NAS fix plan; once /Jump stops squashing we flip both
+  # volumes back to NFS at :/Jump/komodo/postgres and :/Jump/komodo/ferretdb.
+  # Until then, komodo orchestration state lives on local bilby disk as a
+  # pragmatic exception to the bilby-is-stateless rule. Losing it means
+  # re-bootstrapping Komodo from git — annoying but not catastrophic since
+  # all stack definitions are in the repo.
   postgres-data:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
-      device: ":/Jump/komodo/postgres"
   ferretdb-state:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
-      device: ":/Jump/komodo/ferretdb"

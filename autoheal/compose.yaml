@@ -3,15 +3,17 @@ services:
     container_name: autoheal
     image: willfarrell/autoheal:latest
     restart: unless-stopped
+    # SELinux enforcing on Fedora Asahi denies cross-label writes to
+    # /var/run/docker.sock; label:disable lets autoheal talk to Docker.
+    security_opt:
+      - label:disable
     environment:
       AUTOHEAL_CONTAINER_LABEL: autoheal
       AUTOHEAL_INTERVAL: 30
       AUTOHEAL_START_PERIOD: 120
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -x autoheal > /dev/null"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    # No healthcheck — willfarrell/autoheal runs as a shell script with
+    # no persistent process name that pgrep can match against, and the
+    # image ships without a meaningful self-check. restart: unless-stopped
+    # handles crashes; autoheal can't heal itself anyway.

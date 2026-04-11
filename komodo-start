@@ -44,4 +44,15 @@ seed_variable "ONEPASSWORD_CONNECT_TOKEN" \
 seed_variable "ONEPASSWORD_API_KEY" "$api_key"
 seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
 
+echo "Rendering host-side secret files..."
+# Secrets with multi-line content don't round-trip through Komodo's env
+# file pipeline (which truncates at the first newline). We render them
+# to files under /etc/komodo/ on the host and bind-mount them into the
+# containers that need them. rclone.conf is the first one.
+sudo mkdir -p /etc/komodo/rclone
+op read "op://Homelab/rclone-onedrive-token/notesPlain" | \
+  sudo tee /etc/komodo/rclone/rclone.conf > /dev/null
+sudo chmod 600 /etc/komodo/rclone/rclone.conf
+echo "  /etc/komodo/rclone/rclone.conf"
+
 ./komodo-sync

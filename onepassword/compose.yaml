@@ -29,7 +29,16 @@ services:
 
   komodo-op:
     container_name: komodo-op
-    image: ghcr.io/0dragosh/komodo-op:latest
+    # Upstream ghcr.io/0dragosh/komodo-op ships a mislabelled arm64 tag —
+    # its Dockerfile hardcodes GOARCH=amd64 so the "arm64" manifest is
+    # actually an amd64 image and crashes with exec format error on aarch64.
+    # We build locally via onepassword/komodo-op.Dockerfile; rebuild with:
+    #   docker build -f onepassword/komodo-op.Dockerfile -t komodo-op:local-arm64 onepassword/
+    # pull_policy: never tells compose to trust the local tag and skip
+    # the registry pull that would fail (local tag doesn't exist on any
+    # registry).
+    image: komodo-op:local-arm64
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       - op-connect-api
@@ -57,9 +66,9 @@ networks:
     external: true
 
 volumes:
+  # NOTE: op-connect-data is intentionally local, NOT NFS-backed. Same
+  # NAS squash issue as komodo-postgres — Docker's volume setup tries to
+  # chown the mount point for the container's user (opuser), and /Jump's
+  # all_squash export silently denies it. Flip back to NFS at
+  # :/Jump/onepassword once kangaroo's /Jump export stops squashing.
   op-connect-data:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
-      device: ":/Jump/onepassword"

@@ -25,17 +25,6 @@ services:
       retries: 3
       start_period: 180s
 
-  plex-backup:
-    container_name: plex-backup
-    image: alpine:latest
-    restart: unless-stopped
-    command: ["/bin/sh", "/scripts/backup.sh"]
-    volumes:
-      - ./backup.sh:/scripts/backup.sh:ro,z
-      - jump:/config
-      - /mnt/pouch:/pouch
-      - /var/run/docker.sock:/var/run/docker.sock
-
 volumes:
   jump:
     driver: local
