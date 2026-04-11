@@ -1,0 +1,10 @@
+[[stack]]
+name = "autoheal"
+description = "Restart unhealthy containers labelled autoheal=true"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/autoheal"

@@ -1,6 +1,6 @@
 [[variable]]
 name = "MEDIA_DIR"
-value = "/mnt/NFSPouch"
+value = "/mnt/pouch"
 description = "NFS4 mount for media storage on kangaroo NAS"
 
 [[variable]]

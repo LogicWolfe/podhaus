@@ -1,16 +1,20 @@
 ###################################
-# 🦎 KOMODO COMPOSE - FERRETDB 🦎 #
+# KOMODO COMPOSE - FERRETDB       #
 ###################################
 
-## This compose file will deploy:
+## This compose file deploys:
 ##   1. Postgres + FerretDB Mongo adapter (https://www.ferretdb.com)
 ##   2. Komodo Core
 ##   3. Komodo Periphery
+##
+## All state lives on NFS under /Jump/komodo/ so bilby remains stateless.
+## These services are the orchestration layer — they're intentionally not
+## labelled for autoheal (restart: unless-stopped handles crashes; autoheal
+## loops here would risk interrupting in-flight deployments).
 
 services:
   postgres:
     container_name: komodo-postgres
-    # https://github.com/FerretDB/documentdb/pkgs/container/postgres-documentdb
     image: ghcr.io/ferretdb/postgres-documentdb
     labels:
       komodo.skip:
@@ -21,10 +25,15 @@ services:
       POSTGRES_USER: ${KOMODO_DB_USERNAME}
       POSTGRES_PASSWORD: ${KOMODO_DB_PASSWORD}
       POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KOMODO_DB_USERNAME}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   ferretdb:
     container_name: komodo-ferretdb
-    # https://github.com/FerretDB/FerretDB/pkgs/container/ferretdb
     image: ghcr.io/ferretdb/ferretdb
     labels:
       komodo.skip:
@@ -35,6 +44,12 @@ services:
       - ferretdb-state:/state
     environment:
       FERRETDB_POSTGRESQL_URL: postgres://${KOMODO_DB_USERNAME}:${KOMODO_DB_PASSWORD}@postgres:5432/postgres
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /state/ferretdb.sock || nc -z localhost 27017"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   core:
     container_name: komodo-core
@@ -68,6 +83,12 @@ services:
     volumes:
       - ${COMPOSE_KOMODO_BACKUPS_PATH}:/backups
       - ${COMPOSE_KOMODO_REPO_PATH}:/syncs/podhaus
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9120/ > /dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   periphery:
     container_name: komodo-periphery
@@ -90,4 +111,14 @@ networks:
 
 volumes:
   postgres-data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
+      device: ":/Jump/komodo/postgres"
   ferretdb-state:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
+      device: ":/Jump/komodo/ferretdb"

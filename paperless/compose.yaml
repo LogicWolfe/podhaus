@@ -9,11 +9,14 @@ services:
       POSTGRES_PASSWORD: ${PAPERLESS_POSTGRES_PASSWORD}
     volumes:
       - paperless-pgdata:/var/lib/postgresql/data
+    labels:
+      autoheal: "true"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U paperless"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD-SHELL", "pg_isready -U paperless && ls /var/lib/postgresql/data > /dev/null"]
+      interval: 30s
+      timeout: 5s
       retries: 5
+      start_period: 30s
     networks:
       - dockernet
 
@@ -21,10 +24,12 @@ services:
     container_name: paperless-redis
     image: redis:7
     restart: unless-stopped
+    labels:
+      autoheal: "true"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
+      interval: 30s
+      timeout: 5s
       retries: 5
     networks:
       - dockernet
@@ -33,6 +38,14 @@ services:
     container_name: paperless-tika
     image: apache/tika:latest
     restart: unless-stopped
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9998/tika > /dev/null"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - dockernet
 
@@ -41,6 +54,14 @@ services:
     image: gotenberg/gotenberg:8
     restart: unless-stopped
     command: gotenberg --chromium-disable-javascript=true --chromium-allow-list=file:///tmp/.*
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health > /dev/null"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - dockernet
 
@@ -79,14 +100,31 @@ services:
       PAPERLESS_TIME_ZONE: ${TZ}
     volumes:
       - paperless-data:/usr/src/paperless/data
-      - paperless-media:/usr/src/paperless/media
+      - /mnt/pouch/Paperless:/usr/src/paperless/media
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/ > /dev/null && ls /usr/src/paperless/data > /dev/null && ls /usr/src/paperless/media > /dev/null"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
     networks:
       - dockernet
 
 volumes:
   paperless-pgdata:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
+      device: ":/Jump/paperless/pgdata"
   paperless-data:
-  paperless-media:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
+      device: ":/Jump/paperless/data"
 
 networks:
   dockernet:

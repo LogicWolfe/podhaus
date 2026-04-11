@@ -10,6 +10,19 @@ services:
     volumes:
       - home-assistant-config:/config
       - /run/dbus:/run/dbus:ro
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8123/ > /dev/null && ls /config > /dev/null"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
 
 volumes:
   home-assistant-config:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
+      device: ":/Jump/home-assistant"

@@ -12,6 +12,8 @@ services:
         target: /home/opuser/.op/1password-credentials.json
     volumes:
       - op-connect-data:/home/opuser/.op/data
+    networks:
+      - dockernet
 
   op-connect-sync:
     container_name: op-connect-sync
@@ -22,6 +24,8 @@ services:
         target: /home/opuser/.op/1password-credentials.json
     volumes:
       - op-connect-data:/home/opuser/.op/data
+    networks:
+      - dockernet
 
   komodo-op:
     container_name: komodo-op
@@ -30,7 +34,6 @@ services:
     depends_on:
       - op-connect-api
     networks:
-      - default
       - dockernet
     environment:
       OP_CONNECT_HOST: http://op-connect-api:8080
@@ -40,6 +43,14 @@ services:
       KOMODO_API_KEY: ${KOMODO_API_KEY}
       KOMODO_API_SECRET: ${KOMODO_API_SECRET}
       SYNC_INTERVAL: 1m
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x komodo-op > /dev/null || pgrep komodo-op > /dev/null"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 networks:
   dockernet:
@@ -47,3 +58,8 @@ networks:
 
 volumes:
   op-connect-data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
+      device: ":/Jump/onepassword"

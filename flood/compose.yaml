@@ -11,7 +11,15 @@ services:
       GID: "44"
     volumes:
       - flood-db:/flood-db
-      - /mnt/NFSPouch:/data
+      - ${MEDIA_DIR}:/data
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/ > /dev/null && ls /flood-db > /dev/null && ls /data > /dev/null"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
     networks:
       - dockernet
 
@@ -21,3 +29,8 @@ networks:
 
 volumes:
   flood-db:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
+      device: ":/Jump/flood/db"

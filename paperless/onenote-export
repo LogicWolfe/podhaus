@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+
+EXPORTER_DIR="/home/nathan/repos/onenote-exporter"
+OUTPUT_DIR="/mnt/pouch/Nathan/Notes Export Graph API"
+CACHE_DIR="$EXPORTER_DIR/cache"
+DB_DIR="$EXPORTER_DIR/cache/db"
+IMAGE="onenote-exporter-onenote-exporter"
+
+mkdir -p "$OUTPUT_DIR" "$CACHE_DIR" "$DB_DIR"
+
+TTY_FLAG=""
+if [ -t 0 ]; then
+  TTY_FLAG="-it"
+fi
+
+docker run --rm $TTY_FLAG \
+  --user "$(id -u):$(id -g)" \
+  -e TENANT_ID=common \
+  -e CLIENT_ID=529d072c-2131-4fa9-bc92-77da0b26a2bb \
+  -e PYTHONPATH=/app/src \
+  -v "$OUTPUT_DIR:/app/output" \
+  -v "$CACHE_DIR:/app/.cache" \
+  -v "$DB_DIR:/app/db" \
+  "$IMAGE" --db-path /app/db/catalog.sqlite "$@"
