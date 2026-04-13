@@ -11,7 +11,11 @@ services:
       PLEX_GID: "100"
       CHANGE_CONFIG_DIR_OWNERSHIP: "false"
     volumes:
-      - jump:/config
+      # All Plex state on local NVMe (DB, config, metadata)
+      - /var/lib/plex-local:/config:z
+      # BIFs (video scrubbing thumbnails) live on Pouch — ~183 GB
+      - /mnt/pouch/plex-video-thumbnails:/config/Library/Application Support/Plex Media Server/Media/localhost
+      # Media files
       - /mnt/pouch:/Users/Shared/Pouch
       - ./healthcheck.sh:/scripts/healthcheck.sh:ro,z
     tmpfs:
@@ -24,11 +28,3 @@ services:
       timeout: 15s
       retries: 3
       start_period: 180s
-
-volumes:
-  jump:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
-      device: ":/Jump/plex"

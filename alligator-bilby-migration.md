@@ -4,15 +4,22 @@ Migration of all running services from `alligator` (Intel NUC, x86_64, Linux) to
 
 ## Resumption pointer (read this first if returning to a fresh session)
 
-**Current state:** phases 1–5 executed on bilby. Komodo is live with autoheal, onepassword (Connect + komodo-op), backup (Backrest + restic + rclone), logging (Loki + Alloy + Grafana), and uptime-kuma stacks all running. Backup gate satisfied: first snapshot taken, restore drill clean, off-site OneDrive sync complete. **Alligator is still fully running and untouched** — nothing on alligator has been stopped.
+**Current state (2026-04-13):** phases 1–5 executed. **Phase 6 "architecture pivot" happened** — a Plex debugging session cascaded into a full redesign away from "stateless bilby on NFS" toward "local state is the default." See **Phase 6: Architecture pivot (2026-04-12/13)** below for the detailed story, lessons, and choices. Short version: SQLite + NFS + long-lived Plex DB = occasional convoy stalls, and the 47 GB Plex DB turned out to be 99.6% a single bloat table (`statistics_bandwidth`, 796M rows, 9 years of history). Plex now runs entirely from local NVMe (`/var/lib/plex-local`, 14 GB) with BIFs bind-mounted from Pouch and the cleaned-up 217 MB DB. Original `/Jump/plex` (102 GB) is kept intact as a safety net for a few days before cleanup. Komodo, logging, backup, uptime-kuma still running. **Alligator is still fully running and untouched.**
+
+**New design principle (supersedes "all state on NFS"):** Sizing rule — **local <5 GB, consult 5–50 GB, Pouch ≥50 GB**. The NAS squash carve-outs that used to be temporary exceptions are now permanent design choices.
 
 **Next action when resuming:**
 
-1. **Fix the NAS squash issue** (user action on kangaroo) — this is the single biggest architectural deviation from the plan. `/Jump` currently uses `all_squash` (all writes land as UID 1000:100 regardless of container UID, and chown is denied), which breaks Docker's volume setup for any image that chowns its data dir at startup. We've carved out local-volume exceptions for komodo-postgres, komodo-ferretdb, paperless-postgres, op-connect-data, backrest state, loki-data, alloy-data, grafana-data, and uptime-kuma-data. Fix `/Jump` to stop squashing (set `no_root_squash` or equivalent on the kangaroo export for bilby's IP) and flip every local volume back to NFS via the compose files.
-2. **Begin phase 7** (stack migrations): flood → paperless → home-assistant. Each needs rsync of its existing volumes from alligator.
-3. **Phase 8** (Cloudflare tunnel cutover) immediately follows phase 7. Bilby's `cloudflare-tunnel` stack is pre-staged with `deploy = false` and the ingress rules for `logs.pod.haus` + `uptime.pod.haus` already merged into the config.
-4. **Phase 5b** (Kuma state migration from Railway) — Railway CLI dance.
-5. **Phase 9–13** after that.
+1. **Restart autoheal** — stopped during the Plex VACUUM and not restored. `docker start autoheal`.
+2. **Investigate paperless stuck in Created** — `paperless-postgres/redis/gotenberg/tika` never actually started. Find out why and fix.
+3. **Update Backrest compose** — swap `plex_jump:/userdata/plex:ro` → `/var/lib/plex-local:/userdata/plex:ro`. No active plans, so nothing breaks until we write them.
+4. **Write `backup/config.json.tmpl`** — Backrest config-as-code. Define repos, plans (per-stack paths), hooks (DB dump pre-hook, rclone-to-OneDrive post-hook), retention, Shoutrrr → Postmark notifications. Template secrets from 1P. Bind-mount rendered config **read-only** so the repo stays canonical and UI edits don't persist.
+5. **Weekly cron/timer for Plex stats cleanup** — `statistics_bandwidth` regrows unbounded. Script: `DELETE FROM statistics_bandwidth WHERE at < strftime('%s', 'now', '-30 days');` (via `docker exec plex` + Plex SQLite). Include incremental vacuum. Monthly full optimize via the Plex API.
+6. **Re-evaluate each stack against the new sizing rule**. The "NAS squash carve-out" section below now describes the permanent design for those stacks, not a workaround.
+7. **Phase 7** (stack migrations): flood → paperless → home-assistant. Each needs rsync of its existing volumes from alligator, same approach as before but now landing on local disk.
+8. **Phase 8** (Cloudflare tunnel cutover) after phase 7. Staged ingress rules already in place.
+9. **Phase 5b** (Kuma state migration from Railway) — Railway CLI dance.
+10. **Phase 9–13** after that.
 
 **Credentials status:** `railway-api-token` ✓, `postmark-smtp` ✓, `restic-repo-password` ✓, `rclone-onedrive-token` ✓ (all four surfaced as Komodo Variables via komodo-op).
 
@@ -48,6 +55,82 @@ Affected volumes, all currently **local**:
 **Volumes that remain NFS-backed** (no chown-on-startup behaviour, so they work through the squash): `flood_flood-db`, `home-assistant_home-assistant-config`, `paperless_paperless-data`, plus the pre-existing `plex_jump`.
 
 **Fix plan:** reconfigure kangaroo's `/Jump` NFS export to NOT squash (or to squash only root, keeping service UIDs intact). Each compose file has a `NOTE:` block above the affected volume block describing the intended NFS device path to flip back to. Once fixed: edit the compose files, `docker compose down` + `docker compose up -d` each affected stack (or destroy + redeploy via Komodo), and the data migrates back to NFS on next deploy. Pouch is unaffected — its export mode is different and has been working for paperless bind mounts and backrest's restic repo writes all along.
+
+**⚠️ Update 2026-04-13: This section now describes permanent design, not a workaround.** See **Phase 6: Architecture pivot** below. The carve-outs listed above stay local. The NAS squash issue is no longer on the path to resolution because we no longer want those volumes on NFS.
+
+## Phase 6: Architecture pivot (2026-04-12/13)
+
+A Plex remote-access debugging session (out-of-band from the migration) escalated into a week's worth of architecture rethinking. This section captures why the original "stateless bilby on NFS" design was abandoned.
+
+### What happened (short version)
+
+A client reported Plex was "frozen" — browsing the library would work for a bit then stall for 30–60 seconds. Investigation found cascading SQLite write lock storms: the Plex DB on `/Jump/plex` (NFS) was occasionally becoming completely unresponsive under normal play-state tracking load. Root-causing the lock storms uncovered three separate problems layered on top of each other:
+
+1. **Wrong host timezone** — bilby's clock was set to `America/New_York` instead of `Australia/Perth`, so Plex's 2–5 AM "butler" maintenance window was running at 2–5 PM local time, directly overlapping with active use. Butler tasks were doing heavy DB writes concurrent with real client traffic. Fixed by setting the correct TZ.
+2. **Theme music metadata DB records missing** — first-access to any show would trigger Plex to synchronously download + analyze a theme track while holding a write lock. The file on disk was there (years old) but the DB reference was broken. Caused cascading timeouts.
+3. **The real killer: 47 GB Plex DB was 99.6% bloat** — `statistics_bandwidth` table had **796,867,521 rows** dating back to 2017 (9+ years of every playback event). At ~70 bytes per row, this single table was ~55 GB of the 47 GB DB file. Plex has no UI, API, or scheduled task to prune this table.
+
+### The debugging path (briefly, because it matters)
+
+- Attempted online `OptimizeDatabase` (VACUUM): ran for 7+ hours, got killed by the `autoheal` healthcheck timeout (Plex was unresponsive to /identity under the write lock pressure, healthcheck tripped, autoheal restarted the container, SQLite rolled back the transaction, 7 hours lost).
+- Attempted a Plex library "force refresh" to regenerate theme track DB records: completed in ~25 min, but **overwrote user-selected poster choices** for many items. Even worse: force refresh picked new agent posters and updated `user_thumb_url` in the DB, but failed to actually download them — leaving dangling DB references to non-existent files. ~5% of movies broken.
+- Ran the bandwidth cleanup properly: rebuilt `statistics_bandwidth` via offline SQL (CREATE new, INSERT last 30 days, DROP old, RENAME). **796,867,521 → 3,405 rows.** Followup VACUUM completed in **~60 seconds** (vs 7 hours previously) because there was barely any data left to rewrite. **DB: 47 GB → 217 MB.**
+- Rebuilt Plex from a fresh `rsync /Jump/plex` (source-of-truth), ran the cleanup on the copy, moved everything to local NVMe, wired up BIFs via bind-mount from Pouch. Validated posters + themes + watch state intact. User-selected posters preserved.
+
+### Lessons learned
+
+- **SQLite on NFS is fragile under write contention.** Not because NFS average latency is bad (ours is excellent, sub-ms RTT) but because SQLite's WAL checkpointing can stall writers, and any stall cascades because Plex's play-state tracking sends ~1 write per active stream per 10s on a single-writer database. Occasional 30-second stalls were directly observable in our benchmarks even on a fresh, clean 200 MB DB on NFS — so NFS *was* a real structural issue, just a smaller one than the bloat.
+- **Plex has no stats pruning.** The `statistics_bandwidth` table grows forever. Community workarounds are all external (DBRepair, deflate scripts, cron DELETEs). Needs to be our responsibility going forward.
+- **Plex "force refresh" is destructive.** It *will* overwrite user poster selections. It can also leave the DB pointing at files that failed to download. Only use it when you're specifically trying to regenerate metadata — never as routine maintenance.
+- **Autoheal + long-running DB operations is a bad combination.** A 7-hour VACUUM holds the API under contention long enough that healthchecks time out; autoheal restarts the container mid-transaction; all progress is lost. For maintenance work that's expected to be slow, disable autoheal + healthcheck up-front.
+- **Treat originals as sacrosanct when debugging.** We got away with several near-catastrophes because `/Jump/plex` was untouched throughout. Every "fix" attempt was against copies. This is the rule: **never modify the source of truth while the thing is broken**.
+- **Byte math > `du -sh` math.** `du -sh` rounds to human units (e.g., "44G") in a way that makes precise reasoning impossible. When the difference between 44.0 GB and 47.1 GB matters, read `stat -c '%s'`.
+- **BIF format is one file per video.** Scrubbing reads from a single BIF file at various offsets, not many files. BIFs on HDDs work fine because the OS caches the file header after first read. Ours are at `/mnt/pouch/plex-video-thumbnails` (~183 GB, 14k files), deliberately symlinked there originally to keep them out of the config tree. We've replaced the symlink with a Docker bind mount for explicitness.
+
+### Choices made (new design)
+
+- **Sizing rule:** local NVMe <5 GB, consult 5–50 GB, Pouch ≥50 GB. Jump is now **backup target only**.
+- **Plex state is local** — DB (217 MB), blobs DB (500 MB), metadata bundles (12 GB), config (~1 GB). Total ~14 GB at `/var/lib/plex-local`. Fits comfortably.
+- **Plex BIFs stay on Pouch** (183 GB) via explicit bind mount at `/config/Library/Application Support/Plex Media Server/Media/localhost`. The old "symlink from within the config tree" pattern is replaced with a proper bind mount in compose.yaml.
+- **No more "all state on NFS"** as a guiding principle. The NAS squash carve-outs are now permanent — each was local for good reasons that happened to show up as squash errors first.
+- **Config-as-code is the bar for every stack.** "Install from podhaus → deploy via Komodo → it just works, no UI wizard" is the target. Backrest specifically: plans + hooks + retention declared in `backup/config.json.tmpl`, bind-mounted read-only.
+- **Templated Preferences.xml / config files where the stack model fits it.** Don't overdo it — focus on one-time baseline configs useful for restoration. Plex Preferences.xml stays in the deferred list (phase 6 follow-up), backrest config is a new priority.
+- **Periodic maintenance jobs are our responsibility where upstream lacks them** — Plex stats cleanup is one we now own.
+
+### Final Plex architecture (as-built)
+
+```
+/var/lib/plex-local/                              ← local NVMe (14 GB)
+├── Library/Application Support/Plex Media Server/
+│   ├── Plug-in Support/Databases/
+│   │   ├── com.plexapp.plugins.library.db        (217 MB, was 47 GB)
+│   │   └── com.plexapp.plugins.library.blobs.db  (500 MB)
+│   ├── Metadata/                                  (12 GB — bundles, posters, art, themes)
+│   ├── Media/localhost/                           ← bind mount to /mnt/pouch/plex-video-thumbnails (183 GB BIFs)
+│   ├── Plug-ins/                                  (Sub-Zero, Trakttv, IMDB agent, ~220 MB)
+│   ├── Codecs/, Logs/, Preferences.xml            (~1 GB)
+│   └── ...
+└── ...
+```
+
+Compose volumes:
+```yaml
+volumes:
+  - /var/lib/plex-local:/config:z
+  - /mnt/pouch/plex-video-thumbnails:/config/Library/Application Support/Plex Media Server/Media/localhost
+  - /mnt/pouch:/Users/Shared/Pouch
+  - ./healthcheck.sh:/scripts/healthcheck.sh:ro,z
+```
+
+### Backup state after the pivot
+
+- **Old backup snapshot deleted** — the April 11 restic snapshot was of the 100 GB bloated Plex DB; deleted via `restic forget 866cbd66 --prune` (17.5 GiB reclaimed locally).
+- **OneDrive mirror cleaned** — `rclone sync` ran to reconcile the empty local repo to `onedrive:Backups/podhaus-restic`, deleting 1,103 stale files (17.5 GiB) on OneDrive. Remote now has just the empty-repo skeleton (2 files, 609 B).
+- **Backrest has no plans configured yet** — was never finalised in phase 3 (originally deferred). Now a priority item for the next phase.
+
+### Cleanup completed during the pivot
+
+Reclaimed 111 GB on `/Jump` by deleting test copies from the debugging session: `plex-sync` (57 GB), `plex-clean` (46 GB), `plex-local-meta` (7.3 GB), `plex-test` (1.7 GB). Docker volumes removed: `plex_plex-local-meta`, `plex_plex-test`, `plex_plex-test-meta`. `plex_jump` remains because Backrest still references it (will be removed once Backrest compose is updated). Original `/Jump/plex` stays untouched for a few days as a safety net before we delete it.
 
 ## Context
 
@@ -303,12 +386,13 @@ Phase 3 of `paperless/onenote-to-paperless.md` (the upload script that walks the
 
 ### 4. Logging infrastructure
 
+**Update 2026-04-13:** Loki was the original choice but has known resource-bounding weaknesses at home-lab scale (time-based retention only, no size-aware eviction, hard-stop on full). Swapping to **Victoria Logs** before building any dashboards. See Phase 6.5 for the swap task. Alloy and Grafana stay; only the storage/query layer changes.
+
 - [x] Set Docker daemon log driver caps (`local` driver, `max-size=50m`, `max-file=3`). Done in phase 1 batch, dockerd restarted.
-- [x] Create `logging/compose.yaml` + `stack.toml` — Loki + Grafana Alloy + Grafana
-- [x] Loki storage at `/Jump/loki/`, retention configured via Loki compactor (30 days). **Note:** actual storage is a local `loki-data` volume under the NAS squash carve-out, not `/Jump/loki/`.
-- [x] Alloy scrapes all local containers via docker socket. Loki queries return logs from komodo-postgres, autoheal, plex, etc.
+- [x] Create `logging/compose.yaml` + `stack.toml` — **currently** Loki + Grafana Alloy + Grafana. Pending swap to Victoria Logs + Alloy + Grafana (phase 6.5).
+- [x] Alloy scrapes all local containers via docker socket. ~~Loki~~ logs queries return logs from komodo-postgres, autoheal, plex, etc.
 - [x] Grafana exposed via new `logs.pod.haus` ingress rule in cloudflare-tunnel compose. Tunnel itself still deploy = false until phase 8, but the ingress rule is in place for the cutover.
-- [ ] Seed Grafana with a basic "all container logs" dashboard — **deferred to Grafana UI** (admin/admin first-login will force a password change; dashboard provisioning can happen then).
+- [ ] Seed Grafana with a basic "all container logs" dashboard — **deferred until after the Victoria Logs swap** so we don't build dashboards against a backend we're about to replace.
 - [x] Verify logs from existing plex container are flowing. Confirmed via `curl http://loki:3100/loki/api/v1/query_range?query={host="bilby"}` returning plex + komodo + autoheal lines.
 
 ### 5. Uptime Kuma migration from Railway
@@ -352,13 +436,44 @@ Validated implicitly as each stack was deployed:
 - [x] `willfarrell/autoheal` — pulls cleanly
 - [x] `cloudflare/cloudflared` — pulls cleanly (smoke-tested even though the stack is deploy = false for now)
 
+### 6.5 Post-recovery follow-ups (phase 6 pivot aftermath)
+
+Work that falls out of the architecture pivot. Do before phase 7 stack migrations so the patterns (local storage, config-as-code, backrest plans) are in place when each new stack lands.
+
+- [ ] **Restart autoheal** — stopped during the Plex VACUUM, not yet restored. `docker start autoheal`.
+- [ ] **Update Backrest compose** — replace `plex_jump:/userdata/plex:ro` with `/var/lib/plex-local:/userdata/plex:ro`. No active plans so nothing breaks until we write them in the next item.
+- [ ] **Backrest config-as-code** — `backup/config.json.tmpl` checked into the repo, rendered at deploy time with 1P secrets, bind-mounted **read-only** into the container at `/config/config.json`. Declare:
+  - Repos: local restic at `/repos/podhaus`, encrypted, password from `op://Homelab/restic-repo-password/credential`
+  - Plans: one per stack that has state worth backing up. First plan is **plex** pointing at `/userdata/plex` (the new `/var/lib/plex-local` bind). Subsequent phase-7 plans added as each stack comes online.
+  - Hooks:
+    - Pre-backup: per-plan DB dump + validation (sqlite `PRAGMA integrity_check`, postgres `pg_dump --format=custom | pg_restore --list`), 3× retry with 10s backoff, auto-restore from `restic dump latest` on SQLite failure, abort on postgres failure.
+    - Post-backup: `rclone sync /repos/podhaus onedrive:Backups/podhaus-restic` (hook fires once after all plans succeed, not per-plan).
+  - Retention: 14 daily + 4 weekly + 6 monthly, per plan.
+  - Notifications: Shoutrrr → Postmark SMTP via the `POSTMARK_*` env vars already surfaced on the backrest container.
+- [ ] **Fix read-only rclone.conf mount** — current bind mount is `:ro`, which prevents rclone from persisting refreshed OAuth tokens. Change to writable so refresh tokens can be written back. (Downside: the file can drift from the 1P source. Accept the drift since the token refresh is automatic and the drive_id etc. are stable.)
+- [ ] **Plex stats cleanup cron/timer** — `statistics_bandwidth` regrows unbounded. Weekly systemd timer (or Komodo scheduled action) that runs:
+  ```sql
+  DELETE FROM statistics_bandwidth WHERE at < strftime('%s', 'now', '-30 days');
+  ```
+  via `docker exec plex` + Plex's bundled SQLite, plus `PRAGMA incremental_vacuum` (will be a no-op until auto_vacuum mode is set — optional extra step). Monthly full `OptimizeDatabase` via the Plex API to reclaim page space. Script lives at `plex/stats-cleanup.sh` in the repo, timer unit in `plex/stats-cleanup.timer`.
+- [ ] **Swap Loki for Victoria Logs** — Loki was the original choice but its time-only retention + hard-stop-on-full behaviour is a poor fit for home-lab resource bounds. Victoria Logs has native size-based retention, ~7× less disk for equivalent logs, and is specifically designed for small-scale / single-host operation. Alloy and Grafana don't change; only the storage/query layer does. Steps:
+  - Update `logging/compose.yaml`: replace the `loki` service with `victoria-logs` (image `victoriametrics/victoria-logs:latest`, port 9428, volume `/var/lib/victoria-logs-data`, args `-retentionPeriod=31d -retention.maxDiskUsageBytes=50GB` as the size cap).
+  - Update Alloy config to push to Victoria Logs' Loki-compatible endpoint: `http://victoria-logs:9428/insert/loki/api/v1/push` (drop-in, no other Alloy changes).
+  - Update Grafana: install the Victoria Logs datasource plugin (`victoriametrics-logs-datasource`), configure it, remove the Loki datasource.
+  - Delete `loki-config.yaml` from the logging stack.
+  - Storage: `victoria-logs-data` volume is local (small, under the sizing rule). Size cap enforced by Victoria Logs itself, not filesystem quota — no QNAP-side work needed.
+  - **Known feature gap to accept**: LogQL metric-from-log extraction isn't as mature in LogsQL. We don't currently use this. If we ever want "alert me when error rate in plex logs spikes," the path is `vmalert` (separate component) or we solve it differently. Filing as a known limitation, not a blocker.
+- [ ] **Seed Grafana dashboards** — "all container logs" with a `{host="bilby"}` panel, using LogsQL syntax for the new datasource. Do after the swap so we're not building against a backend we're replacing.
+- [ ] **Paperless: confirm deferred** — paperless is a stalled project. Not blocking the migration. Defer the full migration (and all its OneNote upload / ingest pipeline work) until flood + home-assistant + tunnel cutover are done. When we come back to it, the **documents/media live on Pouch** as a bind mount, **postgres + search index + config live local**. See the sizing sanity check in the progress log for numbers.
+- [ ] **Verify `/Jump/plex` safety window expired** — 3-5 day wait after 2026-04-13 before deleting the original. After validation period, `rm -rf /mnt/jump/plex` and `docker volume rm plex_jump` (no longer needed once Backrest source is updated).
+
 ### 7. Stack migrations (smallest blast radius first)
 
-For each stack: take a pre-migration snapshot on alligator → stop on alligator → rsync volume(s) into the new NFS path under `/Jump/<container>/` → deploy on bilby via Komodo → verify → add healthcheck + autoheal label as part of the same change → confirm next backup run captures the new state → add Kuma monitors for the new container.
+For each stack: take a pre-migration snapshot on alligator → stop on alligator → rsync volume(s) to the new home (local or Pouch based on the sizing rule) → deploy on bilby via Komodo → verify → add healthcheck + autoheal label as part of the same change → confirm Backrest plan exists and captures the new state → add Kuma monitors for the new container.
 
-- [ ] **flood** — rsync `flood_flood-db` → `/Jump/flood/db/` (16 MB). Add healthcheck `curl -f http://localhost:3000/api/` + `ls /flood-db` + `ls /data`.
-- [ ] **paperless** — rsync `paperless-data` → `/Jump/paperless/data/`, `paperless-pgdata` → `/Jump/paperless/pgdata/` (~85 MB total). Mount paperless media as a bind mount from `/mnt/pouch/Paperless/`. Redis/Tika/Gotenberg stateless. Add healthchecks to tika + gotenberg (needed for autoheal). Add healthcheck to main `paperless` container.
-- [ ] **home-assistant** — rsync `home-assistant-config` → `/Jump/home-assistant/` (86 MB). Verify integrations reconnect after host change (Sonos, any LAN-bound devices). Add healthcheck.
+- [ ] **flood** — rsync `flood_flood-db` → local (16 MB, local per sizing rule). Add healthcheck `curl -f http://localhost:3000/api/` + `ls` checks on data dirs.
+- [ ] **home-assistant** — rsync `home-assistant-config` → local (~86 MB, local per sizing rule). Verify integrations reconnect after host change (Sonos, any LAN-bound devices). Add healthcheck. HA's `recorder` database can grow — set a retention policy in HA's config if not already set.
+- [ ] **paperless** — **deferred until after flood + HA + tunnel cutover** (see 6.5 above). When resumed: media bind mount from `/mnt/pouch/Paperless/`, postgres + data + whoosh index → local. Redis/Tika/Gotenberg stateless. Healthchecks on tika + gotenberg for autoheal. Sizing sanity check: even 100k documents → postgres ~5-8 GB, whoosh ~5-8 GB, still within "local or consult" bound.
 
 ### 8. Cloudflare tunnel cutover
 
@@ -540,3 +655,11 @@ Updates land here as decisions get made or steps complete.
 - **Phase 5a uptime-kuma scaffolding complete**: fresh empty Kuma instance running on bilby, state in a local volume, port 3001 exposed. Railway state migration (phase 5b) deferred — Railway Kuma stays live until user runs the railway CLI dance.
 - **Bind mount path quirk**: Komodo-managed stack run_directories are `/etc/komodo/repo/<stack>` which exists inside periphery via the bind mount from the repo root, but doesn't exist on the host. Docker daemon runs on the host and resolves bind mount sources from the host filesystem, so relative paths (`./loki-config.yaml`) in the compose resolve to non-existent host paths and Docker silently creates empty stub dirs as fallback. Fix: use absolute host paths (`/home/nathan/repos/podhaus/logging/loki-config.yaml`) in any compose file that bind-mounts repo-resident files. Same pattern as `backup/compose.yaml`'s `/etc/komodo/rclone/rclone.conf` mount. I tried a symlink fix first (`/etc/komodo/repo` → `/home/nathan/repos/podhaus`) but it broke Komodo's `create_dir` call on existing run_directories, so reverted.
 - **Alligator untouched**: nothing on alligator has been stopped, cloudflared on alligator is still the live tunnel, all pod.haus services currently route to alligator. The user explicitly scoped this batch as "set everything up on bilby, don't shut down alligator yet" — every stack on bilby runs in parallel with its alligator counterpart until the phase 7 + 8 cutover.
+
+- **2026-04-12/13: Phase 6 architecture pivot.** A Plex client-visible outage (occasional 30-60s stalls during browsing) led to a multi-day debugging session that uncovered layered problems: wrong host timezone (butler running at peak hours), missing theme-music DB records (triggered inline analysis under lock), and the real culprit — `statistics_bandwidth` had 796,867,671 rows (9 years of history, ~55 GB of the 47 GB DB file) with no Plex-provided pruning. Attempted in-order: host TZ fix, multi-hour online VACUUM (killed by autoheal after ~7h), force refresh (damaged user poster selections), then the actual fix: offline table rebuild keeping only last 30 days (796M → 3,405 rows), VACUUM completed in ~60s, DB 47 GB → 217 MB. Rebuilt Plex from a fresh `rsync /Jump/plex` onto local NVMe at `/var/lib/plex-local`. BIFs (183 GB at `/mnt/pouch/plex-video-thumbnails`) switched from an in-config symlink to an explicit bind mount in compose. **Design principle changed from "stateless bilby on NFS" to "local state is the default."** Sizing rule locked in: local <5 GB, consult 5-50 GB, Pouch ≥50 GB. NAS squash carve-outs become permanent design choices rather than workarounds. Full details in the "Phase 6: Architecture pivot" section above.
+
+- **2026-04-13: Cleanup + remaining plan locked in.** Deleted 111 GB of Plex test copies from `/Jump` (`plex-sync`, `plex-clean`, `plex-local-meta`, `plex-test`). Deleted the April 11 restic snapshot via `restic forget 866cbd66 --prune` (17.5 GiB reclaimed locally), then `rclone sync`'d the empty repo to OneDrive to clean the mirror (1,103 files / 17.5 GiB deleted remotely). Backrest has no active plans so no backups are running until we write `backup/config.json.tmpl`. Paperless deferred until flood + HA + tunnel cutover. Phase 6.5 "Post-recovery follow-ups" added to the plan.
+
+- **2026-04-13: Loki → Victoria Logs decision.** Investigating how to hard-cap Loki storage revealed that Loki only supports time-based retention, not size-based eviction — it would just hard-stop on full, dropping new logs until space is manually freed. This was a bad fit for "logging system must not break the rest of the infrastructure." Researched alternatives: **Victoria Logs** from the VictoriaMetrics team is specifically designed for small-scale / single-host use, uses ~7× less disk than Loki, has native size-based retention (`-retention.maxDiskUsageBytes`), and speaks the Loki push API natively so Alloy needs no changes. Grafana gets a datasource swap but we have zero dashboards built, so migration cost is essentially zero. Known trade-off: LogQL's metric-from-log extraction is more mature than LogsQL's — we don't currently use this, so non-blocking. **Decision: swap to Victoria Logs before building dashboards.** Phase 4 status updated, phase 6.5 retains the "swap" item, original "Loki retention bounding" item removed.
+
+- **2026-04-13: End of day.** Autoheal restarted (was stopped during the VACUUM work earlier in the day). Plex verified healthy on local-db. Original `/Jump/plex` retained as the safety-net source-of-truth for a few more days before cleanup. Migration doc committed reflecting the full architecture pivot + Victoria Logs decision + phase 6.5 follow-ups.
