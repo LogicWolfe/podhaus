@@ -11,4 +11,5 @@ run_directory = "/etc/komodo/repo/flood"
 
 environment = """
 FLOOD_SECRET=[[OP__KOMODO__FLOOD_SECRET__PASSWORD]]
+MEDIA_DIR=[[MEDIA_DIR]]
 """
