@@ -10,7 +10,9 @@ services:
       FLOOD_SECRET: ${FLOOD_SECRET}
       GID: "44"
     volumes:
-      - flood-db:/flood-db
+      # rtorrent session (~16 MB: .torrent + .libtorrent_resume + .rtorrent
+      # files). Local NVMe per the post-phase-6 sizing rule.
+      - /var/lib/flood-db:/flood-db:z
       - ${MEDIA_DIR}:/data
     labels:
       autoheal: "true"
@@ -26,11 +28,3 @@ services:
 networks:
   dockernet:
     external: true
-
-volumes:
-  flood-db:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
-      device: ":/Jump/flood/db"

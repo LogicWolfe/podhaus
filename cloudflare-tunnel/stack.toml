@@ -2,12 +2,13 @@
 name = "cloudflare-tunnel"
 description = "Cloudflare Tunnel (locally managed) for external access"
 tags = ["podhaus"]
-# deploy = false until the phase 8 cutover in alligator-bilby-migration.md.
-# Alligator is still running the same tunnel id (cc68c7c9-...); having two
-# cloudflared instances on the same tunnel creates active-active load
-# balancing and breaks routing for hostnames whose backends only exist on
-# one host. Flip back to true when we're ready to stop alligator's tunnel.
-deploy = false
+# Bilby is now the live tunnel origin. Alligator's cloudflare-tunnel was
+# stopped 2026-04-14 during the flood + tunnel cutover; running two
+# cloudflared instances on the same tunnel id creates active-active
+# load balancing and breaks routing for hostnames whose backends only
+# exist on one host. If alligator is revived, `docker stop cloudflare-tunnel`
+# there before it rejoins the LAN.
+deploy = true
 
 [stack.config]
 server = "podhaus"
