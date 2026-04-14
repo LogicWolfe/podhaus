@@ -29,10 +29,10 @@ komodo_api() {
 }
 
 seed_variable() {
-  local name="$1" value="$2"
+  local name="$1" value="$2" is_secret="${3:-true}"
   local create_payload update_payload
-  create_payload=$(jq -n --arg n "$name" --arg v "$value" \
-    '{type: "CreateVariable", params: {name: $n, value: $v, is_secret: true}}')
+  create_payload=$(jq -n --arg n "$name" --arg v "$value" --argjson s "$is_secret" \
+    '{type: "CreateVariable", params: {name: $n, value: $v, is_secret: $s}}')
   update_payload=$(jq -n --arg n "$name" --arg v "$value" \
     '{type: "UpdateVariableValue", params: {name: $n, value: $v}}')
   komodo_api write "$create_payload" > /dev/null 2>&1 || \
@@ -47,6 +47,15 @@ seed_variable "ONEPASSWORD_CONNECT_TOKEN" \
   "$(op read "op://Homelab/Homelab Access Token Komodo/credential")"
 seed_variable "ONEPASSWORD_API_KEY" "$api_key"
 seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
+
+# Non-secret variables from komodo/sync/variables.toml. Komodo ResourceSync
+# reads that file as remote content but does not apply [[variable]] entries,
+# so declarations there never become live variables — which silently breaks
+# [[TZ]] / [[MEDIA_DIR]] interpolation in stack.toml environment blocks on
+# the next redeploy. Seed them here so they're always present post-bootstrap.
+echo "Seeding non-secret variables into Komodo..."
+seed_variable "TZ"        "Australia/Perth" false
+seed_variable "MEDIA_DIR" "/mnt/pouch"      false
 
 echo "Rendering host-side secret files..."
 # Secrets with multi-line content don't round-trip through Komodo's env

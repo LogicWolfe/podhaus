@@ -9,6 +9,7 @@ services:
       HOME: /flood-db
       FLOOD_SECRET: ${FLOOD_SECRET}
       GID: "44"
+      TZ: ${TZ}
     volumes:
       # rtorrent session (~16 MB: .torrent + .libtorrent_resume + .rtorrent
       # files). Local NVMe per the post-phase-6 sizing rule.
