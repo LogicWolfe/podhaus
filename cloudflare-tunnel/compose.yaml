@@ -39,14 +39,11 @@ services:
         target: /etc/cloudflared/credentials.json
       - source: tunnel-config
         target: /etc/cloudflared/config.yml
-    labels:
-      autoheal: "true"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:20241/ready > /dev/null"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    # No healthcheck / autoheal: the cloudflared image is distroless (no
+    # shell, wget, or curl) so in-container probes can't reach /ready on
+    # port 20241. cloudflared handles its own reconnection, and a true
+    # crash is caught by `restart: unless-stopped`. External liveness is
+    # monitored from Uptime Kuma hitting the public hostnames.
     networks:
       - dockernet
 
