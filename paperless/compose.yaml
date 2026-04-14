@@ -41,14 +41,11 @@ services:
     container_name: paperless-tika
     image: apache/tika:latest
     restart: unless-stopped
-    labels:
-      autoheal: "true"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:9998/tika > /dev/null"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    # No in-container healthcheck / autoheal: the apache/tika image is
+    # distroless, no wget / curl / shell tools available so internal probes
+    # can't reach :9998. Same shape as cloudflare-tunnel. Tika is internal-
+    # only (no public hostname), so liveness comes via paperless calling it
+    # over dockernet — if tika is dead, paperless's own logs surface it.
     networks:
       - dockernet
 
