@@ -40,9 +40,8 @@ D("pod.haus!cloudflare", REG_NONE, DnsProvider(DSP_CF),
 
 // --- UniFi local DNS — split-horizon for LAN access ---
 D("pod.haus!unifi", REG_NONE, DnsProvider(DSP_UNI),
-    A("unifi",     "10.0.0.1"),
-    A("alligator", "10.0.0.83"),
-    A("bilby",     "10.0.0.119")
+    A("unifi", "10.0.0.1"),
+    A("bilby", "10.0.0.119")
 );
 
 // --- elusive.email (Fastmail) ---

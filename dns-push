@@ -5,5 +5,5 @@ export OP_SERVICE_ACCOUNT_TOKEN="$(cat ../OP_SERVICE_ACCOUNT_TOKEN)"
 op run --env-file=.env -- docker run --rm \
   -e CLOUDFLARE_API_TOKEN \
   -e UNIFI_API_KEY \
-  -v "$(pwd):/dns" \
+  -v "$(pwd):/dns:z" \
   ghcr.io/stackexchange/dnscontrol push
