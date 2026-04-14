@@ -8,7 +8,11 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      - home-assistant-config:/config
+      # HA config + recorder SQLite DB (~85 MB). Local NVMe per the
+      # post-phase-6 sizing rule. Host bind mount so the container
+      # matches exactly what's on the host; :z lets SELinux relabel
+      # the content for container access.
+      - /var/lib/home-assistant:/config:z
       - /run/dbus:/run/dbus:ro
     labels:
       autoheal: "true"
@@ -18,11 +22,3 @@ services:
       timeout: 15s
       retries: 3
       start_period: 120s
-
-volumes:
-  home-assistant-config:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
-      device: ":/Jump/home-assistant"
