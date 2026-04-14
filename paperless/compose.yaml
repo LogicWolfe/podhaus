@@ -8,7 +8,10 @@ services:
       POSTGRES_USER: paperless
       POSTGRES_PASSWORD: ${PAPERLESS_POSTGRES_PASSWORD}
     volumes:
-      - paperless-pgdata:/var/lib/postgresql/data
+      # Postgres data on local NVMe per the post-phase-6 sizing rule.
+      # Container chowns this dir to uid 999 (postgres) on first start, so
+      # the host dir must be writable by uid 999. :Z lets SELinux relabel.
+      - /var/lib/paperless-pgdata:/var/lib/postgresql/data:Z
     labels:
       autoheal: "true"
     healthcheck:
@@ -99,7 +102,9 @@ services:
       PAPERLESS_CONSUMER_ENABLE_BARCODES: "true"
       PAPERLESS_TIME_ZONE: ${TZ}
     volumes:
-      - paperless-data:/usr/src/paperless/data
+      # Paperless app state (search index, models, classifiers) on local
+      # NVMe per the sizing rule. Documents themselves stay on Pouch.
+      - /var/lib/paperless-data:/usr/src/paperless/data:z
       - /mnt/pouch/Paperless:/usr/src/paperless/media
     labels:
       autoheal: "true"
@@ -111,19 +116,6 @@ services:
       start_period: 120s
     networks:
       - dockernet
-
-volumes:
-  # NOTE: paperless-pgdata is intentionally local, NOT NFS-backed — same
-  # NAS squash issue that affects komodo-postgres (see
-  # komodo/ferretdb.compose.yaml for details). Flip back to NFS at
-  # :/Jump/paperless/pgdata once kangaroo's /Jump export stops squashing.
-  paperless-pgdata:
-  paperless-data:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=10.0.0.25,nfsvers=4.1,soft,timeo=600,retrans=5,rw"
-      device: ":/Jump/paperless/data"
 
 networks:
   dockernet:
