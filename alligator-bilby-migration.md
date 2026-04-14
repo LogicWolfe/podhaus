@@ -4,22 +4,21 @@ Migration of all running services from `alligator` (Intel NUC, x86_64, Linux) to
 
 ## Resumption pointer (read this first if returning to a fresh session)
 
-**Current state (2026-04-13):** phases 1–5 executed. **Phase 6 "architecture pivot" happened** — a Plex debugging session cascaded into a full redesign away from "stateless bilby on NFS" toward "local state is the default." See **Phase 6: Architecture pivot (2026-04-12/13)** below for the detailed story, lessons, and choices. Short version: SQLite + NFS + long-lived Plex DB = occasional convoy stalls, and the 47 GB Plex DB turned out to be 99.6% a single bloat table (`statistics_bandwidth`, 796M rows, 9 years of history). Plex now runs entirely from local NVMe (`/var/lib/plex-local`, 14 GB) with BIFs bind-mounted from Pouch and the cleaned-up 217 MB DB. Original `/Jump/plex` (102 GB) is kept intact as a safety net for a few days before cleanup. Komodo, logging, backup, uptime-kuma still running. **Alligator is still fully running and untouched.**
+**Current state (2026-04-14):** phases 1–5, 6 (architecture pivot), and 8 (tunnel cutover) executed. Phase 7 is half done: **flood migrated to bilby**, home-assistant and paperless still running on alligator pending their own phase-7 migrations. **Plex** runs entirely from local NVMe (`/var/lib/plex-local`, 14 GB) with BIFs bind-mounted from Pouch and the cleaned-up 217 MB DB. **Cloudflare tunnel** is now on bilby; alligator's tunnel was stopped as part of the cutover. **Komodo, logging, backup, uptime-kuma, autoheal, onepassword** all on bilby. Original `/Jump/plex` (102 GB) still intact as a safety net for a few more days. **Alligator is still running** (home-assistant, paperless, its own komodo instance) but its `flood` and `cloudflare-tunnel` containers are exited.
 
 **New design principle (supersedes "all state on NFS"):** Sizing rule — **local <5 GB, consult 5–50 GB, Pouch ≥50 GB**. The NAS squash carve-outs that used to be temporary exceptions are now permanent design choices.
 
 **Next action when resuming:**
 
-1. **Restart autoheal** — stopped during the Plex VACUUM and not restored. `docker start autoheal`.
-2. **Investigate paperless stuck in Created** — `paperless-postgres/redis/gotenberg/tika` never actually started. Find out why and fix.
-3. **Update Backrest compose** — swap `plex_jump:/userdata/plex:ro` → `/var/lib/plex-local:/userdata/plex:ro`. No active plans, so nothing breaks until we write them.
-4. **Write `backup/config.json.tmpl`** — Backrest config-as-code. Define repos, plans (per-stack paths), hooks (DB dump pre-hook, rclone-to-OneDrive post-hook), retention, Shoutrrr → Postmark notifications. Template secrets from 1P. Bind-mount rendered config **read-only** so the repo stays canonical and UI edits don't persist.
-5. **Weekly cron/timer for Plex stats cleanup** — `statistics_bandwidth` regrows unbounded. Script: `DELETE FROM statistics_bandwidth WHERE at < strftime('%s', 'now', '-30 days');` (via `docker exec plex` + Plex SQLite). Include incremental vacuum. Monthly full optimize via the Plex API.
-6. **Re-evaluate each stack against the new sizing rule**. The "NAS squash carve-out" section below now describes the permanent design for those stacks, not a workaround.
-7. **Phase 7** (stack migrations): flood → paperless → home-assistant. Each needs rsync of its existing volumes from alligator, same approach as before but now landing on local disk.
-8. **Phase 8** (Cloudflare tunnel cutover) after phase 7. Staged ingress rules already in place.
-9. **Phase 5b** (Kuma state migration from Railway) — Railway CLI dance.
-10. **Phase 9–13** after that.
+1. **Phase 7 finish: home-assistant migration.** Rsync `home-assistant_home-assistant-config` (~86 MB) from alligator's local volume to `/var/lib/home-assistant` on bilby. Swap the NFS volume in `home-assistant/compose.yaml` (currently points at `/Jump/home-assistant`, empty placeholder) for a local bind at `/var/lib/home-assistant`. Reference `MEDIA_DIR`/`TZ` in `home-assistant/stack.toml` environment block (see `flood/stack.toml` as the template — see also the TZ propagation finding below before deploying). `network_mode: host` so no dockernet dance. Verify Sonos and other LAN integrations reconnect after host change.
+2. **Phase 7 finish: paperless migration.** 5 containers (paperless, paperless-postgres, paperless-redis, paperless-tika, paperless-gotenberg). Rsync `paperless_paperless-pgdata` (69 MB) and `paperless_paperless-data` (16 MB) from alligator. Documents media comes from `/mnt/pouch/Paperless/` bind mount (already there). All other state goes local per sizing rule. Paperless is currently the remaining "stuck in Created" stack on bilby; investigate whether the Created state is from a failed prior deploy and `docker rm` before the new deploy.
+3. **Retire alligator** — Phase 12. Once HA + paperless are on bilby, alligator has nothing left. Power off, remove `A("alligator", "10.0.0.83")` from `dns/dnsconfig.js`'s UniFi zone, `dns-push`.
+4. **Backrest config-as-code** (`backup/config.json.tmpl`) — still highest-priority phase 6.5 item. With flood state now on bilby too, we're running plex + flood + komodo + uptime-kuma all on a single disk with zero backup coverage. Update `backup/compose.yaml` to swap `plex_jump` → `/var/lib/plex-local` at the same time.
+5. **Plex `/transcode` tmpfs fix** — discovered today: tmpfs mount is root-owned, Plex (uid 1000) can't write to it, theme music transcoding silently failing. One-line compose change (`mode=1777` tmpfs option) but requires plex container restart — schedule for when Plex isn't actively in use.
+6. **Fix the TZ / MEDIA_DIR variable drift** — see "Known gotcha: Komodo variable seeding" below. Proper fix: add `TZ` and `MEDIA_DIR` to `komodo-start`'s `seed_variable` loop.
+7. **Remaining phase 6.5 items**: Ofelia stack + Plex stats cleanup, Victoria Logs swap, rclone.conf writable mount, Grafana dashboards.
+8. **Phase 5b** (Kuma state migration from Railway) — Railway CLI dance.
+9. **Phase 9, 11, 13** after that.
 
 **Credentials status:** `railway-api-token` ✓, `postmark-smtp` ✓, `restic-repo-password` ✓, `rclone-onedrive-token` ✓ (all four surfaced as Komodo Variables via komodo-op).
 
@@ -29,6 +28,32 @@ Migration of all running services from `alligator` (Intel NUC, x86_64, Linux) to
 - **SELinux enforcing on Fedora Asahi** → `security_opt: label:disable` on every container that needs docker socket access or cross-label bind mount reads.
 - **`ghcr.io/0dragosh/komodo-op` mislabelled arm64 manifest** → built a local arm64 image from upstream source via `onepassword/komodo-op.Dockerfile`; compose pins `image: komodo-op:local-arm64` with `pull_policy: never`.
 - **Multi-line 1P Secure Notes don't round-trip through Komodo env files** (truncation at the first newline) → `komodo-start` renders `rclone.conf` on the host via `op CLI` and stacks bind-mount `/etc/komodo/rclone/rclone.conf` directly. Re-run `komodo-start` to refresh after token rotations.
+- **`cloudflare/cloudflared:latest` is distroless** — no shell, no wget, no curl, no busybox. The original in-container `wget http://localhost:20241/ready` healthcheck was structurally impossible. Removed the healthcheck + autoheal label from `cloudflare-tunnel/compose.yaml`; rely on cloudflared's internal reconnect plus `restart: unless-stopped`, and monitor tunnel liveness externally via Uptime Kuma hitting the public hostnames.
+
+## Known gotcha: Komodo variable seeding for non-secret variables
+
+**Problem:** `komodo/sync/variables.toml` declares `TZ` and `MEDIA_DIR` as `[[variable]]` entries, and Komodo's ResourceSync *reads* them as remote content — they're visible in the `remote_contents` field of `GetResourceSync`. But the sync never actually materializes them as live Komodo Variables: `variable_updates` in the sync result stays empty. Stacks that reference `[[TZ]]` or `[[MEDIA_DIR]]` in their `stack.toml` environment blocks get literal unresolved `[[TZ]]` written into their `.env` files on redeploy, which docker compose then passes through verbatim as the TZ env var.
+
+**How this manifests:** At original-deploy time the variables existed (someone had seeded them manually or they survived a prior bootstrap), so each stack's `.env` was populated correctly and the running containers all have `TZ=Australia/Perth`. At some later point the variables were cleared. Subsequent `./komodo-sync` runs rewrote the `.env` files with `TZ=[[TZ]]` literal — but crucially, did **not** recreate the containers, so the divergence is invisible until the next actual redeploy.
+
+**Audited state as of 2026-04-14** (running containers vs on-disk `.env`):
+
+| Stack | Running container TZ | On-disk `.env` TZ line |
+|---|---|---|
+| `logging` (loki/alloy) | _not set → UTC_ | `TZ=[[TZ]]` (literal) |
+| `logging` (grafana) | `Australia/Perth` ✓ | `TZ=[[TZ]]` (literal) |
+| `uptime-kuma` | `Australia/Perth` ✓ | `TZ=[[TZ]]` (literal) |
+| `backup` (backrest) | `Australia/Perth` ✓ | `TZ=[[TZ]]` (literal) |
+| `home-assistant` | _not running on bilby_ | `TZ=Australia/Perth` (correct, from pre-drift deploy) |
+| `paperless` | _not running on bilby_ | `TZ=Australia/Perth` (correct, from pre-drift deploy) |
+| `flood` | _not set → UTC_ | _flood doesn't reference `TZ` yet — should add_ |
+| `cloudflare-tunnel` | _not set → UTC_ | _N/A_ |
+
+**Blast radius right now:** Low. Three stacks have broken-on-disk `.env` files but running containers are still fine. The next redeploy of any of them (e.g., Victoria Logs swap will redeploy the logging stack) would launch with `TZ=[[TZ]]` — tzdata would fall back to UTC, which is exactly the wrong-timezone class of bug that caused the Plex butler incident.
+
+**Fix plan:** Add `TZ` and `MEDIA_DIR` to `komodo-start`'s `seed_variable` loop so they get re-seeded on every bootstrap the same way the 1P credentials do. `variables.toml` stays around as declarative reference but stops being the authoritative source. Two-line change in `komodo-start`, one-line change in `komodo-sync` description.
+
+**Workaround applied 2026-04-14:** Variables manually re-seeded via the Komodo API (`CreateVariable`) to unblock the flood + cloudflare-tunnel cutover. Not durable across a `komodo-start` re-run — anyone redeploying the logging stack before the komodo-start fix lands must either re-seed the variable or accept UTC in their log timestamps.
 
 ## NAS squash carve-out (temporary exception to "all state on NFS")
 
@@ -426,7 +451,7 @@ Preserves monitor configs, notification configs, and history via SQLite volume c
 
 Validated implicitly as each stack was deployed:
 
-- [ ] `jesec/rtorrent-flood` — pending until flood is actually deployed in phase 7
+- [x] `jesec/rtorrent-flood` — pulls cleanly on arm64, runs cleanly, rtorrent session directory layout survived the host rsync (uid/gid preserved as numeric 1000:1001). Validated 2026-04-14 phase 7 flood migration.
 - [x] `ghcr.io/0dragosh/komodo-op` — **mislabelled multi-arch manifest**: upstream Dockerfile hardcodes `--platform=linux/amd64` + `GOARCH=amd64`, so the "arm64" tag is actually an amd64 image that crashes with exec format error on real aarch64. Worked around by building a native arm64 image locally from the same source (`onepassword/komodo-op.Dockerfile`).
 - [x] `ghcr.io/ferretdb/postgres-documentdb` — pulls cleanly, runs as expected; the failure we hit with this image was the NFS squash issue, not arm64
 - [x] `1password/connect-api`, `1password/connect-sync` — pulls cleanly
@@ -471,23 +496,28 @@ Work that falls out of the architecture pivot. Do before phase 7 stack migration
 - [ ] **Seed Grafana dashboards** — "all container logs" with a `{host="bilby"}` panel, using LogsQL syntax for the new datasource. Do after the swap so we're not building against a backend we're replacing.
 - [ ] **Paperless: confirm deferred** — paperless is a stalled project. Not blocking the migration. Defer the full migration (and all its OneNote upload / ingest pipeline work) until flood + home-assistant + tunnel cutover are done. When we come back to it, the **documents/media live on Pouch** as a bind mount, **postgres + search index + config live local**. See the sizing sanity check in the progress log for numbers.
 - [ ] **Verify `/Jump/plex` safety window expired** — 3-5 day wait after 2026-04-13 before deleting the original. After validation period, `rm -rf /mnt/jump/plex` and `docker volume rm plex_jump` (no longer needed once Backrest source is updated).
+- [ ] **Fix Plex `/transcode` tmpfs permissions** — discovered 2026-04-14. The tmpfs mount (`tmpfs: - /transcode:size=4g`) mounts as `root:root 755`, but Plex runs as uid 1000. Inside the container: `ls -la /transcode` shows empty and owned by root, and the log reports `IsDirWritable: directory '/transcode' is not writable` every time Plex tries to transcode a theme music track. Means theme music transcoding has been silently failing since plex came up on bilby — direct-play video works fine because it doesn't hit `/transcode`. Fix: change compose tmpfs spec to `- /transcode:size=4g,uid=1000,gid=100,mode=755`. Requires plex container restart so schedule for a maintenance window (Plex is in active local use). Found while investigating a potential TV app crash report — likely contributed, possibly not the root cause.
+- [ ] **Seed `TZ` + `MEDIA_DIR` in `komodo-start`** — see "Known gotcha: Komodo variable seeding" section above. Two-line change in `komodo-start`'s `seed_variable` loop. Make `komodo/sync/variables.toml` a non-authoritative declarative reference.
+- [ ] **Backfill `TZ=[[TZ]]` / `MEDIA_DIR=[[MEDIA_DIR]]` references into existing stack.toml environment blocks where missing** — specifically `flood/stack.toml` lacks a `TZ` reference (flood has been running without TZ env var set). Add it as part of the komodo-start fix above.
 
 ### 7. Stack migrations (smallest blast radius first)
 
 For each stack: take a pre-migration snapshot on alligator → stop on alligator → rsync volume(s) to the new home (local or Pouch based on the sizing rule) → deploy on bilby via Komodo → verify → add healthcheck + autoheal label as part of the same change → confirm Backrest plan exists and captures the new state → add Kuma monitors for the new container.
 
-- [ ] **flood** — rsync `flood_flood-db` → local (16 MB, local per sizing rule). Add healthcheck `curl -f http://localhost:3000/api/` + `ls` checks on data dirs.
-- [ ] **home-assistant** — rsync `home-assistant-config` → local (~86 MB, local per sizing rule). Verify integrations reconnect after host change (Sonos, any LAN-bound devices). Add healthcheck. HA's `recorder` database can grow — set a retention policy in HA's config if not already set.
-- [ ] **paperless** — **deferred until after flood + HA + tunnel cutover** (see 6.5 above). When resumed: media bind mount from `/mnt/pouch/Paperless/`, postgres + data + whoosh index → local. Redis/Tika/Gotenberg stateless. Healthchecks on tika + gotenberg for autoheal. Sizing sanity check: even 100k documents → postgres ~5-8 GB, whoosh ~5-8 GB, still within "local or consult" bound.
+- [x] **flood** — done 2026-04-14. rsynced `flood_flood-db` from alligator (208 torrents, 13.7 MB of rtorrent session files) → local bind at `/var/lib/flood-db`. Compose volume swapped from NFS to local, `:z` SELinux flag added. `MEDIA_DIR=[[MEDIA_DIR]]` added to `flood/stack.toml` environment block after discovering the variable-seeding gotcha (see above). rtorrent loaded all 208 torrents from the rsynced session without rehashing. Healthcheck (`wget localhost:3000 + ls /flood-db + ls /data`) already present, autoheal label already present. Commit `46a0113` + `8d458d8`.
+- [ ] **home-assistant** — rsync `home-assistant-config` → local bind at `/var/lib/home-assistant` (~86 MB, local per sizing rule). Compose currently has NFS volume pointing at `/Jump/home-assistant` (empty placeholder) — swap for local bind. Add `TZ=[[TZ]]` + `MEDIA_DIR=[[MEDIA_DIR]]` to stack.toml environment if not already there (verify against the variable-seeding gotcha above first). `network_mode: host`, so no dockernet dance. Verify integrations reconnect after host change (Sonos SOAP on :1400, any LAN-bound devices). Add healthcheck. HA's `recorder` database can grow — set a retention policy in HA's config if not already set.
+- [ ] **paperless** — 5 containers. When resumed: media bind mount from `/mnt/pouch/Paperless/` (already there), postgres + data + whoosh index → local. Redis/Tika/Gotenberg stateless. Investigate + clean up the four `paperless-*` containers currently stuck in `Created` state on bilby before the real deploy. Healthchecks on tika + gotenberg for autoheal. Sizing sanity check: even 100k documents → postgres ~5-8 GB, whoosh ~5-8 GB, still within "local or consult" bound.
 
-### 8. Cloudflare tunnel cutover
+### 8. Cloudflare tunnel cutover — done 2026-04-14
 
-Reusing tunnel credentials means both hosts can't run cloudflared simultaneously. Hot swap:
+Reusing tunnel credentials means both hosts can't run cloudflared simultaneously. Cutover was executed alongside the flood migration rather than after all three stack migrations. Alligator was briefly offline earlier in the day (tunnels down everywhere) which simplified the coordination — no hot swap was needed, just "stop on alligator, start on bilby."
 
-- [ ] Confirm flood/paperless/HA are running on bilby and stopped on alligator
-- [ ] Drop `sync.pod.haus` ingress rule (syncthing deferred)
-- [ ] Deploy `cloudflare-tunnel` stack on bilby while stopping it on alligator (coordinated cutover)
-- [ ] Verify all `*.pod.haus` routes still resolve
+- [x] `deploy = false` flipped to `deploy = true` in `cloudflare-tunnel/stack.toml`. Commit `46a0113`.
+- [x] Alligator's `cloudflare-tunnel` container stopped via `docker stop` before bilby's came up.
+- [x] Bilby's cloudflared registered 4 tunnel connections (2× mel02, 2× per01), `https://komodo.pod.haus` returns 200 (was 530 before), `https://torrent.pod.haus` 302s to Cloudflare Access login (origin reachable).
+- [x] Healthcheck removed (distroless image — see gotcha section). Commit `3bba849`.
+- [ ] `sync.pod.haus` / `home.pod.haus` / `paperless.pod.haus` ingress rules **deliberately left in place** per user call "502s are fine, don't do extra work to make a broken thing broken in a different way." Will heal when HA + paperless land on bilby.
+- [ ] `logs.pod.haus` and `uptime.pod.haus` CNAMEs are missing from `dns/dnsconfig.js` (the ingress rules exist in the tunnel config but DNS doesn't route them externally). Add to `dns/dnsconfig.js` and `dns-push` when external access to Grafana/Kuma is needed — LAN access via `http://bilby:3000` and `http://bilby:3001` works now.
 
 ### 9. Finish OneNote export on bilby
 
@@ -670,3 +700,11 @@ Updates land here as decisions get made or steps complete.
 - **2026-04-13: End of day.** Autoheal restarted (was stopped during the VACUUM work earlier in the day). Plex verified healthy on local-db. Original `/Jump/plex` retained as the safety-net source-of-truth for a few more days before cleanup. Migration doc committed reflecting the full architecture pivot + Victoria Logs decision + phase 6.5 follow-ups.
 
 - **2026-04-13: Ofelia chosen for recurring jobs.** Evaluated options for scheduling the Plex stats cleanup (and future maintenance jobs): host systemd timers, Komodo Procedures, Ofelia, Dockron, in-container cron. **Ofelia** wins because it's Docker-native (runs as a container, uses Docker labels on target services to schedule `docker exec` jobs), which means the schedule lives in the same compose file as the service it applies to — natural config-as-code fit with zero new templating. No new infrastructure beyond one container. Phase 6.5 updated: the "Plex stats cleanup cron/timer" item is now an Ofelia stack + labels on `plex/compose.yaml` + a `plex/stats-cleanup.sh` script. Backrest retains its own scheduler (not via Ofelia).
+
+- **2026-04-14: Flood migrated + tunnel cutover executed in a single session.** Alligator was briefly offline earlier (tunnels returning 530 from both hosts; user confirmed "everything is offline, don't worry about coordinating"), came back up mid-session. Because there was no pre-existing active tunnel to fight against, the phase 8 "hot swap" reduced to a plain sequential cutover: stop alligator's flood → rsync flood state → start bilby's flood → stop alligator's cloudflare-tunnel → start bilby's cloudflare-tunnel. rtorrent state (208 torrents, 13.7 MB of `.torrent`/`.libtorrent_resume`/`.rtorrent` files) rsynced from alligator's `/var/lib/docker/volumes/flood_flood-db/_data/` to bilby's `/var/lib/flood-db/` over SSH with sudo-rsync to read the docker-owned volume dir. The `-X` xattr-preservation flag produced SELinux `lremovexattr` warnings that are harmless (file data + metadata transferred fine, just couldn't strip SELinux labels the receiver applied). rtorrent loaded all 208 torrents from the rsynced session on startup without rehashing, meaning the `.libtorrent_resume` bitfields survived the transfer intact. Three commits: `46a0113` (cutover), `8d458d8` (MEDIA_DIR stack.toml reference), `3bba849` (tunnel healthcheck removal).
+
+- **2026-04-14: Komodo variable seeding drift discovered.** Deploying flood on bilby failed at the `docker compose config` stage with `The "MEDIA_DIR" variable is not set. Defaulting to a blank string.` and `invalid spec: :/data: empty section between colons`. Investigation: `MEDIA_DIR` and `TZ` are declared in `komodo/sync/variables.toml` and ResourceSync reads the file (visible in `GetResourceSync`'s `remote_contents`), but the sync's `variable_updates` output is empty — ResourceSync reads variable TOMLs but doesn't apply them. The four `OP__KOMODO__*` variables survive only because komodo-op re-seeds them from 1P on every poll. Further audit: three stacks (`logging`, `uptime-kuma`, `backup`) have on-disk `.env` files containing `TZ=[[TZ]]` literal (from a post-drift `komodo-sync` rewrite) but their running containers still have correct `TZ=Australia/Perth` because docker-compose didn't recreate them. Next redeploy of any affected stack would silently fall back to UTC — exactly the class of bug that caused the Plex butler peak-hours incident. **Workaround 2026-04-14**: re-seeded `TZ` and `MEDIA_DIR` via Komodo API `CreateVariable`, added `MEDIA_DIR=[[MEDIA_DIR]]` to `flood/stack.toml`. **Proper fix** deferred to phase 6.5: add both variables to `komodo-start`'s `seed_variable` loop. Full detail in the "Known gotcha: Komodo variable seeding" section above.
+
+- **2026-04-14: Cloudflare-tunnel healthcheck was structurally impossible.** The original `healthcheck: wget http://localhost:20241/ready` on `cloudflare-tunnel/compose.yaml` couldn't ever pass because `cloudflare/cloudflared:latest` is a distroless image — no shell, no wget, no curl, no busybox, only the `cloudflared` binary. Previous deploys presumably relied on the health state staying in `starting` indefinitely. Now that `/ready` *is* reachable from the host network (verified via `curl http://172.18.0.11:20241/ready` returning 200), we could in theory run a host-side check, but Docker healthchecks run inside the container. Removed the healthcheck and the autoheal label from the compose: cloudflared handles its own reconnection internally (verified in logs: "Retrying connection in up to 1s" → "Registered tunnel connection"), container crashes are caught by `restart: unless-stopped`, and external tunnel liveness will be monitored via Uptime Kuma hitting the public hostnames.
+
+- **2026-04-14: Plex `/transcode` tmpfs is not writable by Plex.** Found while investigating a Plex client crash report. The compose has `tmpfs: - /transcode:size=4g` which mounts as `root:root 755`. Plex runs as uid 1000, so it can't create files there — log shows `IsDirWritable: directory '/transcode' is not writable` every time a transcode is attempted. Blast radius: video direct-play works fine (doesn't hit `/transcode`), but theme music always transcodes and always fails. Has been broken since plex came up on bilby. Fix is trivial (`mode=1777` or `uid=1000,gid=100` tmpfs option) but requires container restart, deferring to next maintenance window because Plex is actively in use. Filed as a phase 6.5 item.
