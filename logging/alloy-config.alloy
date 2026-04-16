@@ -1,5 +1,9 @@
 // Alloy config: discover local Docker containers, tail their logs,
-// ship to the loki container on the same dockernet network.
+// ship to victoria-logs on the same dockernet network.
+//
+// Victoria Logs accepts the Loki push protocol natively at its
+// /insert/loki/api/v1/push endpoint, so Alloy's loki.* components are
+// unchanged from the previous Loki setup — only the URL differs.
 
 discovery.docker "containers" {
   host             = "unix:///var/run/docker.sock"
@@ -42,6 +46,6 @@ loki.source.docker "containers" {
 
 loki.write "local" {
   endpoint {
-    url = "http://loki:3100/loki/api/v1/push"
+    url = "http://victoria-logs:9428/insert/loki/api/v1/push"
   }
 }

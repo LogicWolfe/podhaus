@@ -1,31 +1,39 @@
 services:
-  loki:
-    container_name: loki
-    image: grafana/loki:latest
+  victoria-logs:
+    container_name: victoria-logs
+    image: victoriametrics/victoria-logs:latest
     restart: unless-stopped
-    command: -config.file=/etc/loki/loki-config.yaml
-    # SELinux enforcing on Fedora Asahi denies cross-label reads into
-    # bind-mounted config files; label:disable lifts the confinement so
-    # loki can read its config.
-    security_opt:
-      - label:disable
-    # Absolute host paths intentional: Komodo-managed stacks have a
-    # run_directory that exists as a bind mount inside periphery but not
-    # on the host (docker daemon resolves bind sources from the host
-    # filesystem), so relative paths like ./loki-config.yaml don't work.
-    # Same pattern as backup/compose.yaml's /etc/komodo/rclone mount.
+    # Run as 1000:100 to match the NAS Jump squash effective uid:gid.
+    # Without this, Victoria Logs runs as its default in-image user
+    # (different uid) and writes get squashed to 1000:100, then VL
+    # can't read its own files back. Plex follows the same pattern
+    # (PLEX_UID=1000 PLEX_GID=100) for the same reason.
+    user: "1000:100"
+    command:
+      - -storageDataPath=/victoria-logs-data
+      - -retentionPeriod=31d
+      - -retention.maxDiskSpaceUsageBytes=50GB
+      - -httpListenAddr=:9428
+      - -loggerFormat=json
+    ports:
+      # Expose to LAN so vmui is reachable directly at http://bilby:9428/select/vmui
+      # for head-to-head comparison against Grafana before deciding which UI
+      # to keep long-term. Container also reachable internally via dockernet
+      # at http://victoria-logs:9428 for Alloy push + Grafana datasource.
+      - "9428:9428"
     volumes:
-      - /home/nathan/repos/podhaus/logging/loki-config.yaml:/etc/loki/loki-config.yaml:ro
-      - loki-data:/loki
+      # Storage on Jump (NAS SSD) per the storage tier rule. Log history
+      # is "durable state we'd hate to lose"; size cap prevents Jump fill.
+      - /mnt/jump/victoria-logs:/victoria-logs-data
     networks:
       - dockernet
     labels:
       autoheal: "true"
-    # No healthcheck: grafana/loki image is distroless (no shell, no
-    # wget), and the loki binary doesn't ship a ping subcommand we can
-    # call from HEALTHCHECK. alloy and grafana retry their loki
-    # connections on failure, so we rely on service_started rather
-    # than service_healthy below.
+    # No healthcheck: victoriametrics images don't ship wget/curl/sh in
+    # their distroless base. VL's HTTP API is the actual liveness signal;
+    # if it stops accepting writes Alloy logs the failure and Grafana
+    # queries will fail visibly. Same shape as the cloudflare-tunnel and
+    # paperless-tika decisions.
 
   alloy:
     container_name: alloy
@@ -46,7 +54,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
     depends_on:
-      loki:
+      victoria-logs:
         condition: service_started
     networks:
       - dockernet
@@ -78,12 +86,16 @@ services:
     environment:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: https://logs.pod.haus
+      # Auto-install the Victoria Logs datasource plugin on container
+      # start. Plugin lives in the persistent grafana-data volume so it
+      # only downloads once.
+      GF_INSTALL_PLUGINS: victoriametrics-logs-datasource
       TZ: ${TZ}
     volumes:
       - grafana-data:/var/lib/grafana
-      - /home/nathan/repos/podhaus/logging/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/loki.yaml:ro
+      - /home/nathan/repos/podhaus/logging/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/victoria-logs.yaml:ro
     depends_on:
-      loki:
+      victoria-logs:
         condition: service_started
     networks:
       - dockernet
@@ -101,9 +113,9 @@ networks:
     external: true
 
 volumes:
-  # Local volumes for the same /Jump squash carve-out as komodo-postgres
-  # (see komodo/ferretdb.compose.yaml). Flip to NFS when the export
-  # mode is fixed.
-  loki-data:
+  # alloy + grafana state stay as local docker volumes (NAS squash
+  # carve-out — same as komodo-postgres, see komodo/ferretdb.compose.yaml).
+  # victoria-logs storage is a host bind mount to /mnt/jump/victoria-logs
+  # (NFS Jump) per the storage tier rule, so no named volume here for it.
   alloy-data:
   grafana-data:

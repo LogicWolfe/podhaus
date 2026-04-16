@@ -1,12 +1,27 @@
+# Grafana provisioning: declare the Victoria Logs datasource so it shows
+# up automatically on first boot. The plugin itself is installed at
+# container startup via the GF_INSTALL_PLUGINS env var on the grafana
+# service in compose.yaml.
+#
+# `editable: false` means changes via the UI don't persist — anyone
+# changing the datasource shape edits this file and redeploys.
 apiVersion: 1
 
-datasources:
+# Removes the previously-provisioned Loki datasource. Idempotent —
+# Grafana applies this on every startup; once Loki is gone it's a no-op.
+# Kept as documentation of the migration history; safe to delete this
+# block after a few months when the Loki datasource has definitively
+# been removed everywhere.
+deleteDatasources:
   - name: Loki
-    type: loki
+    orgId: 1
+
+datasources:
+  - name: Victoria Logs
+    type: victoriametrics-logs-datasource
     access: proxy
-    url: http://loki:3100
+    url: http://victoria-logs:9428
     isDefault: true
     editable: false
     jsonData:
       maxLines: 5000
-      timeout: 60

@@ -75,9 +75,13 @@ services:
       - komodo_postgres-data:/userdata/komodo/postgres:ro
       - komodo_ferretdb-state:/userdata/komodo/ferretdb:ro
       - onepassword_op-connect-data:/userdata/onepassword:ro
-      - logging_loki-data:/userdata/logging/loki:ro
       - logging_alloy-data:/userdata/logging/alloy:ro
       - logging_grafana-data:/userdata/logging/grafana:ro
+      # Victoria Logs storage (replaces the old Loki named volume).
+      # Lives on Jump alongside the backup repo itself; backed up so
+      # Victoria Logs history survives a Jump RAID failure (off-site
+      # via the rclone OneDrive sync hook).
+      - /mnt/jump/victoria-logs:/userdata/logging/victoria-logs:ro
       - uptime-kuma_uptime-kuma-data:/userdata/uptime-kuma:ro
       #
       # Backrest backing up its own state. Kept at a separate mount
@@ -119,8 +123,6 @@ volumes:
   komodo_ferretdb-state:
     external: true
   onepassword_op-connect-data:
-    external: true
-  logging_loki-data:
     external: true
   logging_alloy-data:
     external: true
