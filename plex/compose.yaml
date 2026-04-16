@@ -13,13 +13,20 @@ services:
     volumes:
       # All Plex state on local NVMe (DB, config, metadata)
       - /var/lib/plex-local:/config:z
+      # Transcode scratch on local NVMe. Was a 4G tmpfs originally — RAM
+      # made sense back when "all bilby state on NFS" meant disk-backed
+      # transcode would have been disastrous. Post-phase-6 pivot the M1's
+      # internal NVMe handles this trivially (transcoding is ~1 MB/s vs
+      # 1+ GB/s available), and freeing 4 GB of RAM headroom is more
+      # valuable than the theoretical RAM-vs-NVMe speed delta. Owned
+      # 1000(nathan):100(users) on the host to match the Plex process's
+      # uid/gid (PLEX_UID=1000 PLEX_GID=100 above).
+      - /var/lib/plex-transcode:/transcode:z
       # BIFs (video scrubbing thumbnails) live on Pouch — ~183 GB
       - /mnt/pouch/plex-video-thumbnails:/config/Library/Application Support/Plex Media Server/Media/localhost
       # Media files
       - /mnt/pouch:/Users/Shared/Pouch
       - ./healthcheck.sh:/scripts/healthcheck.sh:ro,z
-    tmpfs:
-      - /transcode:size=4g
     labels:
       autoheal: "true"
     healthcheck:
