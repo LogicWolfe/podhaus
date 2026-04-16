@@ -68,4 +68,16 @@ op read "op://Homelab/rclone-onedrive-token/notesPlain" | \
 sudo chmod 600 /etc/komodo/rclone/rclone.conf
 echo "  /etc/komodo/rclone/rclone.conf"
 
+# Backrest config: repo + plans + retention + rclone-sync hook declared in
+# backup/config.json.tmpl. Only secret is RESTIC_REPO_PASSWORD from 1P. We
+# render to /etc/komodo/backup/config.json and bind-mount read-only into
+# the backrest container so the repo is the authoritative source for
+# plans — UI edits to the config can't persist by design.
+sudo mkdir -p /etc/komodo/backup
+RESTIC_REPO_PASSWORD="$(op read 'op://Homelab/restic-repo-password/credential')" \
+  envsubst '${RESTIC_REPO_PASSWORD}' < backup/config.json.tmpl | \
+  sudo tee /etc/komodo/backup/config.json > /dev/null
+sudo chmod 600 /etc/komodo/backup/config.json
+echo "  /etc/komodo/backup/config.json"
+
 ./komodo-sync

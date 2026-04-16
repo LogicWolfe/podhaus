@@ -1,0 +1,204 @@
+{
+  "instance": "podhaus-bilby",
+  "auth": {
+    "disabled": true
+  },
+  "repos": [
+    {
+      "id": "podhaus",
+      "uri": "/repos/podhaus",
+      "password": "${RESTIC_REPO_PASSWORD}",
+      "flags": [],
+      "env": [],
+      "prunePolicy": {
+        "schedule": {
+          "cron": "0 4 * * 0",
+          "clock": "CLOCK_LOCAL"
+        },
+        "maxUnusedPercent": 10
+      },
+      "checkPolicy": {
+        "schedule": {
+          "cron": "0 5 * * 0",
+          "clock": "CLOCK_LOCAL"
+        },
+        "readDataSubsetPercent": 10
+      },
+      "hooks": [],
+      "autoUnlock": true,
+      "autoInitialize": true
+    }
+  ],
+  "plans": [
+    {
+      "id": "plex",
+      "repo": "podhaus",
+      "paths": ["/userdata/plex"],
+      "schedule": {
+        "cron": "0 2 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "flood",
+      "repo": "podhaus",
+      "paths": ["/userdata/flood"],
+      "schedule": {
+        "cron": "10 2 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "home-assistant",
+      "repo": "podhaus",
+      "paths": ["/userdata/home-assistant"],
+      "schedule": {
+        "cron": "20 2 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "paperless",
+      "repo": "podhaus",
+      "paths": ["/userdata/paperless"],
+      "schedule": {
+        "cron": "30 2 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "komodo",
+      "repo": "podhaus",
+      "paths": ["/userdata/komodo"],
+      "schedule": {
+        "cron": "40 2 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "onepassword",
+      "repo": "podhaus",
+      "paths": ["/userdata/onepassword"],
+      "schedule": {
+        "cron": "50 2 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "logging",
+      "repo": "podhaus",
+      "paths": ["/userdata/logging"],
+      "schedule": {
+        "cron": "0 3 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "uptime-kuma",
+      "repo": "podhaus",
+      "paths": ["/userdata/uptime-kuma"],
+      "schedule": {
+        "cron": "10 3 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "backrest-state",
+      "repo": "podhaus",
+      "paths": ["/userdata/backrest-state"],
+      "schedule": {
+        "cron": "20 3 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [
+        {
+          "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
+          "onError": "ON_ERROR_IGNORE",
+          "actionCommand": {
+            "command": "rclone sync --config /rclone/rclone.conf /repos/podhaus onedrive:Backups/podhaus-restic"
+          }
+        }
+      ],
+      "skipIfUnchanged": true
+    }
+  ]
+}
