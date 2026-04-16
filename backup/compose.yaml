@@ -22,25 +22,36 @@ services:
       # multi-line Secure Note through Komodo's env-file pipeline (which
       # truncates at the first newline).
       RCLONE_CONFIG: /rclone/rclone.conf
+      # rclone also uses cache files under XDG_CONFIG_HOME by default;
+      # point it at /tmp so it doesn't try to create $HOME/.config/rclone
+      # under a read-only filesystem layer.
+      RCLONE_CONFIG_DIR: /tmp/rclone
     volumes:
       # Backrest runtime state (oplog, jwt-secret, kvdb, tasklogs).
       - backrest-data:/data
-      # /config is a named volume so Backrest can write anything it
-      # wants into that dir, BUT the config.json itself is overridden
-      # by a read-only bind mount from /etc/komodo/backup/config.json
-      # (rendered on the host by komodo-start from the checked-in
-      # config.json.tmpl + 1P secrets). This is the config-as-code path:
-      # the repo is the source of truth for backup plans; UI edits to
-      # the config fail by design.
-      - backrest-config:/config
-      - /etc/komodo/backup/config.json:/config/config.json:ro
+      # /config is a host bind mount rendered by komodo-start from the
+      # checked-in backup/config.json.tmpl + 1P secrets. The repo is the
+      # canonical source of truth. Backrest rewrites this file in place
+      # on startup (config normalization / schema migration) and on UI
+      # edits, so we can't use a read-only bind — that breaks Backrest's
+      # rename-based atomic write. Any drift between the live file and
+      # the template is erased on the next `komodo-start` run, which
+      # re-renders the template over whatever's there. :z for SELinux
+      # relabel so the container can write.
+      - /etc/komodo/backup:/config:z
       - backrest-cache:/cache
 
       # Restic repository target on Pouch (where snapshots actually land).
       - /mnt/pouch/backups:/repos/podhaus
 
-      # rclone config rendered on the host by komodo-start.
-      - /etc/komodo/rclone/rclone.conf:/rclone/rclone.conf:ro
+      # rclone config rendered on the host by komodo-start. Mounted
+      # as a writable directory (not a read-only file) because rclone
+      # needs to persist refreshed OAuth tokens back to the config —
+      # a read-only single-file bind prevents the rename-based atomic
+      # write rclone uses, which traps rclone in a permanently-
+      # refreshing-in-memory state. Drift from the 1P source is erased
+      # on the next komodo-start run which re-renders the template.
+      - /etc/komodo/rclone:/rclone:z
 
       # Source data to back up — all read-only. Layout:
       #   /userdata/<stack>          — host bind mounts for migrated stacks
@@ -89,10 +100,11 @@ networks:
     external: true
 
 volumes:
-  # Backrest's own state (runtime, config dir, cache). Small, latency
-  # sensitive, stay local per the post-phase-6 sizing rule.
+  # Backrest's own state (runtime data + restic cache). Small, latency
+  # sensitive, stay local per the post-phase-6 sizing rule. /config is
+  # not a named volume — it's a host bind mount to /etc/komodo/backup
+  # (see the service block comment).
   backrest-data:
-  backrest-config:
   backrest-cache:
 
   # External volumes owned by other stacks — Backrest mounts them read-only
