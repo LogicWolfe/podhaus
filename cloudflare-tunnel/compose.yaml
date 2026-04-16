@@ -1,34 +1,12 @@
 configs:
+  # tunnel-credentials stays as a compose `config` because it's an
+  # env-sourced secret blob (TUNNEL_CREDENTIALS comes from 1P via
+  # Komodo). The ingress rules used to be inline `content: |` here too,
+  # which made them invisible to git diff and required a force-recreate
+  # to pick up changes — they now live in cloudflare-tunnel/config.yml
+  # and are bind-mounted in below.
   tunnel-credentials:
     environment: TUNNEL_CREDENTIALS
-  tunnel-config:
-    content: |
-      tunnel: cc68c7c9-1dad-42aa-af04-46119d3e515f
-      credentials-file: /etc/cloudflared/credentials.json
-      ingress:
-        - hostname: komodo.pod.haus
-          service: http://komodo-core:9120
-        - hostname: torrent.pod.haus
-          service: http://flood:3000
-        - hostname: home.pod.haus
-          service: http://172.18.0.1:8123
-        - hostname: kangaroo.pod.haus
-          service: http://10.0.0.25:8080
-        - hostname: sync.pod.haus
-          service: http://172.18.0.1:8384
-        - hostname: unifi.pod.haus
-          service: https://10.0.0.1:443
-          originRequest:
-            noTLSVerify: true
-        - hostname: paperless.pod.haus
-          service: http://paperless:8000
-        - hostname: logs.pod.haus
-          service: http://grafana:3000
-        - hostname: vlogs.pod.haus
-          service: http://victoria-logs:9428
-        - hostname: uptime.pod.haus
-          service: http://uptime-kuma:3001
-        - service: http_status:404
 
 services:
   cloudflare-tunnel:
@@ -36,11 +14,16 @@ services:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate --metrics 0.0.0.0:20241 --config /etc/cloudflared/config.yml run
+    # SELinux enforcing on Fedora Asahi denies cross-label reads into the
+    # bind-mounted ingress config; label:disable lifts the confinement.
+    # Same pattern as the alloy + grafana config bind mounts in logging/.
+    security_opt:
+      - label:disable
     configs:
       - source: tunnel-credentials
         target: /etc/cloudflared/credentials.json
-      - source: tunnel-config
-        target: /etc/cloudflared/config.yml
+    volumes:
+      - ${PODHAUS_REPO}/cloudflare-tunnel/config.yml:/etc/cloudflared/config.yml:ro
     # No healthcheck / autoheal: the cloudflared image is distroless (no
     # shell, wget, or curl) so in-container probes can't reach /ready on
     # port 20241. cloudflared handles its own reconnection, and a true

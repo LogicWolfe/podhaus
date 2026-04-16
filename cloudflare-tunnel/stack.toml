@@ -17,4 +17,5 @@ run_directory = "/etc/komodo/repo/cloudflare-tunnel"
 
 environment = """
 TUNNEL_CREDENTIALS=[[OP__KOMODO__CLOUDFLARE_TUNNEL_CREDENTIALS__CREDENTIAL]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
 """

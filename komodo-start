@@ -3,6 +3,11 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
 
+# Repo root is auto-discovered from the script's working directory. Keeps
+# podhaus portable: clone anywhere, run ./komodo-start, and Komodo + every
+# stack that interpolates [[PODHAUS_REPO]] points at this checkout.
+export COMPOSE_KOMODO_REPO_PATH="$PWD"
+
 # Pre-create /etc/komodo/ssl so komodo-periphery can write its self-signed
 # certs there (the image doesn't mkdir -p the ssl subdir on its own).
 sudo mkdir -p /etc/komodo/ssl
@@ -54,8 +59,15 @@ seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
 # [[TZ]] / [[MEDIA_DIR]] interpolation in stack.toml environment blocks on
 # the next redeploy. Seed them here so they're always present post-bootstrap.
 echo "Seeding non-secret variables into Komodo..."
-seed_variable "TZ"        "Australia/Perth" false
-seed_variable "MEDIA_DIR" "/mnt/pouch"      false
+seed_variable "TZ"            "Australia/Perth" false
+seed_variable "MEDIA_DIR"     "/mnt/pouch"      false
+# Host path to this repo checkout. Stacks that bind-mount files out of
+# the repo (logging configs, cloudflare-tunnel ingress rules, etc.)
+# interpolate [[PODHAUS_REPO]] in their stack.toml environment block so
+# the rendered compose file uses ${PODHAUS_REPO}/<stack>/<file>. This is
+# what keeps the repo portable — bilby has it at /home/nathan/repos/podhaus,
+# the next host could clone it anywhere and the same compose files work.
+seed_variable "PODHAUS_REPO"  "$PWD"            false
 
 echo "Rendering host-side secret files..."
 # Secrets (or large multi-line blobs) don't round-trip through Komodo's

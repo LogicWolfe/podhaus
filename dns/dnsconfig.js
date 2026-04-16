@@ -9,15 +9,15 @@ var PL_TUNNEL = "fec5ca76-b634-4185-bdb2-f85c38b1b570.cfargotunnel.com.";
 D("pod.haus!cloudflare", REG_NONE, DnsProvider(DSP_CF),
 
     // Tunnel-routed services (proxied)
+    CNAME("grafana",   TUNNEL, CF_PROXY_ON),  // grafana (kept for future dashboards)
     CNAME("home",      TUNNEL, CF_PROXY_ON),
     CNAME("kangaroo",  TUNNEL, CF_PROXY_ON),
     CNAME("komodo",    TUNNEL, CF_PROXY_ON),
-    CNAME("logs",      TUNNEL, CF_PROXY_ON),  // grafana
+    CNAME("logs",      TUNNEL, CF_PROXY_ON),  // victoria-logs vmui (primary log UI)
     CNAME("paperless", TUNNEL, CF_PROXY_ON),
     CNAME("sync",      TUNNEL, CF_PROXY_ON),
     CNAME("torrent",   TUNNEL, CF_PROXY_ON),
     CNAME("unifi",     TUNNEL, CF_PROXY_ON),
-    CNAME("vlogs",     TUNNEL, CF_PROXY_ON),  // victoria-logs vmui
 
     // Railway apps
     CNAME("doggos.indigo", "x0y6bs3z.up.railway.app.", CF_PROXY_OFF),

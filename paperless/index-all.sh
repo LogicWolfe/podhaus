@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-cd /home/nathan/repos/podhaus
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 # All notebook IDs
 notebooks=(

@@ -39,9 +39,54 @@ discovery.relabel "container_logs" {
 loki.source.docker "containers" {
   host          = "unix:///var/run/docker.sock"
   targets       = discovery.relabel.container_logs.output
-  forward_to    = [loki.write.local.receiver]
+  forward_to    = [loki.process.containers.receiver]
   relabel_rules = discovery.relabel.container_logs.rules
   labels        = {"host" = "bilby"}
+}
+
+// Per-container log shaping. Pipeline runs in order: ANSI strip first
+// (so JSON parsers don't see colour codes), then per-container JSON
+// extraction. Add a new stage.match block when another container starts
+// shipping JSON-with-non-_msg-field logs.
+loki.process "containers" {
+  forward_to = [loki.write.local.receiver]
+
+  // Strip ANSI colour escape sequences from every log line. komodo-core
+  // and flood emit raw ANSI to stdout, which vmui has no way to render.
+  // We lose colour but gain readable text and working substring search.
+  // Using Alloy's built-in stage rather than a hand-rolled regex so any
+  // corner cases get fixed upstream.
+  stage.decolorize {}
+
+  // op-connect-api emits JSON with the message in `log_message`. VL
+  // detects JSON-shaped Loki pushes and expects `_msg` as the message
+  // field; without that match it warns "missing _msg field" in vmui.
+  // Extract log_message and rewrite the line to just that text.
+  stage.match {
+    selector = "{container=\"op-connect-api\"}"
+
+    stage.json {
+      expressions = { log_message = "log_message" }
+    }
+
+    stage.output {
+      source = "log_message"
+    }
+  }
+
+  // flood emits pino-style JSON with the message in `msg`. Same shape
+  // as op-connect-api but different field name.
+  stage.match {
+    selector = "{container=\"flood\"}"
+
+    stage.json {
+      expressions = { msg = "msg" }
+    }
+
+    stage.output {
+      source = "msg"
+    }
+  }
 }
 
 loki.write "local" {

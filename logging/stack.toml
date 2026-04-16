@@ -11,4 +11,5 @@ run_directory = "/etc/komodo/repo/logging"
 
 environment = """
 TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
 """

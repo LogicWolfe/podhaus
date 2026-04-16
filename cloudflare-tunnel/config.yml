@@ -1,0 +1,32 @@
+# Cloudflare Tunnel ingress rules. Bind-mounted into the cloudflared
+# container at /etc/cloudflared/config.yml. Edit, commit, ./komodo-sync.
+#
+# Anything not listed here returns 404 at the tunnel edge. New service?
+# Add a hostname rule below, then add a matching CNAME in dns/dnsconfig.js
+# pointing at the tunnel id, and an Access policy if it should be gated.
+tunnel: cc68c7c9-1dad-42aa-af04-46119d3e515f
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - hostname: komodo.pod.haus
+    service: http://komodo-core:9120
+  - hostname: torrent.pod.haus
+    service: http://flood:3000
+  - hostname: home.pod.haus
+    service: http://172.18.0.1:8123
+  - hostname: kangaroo.pod.haus
+    service: http://10.0.0.25:8080
+  - hostname: sync.pod.haus
+    service: http://172.18.0.1:8384
+  - hostname: unifi.pod.haus
+    service: https://10.0.0.1:443
+    originRequest:
+      noTLSVerify: true
+  - hostname: paperless.pod.haus
+    service: http://paperless:8000
+  - hostname: logs.pod.haus
+    service: http://victoria-logs:9428
+  - hostname: grafana.pod.haus
+    service: http://grafana:3000
+  - hostname: uptime.pod.haus
+    service: http://uptime-kuma:3001
+  - service: http_status:404
