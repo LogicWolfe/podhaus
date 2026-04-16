@@ -27,8 +27,23 @@ services:
       # Media files
       - /mnt/pouch:/Users/Shared/Pouch
       - ./healthcheck.sh:/scripts/healthcheck.sh:ro,z
+      - ./stats-cleanup.sh:/scripts/stats-cleanup.sh:ro,z
     labels:
       autoheal: "true"
+      # Monthly statistics_bandwidth prune + VACUUM via ofelia (label-based
+      # docker job scheduler — see ofelia/compose.yaml). Runs on the 1st
+      # of each month at 4 AM AWST (cron is interpreted in the ofelia
+      # container's local time, set via TZ). 4 AM puts it after the
+      # nightly Backrest pipeline completes (~03:30 including rclone
+      # sync), so today's backup preserves the pre-cleanup state. Plex
+      # never prunes this table itself; without the cleanup it grows
+      # unbounded (caused the April 2026 outage when it hit 47 GB / 796M
+      # rows). Monthly cadence is plenty — the table grows at ~30 rows/
+      # day so even a missed month means ~900 extra rows of headroom,
+      # not gigabytes.
+      ofelia.enabled: "true"
+      ofelia.job-exec.plex-stats-cleanup.schedule: "0 4 1 * *"
+      ofelia.job-exec.plex-stats-cleanup.command: "/scripts/stats-cleanup.sh"
     healthcheck:
       test: ["CMD", "/scripts/healthcheck.sh"]
       interval: 60s

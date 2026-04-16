@@ -1,0 +1,34 @@
+services:
+  ofelia:
+    container_name: ofelia
+    image: mcuadros/ofelia:latest
+    restart: unless-stopped
+    # daemon mode + --docker enables Docker label discovery: ofelia polls
+    # the docker socket for container events and reads `ofelia.*` labels
+    # to build its job schedule. No central config file needed.
+    command: daemon --docker
+    environment:
+      # Cron schedules in labels are interpreted in the container's local
+      # time. Set TZ so "0 3 * * 0" means 3 AM Australia/Perth, not UTC.
+      TZ: ${TZ}
+    volumes:
+      # Read-only socket access — ofelia only needs to list containers,
+      # read labels, and exec commands. It doesn't need to start/stop
+      # containers or manage their lifecycle.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # SELinux enforcing on Fedora Asahi denies cross-label access to the
+    # docker socket from the container's default context. label:disable
+    # lets ofelia talk to Docker.
+    security_opt:
+      - label:disable
+    networks:
+      - dockernet
+    # No healthcheck: ofelia is a long-running daemon with no endpoint to
+    # probe and no PID-1 process name pgrep can pin against. Same shape as
+    # autoheal — rely on restart: unless-stopped, container-level liveness
+    # is implicit (if it dies, restarts; if it's silently broken, jobs
+    # stop firing and we'll notice in the per-target container logs).
+
+networks:
+  dockernet:
+    external: true

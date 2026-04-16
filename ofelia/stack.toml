@@ -1,0 +1,14 @@
+[[stack]]
+name = "ofelia"
+description = "Label-based docker job scheduler — runs `docker exec` jobs declared as labels on target containers"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/ofelia"
+
+environment = """
+TZ=[[TZ]]
+"""
