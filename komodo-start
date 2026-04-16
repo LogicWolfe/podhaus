@@ -58,12 +58,25 @@ seed_variable "TZ"        "Australia/Perth" false
 seed_variable "MEDIA_DIR" "/mnt/pouch"      false
 
 echo "Rendering host-side secret files..."
-# Secrets with multi-line content don't round-trip through Komodo's env
-# file pipeline (which truncates at the first newline). We render them
-# to files under /etc/komodo/ on the host and bind-mount them into the
-# containers that need them. rclone.conf is the first one.
+# Secrets (or large multi-line blobs) don't round-trip through Komodo's
+# env-file pipeline, so we render them to files under /etc/komodo/ on
+# the host and bind-mount them into the containers that need them.
+#
+# rclone.conf: structural config (remote name, drive_id, drive_type,
+# region) is in backup/rclone.conf.tmpl in the repo so it's git-tracked
+# and reviewable. Only the OAuth token JSON blob lives in 1P as a
+# Secure Note. envsubst assembles them at render time.
+#
+# IMPORTANT: the rendered file on disk is not the long-term source of
+# truth for the token — rclone rewrites the token field in place every
+# time it refreshes OAuth. The 1P copy is used only on bootstrap; after
+# first rclone use the disk is authoritative. The 1P token is valid for
+# roughly 1-2 days of fresh use before OneDrive invalidates the last
+# stored refresh_token; re-OAuth on a laptop and update 1P if the token
+# has gone stale (the recipe is in backup/rclone.conf.tmpl's comment).
 sudo mkdir -p /etc/komodo/rclone
-op read "op://Homelab/rclone-onedrive-token/notesPlain" | \
+RCLONE_ONEDRIVE_TOKEN="$(op read 'op://Homelab/rclone-onedrive-token/notesPlain')" \
+  envsubst '${RCLONE_ONEDRIVE_TOKEN}' < backup/rclone.conf.tmpl | \
   sudo tee /etc/komodo/rclone/rclone.conf > /dev/null
 sudo chmod 600 /etc/komodo/rclone/rclone.conf
 echo "  /etc/komodo/rclone/rclone.conf"

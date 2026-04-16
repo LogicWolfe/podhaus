@@ -1,0 +1,33 @@
+# rclone config template.
+#
+# Structural fields (type, drive_id, drive_type) are committed here for
+# review and history. Only the OAuth token JSON blob is secret — lives in
+# 1P as `op://Homelab/rclone-onedrive-token/notesPlain` and is envsubst'd
+# in at bootstrap by komodo-start.
+#
+# IMPORTANT: rclone refreshes its OAuth token on every call and rewrites
+# the live /etc/komodo/rclone/rclone.conf in place. That means:
+#   - The 1P token copy goes stale within 1-2 days of real use (OneDrive
+#     invalidates each used refresh_token and issues a new one).
+#   - The file on disk is the live source of truth for the token after
+#     first use. 1P is only useful at cold bootstrap.
+#   - If a fresh bootstrap ever happens AFTER the 1P token has gone
+#     stale, rclone will reject the token and re-OAuth is required.
+#
+# Re-OAuth recipe (needs a GUI browser, so run on a laptop, not bilby):
+#   1. brew install rclone (macOS) — or apt/dnf install on Linux
+#   2. rclone config
+#   3. [n]ew remote, name it `onedrive`, storage type `onedrive`,
+#      region 1 (Microsoft Cloud Global), skip advanced config, use
+#      web browser to authenticate. Pick OneDrive Personal from the
+#      drive list.
+#   4. Extract the NEW token JSON:
+#         rclone config show onedrive | awk '/^token = /{sub(/^token = /,""); print}'
+#   5. op item edit rclone-onedrive-token --vault Homelab "notesPlain=<paste>"
+#   6. Re-run komodo-start on bilby to render the fresh token.
+#
+[onedrive]
+type = onedrive
+drive_id = 397B8A27385EB8E3
+drive_type = personal
+token = ${RCLONE_ONEDRIVE_TOKEN}
