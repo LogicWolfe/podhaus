@@ -158,3 +158,68 @@ Secrets use 1Password Service Accounts with `op run` for injection:
 
 - Web UI: `https://komodo.pod.haus` (via Cloudflare Tunnel)
 - komodo-core is temporarily on `dockernet` so the legacy tunnel container can reach it
+
+---
+
+## Operational runbooks
+
+### Backup stack: rclone OAuth token recovery
+
+The backup stack uses [rclone](https://rclone.org) to mirror the local restic repo on Pouch to a OneDrive Personal account for off-site DR. rclone's OneDrive backend stores its config (including the OAuth token) in `/etc/komodo/rclone/rclone.conf` on bilby, bind-mounted into the Backrest container. The rendered file is assembled at `komodo-start` time from two sources:
+
+- **Structural fields** (`type`, `drive_id`, `drive_type`) live in `backup/rclone.conf.tmpl` in this repo
+- **OAuth token JSON** (the `token = {...}` value) lives in 1Password as `op://Homelab/rclone-onedrive-token/notesPlain`
+- `komodo-start` does `envsubst '${RCLONE_ONEDRIVE_TOKEN}' < backup/rclone.conf.tmpl > /etc/komodo/rclone/rclone.conf`
+
+**The token freshness gotcha.** OneDrive's OAuth refresh tokens are *rotating*: every time rclone uses one to mint a fresh access_token, OneDrive invalidates the old refresh_token and issues a new one. rclone catches this and rewrites the live `rclone.conf` on disk in place. So:
+
+- The file on disk is the live source of truth for the token after first use
+- The 1P copy goes stale within roughly 1–2 days of normal rclone activity
+- The 1P copy is only useful at **cold bootstrap** within that freshness window
+- If a rebuild happens after the 1P token has gone stale, OneDrive will reject it and the only recovery is to re-do the OAuth flow
+
+This applies whether you split the structural fields out (current architecture) or store the whole config block in 1P (the previous architecture). It's a property of OneDrive's OAuth implementation, not of where we store the secret.
+
+**Re-OAuth recovery recipe.** Needs a GUI browser, so do this on a laptop, not on bilby. The same recipe also lives inline in `backup/rclone.conf.tmpl` for proximity.
+
+1. **Install rclone** if not present:
+   ```sh
+   brew install rclone   # macOS
+   sudo apt install rclone   # Debian/Ubuntu
+   sudo dnf install rclone   # Fedora
+   ```
+2. **Run `rclone config`** and create a new remote:
+   - `n` (new) → name it `onedrive`
+   - Storage type: `onedrive` (find "Microsoft OneDrive" in the list)
+   - `client_id` / `client_secret`: blank (press enter)
+   - Region: `1` (Microsoft Cloud Global)
+   - Edit advanced config: `n`
+   - Use web browser to authenticate: `y` → sign in to the OneDrive account in the browser
+   - Pick **OneDrive Personal** from the drive list (option 1, usually)
+   - Confirm and quit
+3. **Extract just the new token JSON** (everything after `token = `):
+   ```sh
+   rclone config show onedrive | awk '/^token = /{sub(/^token = /,""); print}'
+   ```
+4. **Update 1Password** (replaces the entire Secure Note body with the fresh token):
+   ```sh
+   op item edit rclone-onedrive-token --vault Homelab \
+     "notesPlain=$(rclone config show onedrive | awk '/^token = /{sub(/^token = /,""); print}')"
+   ```
+5. **Re-render on bilby**:
+   ```sh
+   ssh bilby
+   cd ~/repos/podhaus
+   ./komodo-start   # picks up the fresh token and writes /etc/komodo/rclone/rclone.conf
+   ```
+6. **Verify**:
+   ```sh
+   docker exec backrest rclone --config /rclone/rclone.conf about onedrive:
+   ```
+   Should return account quota info (Total / Used / Free / Trashed) within a second or two. Anything else (silent hang, "couldn't refresh token", etc.) means the new token didn't take.
+
+If you need to verify the structural fields haven't drifted from the template, `diff backup/rclone.conf.tmpl /etc/komodo/rclone/rclone.conf` after a fresh render — the only difference should be the `${RCLONE_ONEDRIVE_TOKEN}` line being replaced with the actual token JSON.
+
+### Backup stack: Backrest config
+
+A similar config-as-code pattern applies to Backrest itself: `backup/config.json.tmpl` defines all backup plans, schedules, retention, and the rclone-sync hook; the only secret is the restic repo password (templated from 1P). `komodo-start` renders it to `/etc/komodo/backup/config.json` and the compose bind-mounts that directory writably (Backrest rewrites its own config in place at startup, so a read-only mount fails). UI edits to plans persist in the file until the next `komodo-start` run re-renders from the template.
