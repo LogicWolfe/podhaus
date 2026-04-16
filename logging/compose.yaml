@@ -11,7 +11,7 @@ services:
     user: "1000:100"
     command:
       - -storageDataPath=/victoria-logs-data
-      - -retentionPeriod=31d
+      - -retentionPeriod=180d
       - -retention.maxDiskSpaceUsageBytes=50GB
       - -httpListenAddr=:9428
       - -loggerFormat=json
