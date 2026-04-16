@@ -41,8 +41,12 @@ services:
       - /etc/komodo/backup:/config:z
       - backrest-cache:/cache
 
-      # Restic repository target on Pouch (where snapshots actually land).
-      - /mnt/pouch/backups:/repos/podhaus
+      # Restic repository target on Jump (NAS SSD). Per the revised storage
+      # tier rule, the backup repo lives on Jump — durable storage we'd hate
+      # to lose, on a different physical drive set than Pouch's bulk media.
+      # SSD reliability vs Pouch's spinning disks is the primary motivation;
+      # IOPS aren't the driver since restic backups are sequential.
+      - /mnt/jump/backups:/repos/podhaus
 
       # rclone config rendered on the host by komodo-start. Mounted
       # as a writable directory (not a read-only file) because rclone
