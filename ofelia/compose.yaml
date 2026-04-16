@@ -23,6 +23,32 @@ services:
       - label:disable
     networks:
       - dockernet
+    labels:
+      # Daily self-restart at 04:00 AWST. ofelia 0.3.x in label-discovery
+      # mode reads container labels at startup and *partially* tracks
+      # changes after that, but in practice we've observed it failing to
+      # pick up label-value changes when target containers are recreated
+      # (saw this with the plex-stats-cleanup label change on 2026-04-16).
+      # Without an external nudge, schedule changes silently don't take
+      # effect until ofelia is manually restarted — the kind of bug you
+      # don't notice for months.
+      #
+      # The fix is to make the daily restart automatic. job-exec runs
+      # `kill 1` inside ofelia's own container; PID 1 is ofelia, so it
+      # exits, and `restart: unless-stopped` brings up a fresh instance
+      # that re-reads all labels including this one. Self-referential
+      # but reliable — bounds the worst-case "stale schedule" window to
+      # ~24h instead of indefinite.
+      #
+      # FOLLOW-UP: drop this self-restart when upstream PR #368
+      # (https://github.com/mcuadros/ofelia/pull/368) ships and lands in
+      # the released image. PR #368 adds true Docker event-driven hot
+      # reload of label changes, which removes the need for this hack.
+      # As of 2026-04-16 it's been open since July 2025 and not yet
+      # merged. Periodically check the PR + the latest image's behaviour.
+      ofelia.enabled: "true"
+      ofelia.job-exec.daily-self-restart.schedule: "0 4 * * *"
+      ofelia.job-exec.daily-self-restart.command: "kill 1"
     # No healthcheck: ofelia is a long-running daemon with no endpoint to
     # probe and no PID-1 process name pgrep can pin against. Same shape as
     # autoheal — rely on restart: unless-stopped, container-level liveness
