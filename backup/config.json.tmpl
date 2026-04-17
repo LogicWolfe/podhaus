@@ -197,6 +197,13 @@
           "actionCommand": {
             "command": "rclone sync --config /rclone/rclone.conf /repos/podhaus onedrive:Backups/podhaus-restic"
           }
+        },
+        {
+          "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
+          "onError": "ON_ERROR_IGNORE",
+          "actionCommand": {
+            "command": "wget -qO- 'http://uptime-kuma:3001/api/push/8b5930f9cdd72457bf4d?status=up&msg=OK'"
+          }
         }
       ],
       "skipIfUnchanged": true

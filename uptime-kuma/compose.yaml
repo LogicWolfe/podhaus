@@ -1,7 +1,7 @@
 services:
   uptime-kuma:
     container_name: uptime-kuma
-    image: louislam/uptime-kuma:latest
+    image: louislam/uptime-kuma:2
     restart: unless-stopped
     # Runs as root inside the container and needs to write to /app/data;
     # SELinux denies the bind mount read/write without label:disable.
