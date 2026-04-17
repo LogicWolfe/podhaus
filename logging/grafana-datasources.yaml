@@ -17,6 +17,18 @@ datasources:
     jsonData:
       maxLines: 5000
 
+  # Loki-compatible datasource for Grafana's built-in Logs drilldown
+  # app. Points at VL's Loki-compatible query API — VL implements
+  # /loki/api/v1/query_range, /loki/api/v1/labels, etc. natively.
+  # The VL-native datasource above is still the default and is more
+  # feature-complete; this one exists purely to satisfy the drilldown
+  # app's requirement for a Loki-type datasource.
+  - name: Victoria Logs (Loki)
+    type: loki
+    access: proxy
+    url: http://victoria-logs:9428
+    editable: false
+
   - name: Gatus
     type: yesoreyeram-infinity-datasource
     access: proxy

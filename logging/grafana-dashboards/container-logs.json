@@ -4,53 +4,19 @@
   "tags": ["podhaus", "logs"],
   "timezone": "browser",
   "refresh": "30s",
-  "time": { "from": "now-1h", "to": "now" },
-  "templating": {
-    "list": [
-      {
-        "name": "container",
-        "type": "custom",
-        "current": { "text": "All", "value": "" },
-        "options": [
-          { "text": "All", "value": "", "selected": true },
-          { "text": "alloy", "value": "alloy" },
-          { "text": "backrest", "value": "backrest" },
-          { "text": "cloudflare-tunnel", "value": "cloudflare-tunnel" },
-          { "text": "flood", "value": "flood" },
-          { "text": "gatus", "value": "gatus" },
-          { "text": "grafana", "value": "grafana" },
-          { "text": "home-assistant", "value": "home-assistant" },
-          { "text": "komodo-core", "value": "komodo-core" },
-          { "text": "komodo-ferretdb", "value": "komodo-ferretdb" },
-          { "text": "komodo-op", "value": "komodo-op" },
-          { "text": "komodo-periphery", "value": "komodo-periphery" },
-          { "text": "komodo-postgres", "value": "komodo-postgres" },
-          { "text": "ofelia", "value": "ofelia" },
-          { "text": "op-connect-api", "value": "op-connect-api" },
-          { "text": "op-connect-sync", "value": "op-connect-sync" },
-          { "text": "paperless", "value": "paperless" },
-          { "text": "paperless-gotenberg", "value": "paperless-gotenberg" },
-          { "text": "paperless-postgres", "value": "paperless-postgres" },
-          { "text": "paperless-redis", "value": "paperless-redis" },
-          { "text": "plex", "value": "plex" },
-          { "text": "victoria-logs", "value": "victoria-logs" }
-        ],
-        "includeAll": false,
-        "label": "Container"
-      }
-    ]
-  },
+  "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
       "id": 1,
       "type": "logs",
-      "title": "Logs",
+      "title": "All Container Logs",
       "gridPos": { "h": 24, "w": 24, "x": 0, "y": 0 },
       "datasource": { "type": "victoriametrics-logs-datasource" },
       "targets": [
         {
-          "expr": "{host=\"bilby\"} ${ container:pipe:container=\"$container\" }",
-          "refId": "A"
+          "refId": "A",
+          "expr": "*",
+          "maxLines": 1000
         }
       ],
       "options": {
