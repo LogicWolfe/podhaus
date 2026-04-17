@@ -7,15 +7,6 @@
 # changing the datasource shape edits this file and redeploys.
 apiVersion: 1
 
-# Removes the previously-provisioned Loki datasource. Idempotent —
-# Grafana applies this on every startup; once Loki is gone it's a no-op.
-# Kept as documentation of the migration history; safe to delete this
-# block after a few months when the Loki datasource has definitively
-# been removed everywhere.
-deleteDatasources:
-  - name: Loki
-    orgId: 1
-
 datasources:
   - name: Victoria Logs
     type: victoriametrics-logs-datasource
@@ -31,9 +22,6 @@ datasources:
     access: proxy
     editable: false
     jsonData:
-      # Infinity datasource queries the Gatus API on dockernet.
-      # No auth needed — Gatus has no auth layer (CF Access gates
-      # the public URL; internal API is open on dockernet).
       global_urls:
         - name: Endpoint Statuses
           url: http://gatus:8080/api/v1/endpoints/statuses
