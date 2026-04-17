@@ -19,9 +19,10 @@ D("pod.haus!cloudflare", REG_NONE, DnsProvider(DSP_CF),
     CNAME("torrent",   TUNNEL, CF_PROXY_ON),
     CNAME("unifi",     TUNNEL, CF_PROXY_ON),
 
+    CNAME("uptime",    TUNNEL, CF_PROXY_ON),
+
     // Railway apps
     CNAME("doggos.indigo", "x0y6bs3z.up.railway.app.", CF_PROXY_OFF),
-    CNAME("uptime",        "j2pkgn87.up.railway.app.", CF_PROXY_OFF),
     CNAME("yiayia",        "06r38qgz.up.railway.app.", CF_PROXY_OFF),
 
     // Email — Fastmail
