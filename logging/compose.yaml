@@ -86,18 +86,23 @@ services:
     environment:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: https://grafana.pod.haus
-      # Auto-install datasource plugins on container start. Plugins
-      # live in the persistent grafana-data volume so they only
-      # download once.
+      # Land on the PodHaus dashboards folder, not the generic home page.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/podhaus/uptime.json
       GF_INSTALL_PLUGINS: victoriametrics-logs-datasource,yesoreyeram-infinity-datasource
-      # Preinstalled drilldown apps disabled — Logs drilldown requires
-      # full Loki query API compatibility that VL doesn't implement
-      # (push protocol is Loki-compat but query side isn't). Use
-      # Explore → Victoria Logs datasource for log queries in Grafana,
-      # or vmui at logs.pod.haus for the native VL experience.
+      # --- Strip Grafana down to Dashboards + Explore ---
+      # Kill every preinstalled app (drilldowns, profile, traces).
       GF_APPS_GRAFANA_LOKIEXPLORE_APP_ENABLED: "false"
       GF_APPS_GRAFANA_PYROSCOPE_APP_ENABLED: "false"
       GF_APPS_GRAFANA_EXPLORETRACES_APP_ENABLED: "false"
+      GF_APPS_GRAFANA_METRICSDRILLDOWN_APP_ENABLED: "false"
+      # Disable features we don't use — removes sidebar clutter.
+      GF_ALERTING_ENABLED: "false"
+      GF_UNIFIED_ALERTING_ENABLED: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_LIVE_ALLOWED_ORIGINS: ""
+      # Hide connections/plugins marketplace from non-admin view.
+      GF_PLUGINS_ENABLE_ALPHA: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
       TZ: ${TZ}
     volumes:
       - grafana-data:/var/lib/grafana
