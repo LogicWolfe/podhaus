@@ -90,9 +90,12 @@ services:
       # live in the persistent grafana-data volume so they only
       # download once.
       GF_INSTALL_PLUGINS: victoriametrics-logs-datasource,yesoreyeram-infinity-datasource
-      # Pyroscope/Traces drilldowns disabled (no backends for them).
-      # Logs drilldown enabled — uses a Loki-type datasource pointing
-      # at VL's Loki-compatible query endpoint.
+      # Preinstalled drilldown apps disabled — Logs drilldown requires
+      # full Loki query API compatibility that VL doesn't implement
+      # (push protocol is Loki-compat but query side isn't). Use
+      # Explore → Victoria Logs datasource for log queries in Grafana,
+      # or vmui at logs.pod.haus for the native VL experience.
+      GF_APPS_GRAFANA_LOKIEXPLORE_APP_ENABLED: "false"
       GF_APPS_GRAFANA_PYROSCOPE_APP_ENABLED: "false"
       GF_APPS_GRAFANA_EXPLORETRACES_APP_ENABLED: "false"
       TZ: ${TZ}
