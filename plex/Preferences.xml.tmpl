@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Enforced Plex preferences — only these attributes are managed by the
+  template. All other attributes (runtime counters, UI settings, library
+  scan state, etc.) are preserved from the existing Preferences.xml.
+
+  Rendered by komodo-start via plex-preferences.py, which merges these
+  attrs into the live file. On first boot (no existing file), this
+  template seeds the initial Preferences.xml.
+
+  PlexOnlineToken is the only secret — sourced from 1P at render time.
+  Identity attrs (MachineIdentifier et al.) are not secret but ARE
+  catastrophic to lose — they're what plex.tv uses to identify this
+  server. Losing them means a new server claim + loss of all sharing,
+  watch history sync, and remote access configuration.
+-->
+<Preferences
+  MachineIdentifier="e2edf17235c0f4f9b51578e13d7be476c88c1b67"
+  ProcessedMachineIdentifier="e2edf17235c0f4f9b51578e13d7be476c88c1b67"
+  AnonymousMachineIdentifier="b1e4e63d-1957-4247-ac5f-5e952bcac15f"
+  CertificateUUID="08daece225664375a110630c19cfa1e5"
+  PlexOnlineToken="${PLEX_ONLINE_TOKEN}"
+  PublishServerOnPlexOnlineKey="1"
+  ManualPortMappingMode="1"
+  ManualPortMappingPort="32400"
+  AcceptedEULA="1"
+  TranscoderTempDirectory="/transcode"
+  DlnaEnabled="0"
+  LanguageInCloud="1"
+  IPNetworkType="dualstack"
+/>

@@ -105,4 +105,14 @@ RESTIC_REPO_PASSWORD="$(op read 'op://Homelab/restic-repo-password/credential')"
 sudo chmod 600 /etc/komodo/backup/config.json
 echo "  /etc/komodo/backup/config.json"
 
+# Plex Preferences.xml: identity + config attrs enforced from the
+# template, PlexOnlineToken from 1P. The merge script overlays
+# enforced attrs onto the existing Preferences.xml (preserving all
+# runtime state Plex has written), or seeds a fresh file on first boot.
+PLEX_PREFS="/var/lib/plex-local/Library/Application Support/Plex Media Server/Preferences.xml"
+PLEX_ONLINE_TOKEN="$(op read 'op://Homelab/Plex Online Token/credential')" \
+  envsubst '${PLEX_ONLINE_TOKEN}' < plex/Preferences.xml.tmpl > /tmp/plex-prefs-rendered.xml
+python3 plex/plex-preferences.py /tmp/plex-prefs-rendered.xml "$PLEX_PREFS"
+rm -f /tmp/plex-prefs-rendered.xml
+
 ./komodo-sync

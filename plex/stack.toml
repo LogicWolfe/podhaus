@@ -1,0 +1,16 @@
+[[stack]]
+name = "plex"
+description = "Plex Media Server — local NVMe state, Pouch media + BIFs"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/plex"
+
+environment = """
+TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
+MEDIA_DIR=[[MEDIA_DIR]]
+"""

@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      TZ: Australia/Perth
+      TZ: ${TZ}
       PLEX_UID: "1000"
       PLEX_GID: "100"
       CHANGE_CONFIG_DIR_OWNERSHIP: "false"
@@ -23,11 +23,11 @@ services:
       # uid/gid (PLEX_UID=1000 PLEX_GID=100 above).
       - /var/lib/plex-transcode:/transcode:z
       # BIFs (video scrubbing thumbnails) live on Pouch — ~183 GB
-      - /mnt/pouch/plex-video-thumbnails:/config/Library/Application Support/Plex Media Server/Media/localhost
+      - ${MEDIA_DIR}/plex-video-thumbnails:/config/Library/Application Support/Plex Media Server/Media/localhost
       # Media files
-      - /mnt/pouch:/Users/Shared/Pouch
-      - ./healthcheck.sh:/scripts/healthcheck.sh:ro,z
-      - ./stats-cleanup.sh:/scripts/stats-cleanup.sh:ro,z
+      - ${MEDIA_DIR}:/Users/Shared/Pouch
+      - ${PODHAUS_REPO}/plex/healthcheck.sh:/scripts/healthcheck.sh:ro,z
+      - ${PODHAUS_REPO}/plex/stats-cleanup.sh:/scripts/stats-cleanup.sh:ro,z
     labels:
       autoheal: "true"
       # Monthly statistics_bandwidth prune + VACUUM via ofelia (label-based
