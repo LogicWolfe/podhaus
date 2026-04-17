@@ -26,6 +26,9 @@ services:
       # point it at /tmp so it doesn't try to create $HOME/.config/rclone
       # under a read-only filesystem layer.
       RCLONE_CONFIG_DIR: /tmp/rclone
+      # Push token for the Gatus heartbeat monitor — shell hooks
+      # expand ${GATUS_BACKREST_PUSH_TOKEN} at runtime.
+      GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
     volumes:
       # Backrest runtime state (oplog, jwt-secret, kvdb, tasklogs).
       - backrest-data:/data
@@ -82,7 +85,7 @@ services:
       # Victoria Logs history survives a Jump RAID failure (off-site
       # via the rclone OneDrive sync hook).
       - /mnt/jump/victoria-logs:/userdata/logging/victoria-logs:ro
-      - uptime-kuma_uptime-kuma-data:/userdata/uptime-kuma:ro
+      - gatus_gatus-data:/userdata/gatus:ro
       #
       # Backrest backing up its own state. Kept at a separate mount
       # point so the backrest-state plan targets it explicitly.
@@ -128,5 +131,5 @@ volumes:
     external: true
   logging_grafana-data:
     external: true
-  uptime-kuma_uptime-kuma-data:
+  gatus_gatus-data:
     external: true

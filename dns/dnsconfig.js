@@ -9,6 +9,7 @@ var PL_TUNNEL = "fec5ca76-b634-4185-bdb2-f85c38b1b570.cfargotunnel.com.";
 D("pod.haus!cloudflare", REG_NONE, DnsProvider(DSP_CF),
 
     // Tunnel-routed services (proxied)
+    CNAME("gatus",     TUNNEL, CF_PROXY_ON),  // gatus config-as-code monitoring
     CNAME("grafana",   TUNNEL, CF_PROXY_ON),  // grafana (kept for future dashboards)
     CNAME("home",      TUNNEL, CF_PROXY_ON),
     CNAME("kangaroo",  TUNNEL, CF_PROXY_ON),

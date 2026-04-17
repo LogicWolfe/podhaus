@@ -158,9 +158,9 @@
       "skipIfUnchanged": true
     },
     {
-      "id": "uptime-kuma",
+      "id": "gatus",
       "repo": "podhaus",
-      "paths": ["/userdata/uptime-kuma"],
+      "paths": ["/userdata/gatus"],
       "schedule": {
         "cron": "10 5 * * *",
         "clock": "CLOCK_LOCAL"
@@ -202,7 +202,7 @@
           "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
           "onError": "ON_ERROR_IGNORE",
           "actionCommand": {
-            "command": "wget -qO- 'http://uptime-kuma:3001/api/push/8b5930f9cdd72457bf4d?status=up&msg=OK'"
+            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' 'http://gatus:8080/api/v1/endpoints/heartbeat_backrest-nightly/external?success=true'"
           }
         }
       ],

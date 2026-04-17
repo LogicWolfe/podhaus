@@ -1,0 +1,106 @@
+# Gatus monitoring config — config-as-code, checked into the repo.
+# Edit, commit, redeploy. No UI state to drift.
+#
+# All HTTP monitors hit the public tunnel-routed URL, proving the full
+# DNS → Cloudflare → tunnel → container path. If a service is down
+# internally the tunnel monitor catches it; if the tunnel itself breaks
+# every monitor drops at once (obvious signal). No need for redundant
+# internal-only checks.
+
+storage:
+  type: sqlite
+  path: /data/gatus.db
+  # Keep ~90 days of results per endpoint (at 2m intervals ≈ 65k checks).
+  capping: 65000
+
+ui:
+  title: PodHaus Status
+  header: PodHaus
+
+alerting:
+  custom:
+    url: "https://api.postmarkapp.com/email"
+    method: POST
+    headers:
+      Accept: application/json
+      Content-Type: application/json
+      X-Postmark-Server-Token: ${POSTMARK_SERVER_TOKEN}
+    body: |
+      {
+        "From": "uptime@nathanbaxter.com",
+        "To": "nathan@nathanbaxter.com",
+        "Subject": "[ALERT_TRIGGERED_OR_RESOLVED] [ENDPOINT_GROUP] / [ENDPOINT_NAME]",
+        "HtmlBody": "<p><strong>Status:</strong> [ALERT_TRIGGERED_OR_RESOLVED]</p><p><strong>Endpoint:</strong> [ENDPOINT_GROUP] / [ENDPOINT_NAME]</p><p><strong>Condition results:</strong><br/>[RESULT_CONDITIONS]</p>",
+        "MessageStream": "outbound"
+      }
+    default-alert:
+      enabled: true
+      failure-threshold: 3
+      success-threshold: 2
+      send-on-resolved: true
+
+# --- Reusable defaults ---
+
+_defaults: &defaults
+  group: services
+  interval: 2m
+  conditions:
+    - "[STATUS] >= 200"
+    - "[STATUS] < 400"
+
+# --- Tunnel-routed *.pod.haus services ---
+
+endpoints:
+  - name: Grafana
+    url: https://grafana.pod.haus/
+    <<: *defaults
+
+  - name: Home Assistant
+    url: https://home.pod.haus/
+    <<: *defaults
+
+  - name: Kangaroo (NAS)
+    url: https://kangaroo.pod.haus/
+    <<: *defaults
+
+  - name: Komodo
+    url: https://komodo.pod.haus/
+    <<: *defaults
+
+  - name: Logs (Victoria Logs)
+    url: https://logs.pod.haus/select/vmui/
+    <<: *defaults
+
+  - name: Paperless
+    url: https://paperless.pod.haus/
+    <<: *defaults
+
+  - name: Syncthing
+    url: https://sync.pod.haus/
+    <<: *defaults
+
+  - name: Flood (Torrent)
+    url: https://torrent.pod.haus/
+    <<: *defaults
+
+  - name: UniFi
+    url: https://unifi.pod.haus/
+    <<: *defaults
+    client:
+      insecure: true
+
+  - name: Yiayia Board Frontend
+    url: https://yiayia.pod.haus/health
+    <<: *defaults
+
+  - name: Yiayia Board Device
+    url: https://yiayia.pod.haus/boards/health
+    <<: *defaults
+
+# --- Heartbeat endpoints (push-style) ---
+
+external-endpoints:
+  - name: Backrest Nightly
+    group: heartbeat
+    token: ${GATUS_BACKREST_PUSH_TOKEN}
+    interval: 25h

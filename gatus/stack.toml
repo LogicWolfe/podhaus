@@ -1,0 +1,17 @@
+[[stack]]
+name = "gatus"
+description = "Gatus — config-as-code endpoint monitoring + status page"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/gatus"
+
+environment = """
+TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
+POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
+GATUS_BACKREST_PUSH_TOKEN=[[GATUS_BACKREST_PUSH_TOKEN]]
+"""
