@@ -17,7 +17,10 @@ services:
     # No SELinux label:disable — QTS doesn't run SELinux. (Bilby's alloy
     # needs this on Fedora Asahi; kangaroo doesn't.)
     volumes:
-      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
+      # Absolute host path because Periphery's container-side relative-
+      # path resolution doesn't match the QNAP host's view of the cloned
+      # repo (same gotcha as kangaroo/backrest's template mount).
+      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/kangaroo/logging/alloy-config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
     labels:
