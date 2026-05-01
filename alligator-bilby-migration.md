@@ -229,6 +229,7 @@ All wrappers live in the same dir as `.py` scripts (mode 755), load Paperless ad
 - [ ] **Clean legacy `$value` files** once stable: `find "/mnt/pouch/Nathan/Notes Export Graph API" -type f -name '$value' -delete` (917 duplicates of properly-named recovery files, unreferenced).
 - [ ] **Hard-delete Paperless Trash** after stability window (Paperless soft-delete retains for 30 days by default).
 - [ ] **Commit final sidecar DB** to `podhaus-migration-state/` as provenance once stable.
+- [ ] **Consider relocating Paperless storage from Pouch to Jump.** User-flagged 2026-05-01. Today the data dir is on `/mnt/pouch/Paperless/` (HDD RAID5) per the storage-tier rule's "bulk content" bucket. Paperless's access pattern (small documents, frequent random reads on UI, OCR-heavy on imports) probably fits Jump's "durable + IOPS" bucket better. Decision deferred — discuss before moving (capacity check, migration plan for postgres pgdata + paperless-data + the documents dir, downtime window).
 - [ ] **(Optional future)** Zip-watcher sidecar stack for transparent scanner/email zip consumption.
 
 **Unrecoverable items (final, 4):**
