@@ -16,7 +16,11 @@ ingress:
   - hostname: kangaroo.pod.haus
     service: http://10.0.0.25:8080
   - hostname: sync.pod.haus
-    service: http://172.18.0.1:8384
+    # Syncthing now lives on kangaroo (Phase 16). bilby's cloudflared
+    # routes LAN-side over the switch to the QNAP at 10.0.0.25:8384,
+    # same fabric NFS mounts already use. Previously routed to
+    # 172.18.0.1:8384 (bilby host gateway) before Phase 16.
+    service: http://10.0.0.25:8384
   - hostname: unifi.pod.haus
     service: https://10.0.0.1:443
     originRequest:
