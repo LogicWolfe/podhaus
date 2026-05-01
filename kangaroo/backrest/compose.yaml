@@ -1,23 +1,38 @@
 services:
+  # Init container — renders config.json from the template + RESTIC_REPO_PASSWORD
+  # env var, writes into the shared backrest-config named volume, then exits.
+  # Backrest depends on this completing successfully before starting. Runs once
+  # per `docker compose up`; doesn't re-run on per-container restarts. See the
+  # migration doc's "Stack customization primitives" section for the pattern.
+  backrest-init:
+    container_name: backrest-init
+    image: alpine:latest
+    user: "0:0"
+    environment:
+      RESTIC_REPO_PASSWORD: ${RESTIC_REPO_PASSWORD}
+    volumes:
+      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/kangaroo/backrest/config.json.tmpl:/tmpl/config.json.tmpl:ro
+      - backrest-config:/config
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        apk add --no-cache gettext > /dev/null
+        envsubst < /tmpl/config.json.tmpl > /config/config.json
+        chmod 600 /config/config.json
+        echo "rendered /config/config.json"
+    restart: "no"
+
   backrest:
     container_name: backrest
-    # Built locally on kangaroo from ./Dockerfile — adds gettext (envsubst)
-    # to the upstream backrest image so config.json template rendering at
-    # startup doesn't need to apk-add on every boot.
-    image: kangaroo-backrest:local
-    build: .
-    pull_policy: never
+    image: garethgeorge/backrest:latest
     restart: unless-stopped
+    depends_on:
+      backrest-init:
+        condition: service_completed_successfully
     ports:
       - 9898:9898
-    # Pre-render the templated config.json from ${RESTIC_REPO_PASSWORD},
-    # then exec the standard docker-entrypoint chain. Keeps the secret
-    # out of git; envsubst is baked into the image (see Dockerfile).
-    # Drift on later Backrest UI edits is erased on next container restart.
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        envsubst < /tmpl/config.json.tmpl > /config/config.json && exec /sbin/tini -- /docker-entrypoint /backrest
     environment:
       BACKREST_PORT: "0.0.0.0:9898"
       BACKREST_CONFIG: /config/config.json
@@ -25,7 +40,6 @@ services:
       BACKREST_RESTIC_COMMAND: /bin/restic
       XDG_CACHE_HOME: /cache
       TZ: ${TZ}
-      RESTIC_REPO_PASSWORD: ${RESTIC_REPO_PASSWORD}
       # Backrest's own shell hooks + ad-hoc restic CLI calls read these.
       RESTIC_REPOSITORY: /repos/podhaus-kangaroo
       RESTIC_PASSWORD: ${RESTIC_REPO_PASSWORD}
@@ -33,16 +47,11 @@ services:
       # Backrest's writable runtime state (oplog, jwt-secret, kvdb, tasklogs).
       - backrest-data:/data
       - backrest-cache:/cache
-      # /config is a writable directory — Backrest rewrites config.json
-      # in place for normalization + UI edits. The named volume isolates
-      # this from the read-only template mount above.
+      # /config is the named volume populated by backrest-init above.
+      # Backrest rewrites config.json in place on UI edits / normalization;
+      # the init container re-renders from the template on next compose up,
+      # so any drift is erased — repo is the source of truth.
       - backrest-config:/config
-      # Read-only template, rendered by envsubst at startup (see command).
-      # Absolute host path because Periphery's container-side relative
-      # path resolution doesn't match the QNAP host's view of the
-      # cloned repo (see migration doc, "Bind mount paths are host-
-      # relative not periphery-relative" gotcha).
-      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/kangaroo/backrest/config.json.tmpl:/tmpl/config.json.tmpl:ro
       # Restic repository on Jump (NAS SSD). Separate from bilby's repo
       # at /mnt/jump/backups (= /share/CACHEDEV2_DATA/Jump/backups) — the
       # `-kangaroo` suffix avoids two-client coordination on a single repo.
