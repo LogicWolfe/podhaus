@@ -1,10 +1,44 @@
 services:
+  # Init container — renders Preferences.xml.tmpl with envsubst (filling in
+  # PLEX_ONLINE_TOKEN), then runs plex-preferences.py to merge enforced
+  # identity attrs (MachineIdentifier, Token, etc.) onto the existing
+  # Preferences.xml — preserving everything Plex has written at runtime.
+  # On first boot when no existing file exists, the script writes the
+  # rendered template as the initial file. Runs once per `docker compose up`;
+  # doesn't re-run on per-container restarts. Replaces komodo-start's prior
+  # host-side render. See migration doc, "Stack customization primitives".
+  plex-preferences-init:
+    container_name: plex-preferences-init
+    image: alpine:latest
+    user: "0:0"
+    environment:
+      PLEX_ONLINE_TOKEN: ${PLEX_ONLINE_TOKEN}
+    volumes:
+      - ${PODHAUS_REPO}/plex/Preferences.xml.tmpl:/tmpl/Preferences.xml.tmpl:ro,z
+      - ${PODHAUS_REPO}/plex/plex-preferences.py:/script/plex-preferences.py:ro,z
+      - /var/lib/plex-local:/config:z
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        apk add --no-cache python3 gettext > /dev/null
+        mkdir -p '/config/Library/Application Support/Plex Media Server'
+        envsubst < /tmpl/Preferences.xml.tmpl > /tmp/rendered.xml
+        python3 /script/plex-preferences.py /tmp/rendered.xml '/config/Library/Application Support/Plex Media Server/Preferences.xml'
+        chown 1000:100 '/config/Library/Application Support/Plex Media Server/Preferences.xml'
+        echo "merged Preferences.xml"
+    restart: "no"
+
   plex:
     container_name: plex
     hostname: Bilby
     image: plexinc/pms-docker:latest
     restart: unless-stopped
     network_mode: host
+    depends_on:
+      plex-preferences-init:
+        condition: service_completed_successfully
     environment:
       TZ: ${TZ}
       PLEX_UID: "1000"
