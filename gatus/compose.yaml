@@ -13,6 +13,10 @@ services:
       GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
       GATUS_UNPACKERR_PUSH_TOKEN: ${GATUS_UNPACKERR_PUSH_TOKEN}
       GATUS_BACKREST_KANGAROO_PUSH_TOKEN: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
+      # Komodo Core API credentials — used by the "Kangaroo Periphery
+      # (via Komodo)" check that asserts kangaroo's Server state is Ok.
+      KOMODO_API_KEY: ${KOMODO_API_KEY}
+      KOMODO_API_SECRET: ${KOMODO_API_SECRET}
     # 8080 published on bilby host so kangaroo's Backrest can POST
     # heartbeat events from across the LAN. The bearer-token check on
     # each external-endpoint is the auth layer; LAN exposure is fine.
