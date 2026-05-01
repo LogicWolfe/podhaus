@@ -1,0 +1,29 @@
+#!/bin/bash
+# Wrapper for paperless-wipe.py. Same container pattern as paperless-import.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+if [ ! -f OP_SERVICE_ACCOUNT_TOKEN ]; then
+    echo "ERROR: OP_SERVICE_ACCOUNT_TOKEN not present at repo root" >&2
+    exit 1
+fi
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+PAPERLESS_PASSWORD="$(op read 'op://Homelab/Paperless Admin Password/password')"
+
+TTY_FLAG=""
+if [ -t 0 ]; then TTY_FLAG="-it"; fi
+
+exec docker run --rm $TTY_FLAG \
+  --network dockernet \
+  --user "$(id -u):$(id -g)" \
+  -e PYTHONUNBUFFERED=1 \
+  -e PAPERLESS_URL=http://paperless:8000 \
+  -e PAPERLESS_USERNAME=nathan \
+  -e PAPERLESS_PASSWORD="$PAPERLESS_PASSWORD" \
+  -e PAPERLESS_HOST_HEADER=paperless.pod.haus \
+  -v "$HOME/repos/podhaus-migration-state:/state:z" \
+  -v "$(pwd)/paperless/paperless-wipe.py:/app/paperless-wipe.py:ro,z" \
+  --entrypoint bash \
+  python:3.13-slim \
+  -c 'pip install --no-cache-dir --quiet --target=/tmp/d requests && PYTHONPATH=/tmp/d exec python /app/paperless-wipe.py "$@"' \
+  -- "$@"

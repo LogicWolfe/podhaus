@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+PAPERLESS_PASSWORD="$(op read 'op://Homelab/Paperless Admin Password/password')"
+
+TTY_FLAG=""
+[ -t 0 ] && TTY_FLAG="-it"
+
+exec docker run --rm $TTY_FLAG \
+  --network dockernet \
+  --user "$(id -u):$(id -g)" \
+  -e PYTHONUNBUFFERED=1 \
+  -e PAPERLESS_URL=http://paperless:8000 \
+  -e PAPERLESS_USERNAME=nathan \
+  -e PAPERLESS_PASSWORD="$PAPERLESS_PASSWORD" \
+  -e PAPERLESS_HOST_HEADER=paperless.pod.haus \
+  -v "/mnt/pouch/Nathan/Notes Export Graph API:/app/output:ro" \
+  -v "$HOME/repos/podhaus-migration-state:/state:z" \
+  -v "$(pwd)/paperless/paperless-extract-zips.py:/app/paperless-extract-zips.py:ro,z" \
+  --entrypoint bash \
+  python:3.13-slim \
+  -c 'apt-get update -qq && apt-get install -yqq --no-install-recommends fonts-dejavu-core >/dev/null 2>&1; pip install --no-cache-dir --quiet --target=/tmp/d requests PyYAML Pillow img2pdf pypdf && PYTHONPATH=/tmp/d exec python /app/paperless-extract-zips.py "$@"' \
+  -- "$@"

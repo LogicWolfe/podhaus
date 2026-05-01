@@ -1,0 +1,291 @@
+diff --git a/src/onenote_exporter/auth.py b/src/onenote_exporter/auth.py
+index 1e99c49..4c5c67e 100644
+--- a/src/onenote_exporter/auth.py
++++ b/src/onenote_exporter/auth.py
+@@ -42,8 +42,8 @@ def acquire_token() -> str:
+         flow = app.initiate_device_flow(scopes=SCOPES)
+         if "user_code" not in flow:
+             raise RuntimeError(
+-                "Failed to create device flow. Check app registration and "
+-                "scopes."
++                "Failed to create device flow: "
++                + str(flow)
+             )
+         print("To sign in, visit and enter the code:")
+         print(flow["verification_uri"])
+diff --git a/src/onenote_exporter/config.py b/src/onenote_exporter/config.py
+index e588664..ca6e618 100644
+--- a/src/onenote_exporter/config.py
++++ b/src/onenote_exporter/config.py
+@@ -4,13 +4,12 @@ import pathlib
+ TENANT_ID = os.getenv("TENANT_ID", "").strip()
+ CLIENT_ID = os.getenv("CLIENT_ID", "").strip()
+ 
+-AUTHORITY = (
+-    f"https://login.microsoftonline.com/{TENANT_ID}"
+-    if TENANT_ID
+-    else "https://login.microsoftonline.com/common"
+-)
++_tenant = TENANT_ID or "common"
++if _tenant == "common":
++    _tenant = "consumers"
++AUTHORITY = f"https://login.microsoftonline.com/{_tenant}"
+ 
+-DEFAULT_SCOPES = ["Notes.Read", "offline_access"]
++DEFAULT_SCOPES = ["Notes.Read"]
+ ADDITIONAL_SCOPES = [
+     s.strip()
+     for s in os.getenv("ADDITIONAL_SCOPES", "").split(",")
+diff --git a/src/onenote_exporter/exporter.py b/src/onenote_exporter/exporter.py
+index fc3daf7..8edccf0 100644
+--- a/src/onenote_exporter/exporter.py
++++ b/src/onenote_exporter/exporter.py
+@@ -5,6 +5,7 @@ import json
+ import datetime as _dt
+ import hashlib
+ import mimetypes
++import time as _time
+ from typing import Any
+ import pathlib
+ import re
+@@ -38,9 +39,17 @@ def write_front_matter(info: dict) -> str:
+ 
+ def onenote_html_to_markdown(
+     token: str, html: str, assets_dir: pathlib.Path
+-) -> tuple[str, list[dict[str, Any]]]:
++) -> tuple[str, list[dict[str, Any]], list[str]]:
+     soup = BeautifulSoup(html, "html.parser")
+ 
++    # Extract OneNote tags before markdownify strips span/div elements
++    onenote_tags: set[str] = set()
++    for el in soup.find_all(attrs={"data-tag": True}):
++        for tag_value in el["data-tag"].split(","):
++            tag_value = tag_value.strip()
++            if tag_value:
++                onenote_tags.add(tag_value)
++
+     collected_assets: list[dict[str, Any]] = []
+ 
+     for tag in soup.find_all(["img", "object"]):
+@@ -111,7 +120,7 @@ def onenote_html_to_markdown(
+     )
+ 
+     markdown = re.sub(r"\n{3,}", "\n\n", markdown).strip() + "\n"
+-    return markdown, collected_assets
++    return markdown, collected_assets, sorted(onenote_tags)
+ 
+ 
+ def export_notebook(
+@@ -178,16 +187,17 @@ def export_notebook(
+     # Index-only mode: scan existing outputs and populate DB then return
+     if index_only:
+         if build_db and DBManager is not None:
+-            db = DBManager(db_path or (out_root / ".." / "catalog.sqlite"))
+-            db.upsert_notebook(
+-                {
+-                    "id": notebook_id,
+-                    "name": notebook_name,
+-                    "slug": slugify(notebook_name),
+-                    "created": "",
+-                    "modified": "",
+-                }
+-            )
++            if db is None:
++                db = DBManager(db_path or (out_root / ".." / "catalog.sqlite"))
++                db.upsert_notebook(
++                    {
++                        "id": notebook_id,
++                        "name": notebook_name,
++                        "slug": slugify(notebook_name),
++                        "created": "",
++                        "modified": "",
++                    }
++                )
+             # scan pages
+             for md_file in (out_root / "pages").glob("*.md"):
+                 try:
+@@ -382,8 +392,17 @@ def export_notebook(
+                     continue
+                 skip_due_to_unchanged = True
+ 
++            _time.sleep(2)  # throttle to avoid 429s
+             html = get_page_content_html(token, page_id)
+-            md_body, collected_assets = onenote_html_to_markdown(
++            if html is None:
++                skipped_count += 1
++                continue
++
++            # Save raw HTML for future re-processing
++            html_path = per_page_dir / f"{page_base}.html"
++            html_path.write_text(html, encoding="utf-8")
++
++            md_body, collected_assets, onenote_tags = onenote_html_to_markdown(
+                 token, html, page_assets_dir
+             )
+ 
+@@ -398,6 +417,7 @@ def export_notebook(
+                     "notebook": notebook_name,
+                     "section": section_name,
+                     "section_id": section_id,
++                    "section_group": section.get("_sectionGroup", ""),
+                     "title": title,
+                     "page_id": page_id,
+                     "created": created,
+@@ -405,6 +425,10 @@ def export_notebook(
+                     "web_url": web_url,
+                     "client_url": client_url,
+                     "content_hash": content_hash,
++                    "tags": ", ".join(onenote_tags) if onenote_tags else "",
++                    "level": page.get("level", 0),
++                    "order": page.get("order", ""),
++                    "created_by_app": page.get("createdByAppId", ""),
+                 }
+             )
+ 
+@@ -441,6 +465,7 @@ def export_notebook(
+                 )
+                 if collected_assets:
+                     db.upsert_assets(page_id, collected_assets)
++                db.commit()
+ 
+             rec_obj = {
+                 "notebook": notebook_name,
+diff --git a/src/onenote_exporter/graph.py b/src/onenote_exporter/graph.py
+index b427cfd..fa376cb 100644
+--- a/src/onenote_exporter/graph.py
++++ b/src/onenote_exporter/graph.py
+@@ -14,25 +14,35 @@ def graph_get(
+     url: str,
+     params: Mapping[str, str] | None = None,
+     stream: bool = False,
++    max_retries: int = 8,
+ ):
+-    headers = {"Authorization": f"Bearer {token}"}
+-    resp = requests.get(
+-        url,
+-        headers=headers,
+-        params=params,
+-        stream=stream,
+-        timeout=30,
+-    )
+-    if resp.status_code == 429:
+-        retry = int(resp.headers.get("Retry-After", "2"))
+-        time.sleep(retry)
++    current_token = token
++    headers = {"Authorization": f"Bearer {current_token}"}
++    retryable = {429, 500, 502, 503, 504}
++    refreshed_once = False
++    for attempt in range(max_retries + 1):
+         resp = requests.get(
+             url,
+             headers=headers,
+             params=params,
+             stream=stream,
+-            timeout=30,
++            timeout=60,
+         )
++        # Access token expired mid-run — silently refresh from MSAL cache and retry once.
++        if resp.status_code == 401 and not refreshed_once:
++            from .auth import acquire_token
++            current_token = acquire_token()
++            headers = {"Authorization": f"Bearer {current_token}"}
++            refreshed_once = True
++            continue
++        if resp.status_code not in retryable:
++            break
++        if attempt == max_retries:
++            break
++        header_retry = int(resp.headers.get("Retry-After", "1"))
++        backoff = max(header_retry, 2 ** (attempt + 1))
++        print(f"[{resp.status_code}] Retrying in {backoff}s (attempt {attempt + 1}/{max_retries + 1})")
++        time.sleep(backoff)
+     resp.raise_for_status()
+     return resp
+ 
+@@ -48,7 +58,41 @@ def list_notebooks(token: str):
+     return notebooks
+ 
+ 
++def list_section_groups_in_notebook(token: str, notebook_id: str):
++    url = f"{GRAPH_ROOT}/me/onenote/notebooks/{notebook_id}/sectionGroups"
++    groups: list[dict] = []
++    while url:
++        r = graph_get(token, url)
++        data = r.json()
++        groups.extend(data.get("value", []))
++        url = data.get("@odata.nextLink")
++    return groups
++
++
++def list_sections_in_group(token: str, group_id: str):
++    url = f"{GRAPH_ROOT}/me/onenote/sectionGroups/{group_id}/sections"
++    sections: list[dict] = []
++    while url:
++        r = graph_get(token, url)
++        data = r.json()
++        sections.extend(data.get("value", []))
++        url = data.get("@odata.nextLink")
++    return sections
++
++
++def list_nested_groups(token: str, group_id: str):
++    url = f"{GRAPH_ROOT}/me/onenote/sectionGroups/{group_id}/sectionGroups"
++    groups: list[dict] = []
++    while url:
++        r = graph_get(token, url)
++        data = r.json()
++        groups.extend(data.get("value", []))
++        url = data.get("@odata.nextLink")
++    return groups
++
++
+ def list_sections_in_notebook(token: str, notebook_id: str):
++    # Top-level sections
+     url = f"{GRAPH_ROOT}/me/onenote/notebooks/{notebook_id}/sections"
+     sections: list[dict] = []
+     while url:
+@@ -56,14 +100,26 @@ def list_sections_in_notebook(token: str, notebook_id: str):
+         data = r.json()
+         sections.extend(data.get("value", []))
+         url = data.get("@odata.nextLink")
++    # Recurse into section groups
++    def _recurse_groups(groups):
++        for g in groups:
++            group_id = g["id"]
++            group_name = g.get("displayName", "")
++            for s in list_sections_in_group(token, group_id):
++                s["_sectionGroup"] = group_name
++                sections.append(s)
++            nested = list_nested_groups(token, group_id)
++            if nested:
++                _recurse_groups(nested)
++    top_groups = list_section_groups_in_notebook(token, notebook_id)
++    _recurse_groups(top_groups)
+     return sections
+ 
+ 
+ def list_pages_in_section(token: str, section_id: str):
+     url = f"{GRAPH_ROOT}/me/onenote/sections/{section_id}/pages"
+     params: dict[str, str] | None = {
+-        "$top": "200",
+-        "$orderby": "createdDateTime asc",
++        "$top": "100",
+     }
+     pages: list[dict] = []
+     while url:
+@@ -75,7 +131,13 @@ def list_pages_in_section(token: str, section_id: str):
+     return pages
+ 
+ 
+-def get_page_content_html(token: str, page_id: str) -> str:
++def get_page_content_html(token: str, page_id: str) -> str | None:
+     url = f"{GRAPH_ROOT}/me/onenote/pages/{page_id}/content"
+-    r = graph_get(token, url)
++    try:
++        r = graph_get(token, url)
++    except requests.exceptions.HTTPError as e:
++        if e.response is not None and e.response.status_code == 404:
++            print(f"[WARN] Page {page_id} returned 404 — skipping")
++            return None
++        raise
+     return r.text

@@ -1,0 +1,33 @@
+#!/bin/bash
+# Wait for the main import to finish, then run the post-passes:
+#  1. paperless-crosslink  (set document_link siblings from main import)
+#  2. paperless-extract-zips (upload zip contents)
+#  3. paperless-crosslink  (again, now that zip siblings exist)
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+LOGDIR="$HOME/repos/podhaus-migration-state/logs"
+mkdir -p "$LOGDIR"
+CHAIN_LOG="$LOGDIR/paperless-finish-chain-$(date +%Y%m%d-%H%M%S).log"
+
+{
+  echo "=== $(date -Iseconds) waiting for main import container to finish ==="
+  while docker ps --filter 'ancestor=python:3.13-slim' --filter 'status=running' -q | grep -q .; do
+    sleep 30
+  done
+  echo "=== $(date -Iseconds) main import container gone ==="
+
+  echo "=== $(date -Iseconds) paperless-crosslink (pass 1) ==="
+  ./paperless/paperless-crosslink 2>&1 | tee -a "$CHAIN_LOG.crosslink1" || echo "crosslink pass1 exited $?"
+
+  echo "=== $(date -Iseconds) paperless-extract-zips ==="
+  # Use a fresh batch_id for zip extraction so we can wipe it independently.
+  BATCH="zipextract-$(date +%Y%m%d-%H%M%S)"
+  echo "zip batch_id: $BATCH"
+  ./paperless/paperless-extract-zips --batch-id "$BATCH" 2>&1 | tee -a "$CHAIN_LOG.extract" || echo "extract-zips exited $?"
+
+  echo "=== $(date -Iseconds) paperless-crosslink (pass 2, picks up zip siblings) ==="
+  ./paperless/paperless-crosslink 2>&1 | tee -a "$CHAIN_LOG.crosslink2" || echo "crosslink pass2 exited $?"
+
+  echo "=== $(date -Iseconds) CHAIN COMPLETE ==="
+} > "$CHAIN_LOG" 2>&1

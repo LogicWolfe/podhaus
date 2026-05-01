@@ -1,0 +1,22 @@
+#!/bin/bash
+# Wrapper to run paperless-tag-audit.py inside the onenote-exporter container.
+# Reuses the existing image (has bs4 + requests + python 3.11) and pip-installs
+# pypdf + PyYAML at startup. Phase 10.0 of the onenote → paperless migration.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+mkdir -p "$HOME/repos/podhaus-migration-state"
+
+TTY_FLAG=""
+if [ -t 0 ]; then TTY_FLAG="-it"; fi
+
+exec docker run --rm $TTY_FLAG \
+  --user "$(id -u):$(id -g)" \
+  -e PYTHONUNBUFFERED=1 \
+  -v "/mnt/pouch/Nathan/Notes Export Graph API:/app/output:ro" \
+  -v "$HOME/repos/podhaus-migration-state:/state:z" \
+  -v "$(pwd)/paperless/paperless-tag-audit.py:/app/paperless-tag-audit.py:ro,z" \
+  --entrypoint bash \
+  onenote-exporter-onenote-exporter:latest \
+  -c 'pip install --no-cache-dir --quiet --target=/tmp/py-deps PyYAML >/dev/null && PYTHONPATH=/tmp/py-deps:/app/src exec python /app/paperless-tag-audit.py "$@"' \
+  -- "$@"

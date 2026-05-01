@@ -1,0 +1,31 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+PAPERLESS_PASSWORD="$(op read 'op://Homelab/Paperless Admin Password/password')"
+
+TTY_FLAG=""
+[ -t 0 ] && TTY_FLAG="-it"
+
+exec docker run --rm $TTY_FLAG \
+  --network dockernet \
+  -e PYTHONUNBUFFERED=1 \
+  -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+  -e PAPERLESS_URL=http://paperless:8000 \
+  -e PAPERLESS_USERNAME=nathan \
+  -e PAPERLESS_PASSWORD="$PAPERLESS_PASSWORD" \
+  -e PAPERLESS_HOST_HEADER=paperless.pod.haus \
+  -v "/mnt/pouch/Nathan/Notes Export Graph API:/app/output:ro" \
+  -v "$HOME/repos/podhaus-migration-state:/state:z" \
+  -v "$(pwd)/paperless/paperless-repair-pdfs.py:/app/paperless-repair-pdfs.py:ro,z" \
+  --entrypoint bash \
+  python:3.13-slim \
+  -c 'set -e
+      apt-get update -qq >/dev/null
+      apt-get install -yqq --no-install-recommends ghostscript >/dev/null
+      pip install --no-cache-dir --quiet --target=/tmp/d requests PyYAML
+      PYTHONPATH=/tmp/d python /app/paperless-repair-pdfs.py "$@"
+      # Fix ownership of any files the root-run python wrote to bind mounts.
+      chown -R "$HOST_UID:$HOST_GID" /state 2>/dev/null || true
+     ' -- "$@"

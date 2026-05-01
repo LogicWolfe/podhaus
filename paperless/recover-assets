@@ -1,0 +1,26 @@
+#!/bin/bash
+# Wrapper to run recover-assets.py inside the onenote-exporter container.
+# Reuses the same image we built for the export so we get MSAL, requests,
+# bs4, and the existing acquire_token() helper for silent token refresh.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Ensure sidecar db dir exists on the host
+mkdir -p "$HOME/repos/podhaus-migration-state"
+
+TTY_FLAG=""
+if [ -t 0 ]; then TTY_FLAG="-it"; fi
+
+exec docker run --rm $TTY_FLAG \
+  --user "$(id -u):$(id -g)" \
+  -e TENANT_ID=common \
+  -e CLIENT_ID=529d072c-2131-4fa9-bc92-77da0b26a2bb \
+  -e PYTHONPATH=/app/src \
+  -e PYTHONUNBUFFERED=1 \
+  -v "/mnt/pouch/Nathan/Notes Export Graph API:/app/output" \
+  -v "/home/nathan/repos/onenote-exporter/cache:/app/.cache:z" \
+  -v "$HOME/repos/podhaus-migration-state:/state:z" \
+  -v "$(pwd)/paperless/recover-assets.py:/app/recover-assets.py:ro,z" \
+  --entrypoint python \
+  onenote-exporter-onenote-exporter:latest \
+  /app/recover-assets.py "$@"

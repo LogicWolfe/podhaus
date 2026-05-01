@@ -1,0 +1,38 @@
+#!/bin/bash
+# Wrapper for paperless-import.py. Runs in a python:3.13-slim container
+# attached to the dockernet bridge so it can reach paperless:8000.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+mkdir -p "$HOME/repos/podhaus-migration-state"
+
+# Load service account token and read Paperless admin password from 1P.
+if [ ! -f OP_SERVICE_ACCOUNT_TOKEN ]; then
+    echo "ERROR: OP_SERVICE_ACCOUNT_TOKEN not present at repo root" >&2
+    exit 1
+fi
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+PAPERLESS_PASSWORD="$(op read 'op://Homelab/Paperless Admin Password/password')"
+if [ -z "$PAPERLESS_PASSWORD" ]; then
+    echo "ERROR: failed to read Paperless Admin Password from 1P" >&2
+    exit 1
+fi
+
+TTY_FLAG=""
+if [ -t 0 ]; then TTY_FLAG="-it"; fi
+
+exec docker run --rm $TTY_FLAG \
+  --network dockernet \
+  --user "$(id -u):$(id -g)" \
+  -e PYTHONUNBUFFERED=1 \
+  -e PAPERLESS_URL=http://paperless:8000 \
+  -e PAPERLESS_USERNAME=nathan \
+  -e PAPERLESS_PASSWORD="$PAPERLESS_PASSWORD" \
+  -e PAPERLESS_HOST_HEADER=paperless.pod.haus \
+  -v "/mnt/pouch/Nathan/Notes Export Graph API:/app/output:ro" \
+  -v "$HOME/repos/podhaus-migration-state:/state:z" \
+  -v "$(pwd)/paperless/paperless-import.py:/app/paperless-import.py:ro,z" \
+  --entrypoint bash \
+  python:3.13-slim \
+  -c 'pip install --no-cache-dir --quiet --target=/tmp/d requests PyYAML Pillow && PYTHONPATH=/tmp/d exec python /app/paperless-import.py "$@"' \
+  -- "$@"

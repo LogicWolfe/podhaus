@@ -20,6 +20,6 @@ docker run --rm $TTY_FLAG \
   -e CLIENT_ID=529d072c-2131-4fa9-bc92-77da0b26a2bb \
   -e PYTHONPATH=/app/src \
   -v "$OUTPUT_DIR:/app/output" \
-  -v "$CACHE_DIR:/app/.cache" \
-  -v "$DB_DIR:/app/db" \
+  -v "$CACHE_DIR:/app/.cache:z" \
+  -v "$DB_DIR:/app/db:z" \
   "$IMAGE" --db-path /app/db/catalog.sqlite "$@"
