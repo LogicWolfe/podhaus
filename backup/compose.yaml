@@ -1,8 +1,39 @@
 services:
+  # Init container — renders config.json from the template + RESTIC_REPO_PASSWORD
+  # env var, writes into the shared backrest-config named volume, then exits.
+  # Backrest depends on this completing before it starts. Runs once per
+  # `docker compose up`; doesn't re-run on per-container restarts. Same shape
+  # as kangaroo-backrest's init container — see migration doc, "Stack
+  # customization primitives" section, init-container row.
+  #
+  # Replaces komodo-start's prior host-side render to /etc/komodo/backup/config.json.
+  backrest-init:
+    container_name: backrest-init
+    image: alpine:latest
+    user: "0:0"
+    environment:
+      RESTIC_REPO_PASSWORD: ${RESTIC_REPO_PASSWORD}
+    volumes:
+      - ${PODHAUS_REPO}/backup/config.json.tmpl:/tmpl/config.json.tmpl:ro
+      - backrest-config:/config
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        apk add --no-cache gettext > /dev/null
+        envsubst < /tmpl/config.json.tmpl > /config/config.json
+        chmod 600 /config/config.json
+        echo "rendered /config/config.json"
+    restart: "no"
+
   backrest:
     container_name: backrest
     image: garethgeorge/backrest:latest
     restart: unless-stopped
+    depends_on:
+      backrest-init:
+        condition: service_completed_successfully
     ports:
       - 9898:9898
     environment:
@@ -32,16 +63,11 @@ services:
     volumes:
       # Backrest runtime state (oplog, jwt-secret, kvdb, tasklogs).
       - backrest-data:/data
-      # /config is a host bind mount rendered by komodo-start from the
-      # checked-in backup/config.json.tmpl + 1P secrets. The repo is the
-      # canonical source of truth. Backrest rewrites this file in place
-      # on startup (config normalization / schema migration) and on UI
-      # edits, so we can't use a read-only bind — that breaks Backrest's
-      # rename-based atomic write. Any drift between the live file and
-      # the template is erased on the next `komodo-start` run, which
-      # re-renders the template over whatever's there. :z for SELinux
-      # relabel so the container can write.
-      - /etc/komodo/backup:/config:z
+      # /config is the named volume populated by backrest-init above.
+      # Backrest rewrites config.json in place on UI edits / normalization;
+      # the init container re-renders from the template on next compose up,
+      # so any drift is erased — repo is the source of truth.
+      - backrest-config:/config
       - backrest-cache:/cache
 
       # Restic repository target on Jump (NAS SSD). Per the revised storage
@@ -113,10 +139,11 @@ networks:
 volumes:
   # Backrest's own state (runtime data + restic cache). Small, latency
   # sensitive, stay local per the post-phase-6 sizing rule. /config is
-  # not a named volume — it's a host bind mount to /etc/komodo/backup
-  # (see the service block comment).
+  # also a named volume now (was a host bind mount before the init-container
+  # migration); backrest-init writes the rendered config.json into it.
   backrest-data:
   backrest-cache:
+  backrest-config:
 
   # External volumes owned by other stacks — Backrest mounts them read-only
   # as backup sources. `external: true` tells compose to reuse the existing
