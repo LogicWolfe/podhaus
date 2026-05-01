@@ -1,21 +1,23 @@
 services:
   backrest:
     container_name: backrest
-    image: garethgeorge/backrest:latest
+    # Built locally on kangaroo from ./Dockerfile — adds gettext (envsubst)
+    # to the upstream backrest image so config.json template rendering at
+    # startup doesn't need to apk-add on every boot.
+    image: kangaroo-backrest:local
+    build: .
+    pull_policy: never
     restart: unless-stopped
     ports:
       - 9898:9898
-    # Pre-render the templated config.json, then exec the standard
-    # docker-entrypoint chain. Keeps the secret out of git: the template
-    # carries ${RESTIC_REPO_PASSWORD} as a placeholder, envsubst expands
-    # it from the container env at startup. Drift on later UI edits is
-    # erased on the next container restart. apk add gettext installs
-    # envsubst on first run (Backrest's base image is alpine, no envsubst
-    # by default); the layer caches across container restarts.
+    # Pre-render the templated config.json from ${RESTIC_REPO_PASSWORD},
+    # then exec the standard docker-entrypoint chain. Keeps the secret
+    # out of git; envsubst is baked into the image (see Dockerfile).
+    # Drift on later Backrest UI edits is erased on next container restart.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        apk add --no-cache gettext > /dev/null && envsubst < /tmpl/config.json.tmpl > /config/config.json && exec /sbin/tini -- /docker-entrypoint /backrest
+        envsubst < /tmpl/config.json.tmpl > /config/config.json && exec /sbin/tini -- /docker-entrypoint /backrest
     environment:
       BACKREST_PORT: "0.0.0.0:9898"
       BACKREST_CONFIG: /config/config.json
