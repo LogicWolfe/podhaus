@@ -97,6 +97,7 @@ services:
     image: ghcr.io/moghtech/komodo-periphery:${COMPOSE_KOMODO_IMAGE_TAG:-latest}
     labels:
       komodo.skip:
+      autoheal: "true"
     restart: unless-stopped
     # SELinux enforcing on Fedora Asahi denies cross-label writes to
     # /var/run/docker.sock; label:disable exempts the periphery container
@@ -111,8 +112,6 @@ services:
       - /proc:/proc
       - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
       - ${COMPOSE_KOMODO_REPO_PATH}:/etc/komodo/repo
-    labels:
-      autoheal: "true"
     # Periphery returns HTTP 405 on `GET /` when alive (it only accepts
     # POST for its API). curl without -f exits 0 on any HTTP response,
     # so 405 satisfies the probe — a hung Periphery (no response) fails.
