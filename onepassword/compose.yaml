@@ -32,13 +32,15 @@ services:
     # Upstream ghcr.io/0dragosh/komodo-op ships a mislabelled arm64 tag —
     # its Dockerfile hardcodes GOARCH=amd64 so the "arm64" manifest is
     # actually an amd64 image and crashes with exec format error on aarch64.
-    # We build locally via onepassword/komodo-op.Dockerfile; rebuild with:
-    #   docker build -f onepassword/komodo-op.Dockerfile -t komodo-op:local-arm64 onepassword/
-    # pull_policy: never tells compose to trust the local tag and skip
-    # the registry pull that would fail (local tag doesn't exist on any
-    # registry).
+    # We build locally from komodo-op.Dockerfile; the stack.toml has
+    # `run_build = true` + `auto_pull = false` so Komodo runs
+    # `docker compose build` before `up` and doesn't try to fetch the
+    # local-only :local-arm64 tag from a registry. No manual build step
+    # needed — first deploy of this stack builds the image automatically.
     image: komodo-op:local-arm64
-    pull_policy: never
+    build:
+      context: .
+      dockerfile: komodo-op.Dockerfile
     restart: unless-stopped
     depends_on:
       - op-connect-api

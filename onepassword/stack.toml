@@ -8,6 +8,12 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/onepassword"
+# Komodo runs `docker compose build` before `up` so the locally-built
+# komodo-op image is always present without manual pre-build. auto_pull
+# disabled so Komodo doesn't try to fetch the local-only :local-arm64 tag
+# from a registry. See migration doc, "Stack customization primitives".
+run_build = true
+auto_pull = false
 
 environment = """
 OP_CREDENTIALS=[[ONEPASSWORD_CREDENTIALS]]

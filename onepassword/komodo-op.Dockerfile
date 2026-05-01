@@ -4,10 +4,9 @@
 # "exec format error" on real aarch64 hosts. This file builds a native
 # arm64 image from the same source, wrapped in the same alpine base.
 #
-# Build (run from this directory):
-#   docker build -f komodo-op.Dockerfile -t komodo-op:local-arm64 .
-#
-# Or via the sibling build-komodo-op script which handles the clone.
+# Built automatically by Komodo on first deploy (and on every redeploy)
+# via compose's `build:` directive in onepassword/compose.yaml + the
+# stack.toml's `run_build = true`. No manual `docker build` step needed.
 
 FROM golang:1.25-alpine AS builder
 RUN apk add --no-cache git
