@@ -26,7 +26,7 @@ Migration of all running services from `alligator` (Intel NUC, x86_64, Linux) to
 5. **Phase 11** (doggos + yiayia Railway migration — Railway CLI warm, transfer pattern proven, project IDs known; depends on Phase 14 for the webhook-bypass Access Application).
 6. **Phase 13** (README rewrite — end-of-project housekeeping).
 
-**Credentials status:** `railway-api-token`, `postmark-smtp`, `restic-repo-password`, `rclone-onedrive-token`, `Plex Online Token` — all five in 1P Homelab. First four surfaced as Komodo Variables via komodo-op; Plex token rendered by komodo-start into Preferences.xml.
+**Credentials status:** `railway-api-token`, `postmark-smtp`, `restic-repo-password`, `rclone-onedrive-token`, `Plex Online Token` — all five in 1P Homelab, all surfaced as Komodo Variables via komodo-op. Plex token consumed by `plex-preferences-init` (the Preferences merge init container) at deploy time; `rclone-onedrive-token` is the one exception still rendered host-side by komodo-start (multi-line OAuth blob, doesn't fit Komodo's env-file pipeline).
 
 ## Environment-specific workarounds
 
@@ -34,12 +34,28 @@ All reversible, all documented in the affected compose files with inline comment
 
 - **NAS `/Jump` squash** — kangaroo's `/Jump` export squashes all writes to uid 1000:gid 100 and denies chown, so container images that chown their data dir on startup fail to deploy against Docker NFS volumes. Originally hit by `ghcr.io/ferretdb/postgres-documentdb`, `postgres:16`, and `1password/connect-api`. Affected volumes were carved out to local storage as "temporary" exceptions — the phase 6 pivot made those carve-outs permanent via the sizing rule, so this is no longer a blocker.
 - **SELinux enforcing on Fedora Asahi** — denies container access to `/var/run/docker.sock` and cross-label reads into bind-mounted config files. Applied `security_opt: label:disable` to `komodo-core`, `komodo-periphery`, `autoheal`, `backrest`, `loki`, `alloy`, `grafana`, `uptime-kuma`. Also use `:z` flag on host bind mounts that need container write access (see `plex/compose.yaml`, `flood/compose.yaml`).
-- **`ghcr.io/0dragosh/komodo-op` mislabelled arm64 manifest** — upstream Dockerfile hardcodes `--platform=linux/amd64` + `GOARCH=amd64`, so the "arm64" tag is actually an amd64 image that crashes with exec format error on real aarch64. Built a local arm64 image from upstream source via `onepassword/komodo-op.Dockerfile`. Compose pins `image: komodo-op:local-arm64` with `pull_policy: never`. Upstream fix deferred (noted in Deferred).
+- **`ghcr.io/0dragosh/komodo-op` mislabelled arm64 manifest** — upstream Dockerfile hardcodes `--platform=linux/amd64` + `GOARCH=amd64`, so the "arm64" tag is actually an amd64 image that crashes with exec format error on real aarch64. Built a local arm64 image from upstream source via `onepassword/komodo-op.Dockerfile`. Compose declares `build: { context: ., dockerfile: komodo-op.Dockerfile }` + `image: komodo-op:local-arm64`; stack.toml has `run_build = true` + `auto_pull = false` so Komodo handles the build automatically on deploy (no manual `docker build` step needed). Upstream fix deferred (noted in Deferred).
 - **Multi-line 1P Secure Notes don't round-trip through Komodo env files** (truncation at the first newline) — `komodo-start` renders `rclone.conf` on the host via `op CLI` and stacks bind-mount `/etc/komodo/rclone/rclone.conf` directly. Re-run `komodo-start` to refresh after OneDrive token rotations.
 - **`cloudflare/cloudflared:latest` is distroless** — no shell, no wget, no curl, no busybox, only the `cloudflared` binary. In-container healthchecks that touch `/ready` on port 20241 are structurally impossible. Dropped the healthcheck and autoheal label from `cloudflare-tunnel/compose.yaml` (commit `3bba849`). cloudflared handles its own reconnection internally; `restart: unless-stopped` handles outright crashes; external liveness will be monitored via Uptime Kuma hitting the public hostnames.
 - **Komodo ResourceSync does not apply `[[variable]]` entries from variable TOML files** — see the "Known gotcha: Komodo variable seeding" section below. Fixed 2026-04-14 via commit `336b961` which adds `TZ` and `MEDIA_DIR` to `komodo-start`'s `seed_variable` loop.
 - **Komodo first-boot chicken-and-egg** — `komodo-start` reads a pre-existing Komodo API key from 1P, but on a fresh DB no such key exists. Manual workaround documented in the progress log; folding into `komodo-start` as an automatic first-boot path is deferred.
 - **Bind mount paths are host-relative, not periphery-relative** — Komodo-managed stack `run_directory` paths (`/etc/komodo/repo/<stack>`) exist inside periphery but not on the host. Docker daemon resolves bind mount sources from the host filesystem, so relative paths in compose (`./loki-config.yaml`) resolve to non-existent host paths and Docker silently creates empty stub dirs. Fix: use absolute host paths in any compose file that bind-mounts repo-resident files.
+
+## Stack customization primitives — canonicalized 2026-05-01
+
+When a stack needs something the upstream image doesn't provide, three primitives are now blessed in this repo. Pick based on the *nature* of the customization:
+
+| Primitive | When to use | Examples |
+|---|---|---|
+| **Init container** in same compose | One-time setup step that produces an artifact before the main service starts; the tool isn't needed during runtime | Backrest envsubst (`backup/`, `kangaroo/backrest/`) — renders `config.json` from template + `RESTIC_REPO_PASSWORD`. Plex Preferences merge (`plex/`) — overlays enforced identity attrs onto the existing `Preferences.xml` |
+| **Custom Dockerfile + Komodo build** (`run_build = true` + `auto_pull = false` in stack.toml) | The main service needs the customization AT RUNTIME (different binary, missing runtime tool, upstream bug fix) | komodo-op arm64 build (`onepassword/komodo-op.Dockerfile`) — upstream ships a mislabeled arm64 manifest that's actually amd64 |
+| **`komodo-start` host render** | True bootstrap concerns that genuinely have to happen on the host before any container can read them | Komodo Core itself, chicken-and-egg credentials, multi-line OAuth blobs (`backup/rclone.conf.tmpl` → `/etc/komodo/rclone/rclone.conf` — Komodo's env-file pipeline truncates at `\n`) |
+
+**Why init container is preferred over custom Dockerfile when both could work:** no derivative image to rebuild on every upstream update (Plex updates weekly, Backrest seasonally), tool isn't carried in the running container's runtime footprint, docker-native expression of "do X then start the real service", and a per-container restart-on-crash for the main service doesn't re-run init (init only runs when compose recreates, which is what you want).
+
+**Why custom Dockerfile is right for komodo-op:** the customization (correct arm64 binary) IS what the container runs continuously. There's no "setup then run" — the custom thing IS the main service.
+
+**komodo-start is now narrower:** as of the 2026-05-01 cleanup it boots Komodo Core, seeds the 7 chicken-and-egg variables, renders just `rclone.conf`, and triggers the first ResourceSync. The Backrest config.json render and Plex Preferences merge moved to per-stack init containers.
 
 ## Known gotcha: Komodo variable seeding for non-secret variables — FIXED 2026-04-14
 

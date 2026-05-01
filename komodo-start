@@ -70,9 +70,12 @@ seed_variable "MEDIA_DIR"     "/mnt/pouch"      false
 seed_variable "PODHAUS_REPO"  "$PWD"            false
 
 echo "Rendering host-side secret files..."
-# Secrets (or large multi-line blobs) don't round-trip through Komodo's
-# env-file pipeline, so we render them to files under /etc/komodo/ on
-# the host and bind-mount them into the containers that need them.
+# rclone.conf is the only thing left here. Per-stack secret rendering
+# (Backrest config.json, Plex Preferences.xml) moved to in-stack init
+# containers — see migration doc, "Stack customization primitives".
+# Only stays in komodo-start: things that genuinely need to happen on the
+# host (multi-line OAuth blobs that can't round-trip through Komodo's
+# env-file pipeline).
 #
 # rclone.conf: structural config (remote name, drive_id, drive_type,
 # region) is in backup/rclone.conf.tmpl in the repo so it's git-tracked
@@ -92,27 +95,5 @@ RCLONE_ONEDRIVE_TOKEN="$(op read 'op://Homelab/rclone-onedrive-token/notesPlain'
   sudo tee /etc/komodo/rclone/rclone.conf > /dev/null
 sudo chmod 600 /etc/komodo/rclone/rclone.conf
 echo "  /etc/komodo/rclone/rclone.conf"
-
-# Backrest config: repo + plans + retention + rclone-sync hook declared in
-# backup/config.json.tmpl. Only secret is RESTIC_REPO_PASSWORD from 1P. We
-# render to /etc/komodo/backup/config.json and bind-mount read-only into
-# the backrest container so the repo is the authoritative source for
-# plans — UI edits to the config can't persist by design.
-sudo mkdir -p /etc/komodo/backup
-RESTIC_REPO_PASSWORD="$(op read 'op://Homelab/restic-repo-password/credential')" \
-  envsubst '${RESTIC_REPO_PASSWORD}' < backup/config.json.tmpl | \
-  sudo tee /etc/komodo/backup/config.json > /dev/null
-sudo chmod 600 /etc/komodo/backup/config.json
-echo "  /etc/komodo/backup/config.json"
-
-# Plex Preferences.xml: identity + config attrs enforced from the
-# template, PlexOnlineToken from 1P. The merge script overlays
-# enforced attrs onto the existing Preferences.xml (preserving all
-# runtime state Plex has written), or seeds a fresh file on first boot.
-PLEX_PREFS="/var/lib/plex-local/Library/Application Support/Plex Media Server/Preferences.xml"
-PLEX_ONLINE_TOKEN="$(op read 'op://Homelab/Plex Online Token/credential')" \
-  envsubst '${PLEX_ONLINE_TOKEN}' < plex/Preferences.xml.tmpl > /tmp/plex-prefs-rendered.xml
-python3 plex/plex-preferences.py /tmp/plex-prefs-rendered.xml "$PLEX_PREFS"
-rm -f /tmp/plex-prefs-rendered.xml
 
 ./komodo-sync
