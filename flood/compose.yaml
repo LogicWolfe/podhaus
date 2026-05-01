@@ -10,13 +10,35 @@ services:
       FLOOD_SECRET: ${FLOOD_SECRET}
       GID: "44"
       TZ: ${TZ}
+      # Used by /scripts/rar-backlog.sh to push daily health pings to
+      # Gatus's heartbeat_rar-extraction external endpoint. Shared-secret
+      # bearer token; Gatus rejects pushes with any other value.
+      GATUS_UNPACKERR_PUSH_TOKEN: ${GATUS_UNPACKERR_PUSH_TOKEN}
     volumes:
       # rtorrent session (~16 MB: .torrent + .libtorrent_resume + .rtorrent
       # files). Local NVMe per the post-phase-6 sizing rule.
       - /var/lib/flood-db:/flood-db:z
       - ${MEDIA_DIR}:/data
+      # .rtorrent.rc as config-as-code. Overlays the live config file in
+      # /flood-db with the repo's version. The original file still exists
+      # in /var/lib/flood-db on host but is shadowed by this bind mount.
+      - ${PODHAUS_REPO}/flood/rtorrent.rc:/flood-db/.rtorrent.rc:ro,z
+      # Cleanup script invoked by the event.download.erased hook. Deletes
+      # RAR pieces + scene detritus only — extracted content survives.
+      # See flood/rtorrent-cleanup.sh for logic + safety layers.
+      - ${PODHAUS_REPO}/flood/rtorrent-cleanup.sh:/scripts/rtorrent-cleanup.sh:ro,z
+      # Daily RAR-extraction health check. Runs under ofelia and pushes
+      # a heartbeat to Gatus — missing heartbeat OR failed push = alert.
+      - ${PODHAUS_REPO}/flood/rar-backlog.sh:/scripts/rar-backlog.sh:ro,z
     labels:
       autoheal: "true"
+      # Daily RAR-extraction backlog scan. Runs 04:50 AWST (dead-time
+      # window, after backrest + plex cleanup). Pushes success/failure
+      # to Gatus heartbeat — dead-man's switch on the full extraction
+      # pipeline's health. See flood/rar-backlog.sh for logic.
+      ofelia.enabled: "true"
+      ofelia.job-exec.rar-backlog.schedule: "50 4 * * *"
+      ofelia.job-exec.rar-backlog.command: "/scripts/rar-backlog.sh"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/ > /dev/null && ls /flood-db > /dev/null && ls /data > /dev/null"]
       interval: 60s

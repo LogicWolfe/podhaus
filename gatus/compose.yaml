@@ -11,6 +11,7 @@ services:
       TZ: ${TZ}
       POSTMARK_SERVER_TOKEN: ${POSTMARK_SERVER_TOKEN}
       GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
+      GATUS_UNPACKERR_PUSH_TOKEN: ${GATUS_UNPACKERR_PUSH_TOKEN}
     volumes:
       - ${PODHAUS_REPO}/gatus/config.yaml:/config/config.yaml:ro
       - gatus-data:/data

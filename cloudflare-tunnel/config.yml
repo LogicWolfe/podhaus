@@ -23,6 +23,13 @@ ingress:
       noTLSVerify: true
   - hostname: paperless.pod.haus
     service: http://paperless:8000
+  - hostname: plex.pod.haus
+    # Plex runs with network_mode: host, so reach it via the dockernet
+    # bridge gateway IP (same pattern as home.pod.haus + sync.pod.haus).
+    # This hostname is web-only — native Plex clients continue to use
+    # plex.tv discovery (LAN / direct WAN / Relay) and are deliberately
+    # not told about this URL via customConnections.
+    service: http://172.18.0.1:32400
   - hostname: logs.pod.haus
     service: http://victoria-logs:9428
   - hostname: gatus.pod.haus

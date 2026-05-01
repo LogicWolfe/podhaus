@@ -16,6 +16,7 @@ D("pod.haus!cloudflare", REG_NONE, DnsProvider(DSP_CF),
     CNAME("komodo",    TUNNEL, CF_PROXY_ON),
     CNAME("logs",      TUNNEL, CF_PROXY_ON),  // victoria-logs vmui (primary log UI)
     CNAME("paperless", TUNNEL, CF_PROXY_ON),
+    CNAME("plex",      TUNNEL, CF_PROXY_ON),
     CNAME("sync",      TUNNEL, CF_PROXY_ON),
     CNAME("torrent",   TUNNEL, CF_PROXY_ON),
     CNAME("unifi",     TUNNEL, CF_PROXY_ON),

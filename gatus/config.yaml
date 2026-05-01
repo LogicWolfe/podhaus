@@ -25,12 +25,24 @@ alerting:
       Accept: application/json
       Content-Type: application/json
       X-Postmark-Server-Token: ${POSTMARK_SERVER_TOKEN}
+    # Placeholder notes:
+    #   [ALERT_DESCRIPTION] always renders (empty if not set). Set per
+    #     alert to explain what it means + where to investigate.
+    #   [RESULT_ERRORS] renders the `error=...` query param (or HTTP
+    #     errors) for both HTTP and push-style external endpoints. Push
+    #     endpoints use this to convey per-invocation failure context
+    #     (e.g., "443 folders unhealthy") — the sender URL-encodes them.
+    #   [RESULT_CONDITIONS] renders the failed condition expression
+    #     (e.g., "✗ `[STATUS] < 400`") for HTTP endpoints; push-style
+    #     external-endpoints have no conditions, so Gatus leaves the
+    #     literal token in place. Kept for HTTP diagnostics; tolerate
+    #     the trailing placeholder on push endpoints.
     body: |
       {
         "From": "uptime@nathanbaxter.com",
         "To": "nathan@nathanbaxter.com",
-        "Subject": "[ALERT_TRIGGERED_OR_RESOLVED] [ENDPOINT_GROUP] / [ENDPOINT_NAME]",
-        "HtmlBody": "<p><strong>Status:</strong> [ALERT_TRIGGERED_OR_RESOLVED]</p><p><strong>Endpoint:</strong> [ENDPOINT_GROUP] / [ENDPOINT_NAME]</p><p><strong>Condition results:</strong><br/>[RESULT_CONDITIONS]</p>",
+        "Subject": "[ALERT_TRIGGERED_OR_RESOLVED] [ENDPOINT_NAME]",
+        "HtmlBody": "<p><strong>Status:</strong> [ALERT_TRIGGERED_OR_RESOLVED]</p><p><strong>Endpoint:</strong> [ENDPOINT_GROUP] / [ENDPOINT_NAME]</p><p><strong>What this means:</strong> [ALERT_DESCRIPTION]</p><p><strong>Details:</strong> [RESULT_ERRORS]</p><p><strong>Status page:</strong> <a href=\"https://gatus.pod.haus\">gatus.pod.haus</a> · <strong>Logs:</strong> <a href=\"https://logs.pod.haus\">logs.pod.haus</a></p><p><strong>Failed conditions:</strong><br/>[RESULT_CONDITIONS]</p>",
         "MessageStream": "outbound"
       }
     default-alert:
@@ -75,6 +87,10 @@ endpoints:
     url: https://paperless.pod.haus/
     <<: *defaults
 
+  - name: Plex
+    url: https://plex.pod.haus/
+    <<: *defaults
+
   - name: Syncthing
     url: https://sync.pod.haus/
     <<: *defaults
@@ -104,3 +120,24 @@ external-endpoints:
     group: heartbeat
     token: ${GATUS_BACKREST_PUSH_TOKEN}
     interval: 25h
+    alerts:
+      - type: custom
+        description: "Backrest's nightly backup pipeline didn't check in. Either no snapshots ran tonight, or the post-plan rclone sync to OneDrive failed. Investigate: `docker logs backrest` in logs.pod.haus, and check /mnt/pouch/backups for the expected repository state."
+        failure-threshold: 3
+        success-threshold: 2
+        send-on-resolved: true
+
+  # Daily health check from flood/rar-backlog.sh. Scans for RAR folders
+  # older than 2h with no extracted content alongside — i.e., unpackerr
+  # failed silently. Missing heartbeat OR success=false both trigger
+  # Postmark alerts via the shared default-alert config.
+  - name: RAR Extraction
+    group: heartbeat
+    token: ${GATUS_UNPACKERR_PUSH_TOKEN}
+    interval: 25h
+    alerts:
+      - type: custom
+        description: "RAR extraction pipeline is unhealthy. Either unpackerr is not processing new torrents (check `docker logs unpackerr`), the cron job itself is broken (check ofelia + `docker logs flood | grep rar-backlog`), or the scanner found folders with RAR files >2h old and no extracted content alongside. Manual scan: `docker exec flood /scripts/rar-backlog.sh`. Full backlog paths land in the flood container logs."
+        failure-threshold: 1
+        success-threshold: 1
+        send-on-resolved: true

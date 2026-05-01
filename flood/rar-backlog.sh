@@ -1,0 +1,94 @@
+#!/bin/sh
+# Daily health check for the unpackerr RAR-extraction pipeline.
+#
+# Scans /data/Movies, /data/TV, /data/Kids for folders containing RAR
+# pieces >= AGE_THRESHOLD old where no non-RAR/non-detritus content
+# exists alongside them — i.e., RARs present but no extracted content.
+# That's the exact failure shape the rtorrent-cleanup.sh ABORT guard is
+# also protecting against, caught proactively.
+#
+# Pushes result to Gatus heartbeat endpoint:
+#   0 unhealthy → success=true
+#   ≥1 unhealthy → success=false + body listing first few paths
+# If the script itself never runs (container dead, ofelia broken), Gatus
+# misses the 25h heartbeat and alerts as a dead-man's switch.
+#
+# Scheduled via ofelia label on the flood container; runs 04:50 AWST.
+
+set -u
+
+AGE_MINUTES=120  # 2 hours — RARs younger than this may still be extracting
+GATUS_URL="http://gatus:8080/api/v1/endpoints/heartbeat_rar-extraction/external"
+TOKEN="${GATUS_UNPACKERR_PUSH_TOKEN:-}"
+
+if [ -z "$TOKEN" ]; then
+    echo "[rar-backlog] ERROR: GATUS_UNPACKERR_PUSH_TOKEN not set in env" >&2
+    exit 1
+fi
+
+unhealthy_list=/tmp/rar-backlog-unhealthy.$$
+dir_list=/tmp/rar-backlog-dirs.$$
+: > "$unhealthy_list"
+
+# Find folders containing RAR pieces older than the age threshold.
+# Folder names may contain spaces (common for TV show names); newlines
+# in paths are assumed to not occur (would break newline-separated list).
+# busybox find's -printf doesn't support \0 reliably, so we newline-
+# separate and quote carefully via `while IFS= read -r`.
+find /data/Movies /data/TV /data/Kids \
+    -type f -mmin +$AGE_MINUTES \
+    \( -iname '*.rar' -o -iname '*.r[0-9][0-9]' -o -iname '*.part[0-9]*.rar' \) \
+    2>/dev/null \
+    | while IFS= read -r rarfile; do
+        dirname -- "$rarfile"
+    done \
+    | sort -u > "$dir_list"
+
+while IFS= read -r dir; do
+    # Same extraction-presence test as rtorrent-cleanup.sh.
+    keep_count=$(find "$dir" -maxdepth 1 -type f \
+        ! -iname '*.rar' \
+        ! -iname '*.r[0-9][0-9]' \
+        ! -iname '*.part[0-9]*.rar' \
+        ! -iname '*.sfv' \
+        ! -iname '*.srr' \
+        ! -iname '*.srs' \
+        ! -iname '*.nfo' \
+        ! -iname '*sample*' \
+        2>/dev/null | wc -l)
+
+    if [ "$keep_count" -eq 0 ]; then
+        printf '%s\n' "$dir" >> "$unhealthy_list"
+    fi
+done < "$dir_list"
+rm -f "$dir_list"
+
+unhealthy_count=$(wc -l < "$unhealthy_list" | tr -d ' ')
+
+if [ "$unhealthy_count" -eq 0 ]; then
+    echo "[rar-backlog] healthy: no unextracted RAR folders older than ${AGE_MINUTES}m"
+    wget -qO- --post-data='' \
+        --header="Authorization: Bearer ${TOKEN}" \
+        "${GATUS_URL}?success=true" > /dev/null
+    rm -f "$unhealthy_list"
+    exit 0
+fi
+
+echo "[rar-backlog] UNHEALTHY: ${unhealthy_count} folders have RARs but no extracted content"
+sed 's/^/  /' "$unhealthy_list"
+
+# Build a short URL-safe error string: count + first 3 folder basenames.
+# Gatus renders this in [RESULT_ERRORS] in the alert email. Full list
+# remains in the stdout above (→ Alloy → Victoria Logs).
+sample=$(head -3 "$unhealthy_list" | awk -F/ '{print $NF}' | tr '\n' ',' | sed 's/,$//')
+error_msg="${unhealthy_count} folders with unextracted RARs; sample: ${sample}"
+# Percent-encode spaces → +, plus the delimiters that break query parsing
+# (%, &, #, ?, ", ;, ,). Busybox has no `jq -r @uri`, so do it crudely.
+error_enc=$(printf '%s' "$error_msg" \
+    | sed 's/%/%25/g; s/ /+/g; s/&/%26/g; s/#/%23/g; s/?/%3F/g; s/"/%22/g; s/;/%3B/g; s/,/%2C/g')
+
+wget -qO- --post-data="" \
+    --header="Authorization: Bearer ${TOKEN}" \
+    "${GATUS_URL}?success=false&error=${error_enc}" > /dev/null
+rm -f "$unhealthy_list"
+exit 0

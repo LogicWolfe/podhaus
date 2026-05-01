@@ -1,0 +1,30 @@
+services:
+  unpackerr:
+    container_name: unpackerr
+    image: ghcr.io/unpackerr/unpackerr:latest
+    restart: unless-stopped
+    # Run as flood's uid/gid so extracted files end up owned the same as
+    # the RAR files rtorrent wrote. Keeps permission handling consistent
+    # across the auto-extract flow.
+    user: "1000:1001"
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ${PODHAUS_REPO}/unpackerr/unpackerr.conf:/config/unpackerr.conf:ro,z
+      - ${MEDIA_DIR}:/data
+    # SELinux enforcing on Fedora Asahi denies cross-label reads of the
+    # bind-mounted config; same workaround used by logging/, grafana, etc.
+    security_opt:
+      - label:disable
+    # No healthcheck: upstream image doesn't ship a probe binary, and the
+    # process has no HTTP endpoint. Silent-failure protection is layered:
+    # (1) rtorrent-cleanup.sh refuses to delete RARs when no extracted
+    # content is present in the folder; (2) restart: unless-stopped
+    # recovers from outright crashes; (3) log-based monitoring is a
+    # follow-up (see alligator-bilby-migration.md Phase 6.5 patterns).
+    networks:
+      - dockernet
+
+networks:
+  dockernet:
+    external: true
