@@ -1,0 +1,11 @@
+[[stack]]
+name = "kangaroo-autoheal"
+description = "Restart unhealthy autoheal-labeled containers on kangaroo"
+tags = ["kangaroo", "podhaus"]
+deploy = true
+
+[stack.config]
+server = "kangaroo"
+linked_repo = "podhaus"
+run_directory = "kangaroo/autoheal"
+file_paths = ["compose.yaml"]

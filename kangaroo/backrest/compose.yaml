@@ -72,6 +72,10 @@ services:
       - /share/CACHEDEV1_DATA/Container/syncthing-config:/userdata/syncthing:ro
       - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo:/userdata/komodo-periphery:ro
       - backrest-data:/userdata/backrest-state:ro
+    labels:
+      # kangaroo's autoheal stack restarts this container if the
+      # healthcheck below fails repeatedly.
+      autoheal: "true"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9898/ > /dev/null"]
       interval: 60s
