@@ -1,0 +1,15 @@
+[[stack]]
+name = "kangaroo-logging"
+description = "Alloy on kangaroo — ships container logs to bilby's Victoria Logs"
+tags = ["kangaroo", "podhaus"]
+deploy = true
+
+[stack.config]
+server = "kangaroo"
+linked_repo = "podhaus"
+run_directory = "kangaroo/logging"
+file_paths = ["compose.yaml"]
+
+environment = """
+TZ=[[TZ]]
+"""
