@@ -47,3 +47,18 @@ services:
     # NB: no repo bind-mount. Bilby's Periphery has the repo at /etc/komodo/repo
     # because bilby uses files_on_host. Kangaroo uses Linked Repo, so Komodo
     # Core orchestrates the clone into /etc/komodo/repos/podhaus/ at sync time.
+    labels:
+      # kangaroo-autoheal restarts this container if the healthcheck below
+      # fails repeatedly. (bilby's autoheal can't reach kangaroo's docker
+      # daemon, so each Periphery host has its own autoheal stack.)
+      autoheal: "true"
+    # Periphery returns HTTP 405 on `GET /` when alive (it only accepts
+    # POST for its API). curl without -f exits 0 on any HTTP response,
+    # so 405 satisfies the probe — a hung Periphery (no response) fails.
+    # -k skips TLS verify (self-signed cert), --max-time bounds the wait.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk --max-time 5 -o /dev/null https://localhost:8120/ || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
