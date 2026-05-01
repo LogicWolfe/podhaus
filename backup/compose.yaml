@@ -14,7 +14,7 @@ services:
     environment:
       RESTIC_REPO_PASSWORD: ${RESTIC_REPO_PASSWORD}
     volumes:
-      - ${PODHAUS_REPO}/backup/config.json.tmpl:/tmpl/config.json.tmpl:ro
+      - ${PODHAUS_REPO}/backup/config.json.tmpl:/tmpl/config.json.tmpl:ro,z
       - backrest-config:/config
     command:
       - /bin/sh
