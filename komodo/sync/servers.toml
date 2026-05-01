@@ -8,3 +8,14 @@ address = "https://periphery:8120"
 enabled = true
 disk_warning = 85.0
 disk_critical = 95.0
+
+[[server]]
+name = "kangaroo"
+description = "QNAP NAS — second deploy target (Container Station)"
+tags = ["kangaroo"]
+
+[server.config]
+address = "https://10.0.0.25:8120"
+enabled = true
+disk_warning = 85.0
+disk_critical = 95.0

@@ -1,0 +1,161 @@
+#!/bin/bash
+# kangaroo_bootstrap — get kangaroo to "comfortable Komodo universe" state.
+#
+# Run from bilby. Idempotent — safe to re-run any time.
+#
+# What it does (in order):
+#   1. Verify SSH + Docker on kangaroo.
+#   2. Create /share/CACHEDEV1_DATA/Container/komodo-periphery/{,etc-komodo}/
+#   3. Render .env locally (passkey from 1P) and SCP it + compose.yaml.
+#   4. SSH-execute `docker compose up -d`.
+#   5. Wait for Periphery to answer on :8120.
+#   6. Idempotently install @reboot crontab line (CS upgrade survival layer 1).
+#   7. Idempotently append [[server]] block for kangaroo to komodo/sync/servers.toml.
+#
+# After running:
+#   - Review the diff to komodo/sync/servers.toml, commit, push.
+#   - Run ./komodo-sync to apply the new Server resource.
+#   - Verify in Komodo Core UI: kangaroo shows healthy.
+#   - Then proceed with Linked Repo declaration + first test stack
+#     (see Phase 15a runbook in alligator-bilby-migration.md).
+#
+# Phase 15b will revisit this script to swap passkey for v2 keypair auth.
+
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+# --- Config ---
+KANGAROO_SSH="${KANGAROO_SSH:-admin@10.0.0.25}"
+KANGAROO_DIR="/share/CACHEDEV1_DATA/Container/komodo-periphery"
+# Container Station ships docker outside the default SSH PATH on QTS.
+# Override via env if your install differs.
+KANGAROO_DOCKER="${KANGAROO_DOCKER:-/share/CACHEDEV1_DATA/.qpkg/container-station/usr/bin/docker}"
+PERIPHERY_HEALTH_TIMEOUT="${PERIPHERY_HEALTH_TIMEOUT:-120}"
+
+export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+
+log()  { printf '\e[1;34m▸\e[0m %s\n' "$*"; }
+warn() { printf '\e[1;33m!\e[0m %s\n' "$*" >&2; }
+fail() { printf '\e[1;31m✗\e[0m %s\n' "$*" >&2; exit 1; }
+ok()   { printf '\e[1;32m✓\e[0m %s\n' "$*"; }
+
+ssh_kangaroo() { ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$KANGAROO_SSH" "$@"; }
+
+# --- 1. Preflight ---
+log "Preflight: verifying SSH + Docker on kangaroo ($KANGAROO_SSH)"
+ssh_kangaroo "echo OK" >/dev/null || fail "SSH to $KANGAROO_SSH failed. Check the host's reachable + your key is loaded."
+ssh_kangaroo "$KANGAROO_DOCKER info >/dev/null 2>&1" || fail "Docker not available at $KANGAROO_DOCKER on kangaroo. Container Station running? Override KANGAROO_DOCKER if path differs."
+ok "kangaroo reachable, Docker responsive"
+
+# --- 2. Directory layout ---
+log "Ensuring directory layout on kangaroo: $KANGAROO_DIR"
+ssh_kangaroo "mkdir -p '$KANGAROO_DIR/etc-komodo'"
+ok "directories ready"
+
+# --- 3. Render and ship .env + compose ---
+log "Rendering .env from 1Password (Komodo Passkey + TZ)"
+KOMODO_PASSKEYS="$(op read 'op://Homelab/Komodo Passkey/password')"
+TZ_VALUE="Australia/Perth"
+
+# Ship via stdin so the rendered .env never lives on bilby's disk.
+{
+    printf 'KOMODO_PASSKEYS=%s\n' "$KOMODO_PASSKEYS"
+    printf 'TZ=%s\n'              "$TZ_VALUE"
+} | ssh_kangaroo "cat > '$KANGAROO_DIR/.env' && chmod 600 '$KANGAROO_DIR/.env'"
+ok ".env staged on kangaroo"
+
+log "Shipping compose.yaml to kangaroo"
+scp -q kangaroo/periphery/compose.yaml "$KANGAROO_SSH:$KANGAROO_DIR/compose.yaml"
+ok "compose.yaml staged"
+
+# --- 3b. Render and ship periphery.config.toml ---
+# Periphery config carries the GitHub PAT for Komodo's Linked Repo to clone
+# private repos via HTTPS (Komodo doesn't support SSH cloning). Lives under
+# the bind-mounted /etc/komodo dir so it's persisted across container restarts.
+log "Rendering periphery.config.toml from 1Password (GitHub PAT)"
+GITHUB_PAT="$(op read 'op://Homelab/Homelab GitHub Personal Access Token/token')"
+{
+    printf '# Auto-rendered by kangaroo_bootstrap. Do not edit on the host —\n'
+    printf '# changes here will be overwritten on next bootstrap re-run.\n\n'
+    printf '[[git_provider]]\n'
+    printf 'domain = "github.com"\n'
+    printf 'accounts = [\n'
+    printf '    { username = "LogicWolfe", token = "%s" },\n' "$GITHUB_PAT"
+    printf ']\n'
+} | ssh_kangaroo "cat > '$KANGAROO_DIR/etc-komodo/periphery.config.toml' && chmod 600 '$KANGAROO_DIR/etc-komodo/periphery.config.toml'"
+ok "periphery.config.toml staged"
+
+# --- 4. Bring up Periphery ---
+log "Starting Periphery via docker compose up -d on kangaroo"
+ssh_kangaroo "cd '$KANGAROO_DIR' && $KANGAROO_DOCKER compose up -d"
+ok "compose up issued"
+
+# --- 5. Wait for health ---
+log "Waiting for Periphery to answer on :8120 (timeout ${PERIPHERY_HEALTH_TIMEOUT}s)"
+deadline=$((SECONDS + PERIPHERY_HEALTH_TIMEOUT))
+while (( SECONDS < deadline )); do
+    if curl -sk --max-time 3 "https://10.0.0.25:8120/" >/dev/null 2>&1; then
+        ok "Periphery responding on https://10.0.0.25:8120"
+        break
+    fi
+    sleep 3
+done
+if (( SECONDS >= deadline )); then
+    warn "Periphery didn't respond within ${PERIPHERY_HEALTH_TIMEOUT}s — check 'docker logs komodo-periphery' on kangaroo."
+    warn "Continuing with crontab + servers.toml anyway; you can re-run this script after fixing."
+fi
+
+# --- 6. CS-upgrade survival: @reboot crontab line ---
+# /etc/config/crontab persists across QTS firmware AND Container Station
+# upgrades — much more reliable than CS's own Application registry.
+log "Installing @reboot crontab line on kangaroo (CS-upgrade survival)"
+CRON_MARKER="# komodo-periphery autostart (managed by kangaroo_bootstrap)"
+CRON_LINE="@reboot for i in \$(seq 1 60); do $KANGAROO_DOCKER info >/dev/null 2>&1 && break; sleep 5; done; cd $KANGAROO_DIR && $KANGAROO_DOCKER compose up -d >/var/log/komodo-periphery-boot.log 2>&1"
+
+ssh_kangaroo "
+    set -eu
+    if grep -qF '$CRON_MARKER' /etc/config/crontab 2>/dev/null; then
+        echo '  crontab line already present — skipping'
+    else
+        printf '%s\n%s\n' '$CRON_MARKER' '$CRON_LINE' >> /etc/config/crontab
+        crontab /etc/config/crontab
+        /etc/init.d/crond.sh restart >/dev/null
+        echo '  crontab line installed + crond reloaded'
+    fi
+"
+ok "@reboot recovery armed"
+
+# --- 7. Append kangaroo to komodo/sync/servers.toml (idempotent) ---
+log "Updating komodo/sync/servers.toml"
+SERVERS_TOML="komodo/sync/servers.toml"
+
+if grep -q '^name = "kangaroo"' "$SERVERS_TOML"; then
+    ok "kangaroo entry already present in $SERVERS_TOML"
+else
+    cat >> "$SERVERS_TOML" <<'EOF'
+
+[[server]]
+name = "kangaroo"
+description = "QNAP NAS — second deploy target (Container Station)"
+tags = ["kangaroo"]
+
+[server.config]
+address = "https://10.0.0.25:8120"
+enabled = true
+disk_warning = 85.0
+disk_critical = 95.0
+EOF
+    ok "kangaroo appended to $SERVERS_TOML"
+fi
+
+# --- Summary ---
+echo
+ok "kangaroo Periphery bootstrap done."
+echo
+echo "Next:"
+echo "  1. git diff komodo/sync/servers.toml — review the kangaroo entry"
+echo "  2. Commit + push if it looks right"
+echo "  3. ./komodo-sync — Komodo Core picks up the new Server resource"
+echo "  4. Verify in https://komodo.pod.haus that kangaroo shows healthy"
+echo "  5. Configure GitHub git_provider in Komodo + declare Linked Repo"
+echo "     (see Phase 15a runbook in alligator-bilby-migration.md)"

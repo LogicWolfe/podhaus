@@ -1,0 +1,49 @@
+# Komodo Periphery for kangaroo (QNAP NAS, AMD x86_64, QTS 5.2 + Container Station).
+#
+# This is the only stack on kangaroo that is NOT itself managed by Komodo —
+# it has to come up before kangaroo can be a Komodo deploy target. Bootstrapped
+# via ./kangaroo_bootstrap from bilby; survives Container Station + QTS upgrades
+# via the @reboot crontab line that bootstrap installs (see runbook in
+# alligator-bilby-migration.md, Phase 15a).
+#
+# All other kangaroo stacks (syncthing, kangaroo/backrest, etc.) live under
+# the standard <stackname>/compose.yaml pattern and are deployed by Komodo
+# Core via the Linked Repo on this Periphery.
+
+services:
+  periphery:
+    container_name: komodo-periphery
+    image: ghcr.io/moghtech/komodo-periphery:${COMPOSE_KOMODO_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    init: true
+    # LAN-only port publish. Komodo Core on bilby (10.0.0.119) dials this
+    # over the LAN. allowed_ips in periphery.config.toml (set via env below)
+    # is defense-in-depth against the QTS firewall drifting open.
+    ports:
+      - "8120:8120"
+    environment:
+      # Phase 15a: legacy passkey shared with bilby's Periphery + Core.
+      # Phase 15b will swap this for v2 keypair auth (PERIPHERY_PRIVATE_KEY
+      # + PERIPHERY_CORE_PUBLIC_KEYS) and drop KOMODO_PASSKEYS entirely.
+      KOMODO_PASSKEYS: ${KOMODO_PASSKEYS}
+      # Defense-in-depth: only Komodo Core on bilby (.119) may connect.
+      PERIPHERY_ALLOWED_IPS: 10.0.0.119/32
+      # Periphery has no default config-file discovery — must point at the
+      # rendered file explicitly. kangaroo_bootstrap drops the rendered
+      # periphery.config.toml at /etc/komodo/ (host: etc-komodo/).
+      PERIPHERY_CONFIG_PATHS: /etc/komodo/periphery.config.toml
+      TZ: ${TZ}
+    volumes:
+      # Docker daemon socket — Periphery's whole job is talking to docker.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # /proc for system stats reporting back to Core.
+      - /proc:/proc
+      # Periphery state: keys (when 15b lands), cloned Linked Repo working
+      # dirs, deployed stack files, action cache. Persisted on the QNAP
+      # storage pool so it survives Container Station upgrades.
+      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo:/etc/komodo
+    # NB: no SELinux label:disable here — QTS doesn't run SELinux. Bilby's
+    # Periphery needs label:disable for Fedora Asahi; QNAP doesn't.
+    # NB: no repo bind-mount. Bilby's Periphery has the repo at /etc/komodo/repo
+    # because bilby uses files_on_host. Kangaroo uses Linked Repo, so Komodo
+    # Core orchestrates the clone into /etc/komodo/repos/podhaus/ at sync time.

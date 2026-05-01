@@ -1,0 +1,25 @@
+# Komodo Repo (Linked Repo) resources.
+#
+# Each [[repo]] block declares a git remote that a Periphery host clones
+# locally. Stacks targeted at remote Peripheries reference the repo by
+# name + a relative path inside it for their compose files.
+#
+# Why this exists: Komodo's `files_on_host = true` mode requires the
+# compose file to physically exist on the Periphery host's filesystem.
+# Bilby has the repo bind-mounted into its Periphery container (see
+# komodo-start), so its stacks use files_on_host. Kangaroo (and any
+# future remote Periphery host) doesn't, so we declare a Linked Repo and
+# let Periphery do the clone. Auth via the github git_provider configured
+# in each Periphery's periphery.config.toml.
+
+[[repo]]
+name = "podhaus"
+description = "Komodo-managed clone of this monorepo on remote Peripheries (kangaroo, future pinelake)"
+tags = ["podhaus"]
+
+[repo.config]
+server = "kangaroo"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/podhaus"
+branch = "main"
