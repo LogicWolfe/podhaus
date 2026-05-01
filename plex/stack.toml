@@ -8,6 +8,9 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/plex"
+# init-tools image built inline by the plex-preferences-init service.
+# See backup/stack.toml for the same pattern.
+run_build = true
 
 environment = """
 TZ=[[TZ]]

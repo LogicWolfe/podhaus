@@ -6,7 +6,11 @@ services:
   # migration doc's "Stack customization primitives" section for the pattern.
   backrest-init:
     container_name: backrest-init
-    image: alpine:latest
+    image: init-tools:local
+    build:
+      context: /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/init-tools
+      dockerfile: Dockerfile
+    pull_policy: never
     user: "0:0"
     environment:
       RESTIC_REPO_PASSWORD: ${RESTIC_REPO_PASSWORD}
@@ -18,7 +22,6 @@ services:
       - -c
       - |
         set -eu
-        apk add --no-cache gettext > /dev/null
         envsubst < /tmpl/config.json.tmpl > /config/config.json
         chmod 600 /config/config.json
         echo "rendered /config/config.json"

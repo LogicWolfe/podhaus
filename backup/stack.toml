@@ -8,6 +8,12 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/backup"
+# init-tools image is built inline by the backrest-init service via the
+# `build:` directive. run_build = true tells Komodo to run `docker compose
+# build` before `up`. auto_pull stays default (true) — the main backrest
+# service still pulls upstream image updates; init service has
+# pull_policy: never so auto_pull skips it.
+run_build = true
 
 environment = """
 TZ=[[TZ]]
