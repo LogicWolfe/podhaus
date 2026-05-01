@@ -36,9 +36,11 @@ services:
       # this from the read-only template mount above.
       - backrest-config:/config
       # Read-only template, rendered by envsubst at startup (see command).
-      # Lives in the Linked Repo clone on kangaroo, mounted in via the
-      # compose file's run_directory.
-      - ./config.json.tmpl:/tmpl/config.json.tmpl:ro
+      # Absolute host path because Periphery's container-side relative
+      # path resolution doesn't match the QNAP host's view of the
+      # cloned repo (see migration doc, "Bind mount paths are host-
+      # relative not periphery-relative" gotcha).
+      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/kangaroo/backrest/config.json.tmpl:/tmpl/config.json.tmpl:ro
       # Restic repository on Jump (NAS SSD). Separate from bilby's repo
       # at /mnt/jump/backups (= /share/CACHEDEV2_DATA/Jump/backups) — the
       # `-kangaroo` suffix avoids two-client coordination on a single repo.
