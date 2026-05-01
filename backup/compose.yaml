@@ -10,8 +10,15 @@ services:
   backrest-init:
     container_name: backrest-init
     image: init-tools:local
+    # Build context is resolved by the docker client running INSIDE the
+    # periphery container (which packages the context tarball + ships to
+    # the daemon). Periphery's run_directory for this stack is
+    # /etc/komodo/repo/backup, so ../init-tools resolves to
+    # /etc/komodo/repo/init-tools — the periphery's view of the bind-
+    # mounted repo. (Volume sources, in contrast, ARE host-resolved —
+    # see template mount below using ${PODHAUS_REPO}.)
     build:
-      context: ${PODHAUS_REPO}/init-tools
+      context: ../init-tools
       dockerfile: Dockerfile
     pull_policy: never
     user: "0:0"

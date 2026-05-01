@@ -7,8 +7,12 @@ services:
   backrest-init:
     container_name: backrest-init
     image: init-tools:local
+    # Build context is periphery-internal (the docker client running inside
+    # periphery packages the tarball). For kangaroo's Linked Repo, periphery
+    # runs compose from /etc/komodo/repos/podhaus/kangaroo/backrest, so
+    # ../../init-tools resolves to /etc/komodo/repos/podhaus/init-tools.
     build:
-      context: /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/init-tools
+      context: ../../init-tools
       dockerfile: Dockerfile
     pull_policy: never
     user: "0:0"
