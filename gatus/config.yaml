@@ -115,7 +115,7 @@ endpoints:
 
   # Surfaces "Komodo Core can't reach kangaroo Periphery" as a Gatus alert.
   # Periphery's :8120 isn't externally exposed (LAN-only), so we check via
-  # Komodo Core's API: POST GetServer for kangaroo, assert info.state == Ok.
+  # Komodo Core's API: POST GetServerState for kangaroo, assert status == Ok.
   # Headers carry Komodo's API credentials (same as komodo-op uses).
   - name: Kangaroo Periphery (via Komodo)
     url: http://komodo-core:9120/read
@@ -126,10 +126,10 @@ endpoints:
       X-Api-Key: ${KOMODO_API_KEY}
       X-Api-Secret: ${KOMODO_API_SECRET}
       Content-Type: application/json
-    body: '{"type":"GetServer","params":{"server":"kangaroo"}}'
+    body: '{"type":"GetServerState","params":{"server":"kangaroo"}}'
     conditions:
       - "[STATUS] == 200"
-      - "[BODY].info.state == Ok"
+      - "[BODY].status == Ok"
 
 # --- Heartbeat endpoints (push-style) ---
 
