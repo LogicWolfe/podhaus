@@ -25,7 +25,15 @@
         },
         "readDataSubsetPercent": 10
       },
-      "hooks": [],
+      "hooks": [
+        {
+          "conditions": ["CONDITION_ANY_ERROR"],
+          "onError": "ON_ERROR_IGNORE",
+          "actionCommand": {
+            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}' 'http://10.0.0.119:8080/api/v1/endpoints/heartbeat_backrest-kangaroo-nightly/external?success=false&error=backrest+{{ .Task }}+failed+for+{{ .Plan.Id }}'"
+          }
+        }
+      ],
       "autoUnlock": true,
       "autoInitialize": true
     }
@@ -82,7 +90,15 @@
           "monthly": 6
         }
       },
-      "hooks": [],
+      "hooks": [
+        {
+          "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
+          "onError": "ON_ERROR_IGNORE",
+          "actionCommand": {
+            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}' 'http://10.0.0.119:8080/api/v1/endpoints/heartbeat_backrest-kangaroo-nightly/external?success=true'"
+          }
+        }
+      ],
       "skipIfUnchanged": true
     }
   ]

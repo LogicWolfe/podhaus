@@ -47,6 +47,10 @@ services:
       BACKREST_RESTIC_COMMAND: /bin/restic
       XDG_CACHE_HOME: /cache
       TZ: ${TZ}
+      # Push token for the Gatus heartbeat — the config.json.tmpl hooks
+      # interpolate this into Authorization headers when posting to bilby's
+      # gatus at http://10.0.0.119:8080/api/v1/endpoints/.../external.
+      GATUS_BACKREST_KANGAROO_PUSH_TOKEN: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
       # Backrest's own shell hooks + ad-hoc restic CLI calls read these.
       RESTIC_REPOSITORY: /repos/podhaus-kangaroo
       RESTIC_PASSWORD: ${RESTIC_REPO_PASSWORD}

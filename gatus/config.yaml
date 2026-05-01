@@ -141,3 +141,19 @@ external-endpoints:
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true
+
+  # Kangaroo's Backrest. Separate from bilby's because it's a separate
+  # restic repo on a separate host. Hooks fire success/failure POSTs to
+  # this endpoint via http://10.0.0.119:8080 (gatus published on bilby's
+  # LAN). The kangaroo Backrest pipeline schedules at 06:00 — 25h interval
+  # tolerates one missed firing before alerting.
+  - name: Backrest Kangaroo Nightly
+    group: heartbeat
+    token: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
+    interval: 25h
+    alerts:
+      - type: custom
+        description: "Kangaroo's nightly Backrest pipeline didn't check in. Either no snapshots ran on kangaroo (check `docker logs backrest` filtered by host=kangaroo on logs.pod.haus), or the success-hook on the backrest-state plan failed. Manually trigger a snapshot of any kangaroo plan from gatus.pod.haus to test."
+        failure-threshold: 3
+        success-threshold: 2
+        send-on-resolved: true

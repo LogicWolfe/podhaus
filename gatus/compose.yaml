@@ -12,6 +12,12 @@ services:
       POSTMARK_SERVER_TOKEN: ${POSTMARK_SERVER_TOKEN}
       GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
       GATUS_UNPACKERR_PUSH_TOKEN: ${GATUS_UNPACKERR_PUSH_TOKEN}
+      GATUS_BACKREST_KANGAROO_PUSH_TOKEN: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
+    # 8080 published on bilby host so kangaroo's Backrest can POST
+    # heartbeat events from across the LAN. The bearer-token check on
+    # each external-endpoint is the auth layer; LAN exposure is fine.
+    ports:
+      - 8080:8080
     volumes:
       - ${PODHAUS_REPO}/gatus/config.yaml:/config/config.yaml:ro
       - gatus-data:/data
