@@ -1,0 +1,36 @@
+services:
+  syncthing:
+    container_name: syncthing
+    image: syncthing/syncthing:latest
+    restart: unless-stopped
+    # network_mode: host so Syncthing can broadcast on UDP/21027 for LAN
+    # device discovery. Bridge networking would silently break the global
+    # discovery pattern most peers use.
+    network_mode: host
+    # Run as PodHaus:everyone (uid=1000, gid=100) to match existing file
+    # ownership on the Pouch share — the .stignore file is owned 1000:100,
+    # so reads + writes will be permission-clean. If new files end up with
+    # surprising owners, this is the first knob to revisit.
+    user: "1000:100"
+    environment:
+      # Bind admin UI on all interfaces (LAN + tunnel via cloudflared).
+      # GUI auth is intentionally OFF — sync.pod.haus is gated by Cloudflare
+      # Access (Family group) externally, and LAN access is trusted.
+      STGUIADDRESS: "0.0.0.0:8384"
+      TZ: ${TZ}
+    volumes:
+      # Syncthing's database, identity (cert/key), config.xml. First-run
+      # autogen lands here; subsequent restarts reuse the persisted device
+      # ID. Backed up by kangaroo/backrest.
+      - /share/CACHEDEV1_DATA/Container/syncthing-config:/var/syncthing/config
+      # The data being synced. Pouch is the user's main media + docs share;
+      # SkyWorkBackup is a sub-folder share. Both have existing .stfolder
+      # markers + .stignore files that Syncthing will auto-discover when
+      # the user adds them as folders in the UI.
+      - /share/CACHEDEV1_DATA/Pouch:/var/syncthing/Pouch
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8384/rest/noauth/health > /dev/null"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

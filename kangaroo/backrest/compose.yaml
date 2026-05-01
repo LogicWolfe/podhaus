@@ -1,0 +1,65 @@
+services:
+  backrest:
+    container_name: backrest
+    image: garethgeorge/backrest:latest
+    restart: unless-stopped
+    ports:
+      - 9898:9898
+    # Pre-render the templated config.json, then exec the standard
+    # docker-entrypoint chain. Keeps the secret out of git: the template
+    # carries ${RESTIC_REPO_PASSWORD} as a placeholder, envsubst expands
+    # it from the container env at startup. Drift on later UI edits is
+    # erased on the next container restart. apk add gettext installs
+    # envsubst on first run (Backrest's base image is alpine, no envsubst
+    # by default); the layer caches across container restarts.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache gettext > /dev/null && envsubst < /tmpl/config.json.tmpl > /config/config.json && exec /sbin/tini -- /docker-entrypoint /backrest
+    environment:
+      BACKREST_PORT: "0.0.0.0:9898"
+      BACKREST_CONFIG: /config/config.json
+      BACKREST_DATA: /data
+      BACKREST_RESTIC_COMMAND: /bin/restic
+      XDG_CACHE_HOME: /cache
+      TZ: ${TZ}
+      RESTIC_REPO_PASSWORD: ${RESTIC_REPO_PASSWORD}
+      # Backrest's own shell hooks + ad-hoc restic CLI calls read these.
+      RESTIC_REPOSITORY: /repos/podhaus-kangaroo
+      RESTIC_PASSWORD: ${RESTIC_REPO_PASSWORD}
+    volumes:
+      # Backrest's writable runtime state (oplog, jwt-secret, kvdb, tasklogs).
+      - backrest-data:/data
+      - backrest-cache:/cache
+      # /config is a writable directory — Backrest rewrites config.json
+      # in place for normalization + UI edits. The named volume isolates
+      # this from the read-only template mount above.
+      - backrest-config:/config
+      # Read-only template, rendered by envsubst at startup (see command).
+      # Lives in the Linked Repo clone on kangaroo, mounted in via the
+      # compose file's run_directory.
+      - ./config.json.tmpl:/tmpl/config.json.tmpl:ro
+      # Restic repository on Jump (NAS SSD). Separate from bilby's repo
+      # at /mnt/jump/backups (= /share/CACHEDEV2_DATA/Jump/backups) — the
+      # `-kangaroo` suffix avoids two-client coordination on a single repo.
+      # Same restic password as bilby's repo; consolidating later is a
+      # one-liner once we want to deduplicate the OneDrive mirror.
+      - /share/CACHEDEV2_DATA/Jump/backups-kangaroo:/repos/podhaus-kangaroo
+      # Source data — read-only bind mounts of every kangaroo-resident
+      # stack's state dir. Backrest runs as root inside the container, so
+      # squash/uid concerns from the all_squash NFS pattern don't apply
+      # (this is local QNAP storage, not NFS).
+      - /share/CACHEDEV1_DATA/Container/syncthing-config:/userdata/syncthing:ro
+      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo:/userdata/komodo-periphery:ro
+      - backrest-data:/userdata/backrest-state:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9898/ > /dev/null"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  backrest-data:
+  backrest-cache:
+  backrest-config:

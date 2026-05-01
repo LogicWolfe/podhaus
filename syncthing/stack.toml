@@ -1,0 +1,15 @@
+[[stack]]
+name = "syncthing"
+description = "Syncthing on kangaroo (replaces the alligator host process)"
+tags = ["kangaroo", "podhaus"]
+deploy = true
+
+[stack.config]
+server = "kangaroo"
+linked_repo = "podhaus"
+run_directory = "syncthing"
+file_paths = ["compose.yaml"]
+
+environment = """
+TZ=[[TZ]]
+"""

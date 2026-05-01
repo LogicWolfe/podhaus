@@ -1,0 +1,89 @@
+{
+  "version": 4,
+  "instance": "kangaroo",
+  "auth": {
+    "disabled": true
+  },
+  "repos": [
+    {
+      "id": "podhaus-kangaroo",
+      "uri": "/repos/podhaus-kangaroo",
+      "password": "${RESTIC_REPO_PASSWORD}",
+      "flags": [],
+      "env": [],
+      "prunePolicy": {
+        "schedule": {
+          "cron": "30 6 * * 0",
+          "clock": "CLOCK_LOCAL"
+        },
+        "maxUnusedPercent": 10
+      },
+      "checkPolicy": {
+        "schedule": {
+          "cron": "45 6 * * 0",
+          "clock": "CLOCK_LOCAL"
+        },
+        "readDataSubsetPercent": 10
+      },
+      "hooks": [],
+      "autoUnlock": true,
+      "autoInitialize": true
+    }
+  ],
+  "plans": [
+    {
+      "id": "syncthing",
+      "repo": "podhaus-kangaroo",
+      "paths": ["/userdata/syncthing"],
+      "schedule": {
+        "cron": "0 6 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "komodo-periphery",
+      "repo": "podhaus-kangaroo",
+      "paths": ["/userdata/komodo-periphery"],
+      "schedule": {
+        "cron": "10 6 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "backrest-state",
+      "repo": "podhaus-kangaroo",
+      "paths": ["/userdata/backrest-state"],
+      "schedule": {
+        "cron": "20 6 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    }
+  ]
+}

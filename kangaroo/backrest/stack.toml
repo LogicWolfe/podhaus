@@ -1,0 +1,16 @@
+[[stack]]
+name = "kangaroo-backrest"
+description = "Backrest on kangaroo — local restic snapshots of QNAP-resident container state"
+tags = ["kangaroo", "podhaus"]
+deploy = true
+
+[stack.config]
+server = "kangaroo"
+linked_repo = "podhaus"
+run_directory = "kangaroo/backrest"
+file_paths = ["compose.yaml"]
+
+environment = """
+TZ=[[TZ]]
+RESTIC_REPO_PASSWORD=[[OP__KOMODO__RESTIC_REPO_PASSWORD__CREDENTIAL]]
+"""
