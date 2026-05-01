@@ -87,6 +87,14 @@ services:
       # IOPS aren't the driver since restic backups are sequential.
       - /mnt/jump/backups:/repos/podhaus
 
+      # Kangaroo's restic repo, read-only over NFS. Bilby's nightly chain
+      # runs the rclone OneDrive sync as a hook on backrest-state's
+      # SNAPSHOT_SUCCESS — that sync now mirrors BOTH bilby's repo and
+      # kangaroo's. Kangaroo's plans run 04:00–04:20 (in parallel with
+      # bilby's early plans) so they're done well before bilby's last
+      # snapshot at 05:20 fires the rclone hook.
+      - /mnt/jump/backups-kangaroo:/repos/podhaus-kangaroo:ro
+
       # rclone config rendered on the host by komodo-start. Mounted
       # as a writable directory (not a read-only file) because rclone
       # needs to persist refreshed OAuth tokens back to the config —

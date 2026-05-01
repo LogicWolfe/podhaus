@@ -203,7 +203,7 @@
           "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
           "onError": "ON_ERROR_IGNORE",
           "actionCommand": {
-            "command": "rclone sync --config /rclone/rclone.conf /repos/podhaus onedrive:Backups/podhaus-restic"
+            "command": "rclone sync --config /rclone/rclone.conf /repos/podhaus onedrive:Backups/podhaus-restic && rclone sync --config /rclone/rclone.conf /repos/podhaus-kangaroo onedrive:Backups/podhaus-kangaroo-restic"
           }
         },
         {
