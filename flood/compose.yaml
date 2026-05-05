@@ -22,14 +22,18 @@ services:
       # .rtorrent.rc as config-as-code. Overlays the live config file in
       # /flood-db with the repo's version. The original file still exists
       # in /var/lib/flood-db on host but is shadowed by this bind mount.
+      # Single-file bind: rtorrent reads this once at startup, so the
+      # inode-pin behavior of file binds (host atomic-rename → container
+      # keeps original inode) doesn't matter — restart is required to
+      # pick up changes regardless.
       - ${PODHAUS_REPO}/flood/rtorrent.rc:/flood-db/.rtorrent.rc:ro,z
-      # Cleanup script invoked by the event.download.erased hook. Deletes
-      # RAR pieces + scene detritus only — extracted content survives.
-      # See flood/rtorrent-cleanup.sh for logic + safety layers.
-      - ${PODHAUS_REPO}/flood/rtorrent-cleanup.sh:/scripts/rtorrent-cleanup.sh:ro,z
-      # Daily RAR-extraction health check. Runs under ofelia and pushes
-      # a heartbeat to Gatus — missing heartbeat OR failed push = alert.
-      - ${PODHAUS_REPO}/flood/rar-backlog.sh:/scripts/rar-backlog.sh:ro,z
+      # Hook + ofelia scripts as a directory bind so host edits propagate
+      # without restart. File-level binds pin the inode at mount time, so
+      # any tool that saves via atomic rename (vim, $EDITOR, Claude Code)
+      # leaves the container looking at the original inode forever.
+      # Contents: rtorrent-cleanup.sh (event.download.erased hook),
+      # rar-backlog.sh (daily health-check pushed via ofelia label).
+      - ${PODHAUS_REPO}/flood/scripts:/scripts:ro,z
     labels:
       autoheal: "true"
       # Daily RAR-extraction backlog scan. Runs 04:50 AWST (dead-time

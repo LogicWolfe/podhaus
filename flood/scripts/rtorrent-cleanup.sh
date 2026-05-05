@@ -16,6 +16,14 @@
 
 set -u
 
+# Self-logging to a persistent file so invocations are observable even
+# when called via rtorrent's `execute2.nothrow` (which discards stdout).
+# Without this, a silently-broken hook is indistinguishable from one
+# that ran cleanly. Append-only — rotate manually if it grows.
+LOG_FILE=/flood-db/rtorrent-cleanup.log
+exec >> "$LOG_FILE" 2>&1
+echo "=== $(date '+%Y-%m-%d %H:%M:%S %Z') invoked argc=$# argv=[$*] ==="
+
 BASE="${1:-}"
 
 log() { echo "[rtorrent-cleanup] $*"; }

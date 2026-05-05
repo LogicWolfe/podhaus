@@ -65,8 +65,11 @@ services:
       - ${MEDIA_DIR}/plex-video-thumbnails:/config/Library/Application Support/Plex Media Server/Media/localhost
       # Media files
       - ${MEDIA_DIR}:/Users/Shared/Pouch
-      - ${PODHAUS_REPO}/plex/healthcheck.sh:/scripts/healthcheck.sh:ro,z
-      - ${PODHAUS_REPO}/plex/stats-cleanup.sh:/scripts/stats-cleanup.sh:ro,z
+      # Healthcheck + ofelia scripts as a directory bind so host edits
+      # propagate without restart. See flood/compose.yaml for the rationale
+      # (file-level binds pin the inode at mount time; atomic-rename saves
+      # detach the container's view from the host file).
+      - ${PODHAUS_REPO}/plex/scripts:/scripts:ro,z
     labels:
       autoheal: "true"
       # Monthly statistics_bandwidth prune + VACUUM via ofelia (label-based
