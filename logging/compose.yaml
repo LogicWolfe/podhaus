@@ -52,6 +52,12 @@ services:
     volumes:
       - ${PODHAUS_REPO}/logging/alloy-config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # rtorrent-cleanup.sh writes to /flood-db/rtorrent-cleanup.log
+      # inside the flood container — that's /var/lib/flood-db on host.
+      # The script is forked by rtorrent (not by tini), so its output
+      # never reaches docker stdout. Tailing the file directly is the
+      # only way to get cleanup-hook events into Victoria Logs.
+      - /var/lib/flood-db:/var/log/flood:ro
       - alloy-data:/var/lib/alloy/data
     depends_on:
       victoria-logs:
