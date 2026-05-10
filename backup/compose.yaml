@@ -23,7 +23,12 @@ services:
     pull_policy: never
     user: "0:0"
     environment:
+      # Every variable referenced by config.json.tmpl must be present here —
+      # envsubst silently strips any ${VAR} not in its environment, which
+      # was the root cause of empty `Authorization: Bearer ` headers in
+      # all gatus push hooks (heartbeat success/failure both broken).
       RESTIC_REPO_PASSWORD: ${RESTIC_REPO_PASSWORD}
+      GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
     volumes:
       - ${PODHAUS_REPO}/backup/config.json.tmpl:/tmpl/config.json.tmpl:ro,z
       - backrest-config:/config
@@ -53,10 +58,13 @@ services:
       BACKREST_RESTIC_COMMAND: /bin/restic
       XDG_CACHE_HOME: /cache
       TZ: ${TZ}
-      # Backrest shell hooks and ad-hoc restic runs can reach these
-      # directly without calling back into 1P.
-      RESTIC_REPOSITORY: /repos/podhaus
-      RESTIC_PASSWORD: ${RESTIC_REPO_PASSWORD}
+      # No RESTIC_REPOSITORY / RESTIC_PASSWORD here. The repo password
+      # is rendered into config.json.tmpl from 1P (single source of
+      # truth, config-as-code). Backrest 1.13.0 fail-fasts when both an
+      # env var and a config password are present (issue #1192) — even
+      # when the values match, since it can't compare them safely. For
+      # ad-hoc restic CLI use Backrest's UI "Run Command" feature, or
+      # `docker exec -e RESTIC_PASSWORD=$(op read 'op://Homelab/restic-repo-password/password') backrest restic ...`.
       # rclone's own RCLONE_CONFIG env var points to the rendered config
       # file bind-mounted in below. See komodo-start — the file is
       # rendered from 1P via op CLI so we don't try to squeeze a
@@ -116,8 +124,8 @@ services:
       - /var/lib/paperless-data:/userdata/paperless/data:ro
       #
       # Docker named volumes from stacks that still use them (NAS squash
-      # carve-out stacks + logging + onepassword + uptime-kuma). Referenced
-      # via `external: true` in the volumes block below so docker can share
+      # carve-out stacks + logging + onepassword). Referenced via
+      # `external: true` in the volumes block below so docker can share
       # the live data with the owning container read-only.
       - komodo_postgres-data:/userdata/komodo/postgres:ro
       - komodo_ferretdb-state:/userdata/komodo/ferretdb:ro

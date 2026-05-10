@@ -17,7 +17,12 @@ services:
     pull_policy: never
     user: "0:0"
     environment:
+      # Every variable referenced by config.json.tmpl must be present here —
+      # envsubst silently strips any ${VAR} not in its environment, which
+      # was the root cause of empty `Authorization: Bearer ` headers in
+      # gatus push hooks. See backup/compose.yaml for the full diagnosis.
       RESTIC_REPO_PASSWORD: ${RESTIC_REPO_PASSWORD}
+      GATUS_BACKREST_KANGAROO_PUSH_TOKEN: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
     volumes:
       - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/kangaroo/backrest/config.json.tmpl:/tmpl/config.json.tmpl:ro
       - backrest-config:/config
@@ -51,9 +56,10 @@ services:
       # interpolate this into Authorization headers when posting to bilby's
       # gatus at http://10.0.0.119:8080/api/v1/endpoints/.../external.
       GATUS_BACKREST_KANGAROO_PUSH_TOKEN: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
-      # Backrest's own shell hooks + ad-hoc restic CLI calls read these.
-      RESTIC_REPOSITORY: /repos/podhaus-kangaroo
-      RESTIC_PASSWORD: ${RESTIC_REPO_PASSWORD}
+      # No RESTIC_REPOSITORY / RESTIC_PASSWORD — see backup/compose.yaml
+      # for the full reasoning. tl;dr: Backrest 1.13.0 fail-fasts when
+      # both env-var and config-rendered passwords are present (issue
+      # #1192). Repo config is the single source of truth.
     volumes:
       # Backrest's writable runtime state (oplog, jwt-secret, kvdb, tasklogs).
       - backrest-data:/data
