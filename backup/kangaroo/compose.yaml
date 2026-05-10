@@ -22,8 +22,9 @@
 services:
   backrest-init:
     # Build context: ../../init-tools resolves to <clone-root>/init-tools
-    # since this file lives at backup/kangaroo/compose.yaml. On kangaroo's
-    # Periphery the clone root is /etc/komodo/repos/podhaus.
+    # since this file is FIRST in file_paths (compose.yaml before
+    # compose.shared.yaml in stack.toml), making the project directory
+    # backup/kangaroo/.
     build:
       context: ../../init-tools
       dockerfile: Dockerfile

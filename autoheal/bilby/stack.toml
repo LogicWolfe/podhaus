@@ -8,4 +8,4 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/autoheal/bilby"
-file_paths = ["../compose.shared.yaml", "compose.yaml"]
+file_paths = ["compose.yaml", "../compose.shared.yaml"]

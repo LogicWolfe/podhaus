@@ -11,8 +11,10 @@
 services:
   backrest-init:
     # Build context: ../../init-tools resolves to <repo-root>/init-tools
-    # since this file lives at backup/bilby/compose.yaml. Periphery's
-    # internal docker client packages the context from there.
+    # since this file is FIRST in file_paths (compose.yaml before
+    # compose.shared.yaml in stack.toml), making the project directory
+    # backup/bilby/. Periphery's internal docker client packages the
+    # context tarball from there.
     build:
       context: ../../init-tools
       dockerfile: Dockerfile

@@ -8,4 +8,4 @@ deploy = true
 server = "kangaroo"
 linked_repo = "podhaus"
 run_directory = "autoheal/kangaroo"
-file_paths = ["../compose.shared.yaml", "compose.yaml"]
+file_paths = ["compose.yaml", "../compose.shared.yaml"]

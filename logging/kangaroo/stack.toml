@@ -8,7 +8,7 @@ deploy = true
 server = "kangaroo"
 linked_repo = "podhaus"
 run_directory = "logging/kangaroo"
-file_paths = ["../compose.shared.yaml", "compose.yaml"]
+file_paths = ["compose.yaml", "../compose.shared.yaml"]
 
 environment = """
 TZ=[[TZ]]
