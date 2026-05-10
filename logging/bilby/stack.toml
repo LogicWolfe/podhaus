@@ -1,13 +1,14 @@
 [[stack]]
 name = "logging"
-description = "Loki + Grafana Alloy + Grafana — centralised logs for bilby containers"
+description = "Victoria Logs + Alloy + Grafana — centralised logs (bilby)"
 tags = ["podhaus"]
 deploy = true
 
 [stack.config]
 server = "podhaus"
 files_on_host = true
-run_directory = "/etc/komodo/repo/logging"
+run_directory = "/etc/komodo/repo/logging/bilby"
+file_paths = ["compose.yaml"]
 
 environment = """
 TZ=[[TZ]]

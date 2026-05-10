@@ -1,3 +1,12 @@
+# Bilby's logging overlay. Adds victoria-logs (the backend that
+# kangaroo's alloy also writes to) and grafana (UI), plus bilby-specific
+# alloy bits: SELinux opt, ${PODHAUS_REPO}-rooted alloy-config bind, and
+# the /var/lib/flood-db tail for rtorrent-cleanup events that don't reach
+# docker stdout.
+
+include:
+  - ../compose.shared.yaml
+
 services:
   victoria-logs:
     container_name: victoria-logs
@@ -17,9 +26,9 @@ services:
       - -loggerFormat=json
     ports:
       # Expose to LAN so vmui is reachable directly at http://bilby:9428/select/vmui
-      # for head-to-head comparison against Grafana before deciding which UI
-      # to keep long-term. Container also reachable internally via dockernet
-      # at http://victoria-logs:9428 for Alloy push + Grafana datasource.
+      # AND so kangaroo's alloy can write logs cross-LAN to 10.0.0.119:9428.
+      # Container also reachable internally via dockernet at
+      # http://victoria-logs:9428 for bilby's alloy + grafana datasource.
       - "9428:9428"
     volumes:
       # Storage on Jump (NAS SSD) per the storage tier rule. Log history
@@ -32,49 +41,25 @@ services:
     # No healthcheck: victoriametrics images don't ship wget/curl/sh in
     # their distroless base. VL's HTTP API is the actual liveness signal;
     # if it stops accepting writes Alloy logs the failure and Grafana
-    # queries will fail visibly. Same shape as the cloudflare-tunnel and
-    # paperless-tika decisions.
+    # queries will fail visibly.
 
   alloy:
-    container_name: alloy
-    image: grafana/alloy:latest
-    restart: unless-stopped
-    command:
-      - run
-      - /etc/alloy/config.alloy
-      - --server.http.listen-addr=0.0.0.0:12345
-      - --storage.path=/var/lib/alloy/data
     # SELinux enforcing on Fedora Asahi denies both cross-label writes
     # to /var/run/docker.sock and cross-label reads into bind-mounted
     # config files; label:disable covers both.
     security_opt:
       - label:disable
     volumes:
-      - ${PODHAUS_REPO}/logging/alloy-config.alloy:/etc/alloy/config.alloy:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${PODHAUS_REPO}/logging/bilby/alloy-config.alloy:/etc/alloy/config.alloy:ro
       # rtorrent-cleanup.sh writes to /flood-db/rtorrent-cleanup.log
       # inside the flood container — that's /var/lib/flood-db on host.
       # The script is forked by rtorrent (not by tini), so its output
       # never reaches docker stdout. Tailing the file directly is the
       # only way to get cleanup-hook events into Victoria Logs.
       - /var/lib/flood-db:/var/log/flood:ro
-      - alloy-data:/var/lib/alloy/data
     depends_on:
       victoria-logs:
         condition: service_started
-    networks:
-      - dockernet
-    labels:
-      autoheal: "true"
-    # Alloy's base image is minimal Debian with no curl/wget/nc, so we
-    # use bash's /dev/tcp shortcut to open a socket to the metrics port
-    # as a liveness probe.
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/12345' 2>/dev/null || exit 1"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
   grafana:
     container_name: grafana
@@ -112,9 +97,9 @@ services:
       TZ: ${TZ}
     volumes:
       - grafana-data:/var/lib/grafana
-      - ${PODHAUS_REPO}/logging/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/victoria-logs.yaml:ro
-      - ${PODHAUS_REPO}/logging/grafana-dashboard-provider.yaml:/etc/grafana/provisioning/dashboards/podhaus.yaml:ro
-      - ${PODHAUS_REPO}/logging/grafana-dashboards:/etc/grafana/provisioning/dashboards/podhaus:ro
+      - ${PODHAUS_REPO}/logging/bilby/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/victoria-logs.yaml:ro
+      - ${PODHAUS_REPO}/logging/bilby/grafana-dashboard-provider.yaml:/etc/grafana/provisioning/dashboards/podhaus.yaml:ro
+      - ${PODHAUS_REPO}/logging/bilby/grafana-dashboards:/etc/grafana/provisioning/dashboards/podhaus:ro
     depends_on:
       victoria-logs:
         condition: service_started
@@ -129,14 +114,9 @@ services:
       retries: 3
       start_period: 60s
 
-networks:
-  dockernet:
-    external: true
-
 volumes:
   # alloy + grafana state stay as local docker volumes (NAS squash
   # carve-out — same as komodo-postgres, see komodo/ferretdb.compose.yaml).
   # victoria-logs storage is a host bind mount to /mnt/jump/victoria-logs
   # (NFS Jump) per the storage tier rule, so no named volume here for it.
-  alloy-data:
   grafana-data:

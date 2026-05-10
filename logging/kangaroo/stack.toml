@@ -7,7 +7,7 @@ deploy = true
 [stack.config]
 server = "kangaroo"
 linked_repo = "podhaus"
-run_directory = "kangaroo/logging"
+run_directory = "logging/kangaroo"
 file_paths = ["compose.yaml"]
 
 environment = """

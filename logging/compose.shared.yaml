@@ -1,0 +1,47 @@
+# Shared service definition for the logging stack's alloy. Each host's
+# compose.yaml in logging/<host>/ extends this via `include:` and adds
+# host-specific bits (alloy-config bind path, additional bind mounts for
+# things like rtorrent-cleanup file tailing on bilby, plus — for bilby
+# only — the victoria-logs and grafana services that bilby hosts).
+#
+# Kangaroo's alloy ships logs cross-LAN to bilby's victoria-logs at
+# 10.0.0.119:9428 (published on bilby's LAN). Bilby's alloy uses dockernet
+# DNS (http://victoria-logs:9428). The endpoint URL lives in each host's
+# alloy-config.alloy file, not in compose env (alloy doesn't natively
+# read URLs from env without `env(...)` template wrapping; keeping the
+# config explicit per-host is simpler than introducing template wrapping
+# for one URL).
+
+services:
+  alloy:
+    container_name: alloy
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    # Alloy's base image is minimal Debian with no curl/wget/nc; we use
+    # bash's /dev/tcp shortcut to test the metrics-port socket as the
+    # liveness probe.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/12345' 2>/dev/null || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  alloy-data:
