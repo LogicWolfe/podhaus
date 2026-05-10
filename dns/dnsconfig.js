@@ -9,19 +9,24 @@ var PL_TUNNEL = "fec5ca76-b634-4185-bdb2-f85c38b1b570.cfargotunnel.com.";
 D("pod.haus!cloudflare", REG_NONE, DnsProvider(DSP_CF),
 
     // Tunnel-routed services (proxied)
-    CNAME("gatus",     TUNNEL, CF_PROXY_ON),  // gatus config-as-code monitoring
-    CNAME("grafana",   TUNNEL, CF_PROXY_ON),  // grafana (kept for future dashboards)
-    CNAME("home",      TUNNEL, CF_PROXY_ON),
-    CNAME("kangaroo",  TUNNEL, CF_PROXY_ON),
-    CNAME("komodo",    TUNNEL, CF_PROXY_ON),
-    CNAME("logs",      TUNNEL, CF_PROXY_ON),  // victoria-logs vmui (primary log UI)
-    CNAME("paperless", TUNNEL, CF_PROXY_ON),
-    CNAME("plex",      TUNNEL, CF_PROXY_ON),
-    CNAME("sync",      TUNNEL, CF_PROXY_ON),
-    CNAME("torrent",   TUNNEL, CF_PROXY_ON),
-    CNAME("unifi",     TUNNEL, CF_PROXY_ON),
-
-    CNAME("uptime",    TUNNEL, CF_PROXY_ON),
+    // Single-label hostnames so the existing `*.pod.haus` Access app
+    // wildcard covers them automatically. Multi-label (e.g.
+    // backups.kangaroo.pod.haus) would fall outside that wildcard, so
+    // host-distinguishing names use a hyphen prefix instead — see
+    // `kangaroo-backups` below.
+    CNAME("backups",          TUNNEL, CF_PROXY_ON),  // backrest UI on bilby
+    CNAME("gatus",            TUNNEL, CF_PROXY_ON),  // gatus config-as-code monitoring
+    CNAME("grafana",          TUNNEL, CF_PROXY_ON),  // grafana (kept for future dashboards)
+    CNAME("home",             TUNNEL, CF_PROXY_ON),
+    CNAME("kangaroo",         TUNNEL, CF_PROXY_ON),
+    CNAME("kangaroo-backups", TUNNEL, CF_PROXY_ON),  // backrest UI on kangaroo
+    CNAME("komodo",           TUNNEL, CF_PROXY_ON),
+    CNAME("logs",             TUNNEL, CF_PROXY_ON),  // victoria-logs vmui (primary log UI)
+    CNAME("paperless",        TUNNEL, CF_PROXY_ON),
+    CNAME("plex",             TUNNEL, CF_PROXY_ON),
+    CNAME("sync",             TUNNEL, CF_PROXY_ON),
+    CNAME("torrent",          TUNNEL, CF_PROXY_ON),
+    CNAME("unifi",            TUNNEL, CF_PROXY_ON),
 
     // Railway apps
     CNAME("doggos.indigo", "x0y6bs3z.up.railway.app.", CF_PROXY_OFF),
