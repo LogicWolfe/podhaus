@@ -8,7 +8,7 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/backup/bilby"
-file_paths = ["compose.yaml"]
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
 # init-tools image is built inline by the backrest-init service via the
 # `build:` directive. run_build = true tells Komodo to run `docker compose
 # build` before `up`.

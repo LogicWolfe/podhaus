@@ -18,8 +18,6 @@
 # touches kangaroo's repo, so NFS-all_squash on kangaroo's restic repo
 # is no longer in any sync path.
 
-include:
-  - ../compose.shared.yaml
 
 services:
   backrest-init:

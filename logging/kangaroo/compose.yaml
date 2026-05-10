@@ -4,8 +4,6 @@
 # 10.0.0.119:9428, no per-container JSON-rewrite stages since the
 # matched container names — op-connect-api, flood — only exist on bilby).
 
-include:
-  - ../compose.shared.yaml
 
 services:
   alloy:

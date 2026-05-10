@@ -7,8 +7,6 @@
 # (backrest-data, backrest-config, backrest-cache, backrest-rclone) are
 # prefixed with `backup_`.
 
-include:
-  - ../compose.shared.yaml
 
 services:
   backrest-init:

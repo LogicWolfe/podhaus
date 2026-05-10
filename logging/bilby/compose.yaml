@@ -4,8 +4,6 @@
 # the /var/lib/flood-db tail for rtorrent-cleanup events that don't reach
 # docker stdout.
 
-include:
-  - ../compose.shared.yaml
 
 services:
   victoria-logs:

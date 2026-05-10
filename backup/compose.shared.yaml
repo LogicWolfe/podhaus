@@ -57,7 +57,7 @@ services:
         fi
         # Render config.json from per-host template. Every variable used
         # by config.json.tmpl must be set in this container's environment
-        # — envsubst silently strips unknown ${VAR} references.
+        # — envsubst silently strips unknown $${VAR} references.
         envsubst < /tmpl/config.json.tmpl > /config/config.json
         chmod 600 /config/config.json
         echo "rendered /config/config.json"

@@ -1,5 +1,3 @@
 # Kangaroo's autoheal overlay. Pulls the shared service spec verbatim —
 # QTS doesn't enforce SELinux, so no label:disable needed.
 
-include:
-  - ../compose.shared.yaml

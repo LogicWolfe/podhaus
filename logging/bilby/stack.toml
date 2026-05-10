@@ -8,7 +8,7 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/logging/bilby"
-file_paths = ["compose.yaml"]
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
 
 environment = """
 TZ=[[TZ]]

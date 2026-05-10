@@ -8,7 +8,7 @@ deploy = true
 server = "kangaroo"
 linked_repo = "podhaus"
 run_directory = "backup/kangaroo"
-file_paths = ["compose.yaml"]
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
 # init-tools image built inline by the backrest-init service via `build:`.
 # See backup/bilby/stack.toml for the same pattern on bilby.
 run_build = true

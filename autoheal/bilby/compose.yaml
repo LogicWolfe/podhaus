@@ -1,8 +1,6 @@
 # Bilby's autoheal overlay. Adds SELinux label:disable for Fedora Asahi,
 # which denies cross-label writes to /var/run/docker.sock without it.
 
-include:
-  - ../compose.shared.yaml
 
 services:
   autoheal:
