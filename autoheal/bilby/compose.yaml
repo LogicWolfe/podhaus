@@ -1,19 +1,10 @@
+# Bilby's autoheal overlay. Adds SELinux label:disable for Fedora Asahi,
+# which denies cross-label writes to /var/run/docker.sock without it.
+
+include:
+  - ../compose.shared.yaml
+
 services:
   autoheal:
-    container_name: autoheal
-    image: willfarrell/autoheal:latest
-    restart: unless-stopped
-    # SELinux enforcing on Fedora Asahi denies cross-label writes to
-    # /var/run/docker.sock; label:disable lets autoheal talk to Docker.
     security_opt:
       - label:disable
-    environment:
-      AUTOHEAL_CONTAINER_LABEL: autoheal
-      AUTOHEAL_INTERVAL: 30
-      AUTOHEAL_START_PERIOD: 120
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    # No healthcheck — willfarrell/autoheal runs as a shell script with
-    # no persistent process name that pgrep can match against, and the
-    # image ships without a meaningful self-check. restart: unless-stopped
-    # handles crashes; autoheal can't heal itself anyway.

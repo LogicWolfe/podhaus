@@ -1,10 +1,11 @@
 [[stack]]
 name = "autoheal"
-description = "Restart unhealthy containers labelled autoheal=true"
+description = "Restart unhealthy containers labelled autoheal=true (bilby)"
 tags = ["podhaus"]
 deploy = true
 
 [stack.config]
 server = "podhaus"
 files_on_host = true
-run_directory = "/etc/komodo/repo/autoheal"
+run_directory = "/etc/komodo/repo/autoheal/bilby"
+file_paths = ["compose.yaml"]

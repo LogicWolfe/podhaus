@@ -7,5 +7,5 @@ deploy = true
 [stack.config]
 server = "kangaroo"
 linked_repo = "podhaus"
-run_directory = "kangaroo/autoheal"
+run_directory = "autoheal/kangaroo"
 file_paths = ["compose.yaml"]

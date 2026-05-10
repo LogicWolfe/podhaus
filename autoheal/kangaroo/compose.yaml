@@ -1,19 +1,5 @@
-# Autoheal on kangaroo. Watches kangaroo's local docker daemon for
-# containers labeled `autoheal: "true"` that go unhealthy and restarts
-# them. Mirror of bilby's autoheal/ stack.
-#
-# QTS doesn't run SELinux so no label:disable security_opt needed.
-services:
-  autoheal:
-    container_name: autoheal
-    image: willfarrell/autoheal:latest
-    restart: unless-stopped
-    environment:
-      AUTOHEAL_CONTAINER_LABEL: autoheal
-      AUTOHEAL_INTERVAL: 30
-      AUTOHEAL_START_PERIOD: 120
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    # No healthcheck — willfarrell/autoheal runs as a shell script with
-    # no persistent process name to probe. restart: unless-stopped
-    # handles crashes; autoheal can't heal itself anyway.
+# Kangaroo's autoheal overlay. Pulls the shared service spec verbatim —
+# QTS doesn't enforce SELinux, so no label:disable needed.
+
+include:
+  - ../compose.shared.yaml
