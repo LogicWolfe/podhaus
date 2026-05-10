@@ -5,7 +5,8 @@ Docker container infrastructure for home servers deployed to podhaus (pod.haus) 
 ## Architecture
 
 - **Komodo Core** manages all services as Docker Compose stacks
-- Each service has a top-level directory with `compose.yaml` and `stack.toml` (Komodo metadata)
+- Single-host services have a top-level directory with `compose.yaml` and `stack.toml` (e.g. `paperless/`, `plex/`)
+- **Multi-host shared services** live at `<service>/{compose.shared.yaml, <host>/...}` — each host's `compose.yaml` does `include: [../compose.shared.yaml]` and adds host-specific bits. Each host's `stack.toml` maps host-specific 1P-backed Komodo Variables onto the standardized in-container env-var names declared in the shared compose. Pattern applies to `backup/`, `autoheal/`, `logging/`. Future hosts (e.g. pinelake) drop in as another `<service>/<host>/` sibling.
 - Repo root is mounted into both Core (ResourceSync) and Periphery (compose files)
 - Secrets flow from 1Password → komodo-op → Komodo Variables → `[[VARIABLE]]` interpolation in stack environments
 - Non-secret variables defined in `komodo/sync/variables.toml`
@@ -46,3 +47,14 @@ Docker container infrastructure for home servers deployed to podhaus (pod.haus) 
 4. Add any non-secret variables to `komodo/sync/variables.toml`
 5. Run `./komodo-sync` to deploy
 6. Add a Cloudflare Tunnel ingress rule in `cloudflare-tunnel/compose.yaml` if the service needs a subdomain
+
+## When adding a new instance of a shared service to another host
+
+Multi-host services already in this layout: `backup/`, `autoheal/`, `logging/`. Each has `<service>/compose.shared.yaml` plus per-host subdirs.
+
+1. Create `<service>/<host>/compose.yaml` that does `include: [../compose.shared.yaml]` and overlays host-specific bits (paths, `security_opt`, additional services if applicable).
+2. Create `<service>/<host>/stack.toml` setting the per-host environment block — variable NAMES match the shared compose's contract; VALUES come from host-specific 1P items (e.g., separate gatus tokens, separate rclone OAuth tokens).
+3. If the host needs a config template (Backrest, etc.), put it at `<service>/<host>/<template>` and reference it via the per-host overlay's volume bind.
+4. Run `./komodo-sync` to deploy.
+
+When fixing a bug or changing behavior in a multi-host service, edit `<service>/compose.shared.yaml` (and `<service>/<template>` if shared) — the change applies to all hosts uniformly. Per-host overlay edits should only touch genuinely host-specific bits.
