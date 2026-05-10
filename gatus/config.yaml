@@ -147,13 +147,52 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
 
+  # Active probes for Backrest. The push-style heartbeats below only fire
+  # on SNAPSHOT_SUCCESS — they catch "snapshot ran but a hook failed" but
+  # cannot detect "backrest never ran" without `heartbeat.interval` set
+  # (the staleness alarm). Active probes catch crash-loops within minutes.
+  # Bilby backrest exposes :9898 on dockernet (gatus is on dockernet too).
+  - name: Backrest (bilby)
+    url: http://backrest:9898/
+    group: services
+    interval: 60s
+    conditions:
+      - "[STATUS] >= 200"
+      - "[STATUS] < 400"
+
+  # Kangaroo backrest is on a separate docker host — gatus can't reach it
+  # directly. Komodo Core polls all peripheries, so we ask it to inspect
+  # the container and assert State.Status == running. Same auth pattern as
+  # the Periphery checks above.
+  - name: Backrest (kangaroo, via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: services
+    interval: 60s
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"kangaroo","container":"backrest"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+
 # --- Heartbeat endpoints (push-style) ---
 
 external-endpoints:
+  # `heartbeat.interval` is the staleness threshold — Gatus synthesises a
+  # failure result if no push arrives within this window. The top-level
+  # `interval:` field is NOT recognised on external-endpoints (it's only
+  # for HTTP-polled endpoints) and was previously silently ignored, which
+  # left these heartbeats as event-only — they could only ever alert on a
+  # received-but-failed push, never on missing pushes. See Gatus README
+  # → External Endpoints.
   - name: Backrest Nightly
     group: heartbeat
     token: ${GATUS_BACKREST_PUSH_TOKEN}
-    interval: 25h
+    heartbeat:
+      interval: 25h
     alerts:
       - type: custom
         description: "Backrest's nightly backup pipeline didn't check in. Either no snapshots ran tonight, or the post-plan rclone sync to OneDrive failed. Investigate: `docker logs backrest` in logs.pod.haus, and check /mnt/pouch/backups for the expected repository state."
@@ -161,14 +200,16 @@ external-endpoints:
         success-threshold: 2
         send-on-resolved: true
 
-  # Daily health check from flood/rar-backlog.sh. Scans for RAR folders
-  # older than 2h with no extracted content alongside — i.e., unpackerr
-  # failed silently. Missing heartbeat OR success=false both trigger
-  # Postmark alerts via the shared default-alert config.
+  # Hourly health check from flood/rar-backlog.sh (ofelia-driven). Scans
+  # for RAR folders older than 2h with no extracted content alongside —
+  # i.e., unpackerr failed silently. Missing heartbeat OR success=false
+  # both trigger Postmark alerts via the shared default-alert config.
+  # 25h staleness threshold tolerates one missed firing.
   - name: RAR Extraction
     group: heartbeat
     token: ${GATUS_UNPACKERR_PUSH_TOKEN}
-    interval: 25h
+    heartbeat:
+      interval: 25h
     alerts:
       - type: custom
         description: "RAR extraction pipeline is unhealthy. Either unpackerr is not processing new torrents (check `docker logs unpackerr`), the cron job itself is broken (check ofelia + `docker logs flood | grep rar-backlog`), or the scanner found folders with RAR files >2h old and no extracted content alongside. Manual scan: `docker exec flood /scripts/rar-backlog.sh`. Full backlog paths land in the flood container logs."
@@ -184,7 +225,8 @@ external-endpoints:
   - name: Backrest Kangaroo Nightly
     group: heartbeat
     token: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
-    interval: 25h
+    heartbeat:
+      interval: 25h
     alerts:
       - type: custom
         description: "Kangaroo's nightly Backrest pipeline didn't check in. Either no snapshots ran on kangaroo (check `docker logs backrest` filtered by host=kangaroo on logs.pod.haus), or the success-hook on the backrest-state plan failed. Manually trigger a snapshot of any kangaroo plan from gatus.pod.haus to test."
