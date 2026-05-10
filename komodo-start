@@ -69,31 +69,13 @@ seed_variable "MEDIA_DIR"     "/mnt/pouch"      false
 # the next host could clone it anywhere and the same compose files work.
 seed_variable "PODHAUS_REPO"  "$PWD"            false
 
-echo "Rendering host-side secret files..."
-# rclone.conf is the only thing left here. Per-stack secret rendering
-# (Backrest config.json, Plex Preferences.xml) moved to in-stack init
-# containers — see migration doc, "Stack customization primitives".
-# Only stays in komodo-start: things that genuinely need to happen on the
-# host (multi-line OAuth blobs that can't round-trip through Komodo's
-# env-file pipeline).
-#
-# rclone.conf: structural config (remote name, drive_id, drive_type,
-# region) is in backup/rclone.conf.tmpl in the repo so it's git-tracked
-# and reviewable. Only the OAuth token JSON blob lives in 1P as a
-# Secure Note. envsubst assembles them at render time.
-#
-# IMPORTANT: the rendered file on disk is not the long-term source of
-# truth for the token — rclone rewrites the token field in place every
-# time it refreshes OAuth. The 1P copy is used only on bootstrap; after
-# first rclone use the disk is authoritative. The 1P token is valid for
-# roughly 1-2 days of fresh use before OneDrive invalidates the last
-# stored refresh_token; re-OAuth on a laptop and update 1P if the token
-# has gone stale (the recipe is in backup/rclone.conf.tmpl's comment).
-sudo mkdir -p /etc/komodo/rclone
-RCLONE_ONEDRIVE_TOKEN="$(op read 'op://Homelab/rclone-onedrive-token/notesPlain')" \
-  envsubst '${RCLONE_ONEDRIVE_TOKEN}' < backup/rclone.conf.tmpl | \
-  sudo tee /etc/komodo/rclone/rclone.conf > /dev/null
-sudo chmod 600 /etc/komodo/rclone/rclone.conf
-echo "  /etc/komodo/rclone/rclone.conf"
+# rclone.conf rendering moved into the backup stack's init container.
+# Both bilby and kangaroo render their own /rclone/rclone.conf (named
+# volume) from backup/rclone.conf.tmpl + per-host RCLONE_ONEDRIVE_TOKEN_B64
+# (1P-stored, base64-encoded OAuth blob). See backup/compose.shared.yaml
+# for the init logic and backup/{bilby,kangaroo}/stack.toml for the per-
+# host token mapping. Bilby's prior /etc/komodo/rclone/ host-side render
+# is no longer needed; the directory can be cleaned up but is left in
+# place to avoid breaking any uncovered consumers.
 
 ./komodo-sync

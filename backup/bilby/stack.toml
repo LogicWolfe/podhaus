@@ -1,0 +1,36 @@
+[[stack]]
+name = "backup"
+description = "Backrest + restic + rclone off-site sync (bilby)"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/backup/bilby"
+file_paths = ["compose.yaml"]
+# init-tools image is built inline by the backrest-init service via the
+# `build:` directive. run_build = true tells Komodo to run `docker compose
+# build` before `up`.
+run_build = true
+
+# Per-host environment block. Each variable here is exposed to the
+# compose project's `.env` file at deploy time. The CONTRACT — variable
+# NAMES — is shared with kangaroo's stack.toml (see backup/kangaroo/
+# stack.toml). VALUES differ per host: bilby pulls its own gatus token,
+# its own rclone bootstrap token, and writes to bilby's gatus directly
+# over dockernet.
+environment = """
+TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
+RESTIC_REPO_PASSWORD=[[OP__KOMODO__RESTIC_REPO_PASSWORD__CREDENTIAL]]
+RCLONE_ONEDRIVE_TOKEN_B64=[[OP__KOMODO__RCLONE_ONEDRIVE_TOKEN_BILBY__NOTES_B64]]
+GATUS_BACKREST_PUSH_TOKEN=[[OP__KOMODO__GATUS_BACKREST_PUSH_TOKEN__TOKEN]]
+GATUS_BASE_URL=http://gatus:8080
+GATUS_BACKREST_ENDPOINT_ID=heartbeat_backrest-nightly
+BACKREST_INSTANCE=podhaus-bilby
+POSTMARK_USERNAME=[[OP__KOMODO__POSTMARK_SMTP__USERNAME]]
+POSTMARK_CREDENTIAL=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
+POSTMARK_SERVER=[[OP__KOMODO__POSTMARK_SMTP__SERVER]]
+POSTMARK_PORT=[[OP__KOMODO__POSTMARK_SMTP__PORT]]
+"""

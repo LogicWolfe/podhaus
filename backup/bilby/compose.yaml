@@ -1,0 +1,79 @@
+# Bilby's backrest overlay. Extends backup/compose.shared.yaml with
+# bilby-specific bits: SELinux opt, ${PODHAUS_REPO}-rooted bind mounts
+# for templates, /mnt/jump/backups bind for the bilby restic repo,
+# and the full set of source-data mounts for stacks that live on bilby.
+#
+# Bilby's stack name is `backup`; project name = `backup`; named volumes
+# (backrest-data, backrest-config, backrest-cache, backrest-rclone) are
+# prefixed with `backup_`.
+
+include:
+  - ../compose.shared.yaml
+
+services:
+  backrest-init:
+    # Build context: ../../init-tools resolves to <repo-root>/init-tools
+    # since this file lives at backup/bilby/compose.yaml. Periphery's
+    # internal docker client packages the context from there.
+    build:
+      context: ../../init-tools
+      dockerfile: Dockerfile
+    volumes:
+      - ${PODHAUS_REPO}/backup/rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro,z
+      - ${PODHAUS_REPO}/backup/bilby/config.json.tmpl:/tmpl/config.json.tmpl:ro,z
+
+  backrest:
+    # Backrest shell hooks need docker socket access to exec into other
+    # containers for live DB dumps (plex library, paperless pg, komodo pg).
+    # label:disable lifts SELinux confinement for that.
+    security_opt:
+      - label:disable
+    volumes:
+      # Restic repository target on Jump (NAS SSD). Per the storage tier
+      # rule, the backup repo lives on Jump — durable storage we'd hate
+      # to lose, on a different physical drive set than Pouch's bulk media.
+      - /mnt/jump/backups:/repos/podhaus
+
+      # Source data — all read-only. Layout:
+      #   /userdata/<stack>          — host bind mounts for migrated stacks
+      #   /userdata/<stack>/<dir>    — nested for stacks with multiple volumes
+      #
+      # Host bind mounts (post-phase-6 migrated stacks):
+      - /var/lib/plex-local:/userdata/plex:ro
+      - /var/lib/flood-db:/userdata/flood:ro
+      - /var/lib/home-assistant:/userdata/home-assistant:ro
+      - /var/lib/paperless-pgdata:/userdata/paperless/pgdata:ro
+      - /var/lib/paperless-data:/userdata/paperless/data:ro
+      #
+      # Docker named volumes from stacks that still use them (NAS squash
+      # carve-out stacks + logging + onepassword). Referenced via
+      # `external: true` in the volumes block below so docker can share
+      # the live data with the owning container read-only.
+      - komodo_postgres-data:/userdata/komodo/postgres:ro
+      - komodo_ferretdb-state:/userdata/komodo/ferretdb:ro
+      - onepassword_op-connect-data:/userdata/onepassword:ro
+      - logging_alloy-data:/userdata/logging/alloy:ro
+      - logging_grafana-data:/userdata/logging/grafana:ro
+      # Victoria Logs storage. Lives on Jump alongside the backup repo
+      # itself; backed up so VL history survives a Jump RAID failure
+      # (off-site via the rclone OneDrive sync hook).
+      - /mnt/jump/victoria-logs:/userdata/logging/victoria-logs:ro
+      - gatus_gatus-data:/userdata/gatus:ro
+
+volumes:
+  # External volumes owned by other stacks — Backrest mounts them
+  # read-only as backup sources. `external: true` tells compose to
+  # reuse the existing volumes by name rather than creating
+  # project-prefixed clones.
+  komodo_postgres-data:
+    external: true
+  komodo_ferretdb-state:
+    external: true
+  onepassword_op-connect-data:
+    external: true
+  logging_alloy-data:
+    external: true
+  logging_grafana-data:
+    external: true
+  gatus_gatus-data:
+    external: true

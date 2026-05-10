@@ -1,0 +1,49 @@
+# Kangaroo's backrest overlay. Extends backup/compose.shared.yaml with
+# kangaroo-specific bits: absolute QNAP paths for templates and source
+# data binds (no ${PODHAUS_REPO} on QNAP), no SELinux opt (QTS doesn't
+# enforce), and the kangaroo restic repo at /share/CACHEDEV2_DATA/Jump.
+#
+# Stack name is `kangaroo-backup` (was `kangaroo-backrest` pre-refactor);
+# project name = `kangaroo-backup`; named volumes (backrest-data,
+# backrest-config, backrest-cache, backrest-rclone) are prefixed with
+# `kangaroo-backup_`. Note: the previous project's volumes
+# (`kangaroo-backrest_*`) become orphaned. Backrest's oplog is in the
+# named volume — losing it is acceptable since the actual restic data
+# lives in /share/CACHEDEV2_DATA/Jump/backups-kangaroo (a host bind
+# mount, NOT a named volume) and Backrest auto-indexes existing repos
+# on first start.
+#
+# Bug B fix: kangaroo now runs its OWN rclone-to-OneDrive sync hook on
+# the backrest-state plan (see config.json.tmpl). Bilby's hook no longer
+# touches kangaroo's repo, so NFS-all_squash on kangaroo's restic repo
+# is no longer in any sync path.
+
+include:
+  - ../compose.shared.yaml
+
+services:
+  backrest-init:
+    # Build context: ../../init-tools resolves to <clone-root>/init-tools
+    # since this file lives at backup/kangaroo/compose.yaml. On kangaroo's
+    # Periphery the clone root is /etc/komodo/repos/podhaus.
+    build:
+      context: ../../init-tools
+      dockerfile: Dockerfile
+    volumes:
+      # Absolute host paths — Periphery's container-side relative-path
+      # resolution doesn't match the QNAP host's view of the cloned repo,
+      # and ${PODHAUS_REPO} doesn't exist on kangaroo (no komodo-start).
+      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro
+      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/kangaroo/config.json.tmpl:/tmpl/config.json.tmpl:ro
+
+  backrest:
+    # No security_opt — QTS doesn't run SELinux.
+    volumes:
+      # Restic repository on Jump (NAS SSD). Local QNAP storage — backrest
+      # runs as root inside the container, so squash/uid concerns from the
+      # all_squash NFS pattern don't apply for this path.
+      - /share/CACHEDEV2_DATA/Jump/backups-kangaroo:/repos/podhaus-kangaroo
+      # Source data — read-only bind mounts of every kangaroo-resident
+      # stack's state dir.
+      - /share/CACHEDEV1_DATA/Container/syncthing-config:/userdata/syncthing:ro
+      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo:/userdata/komodo-periphery:ro

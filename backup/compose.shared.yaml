@@ -1,0 +1,134 @@
+# Shared service definition for Backrest. Each host's compose.yaml in
+# backup/<host>/ extends this via `include:` and adds host-specific bits
+# (build context, template bind-mount paths, source data binds, repo
+# bind, security_opt). The contract here is the in-container env-var
+# names — each host's stack.toml maps host-specific 1P-backed Komodo
+# Variables onto the same names declared here, so the shared file (and
+# the shared rclone.conf.tmpl + per-host config.json.tmpl) never branches
+# by host.
+#
+# Bug B fix (kangaroo OneDrive sync): kangaroo runs its own rclone-to-
+# OneDrive hook now (see backup/kangaroo/config.json.tmpl). Bilby's hook
+# only syncs its own repo. NFS-all_squash on the kangaroo restic repo
+# is no longer in any sync path.
+#
+# rclone.conf rendering: backrest-init renders /rclone/rclone.conf from
+# backup/rclone.conf.tmpl + the base64-decoded OAuth token from 1P. The
+# render is idempotent — if /rclone/rclone.conf already exists in the
+# named volume, we preserve it (rclone rotates the refresh token in-
+# place; a re-render from the bootstrap snapshot would clobber it).
+#
+# Replaces komodo-start's prior host-side rclone render. Both hosts now
+# use this same mechanism; bilby's host-side /etc/komodo/rclone goes
+# unused after migration.
+
+services:
+  backrest-init:
+    container_name: backrest-init
+    image: init-tools:local
+    pull_policy: never
+    user: "0:0"
+    environment:
+      RESTIC_REPO_PASSWORD: ${RESTIC_REPO_PASSWORD}
+      GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
+      RCLONE_ONEDRIVE_TOKEN_B64: ${RCLONE_ONEDRIVE_TOKEN_B64}
+      GATUS_BASE_URL: ${GATUS_BASE_URL}
+      GATUS_BACKREST_ENDPOINT_ID: ${GATUS_BACKREST_ENDPOINT_ID}
+      BACKREST_INSTANCE: ${BACKREST_INSTANCE}
+    volumes:
+      - backrest-config:/config
+      - backrest-rclone:/rclone
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        # Render rclone.conf from rclone.conf.tmpl + base64-decoded
+        # OAuth token from 1P. Idempotent: if /rclone/rclone.conf already
+        # exists (rclone has been refreshing it in-place across deploys),
+        # we preserve the live state. The 1P snapshot is bootstrap-only.
+        if [ ! -s /rclone/rclone.conf ]; then
+          RCLONE_ONEDRIVE_TOKEN="$$(echo "$$RCLONE_ONEDRIVE_TOKEN_B64" | base64 -d)" \
+            envsubst '$$RCLONE_ONEDRIVE_TOKEN' < /tmpl/rclone.conf.tmpl > /rclone/rclone.conf
+          chmod 600 /rclone/rclone.conf
+          echo "rendered /rclone/rclone.conf from 1P bootstrap snapshot"
+        else
+          echo "/rclone/rclone.conf exists, preserving (rclone manages refresh in-place)"
+        fi
+        # Render config.json from per-host template. Every variable used
+        # by config.json.tmpl must be set in this container's environment
+        # — envsubst silently strips unknown ${VAR} references.
+        envsubst < /tmpl/config.json.tmpl > /config/config.json
+        chmod 600 /config/config.json
+        echo "rendered /config/config.json"
+    restart: "no"
+
+  backrest:
+    container_name: backrest
+    image: garethgeorge/backrest:latest
+    restart: unless-stopped
+    depends_on:
+      backrest-init:
+        condition: service_completed_successfully
+    ports:
+      # Published on each host's LAN so bilby's cloudflared can route
+      # backups.pod.haus → backrest:9898 (dockernet, bilby) and
+      # kangaroo-backups.pod.haus → 10.0.0.25:9898 (LAN, kangaroo).
+      - 9898:9898
+    environment:
+      BACKREST_PORT: "0.0.0.0:9898"
+      BACKREST_CONFIG: /config/config.json
+      BACKREST_DATA: /data
+      BACKREST_RESTIC_COMMAND: /bin/restic
+      XDG_CACHE_HOME: /cache
+      TZ: ${TZ}
+      # rclone reads its config file at this path; the file lives in the
+      # backrest-rclone named volume populated by backrest-init. Cache
+      # dir under /tmp avoids rclone trying to create $HOME/.config/rclone
+      # under a read-only filesystem layer.
+      RCLONE_CONFIG: /rclone/rclone.conf
+      RCLONE_CONFIG_DIR: /tmp/rclone
+      # No RESTIC_REPOSITORY / RESTIC_PASSWORD — config.json's password
+      # field (rendered from 1P) is the single source of truth. Backrest
+      # 1.13.0 fail-fasts when both are set (issue #1192). For ad-hoc
+      # restic CLI use Backrest's UI "Run Command" feature.
+      GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
+    volumes:
+      # Backrest runtime state (oplog, jwt-secret, kvdb, tasklogs).
+      - backrest-data:/data
+      # Init-rendered config.json lives here. Backrest may rewrite the
+      # file in-place on UI edits; the next deploy's init container
+      # re-renders from the template, so any drift is erased — repo is
+      # the source of truth.
+      - backrest-config:/config
+      - backrest-cache:/cache
+      # rclone config rendered by init container. Mounted as a writable
+      # directory so rclone can persist refreshed OAuth tokens (a read-
+      # only single-file bind would prevent rclone's rename-based atomic
+      # write and trap it in a permanently-refreshing-in-memory state).
+      - backrest-rclone:/rclone
+      # Backrest backing up its own state — separate mount point so the
+      # backrest-state plan targets it explicitly via /userdata/backrest-state.
+      - backrest-data:/userdata/backrest-state:ro
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9898/ > /dev/null"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  # Backrest's own state (runtime data + restic cache + rendered configs).
+  # Small, latency sensitive, stay local per the post-phase-6 sizing rule.
+  backrest-data:
+  backrest-cache:
+  backrest-config:
+  backrest-rclone:
