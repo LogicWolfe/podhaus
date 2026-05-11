@@ -28,7 +28,13 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export OP_SERVICE_ACCOUNT_TOKEN="$(cat "$SCRIPT_DIR/OP_SERVICE_ACCOUNT_TOKEN")"
 
-exec op run --env-file=.env -- docker run --rm -it \
+# Allocate a TTY only when stdin is a terminal — keeps interactive
+# `terraform apply` working from a shell while still allowing the
+# runner to be invoked from CI / Bash automation that lacks a TTY.
+TTY_FLAGS=()
+[[ -t 0 && -t 1 ]] && TTY_FLAGS=("-it")
+
+exec op run --env-file=.env -- docker run --rm "${TTY_FLAGS[@]}" \
   --network dockernet \
   -v "$PWD:/workspace:z" \
   -w /workspace \

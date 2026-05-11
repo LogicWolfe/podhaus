@@ -1,0 +1,4 @@
+# Provider plugin cache — restored on `tf init`, not source-controlled.
+.terraform/
+# Crash log from rare terraform crashes — never check in.
+crash.log

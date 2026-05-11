@@ -41,6 +41,36 @@ The CF state is one object key inside that shared bucket
 (`cloudflare.tfstate`). Future TF-managed tools land alongside as
 sibling keys.
 
+## Progress (2026-05-11)
+
+| Item | Status |
+|---|---|
+| `cloudflare/` scaffold | ✓ `backend.tf`, `providers.tf`, `variables.tf`, `.env`, `.gitignore` |
+| `cloudflare_dns_record` import flow | ✓ proven via import blocks + `tf plan -generate-config-out` |
+| `pod.haus` DNS (26 records) | ✓ migrated, **zero drift**, cleaned up with `for_each` + `local.zones`/`local.tunnels` |
+| 10 remaining zones DNS | pending — see "Known quirks" below for SRV+URI |
+| 10 Access Apps + policies | pending |
+| Rulesets / Cache Rules / Transform Rules | pending |
+| Zone settings | pending |
+| Komodo webhook Bypass Access App | pending |
+| Paperless iOS service-token Access App | pending |
+| Retire DNSControl `dns/` directory | pending |
+
+## Known quirks (provider v5)
+
+Discovered during the pod.haus migration:
+
+- **SRV and URI records** use the `data { … }` attribute, not `content`.
+  `tf plan -generate-config-out` emits both and the generated HCL fails
+  validation with "Attribute 'data' cannot be specified when 'content'
+  is specified". Hand-write these from the CF API's `data` payload:
+  see `cloudflare/README.md` for the SRV resource shape. Affects:
+  - `nathanbaxter.com` SRV records (caldav, carddav, imap, pop3, submission)
+  - `nathanbaxter.net` and `nathanbaxter.org` URI redirects
+- **`comment` field** sometimes appears in CF on records that
+  DNSControl never set (e.g. Postmark DKIM). Preserve it in HCL rather
+  than dropping it, or `tf plan` shows a one-line drift.
+
 ## DNS migration
 
 DNSControl → Terraform in the same pass. Single unified tool for all
