@@ -25,21 +25,21 @@ considered:
 Accepted #3. cf-access-sync is now historical thinking; decide its
 disposition at the end of this work (probably archive on GitHub).
 
-## State storage
+## Foundation prerequisite
 
-Local file on bilby at `/var/lib/terraform-state/`, captured by the
-existing Backrest nightly pipeline (same pattern as every other
-bilby-local stack state). **No R2, no Terraform Cloud, no 1P-custom-
-wrapper.** The backup+restic+rclone pipeline already proven in earlier
-phases is the durability mechanism.
+State storage and the `tf` runner are spun up separately in
+[Terraform foundation](terraform-setup.md) — a MinIO stack on
+bilby plus a `./tf` wrapper that joins dockernet. That plan must
+land first; the rest of this page assumes:
 
-## Execution runtime
+- A `terraform-state` bucket in MinIO with versioning enabled.
+- A `MinIO Terraform User` 1P item for the S3 backend credentials.
+- A `./tf` runner that injects `AWS_*` and `CLOUDFLARE_API_TOKEN`
+  via `op run`.
 
-Terraform via Docker, same shape as DNSControl
-(`dns-push` / `dns-preview` are 9-line bash wrappers around
-`docker run ghcr.io/stackexchange/dnscontrol`). New wrappers:
-`cf-plan` / `cf-apply` (or similar naming) around
-`hashicorp/terraform:latest`.
+The CF state is one object key inside that shared bucket
+(`cloudflare.tfstate`). Future TF-managed tools land alongside as
+sibling keys.
 
 ## DNS migration
 
@@ -49,11 +49,13 @@ no urgency.
 
 ## Steps (in order)
 
-1. **Decide final naming for the Terraform setup directory** — likely
-   `cloudflare/` at repo root (matches `dns/`, `cloudflare-tunnel/`).
-   Contains `.tf` files, `terraform.tfstate` symlink or equivalent
-   pointing at `/var/lib/terraform-state/cloudflare.tfstate`, a
-   `README.md`.
+Assumes [Terraform foundation](terraform-setup.md) has landed.
+
+1. **Lay out `cloudflare/` at the repo root** (sibling to `dns/`,
+   `cloudflare-tunnel/`). Contains `.tf` files plus a `backend.tf`
+   pointing at `key = "cloudflare.tfstate"` in the shared MinIO
+   `terraform-state` bucket. No state file in the repo — that lives
+   in MinIO.
 2. **Scope the Cloudflare API token** — check whether the existing
    `op://Homelab/Cloudflare API Token/credential` has all the
    Terraform-required scopes (Zone DNS Read/Write, Access Apps/Policies
@@ -75,27 +77,15 @@ no urgency.
 4. **Clean up the generated HCL** — cf-terraforming output is correct
    but often clunky. Organize by resource type into separate `.tf`
    files.
-5. **Set up state file + Backrest plan**:
-   - Create `/var/lib/terraform-state/` with correct ownership.
-   - Add bind mount entry in `backup/compose.shared.yaml`:
-     `/var/lib/terraform-state:/userdata/terraform-state:ro`.
-   - Add plan in `backup/bilby/config.json.tmpl`: `terraform-state`
-     plan, 04:00 AWST or co-schedule with an existing one,
-     `14 daily + 4 weekly + 6 monthly` retention.
-   - Komodo redeploy, trigger first snapshot manually, verify it
-     lands on Jump + OneDrive.
-6. **Write the runner wrappers** — `cf-plan` (equivalent to
-   `dns-preview`) and `cf-apply` (equivalent to `dns-push`). Load the
-   CF token from 1P via `op run`, mount state directory, invoke
-   `hashicorp/terraform:latest`.
-7. **Run `terraform plan`** against the imported HCL — verify zero
-   drift from the current live account (this is the proof that the
-   import worked).
-8. **Add the new Access Application for the Komodo webhook bypass**
+5. **`op run -- ./tf init`** against the imported HCL — first init
+   creates the `cloudflare.tfstate` object in the MinIO bucket.
+6. **`op run -- ./tf plan`** — verify zero drift from the current
+   live account (this is the proof that the import worked).
+7. **Add the new Access Application for the Komodo webhook bypass**
    (the immediate Railway-migrations driver). Scoped to exactly
    `komodo.pod.haus/<komodo-webhook-path>`, Bypass policy, HMAC
-   validated on Komodo's end. `terraform plan && terraform apply`.
-9. **Add a scoped Access Application for `paperless.pod.haus` with a
+   validated on Komodo's end. `./tf plan && ./tf apply`.
+8. **Add a scoped Access Application for `paperless.pod.haus` with a
    service-token bypass** so the Swift Paperless iOS app can
    authenticate with `CF-Access-Client-Id` / `CF-Access-Client-Secret`
    headers instead of interactive login. Why scoped-not-wildcard: a
@@ -110,25 +100,21 @@ no urgency.
    2) matching the same "Family allow" group as the wildcard so
    browser access still works. Then paste both headers into Swift
    Paperless → Settings → connection → Extra Headers.
-10. **Migrate DNS from DNSControl**:
-    - Import current zones (already done in the cf-terraforming sweep
-      above).
-    - Resolve any differences between DNSControl's declarative shape
-      and the HCL output.
-    - Confirm `terraform plan` shows zero drift once the HCL matches
-      reality.
-    - Run for a week in parallel (both tools can "plan" against the
-      account; neither can write simultaneously — apply only via
-      Terraform after this point).
-    - Retire `dns-preview` / `dns-push` scripts and the `dns/`
-      directory once confident.
-    - Delete the DNSControl-specific `.env` and `creds.json` files
-      from 1P and repo.
-11. **Restore drill for terraform state** — delete
-    `/var/lib/terraform-state/cloudflare.tfstate` locally, restore
-    from Backrest snapshot, confirm `terraform plan` still shows
-    clean. Same cadence as the Plex restore drill.
-12. **Decide fate of `LogicWolfe/cf-access-sync` repo** — archive on
+9. **Migrate DNS from DNSControl**:
+   - Import current zones (already done in the cf-terraforming sweep
+     above).
+   - Resolve any differences between DNSControl's declarative shape
+     and the HCL output.
+   - Confirm `./tf plan` shows zero drift once the HCL matches
+     reality.
+   - Run for a week in parallel (both tools can "plan" against the
+     account; neither can write simultaneously — apply only via
+     Terraform after this point).
+   - Retire `dns-preview` / `dns-push` scripts and the `dns/`
+     directory once confident.
+   - Delete the DNSControl-specific `.env` and `creds.json` files
+     from 1P and repo.
+10. **Decide fate of `LogicWolfe/cf-access-sync` repo** — archive on
     GitHub (read-only, with README note pointing to the Terraform
     approach as the actual path), delete outright, or keep as
     "documented thinking" for anyone who wants a reference.

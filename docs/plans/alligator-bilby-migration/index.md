@@ -35,23 +35,26 @@ documentation overhaul.
 
 ## Remaining work
 
-Six independent streams. Ordered loosely by priority (#3 blocks #4):
+Six streams. #3 → #4 → #5 is the only hard dependency chain; everything
+else is independent.
 
-1. [**Syncthing peer re-pairing**](syncthing-peer-repairing.md) — pair
-   phone, laptop, and other peers with kangaroo's fresh device ID after
-   the Phase 16 relocation. ~2 min per peer in the Syncthing UI.
-2. [**Periphery v2 keypair auth**](periphery-v2-auth.md) — migrate
+1. [**Periphery v2 keypair auth**](periphery-v2-auth.md) — migrate
    bilby's + kangaroo's Periphery agents off the legacy
    `KOMODO_PASSKEY` shared-secret model onto v2 noise-handshake keypair
    auth. Single-purpose change, single revert path.
-3. [**Paperless stabilization**](paperless-stabilization.md) — close
+2. [**Paperless stabilization**](paperless-stabilization.md) — close
    out the OneNote bulk-import work: `unknown` bucket review, delete
    stale `$value` files from the export tree, hard-delete Paperless
    Trash, commit the final sidecar DB.
+3. [**Terraform foundation**](terraform-setup.md) — stand up a
+   single-node MinIO stack on bilby and a `tf` runner wrapper so any
+   future Terraform work has a state backend with native locking and a
+   Backrest plan. Prerequisite for #4.
 4. [**Cloudflare as Terraform**](cloudflare-terraform.md) — replace
    DNSControl + the planned cf-access-sync tool with a single Terraform
    surface covering Access, DNS, Rulesets, Transform Rules, Cache
-   Rules. Blocks the Railway-migrations webhook-bypass work below.
+   Rules. Consumes #3's state backend; unblocks the Railway-migrations
+   webhook-bypass work below.
 5. [**Railway migrations**](railway-migrations.md) — bring doggos
    (kid's static site) and yiayia (board app) home from Railway. Needs
    the Terraform Access Application from #4 for the Komodo webhook

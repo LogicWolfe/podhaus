@@ -187,7 +187,9 @@ Two-server Komodo topology live:
 - **Syncthing** moved off bilby (where it had been a host process) to
   a Komodo-managed stack on kangaroo. New device ID
   `J7Z7LNA-…-DCXTEQD`. Tunnel ingress flipped from
-  `172.18.0.1:8384` → `10.0.0.25:8384`.
+  `172.18.0.1:8384` → `10.0.0.25:8384`. **Peers re-paired against the
+  new device ID 2026-05-11**, all shared folders reached
+  "Up to Date".
 - **`kangaroo/backrest`** — separate restic repo at
   `/share/CACHEDEV2_DATA/Jump/backups-kangaroo`. Off-site OneDrive
   sync hooked into bilby's existing rclone pipeline via a read-only
