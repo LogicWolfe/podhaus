@@ -13,6 +13,10 @@ file_paths = ["compose.yaml", "../compose.shared.yaml"]
 # `build:` directive. run_build = true tells Komodo to run `docker compose
 # build` before `up`.
 run_build = true
+# `backrest-init` is a one-shot init container — it renders config.json
+# (and rclone.conf if absent) then exits 0. Without this exclusion Komodo
+# would count its exited state and mark the whole stack Unhealthy.
+ignore_services = ["backrest-init"]
 
 # Per-host environment block. Each variable here is exposed to the
 # compose project's `.env` file at deploy time. The CONTRACT — variable

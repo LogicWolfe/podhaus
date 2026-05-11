@@ -9,8 +9,12 @@ server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/plex"
 # init-tools image built inline by the plex-preferences-init service.
-# See backup/stack.toml for the same pattern.
+# See backup/bilby/stack.toml for the same pattern.
 run_build = true
+# `plex-preferences-init` is a one-shot init container — it renders
+# Preferences.xml then exits 0. Without this exclusion Komodo would
+# count its exited state and mark the whole stack Unhealthy.
+ignore_services = ["plex-preferences-init"]
 
 environment = """
 TZ=[[TZ]]

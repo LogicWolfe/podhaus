@@ -12,6 +12,8 @@ file_paths = ["compose.yaml", "../compose.shared.yaml"]
 # init-tools image built inline by the backrest-init service via `build:`.
 # See backup/bilby/stack.toml for the same pattern on bilby.
 run_build = true
+# `backrest-init` is a one-shot init container — see backup/bilby/stack.toml.
+ignore_services = ["backrest-init"]
 
 # Per-host environment block. Variable NAMES match bilby's stack.toml
 # (the contract shared with backup/compose.shared.yaml). VALUES differ:
