@@ -49,6 +49,61 @@
         <a href="/stack-conventions.html#selinux">Stack conventions</a>.
       </aside>
 
+      <h3 id="bilby-cli-tools">Host CLI tools</h3>
+      <p>
+        For ad-hoc debugging and one-shot administration of containerized services, install
+        the service's client CLI on bilby rather than spinning up a throwaway container or
+        <code>docker exec</code>-ing into the running stack. Host-installed clients
+        give you tab completion, persistent history, scriptable composition, and don't
+        depend on whether the target container has the right tooling shipped inside.
+      </p>
+      <p>
+        The container approach still wins for two narrow cases: (a) one-time bootstrap of a
+        stack you don't expect to interact with again, and (b) reaching a service whose
+        protocol isn't routable from the host (rare — most run on <code>dockernet</code>,
+        reachable from the host via the bridge gateway at <code>172.18.0.1</code>).
+        Everything else: install locally.
+      </p>
+      <p>
+        Currently installed:
+      </p>
+      <table>
+        <thead><tr><th>Tool</th><th>For</th><th>Install source</th></tr></thead>
+        <tbody>
+          <tr><td><code>sqlite3</code></td><td>Plex / Paperless / Komodo SQLite databases</td><td><code>dnf</code> (<code>sqlite</code> package)</td></tr>
+          <tr><td><code>restic</code></td><td>Backrest repository inspection, manual restores</td><td><code>dnf</code></td></tr>
+          <tr><td><code>rclone</code></td><td>OneDrive off-site sync verification</td><td><code>dnf</code></td></tr>
+          <tr><td><code>op</code></td><td>1Password CLI — secret reads, item edits</td><td><code>dnf</code> (1P upstream repo)</td></tr>
+          <tr><td><code>gh</code></td><td>GitHub PR / issue interaction</td><td><code>dnf</code></td></tr>
+          <tr><td><code>jq</code></td><td>JSON munging (Komodo API, mc output, etc.)</td><td><code>dnf</code></td></tr>
+          <tr><td><code>mcli</code></td><td>MinIO admin (buckets, users, policies) — see <a href="/plans/plan-viewer.html?file=alligator-bilby-migration/terraform-setup.md">Terraform foundation</a></td><td><code>sudo dnf install https://dl.min.io/client/mc/release/linux-arm64/mc.rpm</code> — RPM-tracked, upstream-signed releases</td></tr>
+          <tr><td><code>railway</code></td><td>Railway CLI for the doggos + yiayia migrations</td><td>Upstream installer, lives in <code>~/.local/bin/</code></td></tr>
+          <tr><td><code>zellij</code></td><td>Terminal multiplexer (user preference)</td><td>Cargo / upstream</td></tr>
+        </tbody>
+      </table>
+      <aside class="callout note">
+        <span class="callout-title">mc vs mcli</span>
+        Fedora's MinIO RPM ships the binary as <code>mcli</code> to avoid colliding with
+        the Midnight Commander package, which also installs <code>/usr/bin/mc</code>.
+        Upstream MinIO docs uniformly use <code>mc</code>; mentally substitute when
+        copy-pasting. The Docker image <code>minio/mc:latest</code> still uses the
+        <code>mc</code> binary name internally.
+      </aside>
+      <p>
+        Candidates that aren't installed yet but probably should be:
+      </p>
+      <ul>
+        <li><code>psql</code> (<code>postgresql</code> package) — Paperless / Komodo /
+          FerretDB postgres debugging.</li>
+        <li><code>yq</code> — YAML munging for compose files and Gatus config.</li>
+      </ul>
+      <p>
+        This list isn't reproducible-install-script-backed yet — see the
+        <a href="/plans/plan-viewer.html?file=alligator-bilby-migration/deferred-followups.md">
+        bilby host-package runbook</a> follow-up. Until that lands, treat this section as
+        the canonical list; add a row when you install a new tool.
+      </p>
+
       <h2 id="kangaroo">kangaroo</h2>
       <p>
         QNAP NAS, AMD GX-420MC, 16 GB RAM, QTS 5.x with Container Station, ext4. Secondary host.

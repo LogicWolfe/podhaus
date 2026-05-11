@@ -23,6 +23,7 @@ D("pod.haus!cloudflare", REG_NONE, DnsProvider(DSP_CF),
     CNAME("kangaroo-backup", TUNNEL, CF_PROXY_ON),  // backrest UI on kangaroo
     CNAME("komodo",           TUNNEL, CF_PROXY_ON),
     CNAME("logs",             TUNNEL, CF_PROXY_ON),  // victoria-logs vmui (primary log UI)
+    CNAME("minio",            TUNNEL, CF_PROXY_ON),  // minio console (s3 API stays dockernet-internal)
     CNAME("paperless",        TUNNEL, CF_PROXY_ON),
     CNAME("plex",             TUNNEL, CF_PROXY_ON),
     CNAME("sync",             TUNNEL, CF_PROXY_ON),

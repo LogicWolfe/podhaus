@@ -6,6 +6,26 @@ lands. This is the prerequisite for
 else we end up codifying with TF later (Railway-side resources during
 shutdown, GitHub Apps, etc.).
 
+## Repo state (2026-05-11)
+
+In-repo artifacts have landed; what's left is the manual one-shots that
+need 1P, a running MinIO, and DNS push authorization.
+
+| Step | Status |
+|---|---|
+| `minio/{compose.yaml, stack.toml}` | ✓ in repo |
+| Backrest `minio` plan + `/var/lib/minio` bind | ✓ in repo (`backup/bilby/`) |
+| `minio.pod.haus` tunnel ingress | ✓ in repo (`cloudflare-tunnel/conf/config.yml`) |
+| `minio` DNS CNAME | ✓ in repo (`dns/dnsconfig.js`) — needs `./dns-push` |
+| `./tf` runner script | ✓ in repo |
+| `mcli` installed on bilby | ✓ via upstream RPM (see [Hosts](/hosts.html#bilby-cli-tools)) |
+| Create `op://Homelab/MinIO Root` 1P item | pending user |
+| `./komodo-sync` + deploy MinIO | pending user |
+| `mkdir /var/lib/minio` on bilby | pending user (Komodo will stub one if absent) |
+| Create `terraform-state` bucket via `mcli` | pending user, after deploy |
+| Create `MinIO Terraform User` 1P item + MinIO user | pending user, after deploy |
+| Smoke test + restore drill | pending user |
+
 The earlier draft of the CF plan said "local file at
 `/var/lib/terraform-state/`". That works but gives up two things we'll
 want sooner than expected: state locking, and a generic object-storage
@@ -47,8 +67,10 @@ Compose shape:
   build needed.
 - Command: `server /data --console-address :9001`.
 - Bind: `/var/lib/minio:/data` (absolute host path per the hard rules).
-- Network: `dockernet`. **No published ports** — TF runner joins
-  dockernet too.
+- Network: `dockernet`. **API port 9000 published on loopback only**
+  (`127.0.0.1:9000:9000`) so bilby's host-installed `mcli` can reach
+  it; console port stays internal and reaches users through the
+  Cloudflare tunnel.
 - Healthcheck: `curl -fSs http://localhost:9000/minio/health/live`.
 - Env from Komodo Variables:
   - `MINIO_ROOT_USER=[[OP__KOMODO__MINIO_ROOT__USERNAME]]`
@@ -78,27 +100,47 @@ policy — no new Access app needed.
 
 ## Bucket and user layout
 
-One-shot bootstrap via the `mc` CLI run from a temporary container
-attached to dockernet:
+MinIO Client is installed locally on bilby as `mcli` — the binary lives
+at `/usr/local/bin/mcli` from the upstream RPM
+(`sudo dnf install https://dl.min.io/client/mc/release/linux-arm64/mc.rpm`).
+The Fedora package is named `mcli` to avoid colliding with Midnight
+Commander. Upstream MinIO docs uniformly say `mc`; mentally substitute.
+See [Hosts](/hosts.html#bilby-cli-tools) for the broader local-CLI
+pattern.
+
+One-shot bootstrap via bilby's local `mcli` against the loopback-only
+API port:
 
 ```sh
-docker run --rm --network dockernet \
-  -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@minio:9000 \
-  minio/mc:latest mb --with-versioning local/terraform-state
+op run --env-file=<(echo "
+MINIO_ROOT_USER=op://Homelab/MinIO Root/username
+MINIO_ROOT_PASSWORD=op://Homelab/MinIO Root/credential
+") -- bash -c '
+  mcli alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" &&
+  mcli mb --with-versioning local/terraform-state &&
+  mcli admin user add local terraform "$(openssl rand -base64 30)" &&
+  mcli admin policy attach local readwrite --user terraform
+'
 ```
+
+`mcli admin user add` prints the generated secret — capture it and
+store it in 1P as `op://Homelab/MinIO Terraform User` immediately,
+before it scrolls out of view.
 
 - **Bucket**: `terraform-state` with **versioning enabled** so an
   accidental `terraform destroy` leaves the previous state version
   recoverable.
 - **Object key per tool**: `cloudflare.tfstate`, room for
   `railway.tfstate` etc. later.
-- **Dedicated TF user** (don't use root): `mc admin user add local
+- **Dedicated TF user** (don't use root): `mcli admin user add local
   terraform <generated-secret>` plus a `readwrite` policy scoped to
   `arn:aws:s3:::terraform-state/*`. Save credentials to
   `op://Homelab/MinIO Terraform User`.
 
 Root credentials are for stack management only. Day-to-day TF runs use
-the policy-bound user.
+the policy-bound user. The console UI at `minio.pod.haus` is the
+hands-on path for ad-hoc browsing; `mcli` against `127.0.0.1:9000` is
+the scriptable one.
 
 ## Backend config
 

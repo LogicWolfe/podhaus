@@ -184,6 +184,24 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "minio",
+      "repo": "podhaus",
+      "paths": ["/userdata/minio"],
+      "schedule": {
+        "cron": "15 5 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "backrest-state",
       "repo": "podhaus",
       "paths": ["/userdata/backrest-state"],

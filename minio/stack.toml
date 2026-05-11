@@ -1,0 +1,16 @@
+[[stack]]
+name = "minio"
+description = "Single-node S3-compatible object storage — Terraform state backend + future blob/object storage tenants"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/minio"
+
+environment = """
+TZ=[[TZ]]
+MINIO_ROOT_USER=[[OP__KOMODO__MINIO_ROOT__USERNAME]]
+MINIO_ROOT_PASSWORD=[[OP__KOMODO__MINIO_ROOT__CREDENTIAL]]
+"""

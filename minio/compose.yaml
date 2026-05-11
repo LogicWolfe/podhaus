@@ -1,0 +1,50 @@
+services:
+  minio:
+    container_name: minio
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    # Single-node mode. `--console-address :9001` separates the admin UI
+    # port (9001) from the S3 API port (9000) so the cloudflare tunnel
+    # ingress can target just the console while internal services keep
+    # using the API at `http://minio:9000`.
+    command: server /data --console-address :9001
+    # SELinux on Fedora Asahi denies cross-label access into the
+    # bind-mounted data dir; same pattern as every other bilby stack.
+    security_opt:
+      - label:disable
+    environment:
+      TZ: ${TZ}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Tells the console to use the tunnel hostname when issuing OAuth
+      # redirects so links from the UI stay valid behind Cloudflare
+      # Access. Harmless if the console isn't exposed.
+      MINIO_BROWSER_REDIRECT_URL: https://minio.pod.haus
+    volumes:
+      # Local NVMe per the storage-tier rule — terraform state is tiny,
+      # hot, and backed up nightly by Backrest. Absolute host path so
+      # there's no relative-resolution-against-periphery surprise.
+      - /var/lib/minio:/data
+    networks:
+      - dockernet
+    # API published on loopback only so bilby's host-installed `mcli`
+    # can reach it (see hosts.html#bilby-cli-tools). Containers continue
+    # to use `http://minio:9000` over dockernet; the console comes in
+    # via the cloudflare tunnel. Loopback binding keeps MinIO entirely
+    # off the host LAN — only processes on bilby itself can hit it.
+    ports:
+      - 127.0.0.1:9000:9000
+    labels:
+      autoheal: "true"
+    healthcheck:
+      # MinIO ships curl in the official image; the /minio/health/live
+      # endpoint returns 200 once the server is accepting requests.
+      test: ["CMD-SHELL", "curl -fSs http://localhost:9000/minio/health/live || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  dockernet:
+    external: true
