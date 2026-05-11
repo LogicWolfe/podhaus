@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Service runbooks">
+  <meta name="doc-order" content="3">
+  <title>Paperless — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Paperless</h1>
+      <p class="lead text-lg text-text-muted">
+        Paperless-ngx + Postgres + Redis + Tika + Gotenberg. Bilby-resident, dockernet-only
+        access. ~1,120 documents from a one-time OneNote import; ongoing intake is email +
+        scanner via Paperless's consume folder. Reachable externally at
+        <code>paperless.pod.haus</code>.
+      </p>
+
+      <h2 id="stack-shape">Stack shape</h2>
+      <p>Five containers in <code>paperless/compose.yaml</code>:</p>
+      <ul>
+        <li><code>paperless-postgres</code> — Postgres 16, pgdata at
+          <code>/var/lib/paperless-pgdata</code> (local NVMe).</li>
+        <li><code>paperless-redis</code> — for Celery task queue.</li>
+        <li><code>paperless-tika</code> — text extraction. Distroless image, no healthcheck
+          (Tika has no shell/curl); liveness comes via Paperless's own logs.</li>
+        <li><code>paperless-gotenberg</code> — PDF rendering for office docs and emails.</li>
+        <li><code>paperless</code> — the webserver. Data at <code>/var/lib/paperless-data</code>
+          (search index, classifiers); documents at <code>/mnt/pouch/Paperless</code>.</li>
+      </ul>
+
+      <h2 id="access">Access model</h2>
+      <p>
+        Paperless is reachable two ways:
+      </p>
+      <ul>
+        <li>Externally at <code>https://paperless.pod.haus</code>, gated by the wildcard
+          Cloudflare Access app (Family group).</li>
+        <li>Internally on the dockernet bridge at <code>http://paperless:8000</code>. The
+          container's <code>PAPERLESS_ALLOWED_HOSTS=paperless.pod.haus</code> requires the
+          <code>Host:</code> header to match.</li>
+      </ul>
+      <aside class="callout note">
+        <span class="callout-title">Script-side note</span>
+        Migration / import scripts run in throwaway <code>python:3.13-slim</code> containers
+        attached to dockernet, hit <code>http://paperless:8000</code> with an explicit
+        <code>Host: paperless.pod.haus</code> header. Going via the public URL would 403 on
+        Cloudflare Access — anything that follows Paperless's own pagination
+        <code>next</code> URLs must walk pagination by explicit page number instead.
+      </aside>
+
+      <h2 id="paperless-state">Paperless state at a glance</h2>
+      <ul>
+        <li><strong>~1,120 documents</strong> across 3 import batches (OneNote main +
+          extracted ZIPs + Ghostscript-repaired PDFs).</li>
+        <li><strong>149 linked canonical-page groups</strong>, 88 sibling edges via Paperless's
+          <code>document_link</code> custom field.</li>
+        <li><strong>10 custom fields</strong>: <code>onenote_page_id</code>,
+          <code>onenote_canonical_page_id</code>, <code>onenote_page_ids_all</code>,
+          <code>onenote_resource_id</code>, <code>onenote_asset_kind</code>,
+          <code>content_sha256</code>, <code>import_batch</code>,
+          <code>import_heuristic_version</code>, <code>archive_source</code>,
+          <code>related_docs</code> (documentlink).</li>
+        <li><strong>~121 tags</strong> materialized. Content tags MATCH_AUTO except
+          <code>unknown</code> (MATCH_NONE — fallback bucket).</li>
+        <li>Default sort: by <code>created</code> (OneNote page frontmatter, spans 2011-2026).
+          <code>modified</code> never set by import (Evernote → OneNote collapsed 96% of
+          modifieds to 2024-01-07 — useless signal).</li>
+      </ul>
+
+      <h2 id="import-tooling">Migration / import tooling</h2>
+      <p>
+        Lives in <code>paperless/</code> at repo root. Kept in place for re-runs and as
+        reference; not deployed.
+      </p>
+      <table>
+        <thead><tr><th>Script</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>paperless-tag-audit</code></td><td>Walks the OneNote export, classifies assets (PDF / md / image / other), computes sha256 fingerprints, picks canonicals per fingerprint group, emits sidecar SQLite + <code>paperless-tag-audit.yaml</code>.</td></tr>
+          <tr><td><code>paperless-diff-plan.py</code></td><td>Renders the current curation plan as human-readable Markdown showing what tags each page would get, grouped by tag.</td></tr>
+          <tr><td><code>paperless-import</code></td><td>Reads the curation YAML + audit sidecar, uploads to Paperless. Idempotent resume via sidecar's <code>uploads</code> table. Handles sha-dedup, DPI pre-processing.</td></tr>
+          <tr><td><code>paperless-extract-zips</code></td><td>Walks zip archives, uploads each file with parent-page tags; for all-image zips with ≥3 files, generates a lossless <code>img2pdf</code> contact-sheet PDF.</td></tr>
+          <tr><td><code>paperless-crosslink</code></td><td>Groups uploaded docs by canonical-page-id via the sidecar's <code>uploads</code> table; sets <code>related_docs</code> on the primary; Paperless auto-reverses links.</td></tr>
+          <tr><td><code>paperless-repair-pdfs</code></td><td>Pre-processes malformed PDFs through Ghostscript <code>pdfwrite</code> before upload — used for 4 PDFs Paperless's OCR pipeline rejected.</td></tr>
+          <tr><td><code>paperless-wipe</code></td><td>Reverses any batch via Paperless bulk-edit API (soft-delete, 30-day Trash recovery).</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="known-quirks">Known quirks</h2>
+      <aside class="callout warn">
+        <span class="callout-title"><code>onenote_page_ids_all</code> truncation</span>
+        Paperless string custom fields cap at 128 chars. Initial bulk import hit 133 PATCH
+        failures from this. Import script now truncates to fit; the truncation is in the
+        sidecar but not in Paperless if you re-upload via a different path.
+      </aside>
+      <aside class="callout warn">
+        <span class="callout-title">Tika is distroless</span>
+        Same shape as cloudflare-tunnel — image ships no shell. Healthcheck dropped. Tika
+        liveness is observed via the paperless container's logs (it complains loudly on Tika
+        failures).
+      </aside>
+
+      <h2 id="storage-relocation">Pending decision: relocating storage</h2>
+      <p>
+        Currently Paperless's document directory is on <code>/mnt/pouch/Paperless/</code>
+        (Pouch HDD). Paperless's access pattern (small documents, frequent random reads on UI,
+        OCR-heavy on imports) probably fits Jump's "durable + IOPS" bucket better. Decision
+        deferred — needs a capacity check, migration plan for pgdata + paperless-data + the
+        documents dir, and a downtime window.
+      </p>
+
+      <h2 id="see-also">See also</h2>
+      <ul>
+        <li><a href="/plans/index.html">Plans</a> — the migration plan covers Phase 10 (bulk
+          import) in detail including the curation YAML structure.</li>
+        <li><code>~/repos/podhaus-migration-state/paperless-imports.sqlite</code> (off-repo
+          sidecar) — authoritative record of what was imported.</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Service runbooks">
+  <meta name="doc-order" content="2">
+  <title>Plex maintenance log — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Plex maintenance log — 2026-04-12/13</h1>
+      <p class="lead text-lg text-text-muted">
+        Historical record of the Plex DB rescue that drove the Phase 6 architecture pivot
+        (NFS → local NVMe for state). Preserved because the perf numbers and the
+        <code>statistics_bandwidth</code> finding still inform current monthly maintenance.
+      </p>
+
+      <h2 id="background">Background</h2>
+      <p>
+        Plex was running on bilby with a 44 GB SQLite database on NFS at
+        <code>10.0.0.25:/Jump/plex</code>. Client-visible 30-60 s stalls during browsing.
+        Multiple issues uncovered in a single overnight session:
+      </p>
+      <ul>
+        <li>Wrong host timezone (America/New_York → fixed to Australia/Perth) caused butler to
+          run during peak hours.</li>
+        <li>Butler + on-the-fly theme track analysis caused cascading SQLite write-lock storms.</li>
+        <li>Theme music DB records missing for many shows — files on disk since 2022 but DB
+          didn't reference them.</li>
+        <li>Plex had crashed earlier in the day (autoheal SIGTERM during a long DB op),
+          recovered 872 WAL frames.</li>
+      </ul>
+
+      <h2 id="plan">The plan</h2>
+      <p>
+        Create three side-by-side copies from the original (original at
+        <code>/Jump/plex</code> never touched), then benchmark.
+      </p>
+      <table>
+        <thead><tr><th>Copy</th><th>DB location</th><th>Metadata</th><th>DB fix</th><th>Metadata fix</th></tr></thead>
+        <tbody>
+          <tr><td><strong>local-db</strong></td><td>Local NVMe (<code>/var/lib/plex-local</code>)</td><td>NFS (<code>/Jump/plex-local-meta</code>), freshly regenerated</td><td>VACUUM + REINDEX</td><td>Force refresh all libraries</td></tr>
+          <tr><td><strong>sync</strong></td><td>NFS (<code>/Jump/plex-sync</code>)</td><td>NFS (kept from original)</td><td>VACUUM + REINDEX</td><td>RefreshLocalMedia + scan + analyze</td></tr>
+          <tr><td><strong>clean</strong></td><td>NFS (<code>/Jump/plex-clean</code>)</td><td>NFS (wiped + re-downloaded)</td><td>VACUUM + REINDEX</td><td>Force refresh all libraries</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="results">Comparative results (idle, after restart)</h2>
+      <table>
+        <thead><tr><th>Test</th><th>local-db (NVMe)</th><th>sync (NFS)</th><th>clean (NFS, incomplete)</th></tr></thead>
+        <tbody>
+          <tr><td>Bluey theme</td><td><strong>7 ms</strong></td><td>41 ms</td><td>timeout</td></tr>
+          <tr><td>Fallout theme</td><td><strong>9 ms</strong></td><td>18 ms</td><td>timeout</td></tr>
+          <tr><td>Inspector Gadget theme</td><td><strong>78 ms</strong></td><td>471 ms</td><td>timeout</td></tr>
+          <tr><td>Bluey S2 metadata</td><td><strong>7 ms</strong></td><td>62 ms</td><td>16,400 ms</td></tr>
+          <tr><td>Kids TV hub</td><td><strong>158 ms</strong></td><td>624 ms</td><td>448 ms</td></tr>
+          <tr><td>Lock storms</td><td><strong>0</strong></td><td>0</td><td>0</td></tr>
+          <tr><td>On-the-fly analyses</td><td>0</td><td>1</td><td>4</td></tr>
+          <tr><td>Under write load</td><td><strong>stable</strong></td><td><strong>unresponsive</strong></td><td>not tested</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="vacuum">VACUUM saga</h2>
+      <p>
+        Plex's <code>OptimizeDatabase</code> on the original 47 GB DB ran for
+        <strong>7 hours 1 minute</strong> uninterrupted on the local-db copy — Phase 1
+        (temp DB build) ~12 min, Phase 2 (WAL fill, 0 → 46.41 GB) ~5 hours with rate declining
+        from 570 MB/min to 60 MB/min, Phase 3 (checkpoint replay) ~1 hour. Reclaimed a modest
+        3.8% (47.13 GB → 45.35 GB).
+      </p>
+      <aside class="callout warn">
+        <span class="callout-title">Why the first VACUUM attempt failed</span>
+        Initial VACUUM at 06:07 ran for 4.5 hours, then autoheal killed Plex at 10:35 because
+        the healthcheck timed out under the VACUUM DB lock pressure. Plex restart rolled back
+        the transaction, losing all 4.5 hours of work. Lesson: <strong>autoheal + long DB ops
+        is a bad combination</strong>. Belt-and-suspenders for v2: remove
+        <code>autoheal: "true"</code>, disable the Plex healthcheck entirely, stop the
+        autoheal container.
+      </aside>
+
+      <h2 id="statistics-bandwidth">The actual culprit: statistics_bandwidth</h2>
+      <p>
+        Investigation of why VACUUM only reclaimed 3.8% surfaced the real problem:
+      </p>
+      <pre><code>table                  rows
+statistics_bandwidth   796,867,521   ← 9.3 years of bandwidth tracking events
+taggings               401,005
+media_streams          130,346
+metadata_items         21,402</code></pre>
+      <p>
+        At ~70 bytes/row including indexes, this single table accounted for ~55 GB of the
+        47 GB DB. Plex's internal bandwidth tracking, used only for the Status → Statistics
+        chart in Plex Web. No UI to manage it.
+      </p>
+      <p>Cleanup, offline via Plex's bundled SQLite (handles the custom <code>icu_root</code> collation):</p>
+      <pre><code>BEGIN;
+CREATE TABLE statistics_bandwidth_new (...);  -- same schema
+INSERT INTO statistics_bandwidth_new
+    SELECT id, account_id, device_id, timespan, at, lan, bytes
+    FROM statistics_bandwidth
+    WHERE at &gt;= strftime('%s', 'now', '-30 days');
+DROP TABLE statistics_bandwidth;
+ALTER TABLE statistics_bandwidth_new RENAME TO statistics_bandwidth;
+CREATE INDEX index_statistics_bandwidth_on_at ON ...;
+CREATE INDEX index_statistics_bandwidth_on_account_id_and_timespan_and_at ON ...;
+COMMIT;</code></pre>
+      <p>
+        796,867,521 → 3,410 rows. Followup VACUUM completed in <strong>&lt; 60 seconds</strong>.
+      </p>
+
+      <h2 id="final-state">Final state</h2>
+      <table>
+        <thead>
+          <tr><th></th><th>Before</th><th>After VACUUM</th><th>After delete + VACUUM</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Library DB</td><td>47.13 GB</td><td>45.35 GB</td><td><strong>208 MB</strong></td></tr>
+          <tr><td>Total local-db dir</td><td>—</td><td>44 GB</td><td><strong>1.7 GB</strong></td></tr>
+          <tr><td>Reduction</td><td>—</td><td>3.8%</td><td><strong>99.6%</strong></td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="post-optimize">Post-optimize perf</h2>
+      <table>
+        <thead><tr><th>Test</th><th>Result</th><th>vs pre-optimize</th></tr></thead>
+        <tbody>
+          <tr><td>Bluey theme</td><td><strong>9 ms</strong></td><td>7 ms (≈)</td></tr>
+          <tr><td>Fallout theme</td><td><strong>7 ms</strong></td><td>9 ms (≈)</td></tr>
+          <tr><td>Inspector Gadget theme</td><td><strong>5 ms</strong></td><td>78 ms (-93%)</td></tr>
+          <tr><td>Bluey S2 metadata</td><td><strong>5 ms</strong></td><td>7 ms (≈)</td></tr>
+          <tr><td>Kids TV hub</td><td><strong>28 ms</strong></td><td>158 ms (-82%)</td></tr>
+          <tr><td>Lock storms</td><td><strong>0</strong></td><td>—</td></tr>
+          <tr><td>On-the-fly analyses</td><td><strong>0</strong></td><td>—</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="lessons">Lessons carried forward</h2>
+      <ul>
+        <li><strong>SQLite on NFS is fragile under write contention.</strong> Plex DB moved to
+          local NVMe permanently; "stateless bilby on NFS" replaced by "local state is the
+          default" — see <a href="/architecture.html#design-principles">Architecture →
+          design principles</a>.</li>
+        <li><strong>Plex has no stats pruning</strong> upstream — we own it. Monthly
+          <code>statistics_bandwidth</code> cleanup runs via ofelia on the 1st of each month.
+          See <a href="/runbooks/plex.html#maintenance">Plex → monthly stats cleanup</a>.</li>
+        <li><strong>Force refresh is destructive to user poster selections.</strong> Avoid
+          unless necessary; reset to defaults rather than running blanket refresh.</li>
+        <li><strong>Autoheal + long DB ops is a bad combination.</strong> Disable healthchecks
+          + autoheal before any planned multi-hour DB operation.</li>
+        <li><strong>Byte math beats <code>du -sh</code> math</strong> when chasing where the
+          GBs are — the <code>statistics_bandwidth</code> row count + byte estimate is what
+          actually located the bloat.</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

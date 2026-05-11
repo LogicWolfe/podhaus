@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Operations">
+  <meta name="doc-order" content="4">
+  <title>Disaster recovery — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Disaster recovery</h1>
+      <p class="lead text-lg text-text-muted">
+        Runbooks for rebuilding from nothing. The repo plus 1Password plus a working internet
+        connection should be enough to recover either host. Restic snapshots on Jump plus the
+        OneDrive off-site mirror are the data recovery surface.
+      </p>
+
+      <h2 id="prerequisites">Prerequisites</h2>
+      <p>Anyone executing one of these runbooks needs:</p>
+      <ul>
+        <li>A working 1Password vault with the Homelab vault access and the
+          <strong>Emergency Kit hardcopy</strong> (recovers Login).</li>
+        <li>A 1Password Service Account token at the repo root in a file named
+          <code>OP_SERVICE_ACCOUNT_TOKEN</code> — Komodo Connect uses this for the
+          chicken-and-egg first boot, before the Komodo Variable for it has been seeded into
+          Komodo itself.</li>
+        <li>SSH access to the target host (UniFi-managed, configured separately).</li>
+        <li>The restic-repo-password if restoring from OneDrive (in 1P).</li>
+      </ul>
+
+      <h2 id="bilby-rebuild">Fresh bilby from scratch</h2>
+      <p>Assumes bilby is bootable with a base Fedora Asahi install + Docker.</p>
+      <ol>
+        <li>Install <code>docker</code> + <code>docker compose</code>. Add user to the
+          <code>docker</code> group.</li>
+        <li>Install host packages we know we depend on: <code>op</code> (1Password CLI),
+          <code>git</code>, <code>restic</code> (for off-site restores), <code>rclone</code>,
+          <code>zellij</code>, <code>sqlite3</code>. (A canonical host-package runbook is a
+          deferred follow-up.)</li>
+        <li>Mount Jump and Pouch from kangaroo:
+          <pre><code>sudo mkdir -p /mnt/jump /mnt/pouch
+sudo mount -t nfs -o vers=4.1 10.0.0.25:/Jump  /mnt/jump
+sudo mount -t nfs -o vers=4.1 10.0.0.25:/Pouch /mnt/pouch</code></pre>
+        </li>
+        <li>Clone the repo, put the service-account token at the repo root:
+          <pre><code>git clone &lt;repo&gt; ~/repos/podhaus
+cd ~/repos/podhaus
+echo &lt;token&gt; &gt; OP_SERVICE_ACCOUNT_TOKEN
+chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
+        </li>
+        <li>Create the dockernet external bridge if it doesn't already exist:
+          <pre><code>docker network create --driver bridge --subnet 172.18.0.0/16 dockernet</code></pre>
+        </li>
+        <li>Run <code>./komodo-start</code>. This:
+          <ul>
+            <li>Brings up Komodo Core (Postgres, FerretDB, Core, Periphery).</li>
+            <li>Waits for Core to be healthy.</li>
+            <li>Seeds the seven chicken-and-egg variables (4 1P credentials, TZ, MEDIA_DIR,
+              PODHAUS_REPO).</li>
+            <li>Triggers the first ResourceSync.</li>
+          </ul>
+        </li>
+        <li>In the Komodo UI: confirm Servers list shows <code>podhaus</code> as healthy.
+          Deploy <code>onepassword</code> stack first — it brings up komodo-op which fills in
+          all the other variables.</li>
+        <li>Restore each stack's state from restic before deploying the stack. For each:
+          <pre><code>restic -r /mnt/jump/backups restore latest \
+  --target / --include /userdata/&lt;stack&gt;</code></pre>
+          (Adjust the include path so it lands at the right host location — the runbook here
+          is per-stack; cross-reference each <a href="/runbooks/plex.html">runbook</a>.)
+        </li>
+        <li>Deploy every stack from the Komodo UI in dependency order. The repo's
+          ResourceSync has already created the stack definitions.</li>
+        <li>Push DNS:
+          <code>./dns-push</code> (gives ingress hostnames their CNAMEs).</li>
+      </ol>
+      <aside class="callout warn">
+        <span class="callout-title">First-boot API-key dance</span>
+        <code>komodo-start</code> currently assumes a pre-existing
+        <code>"Komodo API OnePassword Sync"</code> item in 1P that matches the live Komodo
+        DB's keys. On a true fresh install the DB has no such key yet — you have to log into
+        Komodo UI once, mint an API key under your user, save it to that 1P item, then re-run
+        <code>komodo-start</code>. Folding this into the script as an automatic first-boot
+        path is a deferred follow-up.
+      </aside>
+
+      <h2 id="kangaroo-rebuild">Fresh kangaroo from scratch</h2>
+      <p>Assumes kangaroo is QTS-installed with Container Station available.</p>
+      <ol>
+        <li>From bilby, run <code>./kangaroo_bootstrap</code>. The script is idempotent and
+          handles:
+          <ul>
+            <li>SSH connectivity check.</li>
+            <li>Renders <code>.env</code> and <code>periphery.config.toml</code> from 1P, SCPs
+              them and the Periphery compose file to kangaroo.</li>
+            <li>SSHs into kangaroo and runs <code>docker compose up -d</code> in the destination
+              directory.</li>
+            <li>Waits for Periphery's <code>:8120</code> health endpoint.</li>
+            <li>Installs the <code>@reboot</code> crontab line at
+              <code>/etc/config/crontab</code> on kangaroo so it survives Container Station and
+              QTS upgrades.</li>
+            <li>Idempotently appends kangaroo's <code>[[server]]</code> entry to
+              <code>komodo/sync/servers.toml</code>.</li>
+          </ul>
+        </li>
+        <li>Run <code>./komodo-sync</code> — Komodo Core picks up the new Server and begins
+          polling. Verify kangaroo shows <code>state: Ok</code> in the Komodo UI.</li>
+        <li>If repos.toml + git_provider haven't already been declared (true on a true greenfield
+          rebuild), they're declared in <code>komodo/sync/repos.toml</code> and a
+          <code>[[git_provider]]</code> block in kangaroo's
+          <code>periphery.config.toml</code>. <code>kangaroo_bootstrap</code> writes the
+          provider config; the repo block is committed in the repo.</li>
+        <li>Deploy kangaroo's stacks (<code>syncthing</code>, <code>kangaroo/backrest</code>,
+          <code>kangaroo/autoheal</code>, <code>kangaroo/logging</code>) from the Komodo UI.</li>
+        <li>Restore kangaroo's state from
+          <code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo/</code> if state was lost.</li>
+      </ol>
+
+      <h2 id="offsite-restore">Restoring from OneDrive (worst case)</h2>
+      <p>
+        If both kangaroo and bilby state are gone (theft, fire), the off-site OneDrive mirror
+        is the recovery source.
+      </p>
+      <ol>
+        <li>On any machine with internet, install <code>rclone</code> and <code>restic</code>.</li>
+        <li>Re-do the rclone OneDrive OAuth dance (<code>rclone config</code>). Save the new
+          OAuth blob to 1P at <code>op://Homelab/rclone-onedrive-token/notesPlain</code>.</li>
+        <li>Pull both repos:
+          <pre><code>rclone sync onedrive:Backups/podhaus-restic           ./recovery/podhaus
+rclone sync onedrive:Backups/podhaus-kangaroo-restic  ./recovery/kangaroo</code></pre>
+        </li>
+        <li>Pull the restic password from 1P (Emergency Kit gets you in if 1P account access
+          is gone; the password lives at
+          <code>op://Homelab/restic-repo-password/credential</code>).</li>
+        <li>Browse and restore from each repo with regular restic commands:
+          <pre><code>restic -r ./recovery/podhaus snapshots
+restic -r ./recovery/podhaus restore latest --target ./out</code></pre>
+        </li>
+        <li>Stage the restored files on a fresh bilby/kangaroo and run the relevant
+          rebuild runbook above.</li>
+      </ol>
+      <aside class="callout caution">
+        <span class="callout-title">Emergency Kit note</span>
+        The 1P Emergency Kit hardcopy should carry a note that points at the
+        <code>restic-repo-password</code> item — without that password, the OneDrive copy is
+        useless.
+      </aside>
+
+      <h2 id="drill-cadence">Drill cadence</h2>
+      <p>
+        Quarterly: run a partial bilby restore (just one stack's state from a recent snapshot
+        to a scratch path; verify checksum). Annually: pull from OneDrive end-to-end on a
+        laptop — proves both the off-site copy and the password recovery path work.
+      </p>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

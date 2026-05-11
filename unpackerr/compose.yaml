@@ -10,7 +10,11 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      - ${PODHAUS_REPO}/unpackerr/unpackerr.conf:/config/unpackerr.conf:ro,z
+      # Directory bind (not file bind) — unpackerr reads its config at
+      # startup and on SIGHUP; a single-file bind would silently break
+      # post-edit reloads due to inode pinning. See
+      # docs/stack-conventions.html#bind-mounts.
+      - ${PODHAUS_REPO}/unpackerr/conf:/config:ro,z
       - ${MEDIA_DIR}:/data
     # SELinux enforcing on Fedora Asahi denies cross-label reads of the
     # bind-mounted config; same workaround used by logging/, grafana, etc.

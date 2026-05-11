@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Platform">
+  <meta name="doc-order" content="1">
+  <title>Komodo — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Komodo</h1>
+      <p class="lead text-lg text-text-muted">
+        Komodo is the orchestrator. One Core runs on bilby (with its own Periphery for the local
+        host). Kangaroo runs a second Periphery, registered to the same Core. Every stack is a
+        Docker Compose project plus a <code>stack.toml</code> file declaring server assignment
+        and environment.
+      </p>
+
+      <h2 id="components">Components</h2>
+      <p>
+        Komodo Core itself runs as four containers in the <code>komodo/</code> stack:
+      </p>
+      <ul>
+        <li><strong><code>komodo-core</code></strong> — the API + web UI on port 9120.</li>
+        <li><strong><code>komodo-periphery</code></strong> — bilby's local agent (the daemon Core
+          actually talks to in order to run <code>docker compose</code>).</li>
+        <li><strong><code>komodo-ferretdb</code></strong> — MongoDB-compatible API; Komodo's
+          metadata store.</li>
+        <li><strong><code>komodo-postgres</code></strong> — backing store for FerretDB.</li>
+      </ul>
+      <p>
+        Kangaroo runs its own <code>komodo-periphery</code> container — see
+        <a href="/hosts.html#kangaroo">Hosts → kangaroo</a>. Both Peripheries are registered as
+        Server resources in Komodo via <code>komodo/sync/servers.toml</code>.
+      </p>
+
+      <h2 id="operating-models">Two operating models</h2>
+      <p>
+        Each Periphery host picks one of two ways to read the repo. The current setup uses both:
+      </p>
+      <table>
+        <thead><tr><th></th><th>bilby</th><th>kangaroo</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Operating model</td>
+            <td><code>files_on_host = true</code></td>
+            <td>Linked Repo (<code>linked_repo = "podhaus"</code>)</td>
+          </tr>
+          <tr>
+            <td>How the repo gets there</td>
+            <td>Cloned manually + bind-mounted into Core and Periphery</td>
+            <td>Komodo clones via HTTPS + a GitHub PAT, stored at <code>/etc/komodo/repos/podhaus/</code></td>
+          </tr>
+          <tr>
+            <td>Deploy workflow</td>
+            <td>Save file → <code>./komodo-sync</code> → deploy stack in UI</td>
+            <td>Commit + push → webhook (or <code>CloneRepo</code>) → deploy stack in UI</td>
+          </tr>
+          <tr>
+            <td>Best for</td>
+            <td>Active development on the primary host</td>
+            <td>Remote hosts where the source of truth must be the git remote</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        New deploy-target hosts (e.g. pinelake) should use Linked Repo — same shape as
+        kangaroo. Bilby stays on files_on_host because tight save-and-deploy beats the
+        commit-roundtrip when the editor is on the same host.
+      </p>
+
+      <h2 id="stack-toml">stack.toml structure</h2>
+      <p>
+        Every Komodo-managed stack has a <code>stack.toml</code> alongside its
+        <code>compose.yaml</code>. Minimum shape (bilby-side):
+      </p>
+      <pre><code>[[stack]]
+name = "gatus"
+description = "Config-as-code endpoint monitoring"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/gatus"
+
+environment = """
+TZ=[[TZ]]
+POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
+"""</code></pre>
+      <p>
+        Key fields:
+      </p>
+      <ul>
+        <li><code>server</code> — <code>"podhaus"</code> for bilby, <code>"kangaroo"</code> for
+          kangaroo. Komodo dispatches the stack to that host's Periphery.</li>
+        <li><code>files_on_host</code> vs <code>linked_repo</code> — picks operating model.</li>
+        <li><code>run_directory</code> — where Periphery runs <code>docker compose</code> from.
+          For bilby it's always <code>/etc/komodo/repo/&lt;stack&gt;</code>; for kangaroo it's
+          relative to the Linked Repo clone.</li>
+        <li><code>environment</code> — multi-line string of <code>KEY=VALUE</code> pairs.
+          <code>[[VAR]]</code> entries are interpolated from Komodo Variables (see
+          <a href="/secrets.html">Secrets</a>).</li>
+      </ul>
+
+      <h2 id="resourcesync">ResourceSync</h2>
+      <p>
+        Stack definitions, Server entries, Repo declarations, and any other Komodo resources
+        are declared in TOML under <code>komodo/sync/</code>. Komodo reads these via a
+        ResourceSync resource (created by <code>komodo-start</code> on first boot, recreated by
+        <code>./komodo-sync</code> on demand).
+      </p>
+      <p>
+        Files in the sync directory today:
+      </p>
+      <ul>
+        <li><code>komodo/sync/servers.toml</code> — bilby and kangaroo Server entries.</li>
+        <li><code>komodo/sync/repos.toml</code> — the <code>podhaus</code> Linked Repo for
+          kangaroo.</li>
+        <li><code>komodo/sync/variables.toml</code> — non-secret variable declarations. Not the
+          authoritative source — see <a href="/secrets.html#non-secret-variables">Secrets →
+          non-secret variables</a>.</li>
+      </ul>
+      <aside class="callout warn">
+        <span class="callout-title">Known gap</span>
+        <code>./komodo-sync</code> updates stack <em>definitions</em> in Komodo's database, but
+        doesn't currently auto-redeploy changed stacks. After syncing, click <em>Deploy</em> in
+        the Komodo UI for any stack whose compose or env block changed.
+      </aside>
+
+      <h2 id="scripts">komodo-* scripts at the repo root</h2>
+      <table>
+        <thead><tr><th>Script</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>komodo-start</code></td><td>First-boot or post-recovery: starts the Komodo Core stack, seeds chicken-and-egg variables from 1Password, creates the ResourceSync resource, triggers the first sync. Idempotent — safe to re-run.</td></tr>
+          <tr><td><code>komodo-stop</code></td><td>Stops the Komodo Core stack (everything else stays running, since Komodo's job is just orchestration; the running containers are managed by Docker directly).</td></tr>
+          <tr><td><code>komodo-status</code></td><td>Shows the Komodo Core container status.</td></tr>
+          <tr><td><code>komodo-sync</code></td><td>Triggers the existing ResourceSync without a full restart of Komodo Core. Use after editing any TOML under <code>komodo/sync/</code> or any <code>stack.toml</code>.</td></tr>
+          <tr><td><code>komodo-upgrade</code></td><td>Pulls latest Komodo images, restarts the Core stack.</td></tr>
+          <tr><td><code>kangaroo_bootstrap</code></td><td>One-time bring-up for kangaroo. Renders Periphery .env from 1Password, ships compose + config to the QNAP via SSH, installs an <code>@reboot</code> crontab entry, idempotently appends the kangaroo Server to <code>servers.toml</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="see-also">See also</h2>
+      <ul>
+        <li><a href="/secrets.html">Secrets &amp; variables</a> — the full 1Password →
+          komodo-op → Komodo Variable flow.</li>
+        <li><a href="/stack-conventions.html">Stack conventions</a> — how to add or change a
+          service.</li>
+        <li><a href="/disaster-recovery.html">Disaster recovery</a> — fresh Komodo bring-up,
+          including the first-boot API-key dance.</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

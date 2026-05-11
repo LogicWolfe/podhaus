@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Getting started">
+  <meta name="doc-order" content="0">
+  <meta name="doc-title" content="Overview">
+  <title>podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <p class="text-sm text-text-muted uppercase tracking-widest mb-2">Home server infrastructure</p>
+      <h1 class="!mb-3">podhaus docs</h1>
+      <p class="lead text-lg text-text-muted">
+        Docker container infrastructure for two home servers — <strong class="text-text">bilby</strong>
+        (Apple M1, primary, runs the bulk of the stack) and <strong class="text-text">kangaroo</strong>
+        (QNAP NAS, runs Syncthing and second Backrest). Managed as Docker Compose stacks under a single
+        Komodo Core, secrets flow from 1Password, ingress via Cloudflare Tunnel + Access.
+      </p>
+
+      <h2>Start here</h2>
+      <p>
+        New to the repo or returning after a while? Read these four in order to get oriented in about
+        ten minutes:
+      </p>
+      <ol>
+        <li><a href="/architecture.html">Architecture</a> — the big picture, in one page.</li>
+        <li><a href="/hosts.html">Hosts</a> — what bilby and kangaroo are, what runs where.</li>
+        <li><a href="/komodo.html">Komodo</a> — how the orchestrator works, two operating models.</li>
+        <li><a href="/stack-conventions.html">Stack conventions</a> — how to add or change a service.</li>
+      </ol>
+
+      <h2>Full index</h2>
+
+      <h3 id="getting-started">Getting started</h3>
+      <ul>
+        <li><a href="/architecture.html">Architecture</a> — system overview, two-host topology, secrets flow.</li>
+        <li><a href="/hosts.html">Hosts</a> — bilby (M1), kangaroo (QNAP), pinelake (planned).</li>
+        <li><a href="/storage.html">Storage</a> — three-tier rule: local NVMe, Jump SSD, Pouch HDD.</li>
+        <li><a href="/networking.html">Networking</a> — dockernet bridge, Cloudflare Tunnel, Access, DNS.</li>
+      </ul>
+
+      <h3 id="platform">Platform</h3>
+      <ul>
+        <li><a href="/komodo.html">Komodo</a> — Core/Periphery, ResourceSync, <code>files_on_host</code> vs Linked Repo.</li>
+        <li><a href="/secrets.html">Secrets &amp; variables</a> — 1Password → komodo-op → Komodo Variables → <code>[[VAR]]</code>.</li>
+        <li><a href="/stack-conventions.html">Stack conventions</a> — adding a service, multi-host pattern, customization primitives.</li>
+      </ul>
+
+      <h3 id="operations">Operations</h3>
+      <ul>
+        <li><a href="/backup-and-recovery.html">Backup &amp; recovery</a> — Backrest, restic, rclone → OneDrive.</li>
+        <li><a href="/monitoring.html">Monitoring</a> — Gatus, Victoria Logs, Grafana, autoheal, Postmark alerting.</li>
+        <li><a href="/scheduling.html">Scheduling</a> — ofelia label-discovery, current jobs.</li>
+        <li><a href="/disaster-recovery.html">Disaster recovery</a> — fresh-host runbooks.</li>
+      </ul>
+
+      <h3 id="runbooks">Service runbooks</h3>
+      <ul>
+        <li><a href="/runbooks/plex.html">Plex</a> — local NVMe state, BIF bind, web ingress.</li>
+        <li><a href="/runbooks/plex-maintenance.html">Plex maintenance log</a> — the 47 GB → 217 MB incident, kept for posterity.</li>
+        <li><a href="/runbooks/paperless.html">Paperless</a> — dockernet-only access, OneNote import provenance.</li>
+        <li><a href="/runbooks/syncthing.html">Syncthing</a> — lives on kangaroo, peer pairing, device IDs.</li>
+        <li><a href="/runbooks/flood.html">Flood + RAR pipeline</a> — rtorrent.rc, unpackerr, ofelia heartbeat.</li>
+      </ul>
+
+      <h3 id="plans">Plans</h3>
+      <ul>
+        <li><a href="/plans/index.html">All plans</a> — implementation plans and migration runbooks, both <code>.md</code> and <code>.html</code> render here.</li>
+      </ul>
+
+      <h2 id="conventions">Conventions used in these docs</h2>
+      <aside class="callout tip">
+        <span class="callout-title">Tip</span>
+        Short, actionable hint or pointer to deeper material.
+      </aside>
+      <aside class="callout note">
+        <span class="callout-title">Note</span>
+        Context that's not strictly required but useful when investigating an issue.
+      </aside>
+      <aside class="callout warn">
+        <span class="callout-title">Watch out</span>
+        A known sharp edge — usually a documented workaround for an upstream bug or environment quirk.
+      </aside>
+      <aside class="callout caution">
+        <span class="callout-title">Caution</span>
+        Destructive or hard-to-reverse operation. Read twice, type once.
+      </aside>
+
+      <h2 id="contributing">Contributing</h2>
+      <p>
+        Every page is a static HTML file. Edit it, save, refresh the browser — changes appear
+        immediately, no rebuild or container restart. Add a new page by copying
+        <code>docs/_template.html</code> and appending an entry to
+        <code>docs/assets/nav.json</code>. Plans can be authored as <code>.md</code> or
+        <code>.html</code>; both render via the plans index.
+      </p>
+      <p>
+        AI agents working in this repo should read <a href="/architecture.html">Architecture</a>,
+        <a href="/komodo.html">Komodo</a>, and <a href="/stack-conventions.html">Stack conventions</a>
+        before making changes — those three pages plus the relevant runbook cover most edits.
+        Project instructions live in <code>AGENTS.md</code> at repo root (Claude Code imports it
+        via <code>CLAUDE.md</code>).
+      </p>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

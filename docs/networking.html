@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Getting started">
+  <meta name="doc-order" content="4">
+  <title>Networking — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Networking</h1>
+      <p class="lead text-lg text-text-muted">
+        One Docker bridge network, one Cloudflare Tunnel for ingress, one wildcard Access app
+        for auth, two DNS surfaces (public Cloudflare + LAN UniFi). No nginx in the path —
+        cloudflared talks directly to backends by container name.
+      </p>
+
+      <h2 id="dockernet">dockernet bridge</h2>
+      <p>
+        Every UI-facing container joins an external bridge network called <code>dockernet</code>
+        at <code>172.18.0.0/16</code>. Within the bridge, containers reach each other by
+        container name via Docker's embedded DNS — never by static IP. Static IPs are reserved
+        for LAN devices (e.g. the UniFi gateway at <code>10.0.0.1</code>) and host-network
+        services.
+      </p>
+      <p>
+        Each consumer compose file declares:
+      </p>
+      <pre><code>networks:
+  - dockernet
+
+# at the bottom:
+networks:
+  dockernet:
+    external: true</code></pre>
+
+      <h2 id="host-network">Host-network services</h2>
+      <p>
+        A few services need direct host network access:
+      </p>
+      <ul>
+        <li><strong>Home Assistant</strong> — Bluetooth, mDNS, multicast device discovery.</li>
+        <li><strong>Plex</strong> — Plex's own LAN discovery protocol, GDM/DLNA.</li>
+        <li><strong>Syncthing</strong> (kangaroo-side) — LAN device discovery via UDP/21027
+          multicast.</li>
+      </ul>
+      <p>
+        These declare <code>network_mode: host</code> in their compose. Cloudflare Tunnel reaches
+        them via the dockernet bridge gateway IP <code>172.18.0.1</code> from cloudflared's side
+        of the bridge — same pattern as <code>home.pod.haus → 172.18.0.1:8123</code>.
+      </p>
+
+      <h2 id="tunnel">Cloudflare Tunnel</h2>
+      <p>
+        A single <code>cloudflared</code> container on bilby holds the tunnel credential. Ingress
+        rules live in <code>cloudflare-tunnel/config.yml</code> (bind-mounted into the container)
+        and look like:
+      </p>
+      <pre><code>- hostname: gatus.pod.haus
+  service: http://gatus:8080
+- hostname: home.pod.haus
+  service: http://172.18.0.1:8123</code></pre>
+      <p>
+        Anything not listed returns 404 at the tunnel edge. New service that needs a hostname?
+        Add the rule here, add a CNAME in <code>dns/dnsconfig.js</code>, run
+        <code>./dns-push</code>, run <code>./komodo-sync</code> to refresh the tunnel container.
+      </p>
+      <aside class="callout warn">
+        <span class="callout-title">cloudflared is distroless</span>
+        No shell, no curl, no wget — the image only ships the cloudflared binary. In-container
+        healthchecks against <code>/ready</code> on port 20241 are structurally impossible, so
+        the stack has no healthcheck and no autoheal label. cloudflared handles its own
+        reconnection; <code>restart: unless-stopped</code> catches outright crashes; external
+        liveness is monitored by Gatus hitting the public hostnames.
+      </aside>
+
+      <h2 id="access">Cloudflare Access</h2>
+      <p>
+        A single Access Application covers <code>*.pod.haus</code> with a Family policy. Any
+        single-label hostname under <code>pod.haus</code> is gated by browser-side Cloudflare
+        Access login automatically — no per-service Access app needed.
+      </p>
+      <p>
+        Implication for hostname design: prefer single-label names like <code>backup.pod.haus</code>
+        over multi-label like <code>backup.kangaroo.pod.haus</code> — the wildcard only covers
+        one label. Host-distinguishing names use a hyphen prefix instead
+        (<code>kangaroo-backup.pod.haus</code>).
+      </p>
+      <p>
+        Exceptions to the wildcard:
+      </p>
+      <ul>
+        <li><strong>UniFi</strong> has its own Access app with a different policy (LAN device
+          UI).</li>
+        <li>Future scoped apps for service-token bypasses (e.g. Paperless iOS, Komodo webhook)
+          will be created via Terraform — see the Phase 14 plan.</li>
+      </ul>
+
+      <h2 id="dns">DNS</h2>
+      <p>
+        Managed by <strong>DNSControl</strong>: <code>dns/dnsconfig.js</code> declares zones for
+        all of our domains, <code>dns/creds.json</code> resolves provider tokens from env. Two
+        providers in play:
+      </p>
+      <ul>
+        <li><strong>Cloudflare</strong> — public DNS for <code>pod.haus</code>,
+          <code>pinelake.haus</code>, the Fastmail/Postmark email domains, and personal sites.</li>
+        <li><strong>UniFi</strong> — LAN-side split-horizon entries (<code>unifi.pod.haus →
+          10.0.0.1</code>, <code>bilby.pod.haus → 10.0.0.119</code>).</li>
+      </ul>
+      <p>
+        Workflow: edit <code>dnsconfig.js</code>, run <code>./dns-preview</code> to see the diff,
+        run <code>./dns-push</code> to apply. Both scripts are bash wrappers around
+        <code>ghcr.io/stackexchange/dnscontrol</code>.
+      </p>
+      <p>
+        DNSControl will be replaced by Terraform as part of the Phase 14 Cloudflare-as-code
+        migration — see the <a href="/plans/index.html">plans</a> for that work.
+      </p>
+
+      <h2 id="current-ingress">Current ingress rules</h2>
+      <table>
+        <thead><tr><th>Hostname</th><th>Backend</th></tr></thead>
+        <tbody>
+          <tr><td><code>backup.pod.haus</code></td><td>Backrest UI on bilby</td></tr>
+          <tr><td><code>kangaroo-backup.pod.haus</code></td><td>Backrest UI on kangaroo</td></tr>
+          <tr><td><code>komodo.pod.haus</code></td><td>Komodo Core UI</td></tr>
+          <tr><td><code>torrent.pod.haus</code></td><td>Flood UI</td></tr>
+          <tr><td><code>home.pod.haus</code></td><td>Home Assistant (host network)</td></tr>
+          <tr><td><code>kangaroo.pod.haus</code></td><td>QNAP admin UI</td></tr>
+          <tr><td><code>sync.pod.haus</code></td><td>Syncthing on kangaroo</td></tr>
+          <tr><td><code>unifi.pod.haus</code></td><td>UniFi network controller</td></tr>
+          <tr><td><code>paperless.pod.haus</code></td><td>Paperless web</td></tr>
+          <tr><td><code>plex.pod.haus</code></td><td>Plex web UI (native clients use plex.tv discovery)</td></tr>
+          <tr><td><code>logs.pod.haus</code></td><td>Victoria Logs vmui</td></tr>
+          <tr><td><code>gatus.pod.haus</code></td><td>Gatus status page</td></tr>
+          <tr><td><code>grafana.pod.haus</code></td><td>Grafana</td></tr>
+          <tr><td><code>docs.pod.haus</code></td><td>This documentation site</td></tr>
+        </tbody>
+      </table>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

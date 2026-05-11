@@ -1,8 +1,32 @@
 services:
+  # One-shot init container that lays down the repo's rtorrent.rc into
+  # the flood-db volume at the dotfile path rtorrent expects. Replaces
+  # the previous single-file bind (which is forbidden — see
+  # docs/stack-conventions.html#bind-mounts). rtorrent reads the file
+  # once at startup, so this runs every time flood starts and the
+  # in-volume copy is always the same as the repo copy on next deploy.
+  flood-init:
+    container_name: flood-init
+    image: alpine:latest
+    restart: "no"
+    volumes:
+      - /var/lib/flood-db:/flood-db:z
+      - ${PODHAUS_REPO}/flood/conf:/conf:ro,z
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        install -o 1000 -g 1001 -m 0644 /conf/rtorrent.rc /flood-db/.rtorrent.rc
+        echo "rtorrent.rc installed at /flood-db/.rtorrent.rc"
+
   flood:
     container_name: flood
     image: jesec/rtorrent-flood
     restart: unless-stopped
+    depends_on:
+      flood-init:
+        condition: service_completed_successfully
     command: --auth=none --rtsocket=/tmp/rtorrent.sock
     user: "1000:1001"
     environment:
@@ -16,17 +40,10 @@ services:
       GATUS_UNPACKERR_PUSH_TOKEN: ${GATUS_UNPACKERR_PUSH_TOKEN}
     volumes:
       # rtorrent session (~16 MB: .torrent + .libtorrent_resume + .rtorrent
-      # files). Local NVMe per the post-phase-6 sizing rule.
+      # files). Local NVMe per the post-phase-6 sizing rule. The .rtorrent.rc
+      # file lands here too via flood-init above.
       - /var/lib/flood-db:/flood-db:z
       - ${MEDIA_DIR}:/data
-      # .rtorrent.rc as config-as-code. Overlays the live config file in
-      # /flood-db with the repo's version. The original file still exists
-      # in /var/lib/flood-db on host but is shadowed by this bind mount.
-      # Single-file bind: rtorrent reads this once at startup, so the
-      # inode-pin behavior of file binds (host atomic-rename → container
-      # keeps original inode) doesn't matter — restart is required to
-      # pick up changes regardless.
-      - ${PODHAUS_REPO}/flood/rtorrent.rc:/flood-db/.rtorrent.rc:ro,z
       # Hook + ofelia scripts as a directory bind so host edits propagate
       # without restart. File-level binds pin the inode at mount time, so
       # any tool that saves via atomic rename (vim, $EDITOR, Claude Code)

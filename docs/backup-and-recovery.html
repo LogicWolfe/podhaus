@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Operations">
+  <meta name="doc-order" content="1">
+  <title>Backup &amp; recovery — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Backup &amp; recovery</h1>
+      <p class="lead text-lg text-text-muted">
+        Backrest manages restic snapshots of operational state from both hosts. Each host has
+        its own restic repository on Jump; bilby's nightly hook also mirrors both repos off-site
+        to OneDrive via rclone.
+      </p>
+
+      <h2 id="topology">Backup topology</h2>
+      <pre><code>bilby state                kangaroo state
+    │                          │
+    ↓                          ↓
+bilby Backrest             kangaroo Backrest
+    │                          │
+    ↓                          ↓
+restic repo                restic repo
+/mnt/jump/backups/         /share/CACHEDEV2_DATA/Jump/backups-kangaroo/
+                           (visible to bilby over NFS as /mnt/jump/backups-kangaroo)
+    │                          │
+    └──────────┬───────────────┘
+               ↓
+       bilby Backrest's
+       rclone hook (CONDITION_SNAPSHOT_SUCCESS
+       on the last plan of the night)
+               ↓
+       OneDrive
+       (Backups/podhaus-restic/  + Backups/podhaus-kangaroo-restic/)</code></pre>
+      <p>
+        Two restic clients on one repo is supported (per-operation locking) but kangaroo gets
+        its own repo to avoid lock coordination across the LAN, and to keep its plan schedule
+        independent of bilby's. The off-site mirror is done from bilby's Backrest because that's
+        where the rclone config (multi-line OAuth blob) already lives.
+      </p>
+
+      <h2 id="bilby-plans">Bilby plans</h2>
+      <p>
+        Configured in <code>backup/bilby/config.json.tmpl</code>. Nine plans, staggered 04:00 to
+        05:20 AWST so the rolling write load doesn't pile up:
+      </p>
+      <table>
+        <thead><tr><th>Plan</th><th>Source</th><th>Schedule</th></tr></thead>
+        <tbody>
+          <tr><td><code>komodo</code></td><td>Komodo Core volumes (postgres, FerretDB)</td><td>04:00</td></tr>
+          <tr><td><code>onepassword</code></td><td>1Password Connect API state</td><td>04:10</td></tr>
+          <tr><td><code>logging</code></td><td>Grafana + Alloy state</td><td>04:20</td></tr>
+          <tr><td><code>flood</code></td><td><code>/var/lib/flood-db</code></td><td>04:30</td></tr>
+          <tr><td><code>plex</code></td><td><code>/var/lib/plex-local</code></td><td>04:40</td></tr>
+          <tr><td><code>paperless</code></td><td><code>/var/lib/paperless-data</code> + <code>/var/lib/paperless-pgdata</code></td><td>04:50</td></tr>
+          <tr><td><code>home-assistant</code></td><td><code>/var/lib/home-assistant</code></td><td>05:00</td></tr>
+          <tr><td><code>uptime-kuma</code></td><td>(legacy, kept for the Kuma rollback window)</td><td>05:10</td></tr>
+          <tr><td><code>backrest-state</code></td><td>Backrest's own DB</td><td>05:20</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Retention on every plan: <strong>14 daily + 4 weekly + 6 monthly</strong>. Weekly prune
+        (Sunday 04:00) and check (Sunday 05:00) on the repo.
+      </p>
+      <p>
+        The <code>backrest-state</code> plan runs last and has a
+        <code>CONDITION_SNAPSHOT_SUCCESS</code> hook that fires the nightly rclone sync to
+        OneDrive (covering both bilby's repo and kangaroo's via the read-only NFS view), and a
+        success ping to the Gatus heartbeat.
+      </p>
+
+      <h2 id="kangaroo-plans">Kangaroo plans</h2>
+      <p>Configured in <code>backup/kangaroo/config.json.tmpl</code>. Three plans:</p>
+      <table>
+        <thead><tr><th>Plan</th><th>Source</th><th>Schedule</th></tr></thead>
+        <tbody>
+          <tr><td><code>syncthing</code></td><td><code>/share/CACHEDEV1_DATA/Container/syncthing-config</code></td><td>04:00</td></tr>
+          <tr><td><code>komodo-periphery</code></td><td>Kangaroo's Periphery state</td><td>04:10</td></tr>
+          <tr><td><code>backrest-state</code></td><td>Kangaroo Backrest's own DB</td><td>04:20</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Done by 04:20 — well before bilby's <code>backrest-state</code> hook fires the rclone
+        sync at ~05:20. Kangaroo's restic repo lives on the SSD-backed Jump volume directly, so
+        no NFS roundtrip from inside the container.
+      </p>
+
+      <h2 id="encryption">Encryption</h2>
+      <p>
+        Restic repos are encrypted with a 48-character base64 password (~288 bits of entropy).
+        The password lives at <code>op://Homelab/restic-repo-password/credential</code> and
+        flows through to Backrest via komodo-op. The init container in
+        <code>backup/compose.shared.yaml</code> renders <code>config.json</code> from the
+        template with the password substituted, so the running config.json on disk has the
+        password baked in — but the source of truth is 1P.
+      </p>
+      <aside class="callout caution">
+        <span class="callout-title">Annotate the 1P Emergency Kit</span>
+        Without the restic password, the off-site OneDrive copy is useless. The 1P Emergency
+        Kit hardcopy should have a note pointing at the
+        <code>restic-repo-password</code> item.
+      </aside>
+
+      <h2 id="off-site">Off-site sync</h2>
+      <p>
+        rclone OneDrive sync runs out of bilby's Backrest container, triggered by the last
+        plan of the night via <code>CONDITION_SNAPSHOT_SUCCESS</code>. Two upload targets:
+      </p>
+      <ul>
+        <li><code>onedrive:Backups/podhaus-restic/</code> — bilby's repo.</li>
+        <li><code>onedrive:Backups/podhaus-kangaroo-restic/</code> — kangaroo's repo (read over
+          NFS).</li>
+      </ul>
+      <p>
+        The rclone config is a multi-line OAuth blob stored as a Secure Note in 1P
+        (<code>rclone-onedrive-token</code> / <code>notesPlain</code>) — multi-line values
+        don't round-trip through Komodo env files cleanly, so an init container in the backup
+        stack renders <code>rclone.conf</code> on first boot from the synced variable. Token
+        rotation: regenerate via <code>rclone config</code> on a laptop, paste the new
+        <code>[onedrive]</code> block into the 1P Secure Note, redeploy.
+      </p>
+
+      <h2 id="restore-drill">Restore drill</h2>
+      <p>
+        Quarterly cadence. Two paths to verify:
+      </p>
+      <ol>
+        <li><strong>Local restore from bilby's repo:</strong> open Backrest UI, pick a snapshot,
+          restore one file to <code>/tmp/restore-test/</code>, verify checksum matches the
+          source.</li>
+        <li><strong>Off-site restore:</strong> on a laptop, install restic, run
+          <code>rclone sync onedrive:Backups/podhaus-restic /tmp/restore-from-cloud/</code>,
+          then <code>restic -r /tmp/restore-from-cloud snapshots</code> with the password from
+          1P. Restore one file, verify.</li>
+      </ol>
+      <p>
+        Document the dates in the runbook. Last drill: 2026-04-16 against
+        <code>Preferences.xml</code> from the plex plan — matched bit-for-bit.
+      </p>
+
+      <h2 id="alerts">Alerting</h2>
+      <p>
+        Two failure surfaces, both go through Gatus → Postmark email:
+      </p>
+      <ul>
+        <li><strong>Per-plan error</strong>: Backrest's <code>CONDITION_ANY_ERROR</code> hook
+          posts <code>success=false&amp;error=...</code> to the Gatus push endpoint. Alerts
+          within minutes (failure-threshold: 3).</li>
+        <li><strong>Missing nightly heartbeat</strong>: the Gatus push endpoint has a 25-hour
+          interval window — if no successful ping arrives, the dead-man's-switch fires. Catches
+          the case where Backrest itself is down.</li>
+      </ul>
+      <p>See <a href="/monitoring.html">Monitoring</a> for the Gatus side.</p>
+
+      <h2 id="add-plan">Adding a plan for a new stack</h2>
+      <ol>
+        <li>Bind-mount the stack's state directory into Backrest read-only as
+          <code>/userdata/&lt;stack&gt;/</code> — edit
+          <code>backup/compose.shared.yaml</code>.</li>
+        <li>Add a plan block to <code>backup/&lt;host&gt;/config.json.tmpl</code> with a
+          schedule slotted into the dead-time window (04:00–05:20 AWST), the standard 14d/4w/6m
+          retention, and <code>paths: ["/userdata/&lt;stack&gt;"]</code>.</li>
+        <li><code>./komodo-sync</code> + redeploy <code>backup</code>. Backrest's init
+          container re-renders <code>config.json</code> on next start.</li>
+        <li>Take a manual snapshot from the Backrest UI to verify the plan works before letting
+          the cron run.</li>
+      </ol>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

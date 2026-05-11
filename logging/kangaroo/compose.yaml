@@ -11,4 +11,11 @@ services:
       # Absolute host path because Periphery's container-side relative-
       # path resolution doesn't match the QNAP host's view of the cloned
       # repo, and ${PODHAUS_REPO} doesn't exist on kangaroo.
-      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/logging/kangaroo/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      #
+      # Directory bind (not file bind) — alloy reloads config on file
+      # change; an atomic-rename save on host would otherwise pin the
+      # inode and silently hide updates. The bound dir contains exactly
+      # config.alloy, matching the path alloy is told to read via the
+      # shared compose's `command:` line. See
+      # docs/stack-conventions.html#bind-mounts.
+      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/logging/kangaroo/alloy-conf:/etc/alloy:ro

@@ -1,0 +1,15 @@
+[[stack]]
+name = "docs-server"
+description = "Static nginx serving the docs/ tree at docs.pod.haus"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/docs-server"
+
+environment = """
+TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
+"""

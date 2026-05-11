@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Service runbooks">
+  <meta name="doc-order" content="1">
+  <title>Plex — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Plex</h1>
+      <p class="lead text-lg text-text-muted">
+        Runs on bilby with <code>network_mode: host</code>. Library DB lives on local NVMe
+        (post-Phase-6 pivot); media and BIFs live on Pouch. Identity is templated from
+        Preferences.xml in the repo + a Plex Online Token from 1P, so a host wipe doesn't lose
+        the <code>MachineIdentifier</code>.
+      </p>
+
+      <h2 id="critical-state">Critical identity state</h2>
+      <p>
+        Clients (apps, smart TVs, plex.tv) identify the server by its
+        <code>MachineIdentifier</code>. If it changes, every client treats it as a new server
+        — shared libraries break, watch state is orphaned, every device must re-pair.
+      </p>
+      <table>
+        <thead><tr><th>Field</th><th>Source of truth</th></tr></thead>
+        <tbody>
+          <tr><td><code>MachineIdentifier</code></td><td><code>plex/Preferences.xml</code> in repo (template)</td></tr>
+          <tr><td><code>CertificateUUID</code></td><td><code>plex/Preferences.xml</code> in repo (template)</td></tr>
+          <tr><td><code>AnonymousMachineIdentifier</code></td><td><code>plex/Preferences.xml</code> in repo (template)</td></tr>
+          <tr><td><code>PlexOnlineUsername</code></td><td><code>plex/Preferences.xml</code> in repo (template)</td></tr>
+          <tr><td><code>PlexOnlineToken</code></td><td>1P <code>Plex Online Token</code> → templated in by the init container</td></tr>
+          <tr><td>Server name (<code>hostname</code>)</td><td>plex compose <code>hostname: Bilby</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        The init container in <code>plex/compose.yaml</code> merges the template's enforced
+        attrs (identity, network prefs) into the live <code>Preferences.xml</code> on each
+        deploy. Plex's own runtime can mutate other prefs in that file freely; the next deploy
+        re-enforces the identity attrs.
+      </p>
+
+      <h2 id="storage">Storage layout</h2>
+      <table>
+        <thead><tr><th>Mount</th><th>Path on bilby</th><th>Backing</th></tr></thead>
+        <tbody>
+          <tr><td>Library DB + config</td><td><code>/var/lib/plex-local</code></td><td>Local NVMe</td></tr>
+          <tr><td>Transcode scratch</td><td><code>/var/lib/plex-transcode</code></td><td>Local NVMe (was tmpfs pre-pivot)</td></tr>
+          <tr><td>Media libraries</td><td><code>/mnt/pouch/&lt;library&gt;</code></td><td>NFS to Pouch</td></tr>
+          <tr><td>BIFs (preview thumbnails)</td><td><code>/mnt/pouch/plex-video-thumbnails</code></td><td>NFS to Pouch — bind-mounted (no in-config symlink)</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Library paths are stored as absolute paths in the SQLite DB. Mounting Pouch at the
+        same path inside the container that the DB expects means <strong>zero library
+        reconfiguration</strong> after a host rebuild.
+      </p>
+      <p>
+        Specific library paths (database contracts):
+      </p>
+      <ul>
+        <li>Movies — <code>/Users/Shared/Pouch/Movies</code></li>
+        <li>TV Shows — <code>/Users/Shared/Pouch/TV</code></li>
+        <li>Anime — <code>/Users/Shared/Pouch/Anime</code></li>
+        <li>Kids Movies / TV / Video — <code>/Users/Shared/Pouch/Kids/{Movies,TV,Videos}</code></li>
+        <li>Sports — <code>/Users/Shared/Pouch/Sports</code>, <code>.../Races</code></li>
+        <li>Documentaries — <code>/Users/Shared/Pouch/Documentaries</code>, <code>.../Documentary Series</code></li>
+        <li>Ελληνικές Ταινίες — <code>/Users/Shared/Pouch/Ελληνικές Ταινίες</code></li>
+      </ul>
+
+      <h2 id="ingress">Web ingress</h2>
+      <p>
+        <code>plex.pod.haus</code> routes to <code>http://172.18.0.1:32400</code> via
+        Cloudflare Tunnel (Plex runs <code>network_mode: host</code>, so dockernet's bridge
+        gateway IP is the entry point).
+      </p>
+      <p>
+        <strong>Web-only.</strong> Native Plex clients are <em>not</em> told about this URL via
+        <code>customConnections</code> — they continue to use plex.tv discovery (LAN, direct
+        WAN, Plex Relay). Avoids duplicate-server confusion in client UI.
+      </p>
+
+      <h2 id="remote-access">Remote access (the three settings)</h2>
+      <p>
+        Three preferences must be set in <code>Preferences.xml</code> for remote access to
+        work. All three are in the templated identity attrs, so they survive rebuilds.
+      </p>
+      <table>
+        <thead><tr><th>Setting</th><th>Value</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><code>PublishServerOnPlexOnlineKey</code></td><td><code>1</code></td><td><strong>The master "Enable Remote Access" toggle.</strong> When 0, Plex doesn't run its publish flow at all.</td></tr>
+          <tr><td><code>ManualPortMappingMode</code></td><td><code>1</code></td><td>Tells Plex "skip UPnP, trust the static port forward". Needed because UniFi silently drops the UPnP SSDP multicast Plex uses for auto-mapping.</td></tr>
+          <tr><td><code>ManualPortMappingPort</code></td><td><code>32400</code></td><td>External port the UniFi port forward points at.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="verify-remote-access">Verifying remote access</h3>
+      <pre><code>TOKEN=$(docker exec plex sh -c \
+  'grep -oE "PlexOnlineToken=\"[^\"]*\"" \
+   "/config/Library/Application Support/Plex Media Server/Preferences.xml" \
+   | cut -d\" -f2')
+
+curl -s "http://localhost:32400/myplex/account?X-Plex-Token=$TOKEN" \
+  | grep -oE '(mappingState|publicAddress|publicPort)="[^"]*"'</code></pre>
+      <p>
+        Must show <code>mappingState="mapped"</code>, a non-empty <code>publicAddress</code>,
+        and a real <code>publicPort</code>. If <code>publicAddress=""</code> or
+        <code>publicPort="0"</code>, the publish loop is broken — start with
+        <code>PublishServerOnPlexOnlineKey</code>.
+      </p>
+
+      <h2 id="maintenance">Monthly stats cleanup</h2>
+      <p>
+        Plex's <code>statistics_bandwidth</code> table grows indefinitely with no upstream
+        pruning mechanism. Left unchecked it can balloon the DB by tens of GB. An ofelia job
+        runs an online DELETE + VACUUM on the 1st of each month at 04:00 AWST via
+        <code>plex/scripts/stats-cleanup.sh</code>. See
+        <a href="/runbooks/plex-maintenance.html">Plex maintenance log</a> for the historical
+        incident that prompted this.
+      </p>
+
+      <h2 id="why-local-nvme">Why the DB is on local NVMe (not NFS)</h2>
+      <p>
+        Pre-Phase-6, Plex's DB lived on Jump over NFS. SQLite on NFS under write contention
+        (butler scans, normal play state updates) cascaded into lock storms that surfaced as
+        client-visible stalls. Moving the DB onto bilby's NVMe eliminated the contention
+        class entirely. Bulk media reads stay on Pouch (sequential, HDDs are fine).
+      </p>
+      <aside class="callout note">
+        <span class="callout-title">No hardware transcoding</span>
+        Apple Silicon's VideoToolbox media engines have no Linux driver — they're an
+        undocumented Apple block, Asahi can't expose them. Plex transcoding is software-only.
+        M1 CPU is fast enough for 1080p in software trivially; 4K HDR tone-mapping is the worst
+        case, and the answer there is "play a different copy" or "let the client direct-play".
+      </aside>
+
+      <h2 id="see-also">See also</h2>
+      <ul>
+        <li><a href="/runbooks/plex-maintenance.html">Plex maintenance log</a> — the 47 GB →
+          217 MB DB-rescue incident, kept as historical reference.</li>
+        <li><a href="/backup-and-recovery.html">Backup &amp; recovery</a> — the
+          <code>plex</code> Backrest plan and what it captures.</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

@@ -15,6 +15,7 @@ D("pod.haus!cloudflare", REG_NONE, DnsProvider(DSP_CF),
     // host-distinguishing names use a hyphen prefix instead — see
     // `kangaroo-backup` below.
     CNAME("backup",          TUNNEL, CF_PROXY_ON),  // backrest UI on bilby
+    CNAME("docs",            TUNNEL, CF_PROXY_ON),  // docs.pod.haus — static nginx serving docs/
     CNAME("gatus",           TUNNEL, CF_PROXY_ON),  // gatus config-as-code monitoring
     CNAME("grafana",         TUNNEL, CF_PROXY_ON),  // grafana (kept for future dashboards)
     CNAME("home",            TUNNEL, CF_PROXY_ON),

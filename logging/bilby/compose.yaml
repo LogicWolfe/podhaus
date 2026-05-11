@@ -48,7 +48,12 @@ services:
     security_opt:
       - label:disable
     volumes:
-      - ${PODHAUS_REPO}/logging/bilby/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      # Directory bind (not file bind) — alloy reloads config on file
+      # change, and a file-level bind pins the inode at mount time so
+      # atomic-rename host edits would silently never reach the container.
+      # The bound dir contains exactly config.alloy, matching the path
+      # alloy is told to read via the shared compose's `command:` line.
+      - ${PODHAUS_REPO}/logging/bilby/alloy-conf:/etc/alloy:ro
       # rtorrent-cleanup.sh writes to /flood-db/rtorrent-cleanup.log
       # inside the flood container — that's /var/lib/flood-db on host.
       # The script is forked by rtorrent (not by tini), so its output
@@ -95,9 +100,16 @@ services:
       TZ: ${TZ}
     volumes:
       - grafana-data:/var/lib/grafana
-      - ${PODHAUS_REPO}/logging/bilby/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/victoria-logs.yaml:ro
-      - ${PODHAUS_REPO}/logging/bilby/grafana-dashboard-provider.yaml:/etc/grafana/provisioning/dashboards/podhaus.yaml:ro
-      - ${PODHAUS_REPO}/logging/bilby/grafana-dashboards:/etc/grafana/provisioning/dashboards/podhaus:ro
+      # Single directory bind replaces three previous file binds + one
+      # directory bind. The tree is structured to mirror Grafana's
+      # provisioning convention:
+      #   grafana-provisioning/datasources/victoria-logs.yaml
+      #   grafana-provisioning/dashboards/podhaus.yaml         (provider)
+      #   grafana-provisioning/dashboards/podhaus/<*.json>     (dashboards)
+      # Grafana's other provisioning subdirs (alerting, plugins, etc.)
+      # are empty in the image by default; shadowing them with this bind
+      # is a no-op.
+      - ${PODHAUS_REPO}/logging/bilby/grafana-provisioning:/etc/grafana/provisioning:ro
     depends_on:
       victoria-logs:
         condition: service_started

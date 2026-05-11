@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Platform">
+  <meta name="doc-order" content="3">
+  <title>Stack conventions — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Stack conventions</h1>
+      <p class="lead text-lg text-text-muted">
+        Patterns that any stack in this repo follows. Match the existing shapes and most things
+        line up automatically — networking, secrets, backups, monitoring.
+      </p>
+
+      <h2 id="single-host">Adding a single-host stack</h2>
+      <ol>
+        <li>Create <code>&lt;name&gt;/compose.yaml</code>. Join <code>dockernet</code> if the
+          stack needs to be reachable from another container or via the Cloudflare Tunnel.</li>
+        <li>Create <code>&lt;name&gt;/stack.toml</code> with <code>server = "podhaus"</code>,
+          <code>files_on_host = true</code>, and
+          <code>run_directory = "/etc/komodo/repo/&lt;name&gt;"</code>. List any required
+          variables in the <code>environment</code> block.</li>
+        <li>Add any new secrets to the 1Password Homelab vault — komodo-op auto-syncs them
+          (see <a href="/secrets.html">Secrets</a>).</li>
+        <li>If the stack needs a hostname, add an ingress rule to
+          <code>cloudflare-tunnel/config.yml</code> and a CNAME in
+          <code>dns/dnsconfig.js</code>. Run <code>./dns-push</code> after.</li>
+        <li>Run <code>./komodo-sync</code>, then open the stack in Komodo UI and click
+          <em>Deploy</em>.</li>
+      </ol>
+
+      <h2 id="multi-host">Adding a stack to a multi-host shared service</h2>
+      <p>
+        Services in this layout today: <code>backup/</code>, <code>autoheal/</code>,
+        <code>logging/</code>. Each has a <code>compose.shared.yaml</code> defining the
+        cross-host contract and per-host subdirectories overlaying the host-specific bits.
+      </p>
+      <ol>
+        <li>Create <code>&lt;service&gt;/&lt;host&gt;/compose.yaml</code> with
+          <code>include: [../compose.shared.yaml]</code> and the host-specific overlay
+          (volumes, security_opt, additional services).</li>
+        <li>Create <code>&lt;service&gt;/&lt;host&gt;/stack.toml</code> setting
+          <code>server = "&lt;host&gt;"</code> and the per-host
+          <code>environment</code> block. Variable <em>names</em> must match the shared
+          compose's contract; <em>values</em> come from host-specific 1P items.</li>
+        <li>If the host needs a config template (e.g. Backrest's
+          <code>config.json.tmpl</code>), put it at
+          <code>&lt;service&gt;/&lt;host&gt;/&lt;template&gt;</code> and reference it via the
+          per-host overlay's bind mount.</li>
+        <li><code>./komodo-sync</code> + deploy.</li>
+      </ol>
+      <p>
+        When fixing a bug in a multi-host service, edit <code>compose.shared.yaml</code> (and
+        the shared template if present) — the change applies to all hosts uniformly. Per-host
+        overlay edits should only touch genuinely host-specific bits.
+      </p>
+
+      <h2 id="customization-primitives">Customization primitives</h2>
+      <p>
+        Three blessed primitives for when an upstream image doesn't do exactly what's needed.
+        Pick based on the <em>nature</em> of the customization.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Primitive</th>
+            <th>When to use</th>
+            <th>Example</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Init container</strong> using the shared <code>init-tools:local</code> image</td>
+            <td>One-time setup that produces an artifact <em>before</em> the main service starts. Tool isn't needed during runtime.</td>
+            <td>Backrest envsubst (<code>backup/</code>) — renders <code>config.json</code> from template. Plex Preferences merge — overlays enforced identity attrs onto <code>Preferences.xml</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>Custom Dockerfile + Komodo build</strong> (<code>run_build = true</code>, <code>auto_pull = false</code> in stack.toml)</td>
+            <td>The main service needs the customization at <em>runtime</em>: different binary, missing runtime tool, upstream bug fix.</td>
+            <td><code>komodo-op</code> arm64 build — upstream ships a mislabeled arm64 manifest that's actually amd64.</td>
+          </tr>
+          <tr>
+            <td><strong><code>komodo-start</code> host render</strong></td>
+            <td>True bootstrap concerns that must happen on the host before any container can read them.</td>
+            <td>Komodo Core itself, chicken-and-egg credentials.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <strong>init-tools shared image:</strong> All init containers across the fleet use the
+        same locally-built image declared at <code>init-tools/Dockerfile</code>
+        (alpine + gettext + python3). Each consumer stack triggers the build inline via its
+        init service's <code>build:</code> directive (Komodo's <code>run_build = true</code>
+        handles this). Init service uses <code>pull_policy: never</code> so Komodo's auto_pull
+        doesn't try to fetch the local-only tag. Stack.toml has <code>run_build = true</code>;
+        auto_pull stays default-true so the main service still pulls upstream image updates.
+      </p>
+
+      <h2 id="bind-mounts">Bind mounts from the repo</h2>
+      <p>
+        When a stack needs to bind-mount config or scripts from the repo, mount the
+        <strong>containing directory</strong> — never an individual file. Stacks that need
+        their config at a specific in-container path either point the upstream binary at the
+        bind-mounted directory (<code>nginx -c /conf/nginx.conf</code>,
+        <code>backrest --config /conf/config.json</code>) or use an init container to copy
+        the file into a named volume on first boot.
+      </p>
+      <pre><code>volumes:
+  # Right — directory bind. Host edits propagate immediately, atomic
+  # renames don't break the link to the container.
+  - ${PODHAUS_REPO}/&lt;stack&gt;/conf:/conf:ro</code></pre>
+      <p>
+        <code>PODHAUS_REPO</code> is seeded by <code>komodo-start</code> with the host's
+        absolute path to the repo clone. This keeps the repo portable across hosts and
+        environments.
+      </p>
+      <aside class="callout caution">
+        <span class="callout-title">Never use single-file bind mounts</span>
+        Compose lines like
+        <code>${PODHAUS_REPO}/&lt;stack&gt;/config.yaml:/etc/foo/config.yaml:ro</code>
+        <strong>are forbidden in this repo</strong>. File-level binds pin the inode at mount
+        time, and any tool that saves via atomic rename (vim, $EDITOR, Claude Code, the
+        Write tool) leaves the container pointing at the now-orphaned original inode.
+        Subsequent host edits are silently invisible to the container until it's recreated.
+        Mount the containing directory instead.
+        <br><br>
+        Real incident: the docs-server's <code>nginx.conf</code> was originally a file bind.
+        After editing it, the new directives didn't take effect until the container was
+        force-recreated — exactly the silent-divergence failure mode this rule prevents.
+        The fix was the pattern above: nginx.conf moved into
+        <code>docs-server/conf/</code>, that whole directory bound at <code>/conf/</code>,
+        and nginx pointed at it via
+        <code>command: ["nginx", "-c", "/conf/nginx.conf", "-g", "daemon off;"]</code>.
+      </aside>
+      <aside class="callout warn">
+        <span class="callout-title">Always use absolute host paths</span>
+        Komodo-managed stack <code>run_directory</code> paths
+        (<code>/etc/komodo/repo/&lt;stack&gt;</code>) exist <em>inside</em> Periphery but not on
+        the host. Docker daemon resolves bind mount sources from the host filesystem, so
+        relative paths like <code>./conf/</code> resolve to non-existent host paths and
+        Docker silently creates empty stub directories. Always
+        <code>${PODHAUS_REPO}/&lt;stack&gt;/...</code>, never relative paths.
+      </aside>
+
+      <h2 id="selinux">SELinux on Fedora Asahi</h2>
+      <p>
+        SELinux on bilby denies cross-label reads into bind-mounted config files by default.
+        Two workarounds, both already in use:
+      </p>
+      <ul>
+        <li><strong><code>security_opt: label:disable</code></strong> on the service — lifts
+          confinement entirely. Used by <code>cloudflare-tunnel</code>, <code>gatus</code>,
+          <code>ofelia</code>, <code>autoheal</code>, <code>backrest</code>, <code>alloy</code>,
+          <code>grafana</code>.</li>
+        <li><strong><code>:z</code> or <code>:Z</code> on the volume</strong> — labels the
+          source so the container can read/write. Used on <code>plex/</code>,
+          <code>flood/</code>, paperless pgdata mount.</li>
+      </ul>
+      <p>Kangaroo (QTS) has no SELinux, so these flags are no-ops there but stay in compose for portability.</p>
+
+      <h2 id="healthchecks">Healthchecks and autoheal</h2>
+      <p>
+        Most stacks declare a <code>healthcheck</code> + <code>labels: autoheal: "true"</code>.
+        The host's autoheal stack restarts any container whose healthcheck reports unhealthy
+        for ~3 consecutive cycles.
+      </p>
+      <p>
+        Skip the healthcheck (and the autoheal label) when the image is distroless and has no
+        shell/curl/wget to probe with — pattern documented in <code>cloudflare-tunnel</code>,
+        <code>paperless-tika</code>, and others. Liveness for those services comes from a
+        downstream service's logs surfacing the dependency failure, plus external Gatus
+        monitoring of the public hostname.
+      </p>
+
+      <h2 id="ingress">Cloudflare Tunnel ingress</h2>
+      <p>
+        Add an entry to <code>cloudflare-tunnel/config.yml</code>:
+      </p>
+      <pre><code>- hostname: my-service.pod.haus
+  service: http://my-service:8080</code></pre>
+      <p>
+        The hostname must be single-label under <code>pod.haus</code> for the wildcard Access
+        app to gate it (multi-label fails through). Host-network services route via
+        <code>http://172.18.0.1:&lt;port&gt;</code> (the dockernet bridge gateway).
+      </p>
+      <p>
+        Add a matching CNAME in <code>dns/dnsconfig.js</code>:
+      </p>
+      <pre><code>CNAME("my-service", TUNNEL, CF_PROXY_ON),</code></pre>
+      <p>
+        Then <code>./dns-push</code> to apply. The cloudflare-tunnel stack picks up the new
+        ingress rule automatically — the bind-mounted <code>config.yml</code> is re-read on
+        cloudflared's next reconnect cycle (or you can <code>docker restart
+        cloudflare-tunnel</code>).
+      </p>
+
+      <h2 id="backups">Backups</h2>
+      <p>
+        Any stack with state worth keeping needs an entry in
+        <code>backup/compose.shared.yaml</code> (bind-mount the state dir into the Backrest
+        container as <code>/userdata/&lt;stack&gt;</code>) plus a plan in
+        <code>backup/&lt;host&gt;/config.json.tmpl</code>. See
+        <a href="/backup-and-recovery.html">Backup &amp; recovery</a> for the full pattern.
+      </p>
+
+      <h2 id="checklist">Quick checklist when adding a stack</h2>
+      <ul>
+        <li>☐ <code>compose.yaml</code> + <code>stack.toml</code> in <code>&lt;name&gt;/</code></li>
+        <li>☐ <code>dockernet</code> external network declared (if reachable from other containers)</li>
+        <li>☐ Bind mounts use <code>${PODHAUS_REPO}/...</code>, not relative paths</li>
+        <li>☐ All bind mounts are <strong>directory</strong> binds, never single files (see above)</li>
+        <li>☐ SELinux flag (<code>:z</code> or <code>label:disable</code>) on bilby-targeted bind mounts</li>
+        <li>☐ Healthcheck + <code>autoheal: "true"</code> label (unless distroless image)</li>
+        <li>☐ Secrets created in 1P, referenced via <code>OP__KOMODO__*</code></li>
+        <li>☐ Cloudflare Tunnel ingress + DNS CNAME (if public hostname)</li>
+        <li>☐ Backrest plan added (if there's state to preserve)</li>
+        <li>☐ Gatus monitor added (if there's a public hostname or critical internal endpoint)</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

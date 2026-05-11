@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Getting started">
+  <meta name="doc-order" content="2">
+  <title>Hosts — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Hosts</h1>
+      <p class="lead text-lg text-text-muted">
+        Two physical hosts today, a third planned. Both are registered with the same Komodo Core
+        on bilby; stack deploys for either host go through the same UI.
+      </p>
+
+      <h2 id="bilby">bilby</h2>
+      <p>
+        Apple M1 Mac mini, 8 cores, 15 GB RAM, aarch64, Fedora Asahi Linux. Primary host. Runs
+        Komodo Core (Postgres + FerretDB + Core + Periphery), every original podhaus stack, the
+        Cloudflare Tunnel, and the 1Password Connect API. LAN IP <code>10.0.0.119</code>.
+      </p>
+      <p>
+        Filesystem highlights:
+      </p>
+      <ul>
+        <li><strong>Local NVMe</strong> — hot operational state for every stack. See
+          <a href="/storage.html">Storage</a> for the per-stack layout.</li>
+        <li><strong><code>/mnt/pouch</code></strong> — NFS mount of the QNAP HDD array. Plex media,
+          BIFs, paperless documents, flood downloads.</li>
+        <li><strong><code>/mnt/jump</code></strong> — NFS mount of the QNAP SSD array. Restic repo
+          and Victoria Logs storage.</li>
+      </ul>
+      <aside class="callout warn">
+        <span class="callout-title">SELinux on Fedora Asahi</span>
+        Most container bind mounts need <code>security_opt: label:disable</code> or the
+        <code>:z</code> volume flag. Pattern documented in
+        <a href="/stack-conventions.html#selinux">Stack conventions</a>.
+      </aside>
+
+      <h2 id="kangaroo">kangaroo</h2>
+      <p>
+        QNAP NAS, AMD GX-420MC, 16 GB RAM, QTS 5.x with Container Station, ext4. Secondary host.
+        Runs a Komodo Periphery agent + Syncthing + a second Backrest + autoheal + a logging
+        Alloy collector. LAN IP <code>10.0.0.25</code>.
+      </p>
+      <p>
+        Filesystem highlights:
+      </p>
+      <ul>
+        <li><strong><code>/share/CACHEDEV1_DATA/Pouch</code></strong> — the bulk HDD volume. Same
+          content bilby sees as <code>/mnt/pouch</code>.</li>
+        <li><strong><code>/share/CACHEDEV2_DATA/Jump</code></strong> — the SSD volume. Kangaroo's
+          Backrest restic repo lives at
+          <code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo</code> — a separate repo from bilby's
+          to avoid restic two-client coordination.</li>
+        <li><strong><code>/share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/</code></strong>
+          — Periphery state.</li>
+      </ul>
+      <aside class="callout note">
+        <span class="callout-title">No Container Station GUI involvement</span>
+        Periphery deploys via SSH + <code>docker compose up -d</code> against the QNAP host's
+        Docker daemon directly. Container Station's REST API only accepts built-in template
+        names, and its GUI flow blocks the <code>docker.sock</code> mount Periphery needs.
+        Survival across CS/QTS upgrades is handled by a <code>@reboot</code> line in
+        <code>/etc/config/crontab</code> — see
+        <a href="/disaster-recovery.html#kangaroo-rebuild">disaster recovery</a>.
+      </aside>
+
+      <h2 id="pinelake">pinelake (planned)</h2>
+      <p>
+        A second household's primary host, paralleling bilby's role for that environment.
+        Designed to drop into the existing layout: a new entry in
+        <code>komodo/sync/servers.toml</code>, its own row in the multi-host shared services
+        (<code>backup/</code>, <code>autoheal/</code>, <code>logging/</code>), and per-stack
+        deploys via the same Komodo UI. <code>pinelake.haus</code> already has DNS scaffolding
+        in <code>dns/dnsconfig.js</code>; no infrastructure landed yet.
+      </p>
+
+      <h2 id="adding-host">Adding another host</h2>
+      <p>
+        The kangaroo bring-up doubled as the runbook for "add a host to the existing Komodo
+        Core". The same path applies for pinelake:
+      </p>
+      <ol>
+        <li>Bring up a Periphery agent on the new host
+          (template at <code>kangaroo/periphery/compose.yaml</code>).</li>
+        <li>Use the <code>kangaroo_bootstrap</code> script as a model — it's idempotent and
+          covers .env rendering from 1Password, crontab survival, and idempotently appending the
+          new server entry to <code>komodo/sync/servers.toml</code>.</li>
+        <li>Declare a Linked Repo for the host in <code>komodo/sync/repos.toml</code> (kangaroo
+          uses one — push-to-deploy via git clone) <strong>or</strong> use
+          <code>files_on_host</code> if the repo is going to live directly on the host
+          (bilby-style — save-and-deploy).</li>
+        <li>Add the host's per-host overlays to <code>backup/</code>, <code>autoheal/</code>,
+          <code>logging/</code> following the existing kangaroo/bilby pattern.</li>
+      </ol>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

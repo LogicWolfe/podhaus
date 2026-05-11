@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Operations">
+  <meta name="doc-order" content="2">
+  <title>Monitoring — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Monitoring</h1>
+      <p class="lead text-lg text-text-muted">
+        Gatus does endpoint monitoring and pushes alerts to Postmark email. Victoria Logs +
+        Alloy collects container logs. Grafana surfaces both. Autoheal restarts unhealthy
+        containers locally on each host.
+      </p>
+
+      <h2 id="gatus">Gatus</h2>
+      <p>
+        Config-as-code endpoint monitoring, defined entirely in
+        <code>gatus/config.yaml</code>. Monitors HTTP endpoints, pushed heartbeats, and
+        downstream-service-state checks. Stores results in SQLite with a 90-day cap. Alerts via
+        Postmark webhook.
+      </p>
+      <p>
+        Three monitor types in use:
+      </p>
+      <ul>
+        <li><strong>HTTP</strong> — periodic GET on each <code>*.pod.haus</code> endpoint with
+          status + body conditions.</li>
+        <li><strong>Push (external endpoints)</strong> — bearer-token-protected URLs that
+          jobs/scripts POST to with <code>success=true|false&amp;error=...</code>. Used for
+          Backrest nightly heartbeats and the RAR-extraction backlog scan.</li>
+        <li><strong>Komodo-API check</strong> — Gatus calls Komodo Core's <code>/read</code>
+          API and asserts that kangaroo's Periphery state is <code>Ok</code>. Surfaces
+          "Komodo Core can't reach kangaroo Periphery" as a normal Gatus alert.</li>
+      </ul>
+      <p>
+        Live monitors today cover every public hostname plus the Backrest, unpackerr, and
+        kangaroo-backrest heartbeats. <code>gatus.pod.haus</code> shows the live status page.
+      </p>
+
+      <h3 id="alert-body">Alert body</h3>
+      <p>
+        Postmark email body is customized in <code>gatus/config.yaml</code> to surface, per
+        alert: the <code>[ALERT_DESCRIPTION]</code> string (per-alert "what this means + where
+        to investigate"), the failing conditions, and any <code>[RESULT_ERRORS]</code> from the
+        push payload. Every alert links back to <code>gatus.pod.haus</code> and
+        <code>logs.pod.haus</code> for triage.
+      </p>
+
+      <h3 id="adding-monitor">Adding a Gatus monitor</h3>
+      <p>
+        Edit <code>gatus/config.yaml</code> — YAML anchors at the top define common defaults
+        (interval, alert config, conditions). Append a new endpoint to the appropriate group
+        (services / heartbeats / docker). Save. Gatus reloads config automatically on file
+        change — no restart.
+      </p>
+
+      <h2 id="logs">Victoria Logs + Alloy</h2>
+      <p>
+        Victoria Logs (port 9428) is the log store; <code>logs.pod.haus</code> serves its native
+        vmui. Backed by <code>/mnt/jump/victoria-logs/</code> on bilby; runs as
+        <code>1000:100</code> to align with the NAS Jump squash. Retention is
+        <code>-retentionPeriod=180d -retention.maxDiskSpaceUsageBytes=50GB</code>.
+      </p>
+      <p>
+        Grafana Alloy collectors scrape container logs from each host's Docker socket and push
+        to Victoria Logs via the Loki-compatible push API. Two collectors:
+      </p>
+      <ul>
+        <li><strong>bilby</strong>: <code>logging/bilby/alloy-config.alloy</code> — has
+          per-container shaping (op-connect-api's <code>log_message</code> field and flood's
+          <code>msg</code> field get rewritten to VL's expected <code>_msg</code>).</li>
+        <li><strong>kangaroo</strong>: <code>logging/kangaroo/alloy-config.alloy</code> — same
+          general shape, slightly slimmer since the bilby-specific rewrites aren't needed. Logs
+          tagged with <code>host="kangaroo"</code> so they're filterable in vmui.</li>
+      </ul>
+
+      <h2 id="grafana">Grafana</h2>
+      <p>
+        Grafana lives at <code>grafana.pod.haus</code>. Plugged into Victoria Logs (via the
+        <code>victoriametrics-logs-datasource</code> plugin) and Gatus (via the Infinity
+        datasource hitting Gatus's API). Two dashboards provisioned via file-based config in
+        <code>logging/dashboards/</code>:
+      </p>
+      <ul>
+        <li><strong>Container Logs</strong> — VL native panel.</li>
+        <li><strong>Uptime Status</strong> — Gatus endpoints via Infinity datasource. This is
+          the home dashboard.</li>
+      </ul>
+      <p>
+        Grafana is intentionally stripped down: all drilldown apps disabled (Logs drilldown
+        needs Loki's full query API which VL doesn't implement), alerting disabled (Gatus owns
+        it), news feed off, plugin marketplace hidden.
+      </p>
+
+      <h2 id="autoheal">Autoheal</h2>
+      <p>
+        Each host runs its own autoheal container (<code>willfarrell/autoheal</code>) — bilby's
+        autoheal can't see kangaroo's Docker daemon, so each Periphery host needs one. Autoheal
+        watches the local Docker daemon and restarts any container whose healthcheck reports
+        unhealthy for ~3 consecutive checks, provided the container has the
+        <code>autoheal: "true"</code> label.
+      </p>
+      <p>
+        Standard pattern on every healthy stack:
+      </p>
+      <pre><code>services:
+  my-service:
+    ...
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "..."]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s</code></pre>
+
+      <h2 id="alerting-flow">Alerting flow</h2>
+      <ol>
+        <li>Endpoint check fails (HTTP non-2xx, body assertion fails, push missing, etc.).</li>
+        <li>After <code>failure-threshold</code> consecutive failures (typically 3), Gatus fires
+          the alert chain.</li>
+        <li>Postmark webhook sends email from <code>alerts@pod.haus</code> with the rich
+          body.</li>
+        <li>Recovery (3 consecutive successes) sends a resolution email.</li>
+      </ol>
+
+      <h2 id="see-also">See also</h2>
+      <ul>
+        <li><a href="/backup-and-recovery.html#alerts">Backup &amp; recovery → alerts</a> —
+          how Backrest's nightly heartbeat plugs into Gatus.</li>
+        <li><a href="/scheduling.html">Scheduling</a> — the ofelia job that pushes the daily
+          RAR-backlog heartbeat.</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

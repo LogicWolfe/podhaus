@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Plans">
+  <meta name="doc-order" content="0">
+  <meta name="doc-title" content="All plans">
+  <title>Plans — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Plans</h1>
+      <p class="lead text-lg text-text-muted">
+        Implementation plans, migration runbooks, and other long-form planning docs.
+        Drop a <code>.md</code> or <code>.html</code> file into <code>docs/plans/</code> and
+        it appears here automatically on next page load — no manifest, no rebuild.
+      </p>
+
+      <h2 id="all-plans">All plans</h2>
+      <div id="plans-list" class="not-prose flex flex-col gap-1">
+        <p class="text-text-muted italic">Loading plans…</p>
+      </div>
+
+      <h2 id="authoring">Authoring a new plan</h2>
+      <p>Three flavors are supported, picked by what you put in <code>docs/plans/</code>:</p>
+      <ul>
+        <li><strong><code>.md</code> (Markdown)</strong> — easiest. Just drop the file in.
+          The plans index links it through <code>/plans/plan-viewer.html?file=&lt;name&gt;.md</code>,
+          which renders the Markdown client-side via the vendored <code>marked.min.js</code>
+          using the same shell, theme, and TOC as the rest of the docs.</li>
+        <li><strong><code>.html</code></strong> — start from <code>docs/_template.html</code>,
+          add your content. The plans index links it directly. Useful when you need richer
+          layout than Markdown gives you.</li>
+        <li><strong>Directory plan</strong> — for big plans that should be split across
+          multiple pages. Create <code>docs/plans/&lt;name&gt;/</code> with an
+          <code>index.md</code> (the landing page) plus any number of sibling
+          <code>.md</code> or <code>.html</code> sub-pages. The sidebar shows the parent
+          plan; sub-pages appear as indented children only when the parent or one of its
+          sub-pages is active, so the nav stays uncluttered. See
+          <a href="/plans/plan-viewer.html?file=sample-nested-plan/index.md">Sample Nested Plan</a>
+          for a worked example, including how to convert a flat plan to nested.</li>
+      </ul>
+
+      <p>
+        All flavors get the same styling. Plans don't need a fixed naming convention —
+        descriptive kebab-case is fine.
+      </p>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+  <script src="/assets/plan-list.js"></script>
+</body>
+</html>

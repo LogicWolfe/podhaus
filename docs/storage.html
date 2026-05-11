@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Getting started">
+  <meta name="doc-order" content="3">
+  <title>Storage — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Storage</h1>
+      <p class="lead text-lg text-text-muted">
+        Three storage tiers, chosen by what you'd hate to lose rather than by raw size. The tier
+        decides where a stack's data lives; the rule has been load-bearing since the Phase 6
+        architecture pivot.
+      </p>
+
+      <h2 id="tiers">The three tiers</h2>
+
+      <h3 id="local-nvme">Local NVMe (bilby internal)</h3>
+      <p>
+        Hot operational state for every stack — Plex DB, paperless pgdata, flood session,
+        Home Assistant config, Komodo state. Typically &lt;5 GB per stack. The default
+        destination for any new container's data volume.
+      </p>
+      <p>
+        Backed up nightly by Backrest (see <a href="/backup-and-recovery.html">Backup &amp;
+        recovery</a>). If a container needs to crash-restart, this is the disk that has to
+        survive. SQLite files belong here, never on NFS.
+      </p>
+
+      <h3 id="jump">Jump (NAS SSD)</h3>
+      <p>
+        QNAP SSD array, RAID5, ~382 GB total / ~280 GB free. Durable storage that
+        we'd really rather not lose. Three live consumers:
+      </p>
+      <ul>
+        <li><strong>Restic repo</strong> at <code>/mnt/jump/backups/</code> (bilby view) or
+          <code>/share/CACHEDEV2_DATA/Jump/backups/</code> (kangaroo view) — primary on-prem
+          backup target.</li>
+        <li><strong>Kangaroo's restic repo</strong> at <code>/mnt/jump/backups-kangaroo/</code> —
+          separate from bilby's to avoid two-client coordination.</li>
+        <li><strong>Victoria Logs</strong> at <code>/mnt/jump/victoria-logs/</code> — 180-day log
+          retention, 50 GB cap.</li>
+      </ul>
+      <p>
+        Bilby mounts Jump over NFS at <code>/mnt/jump</code>; kangaroo accesses it directly.
+        Either-direction off-site sync to OneDrive runs out of bilby's Backrest container via
+        the existing rclone hook.
+      </p>
+
+      <h3 id="pouch">Pouch (NAS HDD)</h3>
+      <p>
+        QNAP HDD array, RAID5 across 5 drives, ~29 TB / ~5 TB free at last check. Bulk content
+        where capacity matters more than per-drive resilience: Plex media, paperless documents,
+        flood downloads, Syncthing-replicated folders, OneNote export archive, BIFs (~183 GB).
+      </p>
+      <p>
+        Bilby mounts Pouch over NFS at <code>/mnt/pouch</code>; kangaroo accesses it at
+        <code>/share/CACHEDEV1_DATA/Pouch</code>. Same backing data.
+      </p>
+      <aside class="callout note">
+        <span class="callout-title">Why these aren't backed up the same way</span>
+        Plex media and paperless documents are large and redundant (we have the originals).
+        Backrest backs up the small operational <em>state</em> (Plex DB, Paperless pgdata) — not
+        the bulk content.
+      </aside>
+
+      <h2 id="sizing-rule">Sizing rule</h2>
+      <p>
+        When a new stack lands, pick a tier by this rule of thumb:
+      </p>
+      <ul>
+        <li><strong>&lt;5 GB, hot, must-survive-restart:</strong> local NVMe on bilby.</li>
+        <li><strong>5–50 GB or "we'd hate to lose this":</strong> ask. Probably Jump.</li>
+        <li><strong>&gt;50 GB, bulk, regenerable:</strong> Pouch.</li>
+      </ul>
+
+      <h2 id="nas-quirks">NFS quirks</h2>
+      <aside class="callout warn">
+        <span class="callout-title">Squash on Jump</span>
+        Kangaroo's <code>/Jump</code> export squashes all writes to <code>uid 1000:gid 100</code>
+        and denies <code>chown</code>. Container images that <code>chown</code> their data dir on
+        startup will fail to deploy against Docker NFS volumes — this hit
+        <code>ghcr.io/ferretdb/postgres-documentdb</code>,
+        <code>postgres:16</code>, and <code>1password/connect-api</code> during bring-up.
+        The carve-out is permanent now: any state that would have lived on Jump moved to local
+        NVMe instead.
+      </aside>
+      <aside class="callout warn">
+        <span class="callout-title">Mount-recovery gap</span>
+        <code>/mnt/jump</code> is mounted but not in <code>/etc/fstab</code> — survives until
+        first reboot. <code>/mnt/pouch</code> uses <code>_netdev,nofail</code>, so boot continues
+        if the NAS is unreachable and container bind mounts silently resolve to empty host dirs.
+        Investigation is tracked as a follow-up; affects plex, paperless, flood, logging,
+        backup.
+      </aside>
+
+      <h2 id="mounts">Mount summary</h2>
+      <table>
+        <thead>
+          <tr><th>Path</th><th>Host</th><th>What it is</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>/var/lib/&lt;stack&gt;</code></td><td>bilby</td><td>Local NVMe state per stack.</td></tr>
+          <tr><td><code>/mnt/jump</code></td><td>bilby</td><td>NFS to QNAP SSD (Jump).</td></tr>
+          <tr><td><code>/mnt/pouch</code></td><td>bilby</td><td>NFS to QNAP HDD (Pouch).</td></tr>
+          <tr><td><code>/share/CACHEDEV1_DATA/Pouch</code></td><td>kangaroo</td><td>Direct access to Pouch.</td></tr>
+          <tr><td><code>/share/CACHEDEV2_DATA/Jump</code></td><td>kangaroo</td><td>Direct access to Jump.</td></tr>
+          <tr><td><code>/share/CACHEDEV1_DATA/Container/</code></td><td>kangaroo</td><td>Container state on the SSD (Periphery, Syncthing, kangaroo Backrest).</td></tr>
+        </tbody>
+      </table>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

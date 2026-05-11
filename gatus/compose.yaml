@@ -23,7 +23,12 @@ services:
     ports:
       - 8080:8080
     volumes:
-      - ${PODHAUS_REPO}/gatus/config.yaml:/config/config.yaml:ro
+      # Directory bind (not file bind) — gatus auto-reloads its config on
+      # change, but an atomic-rename save on the host would leave the
+      # container pointed at the now-orphan inode forever. Bind the
+      # containing dir; gatus's default config path /config/config.yaml
+      # still resolves correctly. See docs/stack-conventions.html#bind-mounts.
+      - ${PODHAUS_REPO}/gatus/conf:/config:ro
       - gatus-data:/data
     networks:
       - dockernet

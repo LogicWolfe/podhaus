@@ -1,0 +1,46 @@
+services:
+  docs-server:
+    container_name: docs-server
+    image: nginx:alpine
+    restart: unless-stopped
+    # Tell nginx to read its config from the bind-mounted conf/ directory
+    # rather than the image's default /etc/nginx/nginx.conf. The default
+    # is left in place untouched — we just point nginx at ours via -c.
+    command: ["nginx", "-c", "/conf/nginx.conf", "-g", "daemon off;"]
+    # SELinux enforcing on Fedora Asahi denies cross-label reads into the
+    # bind-mounted docs tree + nginx config; label:disable lifts the
+    # confinement. Same pattern as gatus / ofelia / cloudflare-tunnel.
+    security_opt:
+      - label:disable
+    volumes:
+      # The docs themselves — bind-mounted read-only so a content edit on
+      # disk is immediately visible on next HTTP request (no container
+      # restart, no rebuild). Combined with the nginx Cache-Control headers
+      # in conf/nginx.conf, this gives the "edit → save → refresh → see it"
+      # workflow the site is built around.
+      - ${PODHAUS_REPO}/docs:/usr/share/nginx/html:ro
+      # Directory bind (not file bind) so atomic-rename editor saves on
+      # the host actually surface inside the container. File-level binds
+      # pin the inode at mount time and ignore subsequent host writes
+      # that replace the file — same gotcha documented in flood/compose
+      # for rtorrent.rc. See docs/stack-conventions.html#bind-mounts.
+      - ${PODHAUS_REPO}/docs-server/conf:/conf:ro
+    environment:
+      TZ: ${TZ}
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    healthcheck:
+      # 127.0.0.1 (not localhost) so the probe lands on IPv4 directly —
+      # nginx isn't listening on IPv6 in this stack, and wget's localhost
+      # resolution tries ::1 first and fails.
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/ > /dev/null"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  dockernet:
+    external: true

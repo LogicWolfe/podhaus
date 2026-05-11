@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Service runbooks">
+  <meta name="doc-order" content="5">
+  <title>Flood + RAR pipeline — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Flood + RAR pipeline</h1>
+      <p class="lead text-lg text-text-muted">
+        Flood (rtorrent + Flood web UI) is bilby-resident. The auto-extract pipeline around it
+        — unpackerr + rtorrent-cleanup.sh + rar-backlog.sh + Gatus heartbeat — is the
+        config-as-code answer to RAR-multi-volume torrents. Every config file involved lives in
+        the repo and bind-mounts into the container.
+      </p>
+
+      <h2 id="flood">Flood</h2>
+      <p>
+        <code>jesec/rtorrent-flood</code> image; runs as <code>1000:1001</code> so files
+        created end up owned the same as rtorrent's RAR files. UI on port 3000, reachable at
+        <code>torrent.pod.haus</code>.
+      </p>
+      <p>
+        Storage:
+      </p>
+      <ul>
+        <li><code>/var/lib/flood-db</code> (local NVMe) — rtorrent session
+          (~16 MB of <code>.torrent</code> + <code>.libtorrent_resume</code> +
+          <code>.rtorrent</code> files for ~200 active torrents).</li>
+        <li><code>/mnt/pouch</code> (NFS) — actual data, mounted into the container as
+          <code>/data</code>.</li>
+      </ul>
+
+      <h2 id="config-as-code">Config-as-code overlays</h2>
+      <p>
+        Two bind mounts make Flood's behavior diff-able and survive volume rebuild:
+      </p>
+      <ul>
+        <li><code>${PODHAUS_REPO}/flood/rtorrent.rc</code> overlaid onto
+          <code>/flood-db/.rtorrent.rc</code> — the live rtorrent config that used to be
+          container-volume-only.</li>
+        <li><code>${PODHAUS_REPO}/flood/scripts</code> overlaid onto <code>/scripts</code>
+          (directory bind, so host edits propagate without restart). Contains
+          <code>rtorrent-cleanup.sh</code> and <code>rar-backlog.sh</code>.</li>
+      </ul>
+      <aside class="callout note">
+        <span class="callout-title">Directory bind, not file bind, for the scripts dir</span>
+        File-level binds pin the inode at mount time. Any tool that saves via atomic rename
+        (vim, $EDITOR, Claude Code) leaves the container looking at the original inode forever.
+        A directory bind sidesteps that.
+      </aside>
+
+      <h2 id="rar-pipeline">The RAR auto-extract pipeline</h2>
+      <p>
+        Three parts working in concert. The whole point is "extract RAR multi-volume torrents
+        automatically and clean up the RAR pieces afterwards, but never delete the only copy
+        of the content if extraction silently failed."
+      </p>
+      <ol>
+        <li><strong>unpackerr stack</strong> (<code>unpackerr/compose.yaml</code>) —
+          <code>ghcr.io/unpackerr/unpackerr:latest</code>, runs as <code>1000:1001</code> like
+          flood. Watches the rtorrent download dir and extracts RAR multi-volume sets to the
+          containing directory.</li>
+        <li><strong><code>flood/scripts/rtorrent-cleanup.sh</code></strong> — invoked by
+          rtorrent's <code>event.download.erased</code> hook. Deletes RAR pieces and scene
+          detritus (<code>.rar</code>, <code>.r[0-9][0-9]</code>, <code>.partN.rar</code>,
+          <code>.sfv</code>, <code>.srr</code>, <code>.srs</code>, <code>.nfo</code>, sample/
+          proof dirs) <strong>only after</strong> verifying at least one non-RAR/non-detritus
+          keeper file exists in the folder. Path-restricted to
+          <code>/data/{Movies,TV,Kids}</code>.</li>
+        <li><strong><code>flood/scripts/rar-backlog.sh</code></strong> — daily ofelia job at
+          04:50 AWST. Scans for folders containing RAR pieces ≥2h old with no extracted
+          keepers (same detection as the cleanup script's abort guard, run proactively).
+          Pushes <code>success=true</code> or <code>success=false&amp;error=&lt;count+sample&gt;</code>
+          to Gatus's <code>heartbeat_rar-extraction</code> external endpoint with the bearer
+          token.</li>
+      </ol>
+
+      <h2 id="safety-layering">Safety layering</h2>
+      <p>
+        unpackerr ships no healthcheck (image has no probe binary, no HTTP endpoint). The
+        safety net is layered:
+      </p>
+      <ul>
+        <li><strong>Extraction-presence guard in <code>rtorrent-cleanup.sh</code></strong> —
+          if unpackerr died silently, the keeper count is zero and the cleanup aborts rather
+          than deleting the only copy.</li>
+        <li><strong><code>restart: unless-stopped</code></strong> on the unpackerr container.</li>
+        <li><strong>Daily Gatus heartbeat</strong> — if no successful ping arrives within 25
+          hours, the dead-man's-switch fires.</li>
+        <li><strong>Failure ping with context</strong> — if the proactive scan finds a stuck
+          folder, it pushes <code>success=false</code> with the count and a sample folder name
+          — Gatus alerts within minutes instead of waiting for the missing heartbeat.</li>
+      </ul>
+
+      <h2 id="legacy-cleanup">One-shot RAR-backlog cleanup tooling</h2>
+      <p>
+        Before the live pipeline went on, the existing 139-folder legacy RAR backlog was
+        remediated with a disposable <code>rar-cleanup:local</code> image (Dockerfile at
+        <code>rar-cleanup-scripts/Dockerfile</code> — debian:trixie-slim with unrar + python3
+        + sqlite3). All 136 cleanup actions are recorded in
+        <code>~/repos/podhaus-migration-state/rar-backlog-remediation.sqlite</code> (off-repo
+        sidecar). The tooling stays in the repo for reuse if the pattern recurs; not deployed
+        as a stack.
+      </p>
+
+      <h2 id="see-also">See also</h2>
+      <ul>
+        <li><a href="/scheduling.html">Scheduling</a> — the ofelia label that schedules
+          <code>rar-backlog.sh</code>.</li>
+        <li><a href="/monitoring.html">Monitoring</a> — the Gatus push endpoint that receives
+          the heartbeat.</li>
+        <li><a href="/plans/index.html">Plans</a> — Phase 7.5 of the migration plan documents
+          the pipeline's design end-to-end.</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

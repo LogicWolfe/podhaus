@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Operations">
+  <meta name="doc-order" content="3">
+  <title>Scheduling — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Scheduling</h1>
+      <p class="lead text-lg text-text-muted">
+        Ofelia handles all docker-side cron in podhaus. Schedules are declared as labels on
+        target containers — ofelia discovers them via the Docker socket and runs jobs as
+        <code>docker exec</code> against the labeled container. No central config file.
+      </p>
+
+      <h2 id="model">How ofelia works here</h2>
+      <p>
+        The <code>ofelia/</code> stack runs <code>mcuadros/ofelia:latest</code> in daemon mode
+        with <code>--docker</code>. On startup it reads labels from every running container and
+        builds its job schedule. Two label flavors in use:
+      </p>
+      <ul>
+        <li><strong><code>job-exec</code></strong> — runs a command inside the target container
+          via <code>docker exec</code>.</li>
+        <li><strong><code>job-run</code></strong> (rarely) — runs a one-shot ephemeral container
+          from a given image.</li>
+      </ul>
+      <p>
+        Cron schedules are interpreted in the container's local time. The <code>TZ</code> env
+        is set to <code>Australia/Perth</code> so labels like
+        <code>"0 4 * * *"</code> mean 04:00 AWST.
+      </p>
+
+      <h2 id="dead-time">04:00 dead-time window</h2>
+      <p>
+        Scheduled work defaults to starting at <strong>04:00 AWST</strong>. If a job is
+        expected to take more than 2 hours, walk it back from 06:00 instead so the whole
+        nightly run finishes before peak hours. This rule applies to Backrest plans (see
+        <a href="/backup-and-recovery.html">Backup &amp; recovery</a>) and to ofelia jobs.
+      </p>
+
+      <h2 id="current-jobs">Current ofelia jobs</h2>
+      <table>
+        <thead><tr><th>Job</th><th>Container</th><th>Schedule</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>plex-stats-cleanup</code></td><td>plex</td><td>04:00 on the 1st of each month</td><td>Online DELETE on <code>statistics_bandwidth</code> rows older than 30 days + VACUUM.</td></tr>
+          <tr><td><code>rar-backlog</code></td><td>flood</td><td>04:50 daily</td><td>Scans <code>/data/{Movies,TV,Kids}</code> for folders with RAR pieces ≥2h old and no extracted keepers. Pushes Gatus heartbeat with success or failure context.</td></tr>
+          <tr><td><code>daily-self-restart</code></td><td>ofelia</td><td>04:00 daily</td><td>Workaround — see below.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="self-restart">Why ofelia restarts itself daily</h2>
+      <aside class="callout warn">
+        <span class="callout-title">Workaround for upstream label-reload bug</span>
+        ofelia 0.3.x in label-discovery mode reads container labels at startup and only
+        partially tracks changes after that. In practice, label-value changes on existing
+        containers (typical when redeploying a stack with an updated schedule) silently fail to
+        take effect.
+      </aside>
+      <p>
+        The workaround: ofelia has a <code>job-exec</code> label on itself that runs
+        <code>kill 1</code> at 04:00 every day. PID 1 is ofelia, so it exits, and
+        <code>restart: unless-stopped</code> brings up a fresh instance that re-reads all
+        labels — including any schedule changes deployed during the day.
+      </p>
+      <p>
+        Bounds the worst-case "stale schedule" window to ~24 hours instead of indefinite.
+        Self-referential but reliable. Drop it when
+        <a href="https://github.com/mcuadros/ofelia/pull/368">upstream PR #368</a> ships true
+        Docker-event-driven hot reload of label changes.
+      </p>
+
+      <h2 id="ofelia-quirk">Other ofelia quirk</h2>
+      <aside class="callout warn">
+        <span class="callout-title">ofelia exits if it starts with zero jobs</span>
+        If ofelia comes up before any target container has its labels, the scheduler has zero
+        jobs and ofelia exits fatally (rather than idling). After a fresh bilby boot, ofelia
+        sometimes needs to be restarted once the labeled containers are up. Documented during
+        the plex-stats-cleanup bring-up.
+      </aside>
+
+      <h2 id="adding-job">Adding an ofelia job</h2>
+      <ol>
+        <li>Decide which container the job should run inside. The target container must
+          already have <code>docker compose</code> bring it up — ofelia can't schedule jobs in
+          a not-yet-running container.</li>
+        <li>Add labels to the target container's compose:
+          <pre><code>labels:
+  ofelia.enabled: "true"
+  ofelia.job-exec.&lt;name&gt;.schedule: "0 4 * * *"
+  ofelia.job-exec.&lt;name&gt;.command: "/path/to/script.sh"</code></pre>
+        </li>
+        <li>Deploy the target stack. Restart ofelia once
+          (<code>docker restart ofelia</code>) so it picks up the new labels — the
+          daily-self-restart hack will catch them the next cycle if you forget.</li>
+        <li>If the job is critical, add a Gatus push heartbeat — the script should POST
+          success/failure to a bearer-token-protected push endpoint, and Gatus's
+          dead-man's-switch interval (25h is the convention) catches missed pings. Pattern in
+          <code>flood/scripts/rar-backlog.sh</code>.</li>
+      </ol>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

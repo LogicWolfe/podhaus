@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Getting started">
+  <meta name="doc-order" content="1">
+  <title>Architecture — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Architecture</h1>
+      <p class="lead text-lg text-text-muted">
+        Two hosts, one Komodo Core, one git repo. All services run as Docker Compose stacks
+        whose configs are committed; secrets are templated in at deploy time from 1Password.
+      </p>
+
+      <h2 id="topology">Topology</h2>
+      <p>
+        <strong>bilby</strong> (Apple M1 Mac mini, 15 GB RAM, Asahi Linux) is the primary host. It
+        runs Komodo Core, the Periphery agent for itself, and every original podhaus stack
+        (Plex, Paperless, Home Assistant, Flood, etc.).
+      </p>
+      <p>
+        <strong>kangaroo</strong> (QNAP NAS, QTS, ext4) runs a second Periphery agent registered to
+        the same Komodo Core, plus Syncthing, a second Backrest instance, an autoheal, and a
+        logging Alloy collector. Kangaroo is a managed deploy target — its stacks live in the same
+        git repo and are deployed through the same Komodo UI.
+      </p>
+      <p>
+        <strong>pinelake</strong> is a planned third host (same role as bilby — primary services
+        for a second household). When it lands, it slots into the existing pattern with no
+        further architectural work.
+      </p>
+
+      <h2 id="repo-layout">Repo layout</h2>
+      <ul>
+        <li>Single-host services live in a top-level directory with <code>compose.yaml</code> and
+          <code>stack.toml</code> — e.g. <code>plex/</code>, <code>paperless/</code>,
+          <code>gatus/</code>.</li>
+        <li>Multi-host shared services use the <code>&lt;service&gt;/{compose.shared.yaml,
+          &lt;host&gt;/...}</code> layout. Each host's <code>compose.yaml</code> does
+          <code>include: [../compose.shared.yaml]</code> and overlays host-specific bits. Applies
+          to <code>backup/</code>, <code>autoheal/</code>, <code>logging/</code>.</li>
+        <li>Komodo's own infrastructure lives in <code>komodo/</code>
+          (<code>ferretdb.compose.yaml</code>, ResourceSync TOML files).</li>
+        <li>Bootstrap scripts (<code>komodo-start</code>, <code>komodo-sync</code>,
+          <code>kangaroo_bootstrap</code>, <code>dns-push</code>) sit at the repo root.</li>
+      </ul>
+      <p>
+        The repo is bind-mounted into bilby's Komodo Core (for ResourceSync) and bilby's
+        Periphery (for stack compose files). Kangaroo's Periphery clones the repo itself via
+        Komodo's Linked Repo resource — see <a href="/komodo.html#operating-models">Komodo →
+        operating models</a>.
+      </p>
+
+      <h2 id="design-principles">Design principles</h2>
+      <p>These four principles trump local convenience whenever they conflict:</p>
+
+      <h3 id="config-as-code">Config-as-code</h3>
+      <p>
+        Any config that <em>can</em> live in the repo, <em>should</em>. Container-volume-only state is
+        not an acceptable substitute — those files get lost on rebuild. Secrets live in 1Password
+        and are templated in at deploy time; everything else is plain files committed alongside
+        the compose definitions.
+      </p>
+
+      <h3 id="local-state-default">Local state by default</h3>
+      <p>
+        Bilby's NVMe is the canonical home for container state. NFS volumes carry bulk content
+        (Plex media, paperless documents, BIFs) but not operational state. Backrest →
+        <a href="/storage.html#jump">Jump SSD</a> → OneDrive is the durability mechanism. The
+        original "stateless bilby on NFS" idea was abandoned during the Phase 6 architecture
+        pivot — SQLite on NFS under contention is fragile.
+      </p>
+
+      <h3 id="storage-tier-rule">Storage tier rule</h3>
+      <p>
+        Three tiers, chosen by what you'd hate to lose rather than by size alone:
+      </p>
+      <ul>
+        <li><strong>Local NVMe</strong> — hot operational state, &lt;5 GB per stack, backed up
+          nightly.</li>
+        <li><strong>Jump</strong> (NAS SSD, RAID5, ~280 GB free) — durable storage we'd hate to
+          lose: restic repo, Victoria Logs.</li>
+        <li><strong>Pouch</strong> (NAS HDD, RAID5, ~5 TB free) — bulk content where capacity
+          matters more than per-drive resilience.</li>
+      </ul>
+      <p>See <a href="/storage.html">Storage</a> for mount details and the NAS-squash quirk.</p>
+
+      <h3 id="secrets-from-1p">Secrets from 1Password, never from the UI</h3>
+      <p>
+        Komodo Variables come from 1Password via <code>komodo-op</code>, never created manually
+        through the Komodo UI. When a stack needs a secret, the workflow is:
+      </p>
+      <ol>
+        <li>Add the item to the Homelab 1Password vault.</li>
+        <li><code>komodo-op</code> auto-syncs it as
+          <code>OP__KOMODO__&lt;ITEM&gt;__&lt;FIELD&gt;</code>.</li>
+        <li>Reference that synced name in the stack's <code>environment</code> block in
+          <code>stack.toml</code>.</li>
+      </ol>
+      <p>
+        Manual UI variables don't survive a fresh Komodo bootstrap and silently break the
+        disaster-recovery path. The only direct-seeded variables (in <code>komodo-start</code>)
+        are chicken-and-egg credentials that must exist before <code>komodo-op</code> can run.
+        See <a href="/secrets.html">Secrets &amp; variables</a> for the full flow.
+      </p>
+
+      <h2 id="ingress">Ingress</h2>
+      <p>
+        All external traffic enters through a single Cloudflare Tunnel running on bilby. Ingress
+        rules live in <code>cloudflare-tunnel/config.yml</code> — adding a service that needs a
+        hostname means adding one rule there plus a CNAME in <code>dns/dnsconfig.js</code>.
+        Cloudflare Access enforces a <code>*.pod.haus</code> wildcard policy so every admin
+        surface is gated on a "Family" identity group without needing a per-service Access app.
+      </p>
+      <p>See <a href="/networking.html">Networking</a> for dockernet, host-network services, and
+        DNS detail.</p>
+
+      <h2 id="lifecycle">Stack lifecycle</h2>
+      <p>
+        Day-to-day, the loop is:
+      </p>
+      <ol>
+        <li>Edit a stack's <code>compose.yaml</code> or <code>stack.toml</code>.</li>
+        <li>Commit (optional — bilby uses <code>files_on_host</code>, so changes are read
+          straight from the working tree).</li>
+        <li>Run <code>./komodo-sync</code> — Komodo Core picks up the updated stack definition.</li>
+        <li>Deploy the stack from the Komodo UI (or accept the auto-pulled change).</li>
+      </ol>
+      <aside class="callout warn">
+        <span class="callout-title">Known gap</span>
+        <code>komodo-sync</code> updates stack <em>definitions</em> in Komodo's database but
+        doesn't currently auto-redeploy changed stacks. Manual <em>Deploy</em> in the UI is the
+        step that actually recreates containers. Tracked as a follow-up.
+      </aside>
+
+      <h2 id="see-also">See also</h2>
+      <ul>
+        <li><a href="/komodo.html">Komodo</a> — how the orchestrator actually works.</li>
+        <li><a href="/stack-conventions.html">Stack conventions</a> — patterns for adding or
+          changing services.</li>
+        <li><a href="/plans/index.html">Plans</a> — historical context, especially the long
+          alligator → bilby migration plan that drove most of the current design.</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>
