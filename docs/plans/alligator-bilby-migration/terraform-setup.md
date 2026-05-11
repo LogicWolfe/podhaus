@@ -1,30 +1,10 @@
 # Terraform foundation
 
-Stand up a state backend and a runner before any Terraform-managed work
-lands. This is the prerequisite for
-[Cloudflare as Terraform](cloudflare-terraform.md) and for anything
-else we end up codifying with TF later (Railway-side resources during
-shutdown, GitHub Apps, etc.).
-
-## Repo state (2026-05-11)
-
-In-repo artifacts have landed; what's left is the manual one-shots that
-need 1P, a running MinIO, and DNS push authorization.
-
-| Step | Status |
-|---|---|
-| `minio/{compose.yaml, stack.toml}` | ✓ in repo |
-| Backrest `minio` plan + `/var/lib/minio` bind | ✓ in repo (`backup/bilby/`) |
-| `minio.pod.haus` tunnel ingress | ✓ in repo (`cloudflare-tunnel/conf/config.yml`) |
-| `minio` DNS CNAME | ✓ in repo (`dns/dnsconfig.js`) — needs `./dns-push` |
-| `./tf` runner script | ✓ in repo |
-| `mcli` installed on bilby | ✓ via upstream RPM (see [Hosts](/hosts.html#bilby-cli-tools)) |
-| Create `op://Homelab/MinIO Root` 1P item | pending user |
-| `./komodo-sync` + deploy MinIO | pending user |
-| `mkdir /var/lib/minio` on bilby | pending user (Komodo will stub one if absent) |
-| Create `terraform-state` bucket via `mcli` | pending user, after deploy |
-| Create `MinIO Terraform User` 1P item + MinIO user | pending user, after deploy |
-| Smoke test + restore drill | pending user |
+**Status: complete (2026-05-11).** MinIO is live, the `tf` runner is in
+place, the smoke test + restore drill passed, and
+[Cloudflare as Terraform](cloudflare-terraform.md) is consuming this
+state backend at `s3://terraform-state/cloudflare.tfstate`. Kept here
+as the architectural record + future-tool reference.
 
 The earlier draft of the CF plan said "local file at
 `/var/lib/terraform-state/`". That works but gives up two things we'll

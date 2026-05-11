@@ -202,6 +202,49 @@ Two-server Komodo topology live:
   kangaroo Periphery surfaces remote-Periphery failures as normal
   Gatus alerts.
 
+## Terraform foundation + Cloudflare migration — 2026-05-11
+
+End-to-end Terraform stand-up plus full migration of every Cloudflare
+resource off DNSControl + the Access dashboard, in one session.
+
+- **MinIO** (`minio/`) — single-node, dockernet-only API + loopback-
+  published 9000 for `mcli`, console at `minio.pod.haus`. `mcli` RPM
+  installed on bilby (`mcli` binary, Fedora rename of `mc`). Backrest
+  plan + `/var/lib/minio` bind in place.
+- **`tf` runner** at repo root — docker run of
+  `hashicorp/terraform:latest` on dockernet, `op run` injects
+  `AWS_*` + `CLOUDFLARE_API_TOKEN` from 1P.
+- **Smoke test** — verified S3 backend init/apply/destroy, the
+  `use_lockfile = true` S3 lock blocking concurrent applies with
+  `412 PreconditionFailed`, and Backrest restic non-destructive restore
+  recovering the bucket + state cleanly.
+- **`cloudflare/` Terraform root** — 11 zones / 82 DNS records / 12
+  Access apps / 13 policies / 1 group / 2 service tokens, zero drift.
+  Per-zone `dns_<zone>.tf`, plus `access.tf` for the Zero Trust layer.
+- **New Access apps** — `paperless.pod.haus` with a domain-scoped
+  service-token Bypass, and a path-scoped `komodo.pod.haus/auth/github/webhook`
+  app with everyone-Bypass for GitHub webhook delivery.
+- **Service tokens** — *Homelab service token* (full `*.pod.haus`
+  surface incl. per-host overrides) and *Paperless iOS* (scoped to
+  paperless.pod.haus only). Both stored in 1P.
+- **DNSControl retired for Cloudflare** — `dns/` now manages UniFi
+  split-horizon only. CF API token removed from `dns/.env` and
+  `dns/creds.json`. `dns-preview` / `dns-push` retained as
+  UniFi-only wrappers.
+
+Schema gotchas captured in `cloudflare/README.md`:
+
+- SRV + URI records use `data { }` not `content`; auto-generation
+  emits both and fails validation. Hand-write these.
+- Top-level `priority` must be set on SRV records alongside
+  `data.priority` to avoid drift.
+- Imported inline (non-reusable) Access policies can't be updated via
+  the provider's account-level PUT — `tf state rm` and let TF
+  recreate them as reusable.
+- App-launcher type apps need `landing_page_design = {}` plus
+  `ignore_changes` to suppress the every-refresh `{title="Welcome!"}`
+  injection.
+
 ## Documentation overhaul — 2026-05-11
 
 - New static docs site at `https://docs.pod.haus` served by

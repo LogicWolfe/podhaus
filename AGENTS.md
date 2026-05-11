@@ -111,10 +111,13 @@ slot into the same pattern.
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
-| `dns/dnsconfig.js` | DNSControl zone declarations (Cloudflare + UniFi) |
-| `dns/creds.json` | DNSControl provider credentials (env var refs, no secrets) |
-| `dns-preview` | DNSControl dry-run script |
-| `dns-push` | DNSControl apply script |
+| `cloudflare/` | Terraform sources for all Cloudflare resources (DNS, Access apps, policies, service tokens). State at `s3://terraform-state/cloudflare.tfstate` in MinIO. |
+| `tf` | `op run`-wrapped `hashicorp/terraform` docker runner, attaches to `dockernet`. |
+| `minio/` | Single-node MinIO — S3 backend for Terraform state. |
+| `dns/dnsconfig.js` | DNSControl zone declarations for UniFi split-horizon only (Cloudflare moved to Terraform). |
+| `dns/creds.json` | DNSControl UniFi provider credentials (env var refs, no secrets). |
+| `dns-preview` | DNSControl dry-run script (UniFi only). |
+| `dns-push` | DNSControl apply script (UniFi only). |
 | `docs/` | The published docs (served at `docs.pod.haus`) |
 | `docs-server/` | nginx stack serving `docs/` |
 | `AGENTS.md` | This file |
@@ -135,8 +138,10 @@ slot into the same pattern.
 5. Run `./komodo-sync` to register the stack. Deploy it from the Komodo
    UI.
 6. If the service needs a hostname, add an ingress rule to
-   `cloudflare-tunnel/conf/config.yml` and a CNAME in
-   `dns/dnsconfig.js`. Then `./dns-push`.
+   `cloudflare-tunnel/conf/config.yml` and a `cloudflare_dns_record`
+   resource to the appropriate `cloudflare/dns_<zone>.tf`. Then
+   `cd cloudflare && op run --env-file=.env -- ../tf apply` to
+   publish the DNS change.
 
 ## When adding a new instance of a shared service to another host
 
@@ -181,10 +186,10 @@ These have failure modes that you must not introduce:
   `${PODHAUS_REPO}/<stack>/...`, never relative paths. Relative paths
   resolve against the periphery container's filesystem, not the host's,
   and Docker silently creates empty stub directories.
-- **Don't push, deploy, or change DNS without explicit user
-  authorization.** Treat all `git push`, `./komodo-sync` (deploy), and
-  `./dns-push` as actions that require a green light. Previewing
-  (`dns-preview`) is fine.
+- **Don't push, deploy, or change DNS / Access policy without explicit
+  user authorization.** Treat all `git push`, `./komodo-sync` (deploy),
+  `./dns-push`, and any `tf apply` against `cloudflare/` as actions that
+  require a green light. `dns-preview` and `tf plan` are fine.
 - **Don't bypass git hooks (`--no-verify`, etc.) without explicit
   permission.** Same for force-push, hard reset, branch deletion.
 - **Plex identity is sacred.** Never let Plex start without an init

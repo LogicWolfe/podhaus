@@ -73,8 +73,9 @@ networks:
   service: http://172.18.0.1:8123</code></pre>
       <p>
         Anything not listed returns 404 at the tunnel edge. New service that needs a hostname?
-        Add the rule here, add a CNAME in <code>dns/dnsconfig.js</code>, run
-        <code>./dns-push</code>, run <code>./komodo-sync</code> to refresh the tunnel container.
+        Add the rule here, add a <code>cloudflare_dns_record</code> to the relevant
+        <code>cloudflare/dns_*.tf</code> file, run <code>op run --env-file=.env -- ../tf apply</code>
+        from <code>cloudflare/</code>, then <code>./komodo-sync</code> to refresh the tunnel container.
       </p>
       <aside class="callout warn">
         <span class="callout-title">cloudflared is distroless</span>
@@ -87,9 +88,11 @@ networks:
 
       <h2 id="access">Cloudflare Access</h2>
       <p>
-        A single Access Application covers <code>*.pod.haus</code> with a Family policy. Any
-        single-label hostname under <code>pod.haus</code> is gated by browser-side Cloudflare
-        Access login automatically — no per-service Access app needed.
+        All Access applications, policies, groups, and service tokens are codified in
+        <code>cloudflare/access.tf</code> (Terraform). A single
+        <strong>Pod Haus wildcard</strong> Application covers <code>*.pod.haus</code> with a
+        Family allow policy — any single-label hostname under <code>pod.haus</code> is gated
+        by browser-side Cloudflare Access login automatically.
       </p>
       <p>
         Implication for hostname design: prefer single-label names like <code>backup.pod.haus</code>
@@ -98,35 +101,58 @@ networks:
         (<code>kangaroo-backup.pod.haus</code>).
       </p>
       <p>
-        Exceptions to the wildcard:
+        Scoped overrides to the wildcard:
       </p>
       <ul>
-        <li><strong>UniFi</strong> has its own Access app with a different policy (LAN device
-          UI).</li>
-        <li>Future scoped apps for service-token bypasses (e.g. Paperless iOS, Komodo webhook)
-          will be created via Terraform — see the Phase 14 plan.</li>
+        <li><strong>UniFi</strong> — own Access app, Bypass policy (UniFi has its own LAN login).</li>
+        <li><strong>Home Assistant, Sunshine, Syncthing, Torrents, Paperless</strong> — per-host
+          apps that layer the Homelab service-token Bypass on top of the Family allow.</li>
+        <li><strong>Pine Lake apps</strong> — Nathan-only reusable policy, separate from the
+          Family group (cross-household).</li>
+        <li><strong>Komodo webhook</strong> — path-scoped Bypass on
+          <code>komodo.pod.haus/auth/github/webhook</code> so GitHub webhook deliveries skip
+          Access; Komodo HMAC-validates the delivery itself.</li>
+      </ul>
+      <h3 id="service-tokens">Service tokens</h3>
+      <p>
+        Two service tokens for programmatic access. Send as
+        <code>CF-Access-Client-Id</code> + <code>CF-Access-Client-Secret</code> headers:
+      </p>
+      <ul>
+        <li><strong>Homelab service token</strong> (<code>op://Homelab/Cloudflare Access —
+          Homelab Service Token</code>) — full bypass of the
+          <code>*.pod.haus</code> surface plus every per-host override above. One token,
+          everything. Treat as high-value; a leak grants access to all of pod.haus.</li>
+        <li><strong>Paperless iOS</strong> (<code>op://Homelab/Cloudflare Access — Paperless
+          iOS Service Token</code>) — bypass scoped to <code>paperless.pod.haus</code> only.
+          Paste both header values into Swift Paperless &gt; Settings &gt; Connection &gt;
+          Extra Headers.</li>
       </ul>
 
       <h2 id="dns">DNS</h2>
       <p>
-        Managed by <strong>DNSControl</strong>: <code>dns/dnsconfig.js</code> declares zones for
-        all of our domains, <code>dns/creds.json</code> resolves provider tokens from env. Two
-        providers in play:
+        Two source-of-truth tools, one per provider:
       </p>
       <ul>
-        <li><strong>Cloudflare</strong> — public DNS for <code>pod.haus</code>,
-          <code>pinelake.haus</code>, the Fastmail/Postmark email domains, and personal sites.</li>
-        <li><strong>UniFi</strong> — LAN-side split-horizon entries (<code>unifi.pod.haus →
-          10.0.0.1</code>, <code>bilby.pod.haus → 10.0.0.119</code>).</li>
+        <li><strong>Cloudflare</strong> — every public zone managed by Terraform in
+          <code>cloudflare/dns_*.tf</code>, one file per zone. State lives in MinIO at
+          <code>s3://terraform-state/cloudflare.tfstate</code>. Run
+          <code>op run --env-file=.env -- ../tf plan</code> / <code>apply</code> from
+          <code>cloudflare/</code>.</li>
+        <li><strong>UniFi</strong> — LAN-side split-horizon (<code>unifi.pod.haus →
+          10.0.0.1</code>, <code>bilby.pod.haus → 10.0.0.119</code>) managed by DNSControl in
+          <code>dns/dnsconfig.js</code>. The UniFi controller has no Terraform provider worth
+          the burden for these two records; DNSControl stays.</li>
       </ul>
       <p>
-        Workflow: edit <code>dnsconfig.js</code>, run <code>./dns-preview</code> to see the diff,
-        run <code>./dns-push</code> to apply. Both scripts are bash wrappers around
-        <code>ghcr.io/stackexchange/dnscontrol</code>.
+        Workflow for Cloudflare: edit the relevant <code>dns_&lt;zone&gt;.tf</code>, run
+        <code>../tf plan</code> from <code>cloudflare/</code> to see the diff, run
+        <code>../tf apply</code> to apply. The <code>tf</code> wrapper joins
+        <code>dockernet</code> so it reaches MinIO at <code>http://minio:9000</code>.
       </p>
       <p>
-        DNSControl will be replaced by Terraform as part of the Phase 14 Cloudflare-as-code
-        migration — see the <a href="/plans/index.html">plans</a> for that work.
+        Workflow for UniFi: edit <code>dns/dnsconfig.js</code>, run <code>./dns-preview</code>,
+        run <code>./dns-push</code>.
       </p>
 
       <h2 id="current-ingress">Current ingress rules</h2>

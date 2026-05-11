@@ -35,8 +35,7 @@ documentation overhaul.
 
 ## Remaining work
 
-Six streams. #3 → #4 → #5 is the only hard dependency chain; everything
-else is independent.
+Three streams, all independent.
 
 1. [**Periphery v2 keypair auth**](periphery-v2-auth.md) — migrate
    bilby's + kangaroo's Periphery agents off the legacy
@@ -46,24 +45,20 @@ else is independent.
    out the OneNote bulk-import work: `unknown` bucket review, delete
    stale `$value` files from the export tree, hard-delete Paperless
    Trash, commit the final sidecar DB.
-3. [**Terraform foundation**](terraform-setup.md) — stand up a
-   single-node MinIO stack on bilby and a `tf` runner wrapper so any
-   future Terraform work has a state backend with native locking and a
-   Backrest plan. Prerequisite for #4.
-4. [**Cloudflare as Terraform**](cloudflare-terraform.md) — replace
-   DNSControl + the planned cf-access-sync tool with a single Terraform
-   surface covering Access, DNS, Rulesets, Transform Rules, Cache
-   Rules. Consumes #3's state backend; unblocks the Railway-migrations
-   webhook-bypass work below.
-5. [**Railway migrations**](railway-migrations.md) — bring doggos
-   (kid's static site) and yiayia (board app) home from Railway. Needs
-   the Terraform Access Application from #4 for the Komodo webhook
-   bypass.
-6. [**Deferred follow-ups**](deferred-followups.md) — non-blocking
+3. [**Railway migrations**](railway-migrations.md) — bring doggos
+   (kid's static site) and yiayia (board app) home from Railway. The
+   Komodo webhook bypass Access app is already in place (TF-managed).
+4. [**Deferred follow-ups**](deferred-followups.md) — non-blocking
    items surfaced during the migration: NFS bind-mount auto-recovery,
    ofelia self-restart workaround removal pending upstream PR,
    host-package runbook, komodo-sync auto-deploy gap, orphan-container
    behaviour documentation, komodo-start first-boot API-key automation.
+
+Both [Terraform foundation](terraform-setup.md) and
+[Cloudflare as Terraform](cloudflare-terraform.md) are **done** —
+state-backend stack live, all 11 zones (82 records) + 12 Access apps
++ 2 service tokens managed by TF with zero drift, DNSControl is now
+UniFi-only. See [Completed work](completed-work.md) for the recap.
 
 ## Credentials
 

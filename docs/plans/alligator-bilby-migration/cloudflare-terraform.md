@@ -1,11 +1,15 @@
 # Cloudflare as Terraform
 
-Replace DNSControl + the planned cf-access-sync tool with a single
-Terraform surface covering Cloudflare Access, DNS, Rulesets, Transform
-Rules, Single Redirects, Cache Rules, Zone Settings, and everything
-else hand-configured in the dashboard today. **Blocks** the Railway
-migrations work which needs a path-scoped Access Bypass Application
-for the Komodo webhook.
+**Status: complete (2026-05-11).** 11 zones / 82 DNS records / 12 Access
+apps / 13 policies / 1 group / 2 service tokens all under Terraform in
+`cloudflare/`, zero drift. DNSControl is now UniFi-only. Kept here as
+the architectural record + capture of v5-provider quirks. Live source
+in `cloudflare/dns_*.tf` + `cloudflare/access.tf`.
+
+Original goal: replace DNSControl + the planned cf-access-sync tool
+with a single Terraform surface covering Cloudflare Access, DNS,
+Rulesets, Transform Rules, Single Redirects, Cache Rules, Zone Settings,
+and everything else hand-configured in the dashboard today.
 
 ## Decision context (recorded 2026-04-17)
 
