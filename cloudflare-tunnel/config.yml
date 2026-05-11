@@ -7,13 +7,13 @@
 tunnel: cc68c7c9-1dad-42aa-af04-46119d3e515f
 credentials-file: /etc/cloudflared/credentials.json
 ingress:
-  - hostname: backups.pod.haus
+  - hostname: backup.pod.haus
     # Backrest UI on bilby. Backrest is on dockernet alongside cloudflared,
     # so resolve by container name. Backrest's own auth is disabled in
     # config.json.tmpl — Cloudflare Access (`*.pod.haus` wildcard app) is
     # the sole gate.
     service: http://backrest:9898
-  - hostname: kangaroo-backups.pod.haus
+  - hostname: kangaroo-backup.pod.haus
     # Backrest UI on kangaroo. cloudflared lives on bilby, so route via
     # the LAN to kangaroo's published :9898 (same path as kangaroo.pod.haus
     # → 10.0.0.25:8080). Hyphenated single-label hostname intentional —

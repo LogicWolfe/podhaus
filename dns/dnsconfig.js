@@ -11,15 +11,15 @@ D("pod.haus!cloudflare", REG_NONE, DnsProvider(DSP_CF),
     // Tunnel-routed services (proxied)
     // Single-label hostnames so the existing `*.pod.haus` Access app
     // wildcard covers them automatically. Multi-label (e.g.
-    // backups.kangaroo.pod.haus) would fall outside that wildcard, so
+    // backup.kangaroo.pod.haus) would fall outside that wildcard, so
     // host-distinguishing names use a hyphen prefix instead — see
-    // `kangaroo-backups` below.
-    CNAME("backups",          TUNNEL, CF_PROXY_ON),  // backrest UI on bilby
-    CNAME("gatus",            TUNNEL, CF_PROXY_ON),  // gatus config-as-code monitoring
-    CNAME("grafana",          TUNNEL, CF_PROXY_ON),  // grafana (kept for future dashboards)
-    CNAME("home",             TUNNEL, CF_PROXY_ON),
-    CNAME("kangaroo",         TUNNEL, CF_PROXY_ON),
-    CNAME("kangaroo-backups", TUNNEL, CF_PROXY_ON),  // backrest UI on kangaroo
+    // `kangaroo-backup` below.
+    CNAME("backup",          TUNNEL, CF_PROXY_ON),  // backrest UI on bilby
+    CNAME("gatus",           TUNNEL, CF_PROXY_ON),  // gatus config-as-code monitoring
+    CNAME("grafana",         TUNNEL, CF_PROXY_ON),  // grafana (kept for future dashboards)
+    CNAME("home",            TUNNEL, CF_PROXY_ON),
+    CNAME("kangaroo",        TUNNEL, CF_PROXY_ON),
+    CNAME("kangaroo-backup", TUNNEL, CF_PROXY_ON),  // backrest UI on kangaroo
     CNAME("komodo",           TUNNEL, CF_PROXY_ON),
     CNAME("logs",             TUNNEL, CF_PROXY_ON),  // victoria-logs vmui (primary log UI)
     CNAME("paperless",        TUNNEL, CF_PROXY_ON),
