@@ -100,9 +100,10 @@ services:
       PAPERLESS_TIME_ZONE: ${TZ}
     volumes:
       # Paperless app state (search index, models, classifiers) on local
-      # NVMe per the sizing rule. Documents themselves stay on Pouch.
+      # NVMe per the sizing rule. Documents on Jump — small + random-read,
+      # fits Jump's "durable + IOPS" bucket better than Pouch's HDDs.
       - /var/lib/paperless-data:/usr/src/paperless/data:z
-      - /mnt/pouch/Paperless:/usr/src/paperless/media
+      - /mnt/jump/paperless:/usr/src/paperless/media
     labels:
       autoheal: "true"
     healthcheck:

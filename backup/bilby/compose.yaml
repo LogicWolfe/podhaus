@@ -44,6 +44,7 @@ services:
       - /var/lib/home-assistant:/userdata/home-assistant:ro
       - /var/lib/paperless-pgdata:/userdata/paperless/pgdata:ro
       - /var/lib/paperless-data:/userdata/paperless/data:ro
+      - /mnt/jump/paperless/documents:/userdata/paperless/documents:ro
       - /var/lib/minio:/userdata/minio:ro
       #
       # Docker named volumes from stacks that still use them (NAS squash

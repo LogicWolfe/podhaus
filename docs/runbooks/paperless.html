@@ -37,7 +37,10 @@
           (Tika has no shell/curl); liveness comes via Paperless's own logs.</li>
         <li><code>paperless-gotenberg</code> — PDF rendering for office docs and emails.</li>
         <li><code>paperless</code> — the webserver. Data at <code>/var/lib/paperless-data</code>
-          (search index, classifiers); documents at <code>/mnt/pouch/Paperless</code>.</li>
+          (search index, classifiers) on local NVMe; documents at
+          <code>/mnt/jump/paperless</code>. Documents tree is included in the daily
+          <code>paperless</code> restic plan via the <code>/userdata/paperless/documents</code>
+          bind mount in <code>backup/bilby/compose.yaml</code>.</li>
       </ul>
 
       <h2 id="access">Access model</h2>
@@ -111,17 +114,20 @@
         failures).
       </aside>
 
-      <h2 id="storage-relocation">Pending decision: relocating storage</h2>
+      <h2 id="email-ingest">Email ingest (not yet configured)</h2>
       <p>
-        Currently Paperless's document directory is on <code>/mnt/pouch/Paperless/</code>
-        (Pouch HDD). Paperless's access pattern (small documents, frequent random reads on UI,
-        OCR-heavy on imports) probably fits Jump's "durable + IOPS" bucket better. Decision
-        deferred — needs a capacity check, migration plan for pgdata + paperless-data + the
-        documents dir, and a downtime window.
+        The compose env var <code>PAPERLESS_EMAIL_TASK_CRON: "*/10 * * * *"</code> is
+        already wired — Paperless polls IMAP every 10 minutes — but no mail account has
+        been configured inside Paperless, so the cron is a no-op. Full setup steps in
+        <a href="/plans/alligator-bilby-migration/paperless-email-ingest.html">Paperless
+        email ingest</a>: Fastmail alias → "Paperless Ingest" folder → app-password →
+        Paperless mail account + rule.
       </p>
 
       <h2 id="see-also">See also</h2>
       <ul>
+        <li><a href="/plans/alligator-bilby-migration/paperless-email-ingest.html">Email
+          ingest plan</a> — Fastmail IMAP setup, not yet executed.</li>
         <li><a href="/plans/index.html">Plans</a> — the migration plan covers Phase 10 (bulk
           import) in detail including the curation YAML structure.</li>
         <li><code>~/repos/podhaus-migration-state/paperless-imports.sqlite</code> (off-repo

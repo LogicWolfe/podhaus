@@ -4,6 +4,26 @@ Summary of everything done across the alligator → bilby migration,
 organized by chunk. Specific dates and commit hashes preserved for the
 ones that mattered.
 
+## Paperless stabilization — 2026-05-12
+
+- **`unknown` bucket review** — manually swept in the Paperless UI.
+- **Legacy `$value` files deleted** — 917 files, ~1.76 GB freed on Pouch.
+- **Trash** — left to auto-expire at the 30-day window.
+- **Storage moved Pouch → Jump** — `/mnt/pouch/Paperless` → `/mnt/jump/paperless`.
+  1.6 GB on Jump's 363 GB free. Bind mount updated in
+  `paperless/compose.yaml`. NVMe state stayed where it was.
+- **Documents added to restic** — previously the documents tree had no
+  restic snapshot. Now covered by the daily `paperless` plan via a new
+  `/mnt/jump/paperless/documents:/userdata/paperless/documents:ro`
+  bind mount in `backup/bilby/compose.yaml`.
+- **Migration provenance pushed to GitHub** —
+  `~/repos/podhaus-migration-state/` promoted from plain directory to
+  git repo, pushed to private `LogicWolfe/podhaus-migration-state`.
+  Holds the curation yaml, diff plan, import sidecar SQLite, audit logs.
+- **iOS app working** — Swiftless, configured with the CF Access service
+  token headers + a DRF API token stored at
+  `op://Homelab/Paperless API Token (iOS)`.
+
 ## Service exposure module + push-to-deploy — 2026-05-12
 
 - **`cloudflare/modules/pod_haus_service`** — Terraform module

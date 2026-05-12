@@ -7,9 +7,8 @@ joining mid-flight as a second managed host under one Komodo Core.
 The core work is done — **alligator was powered off 2026-04-14**, every
 service has lived on bilby/kangaroo since, and the Docker-based + Komodo-
 managed + 1Password-backed architecture has been stable for weeks. What
-remains is end-of-project polish: one auth-model swap, a documentation
-cleanup window for the Paperless import, two Railway services not yet
-migrated, and a handful of non-blocking follow-ups.
+remains is end-of-project polish: one auth-model swap, two Railway services
+not yet migrated, and a handful of non-blocking follow-ups.
 
 ## Status
 
@@ -40,10 +39,12 @@ Four streams, all independent.
    bilby's + kangaroo's Periphery agents off the legacy
    `KOMODO_PASSKEY` shared-secret model onto v2 noise-handshake keypair
    auth. Single-purpose change, single revert path.
-2. [**Paperless stabilization**](paperless-stabilization.md) — close
-   out the OneNote bulk-import work: `unknown` bucket review, delete
-   stale `$value` files from the export tree, hard-delete Paperless
-   Trash, commit the final sidecar DB.
+2. [**Paperless email ingest**](paperless-email-ingest.md) — set up
+   Fastmail alias + IMAP-polling Paperless mail account so anything
+   forwarded to `paperless@<domain>` lands in the archive
+   automatically. The compose-level `PAPERLESS_EMAIL_TASK_CRON` is
+   already wired; just needs the alias + folder + app password +
+   Paperless mail rule.
 3. [**Railway migrations**](railway-migrations.md) — bring doggos
    (kid's static site) and yiayia (board app) home from Railway. The
    Komodo webhook bypass Access app is already in place (TF-managed)
@@ -54,6 +55,9 @@ Four streams, all independent.
    host-package runbook, orphan-container behaviour documentation,
    komodo-start first-boot API-key automation, the upstream komodo-op
    PR.
+
+[Paperless stabilization](paperless-stabilization.md) is **done**
+(2026-05-12). See [Completed work](completed-work.md) for the recap.
 
 [Terraform foundation](terraform-setup.md) and
 [Cloudflare as Terraform](cloudflare-terraform.md) are **done**.
