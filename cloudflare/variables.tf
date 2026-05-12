@@ -26,4 +26,11 @@ locals {
     pod_haus  = "cc68c7c9-1dad-42aa-af04-46119d3e515f.cfargotunnel.com"
     pinelake  = "fec5ca76-b634-4185-bdb2-f85c38b1b570.cfargotunnel.com"
   }
+
+  # Tunnel UUIDs (without the cfargotunnel.com suffix) — needed by the
+  # tunnel-config aggregator resource, distinct from the CNAME target.
+  tunnel_ids = {
+    pod_haus = "cc68c7c9-1dad-42aa-af04-46119d3e515f"
+    pinelake = "fec5ca76-b634-4185-bdb2-f85c38b1b570"
+  }
 }

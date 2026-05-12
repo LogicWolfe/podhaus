@@ -1,32 +1,16 @@
-# pod.haus DNS records.
+# pod.haus DNS records that aren't owned by a per-service module.
 #
-# Tunnel-routed CNAMEs share the same target (`local.tunnels.pod_haus`)
-# and proxied=true so cloudflared sees the request; external CNAMEs
-# (Fastmail DKIM, Postmark, Railway) sit unproxied with ttl=300 because
-# they need DNS-level pass-through.
+# Tunnel-routed CNAMEs (the bulk of pod.haus traffic) live in
+# services_pod_haus.tf as `module.<name>` calls — the module owns the
+# CNAME alongside its Access app and tunnel ingress rule. What's left
+# here is everything the module is intentionally not responsible for:
+# Fastmail DKIM CNAMEs, Postmark bounce, Railway-hosted apps that
+# haven't been migrated home yet, plus the apex MX/TXT records.
 
 locals {
-  # Tunnel-routed subdomains. Adding a new service? Drop its short name
-  # in this set, run `../tf plan` — record is created automatically.
-  pod_haus_tunnel_cnames = toset([
-    "backup",
-    "docs",
-    "gatus",
-    "grafana",
-    "home",
-    "kangaroo",
-    "kangaroo-backup",
-    "komodo",
-    "logs",
-    "minio",
-    "paperless",
-    "plex",
-    "sync",
-    "torrent",
-    "unifi",
-  ])
-
-  # External CNAMEs: { name => { content, ttl } }. proxied=false on all.
+  # External CNAMEs: { name => { content } }. proxied=false, ttl=300
+  # because these need DNS-level pass-through (Fastmail DKIM, Postmark
+  # bounce path, Railway frontends).
   pod_haus_external_cnames = {
     "fm1._domainkey" = { content = "fm1.pod.haus.dkim.fmhosted.com" }
     "fm2._domainkey" = { content = "fm2.pod.haus.dkim.fmhosted.com" }
@@ -34,21 +18,6 @@ locals {
     "pm-bounces"     = { content = "pm.mtasv.net" }
     "doggos.indigo"  = { content = "x0y6bs3z.up.railway.app" }
     "yiayia"         = { content = "06r38qgz.up.railway.app" }
-  }
-}
-
-resource "cloudflare_dns_record" "pod_haus_tunnel" {
-  for_each = local.pod_haus_tunnel_cnames
-  zone_id  = local.zones["pod.haus"]
-  name     = "${each.key}.pod.haus"
-  type     = "CNAME"
-  content  = local.tunnels.pod_haus
-  proxied  = true
-  ttl      = 1
-  settings = {
-    flatten_cname = false
-    ipv4_only     = false
-    ipv6_only     = false
   }
 }
 

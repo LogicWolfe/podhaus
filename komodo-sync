@@ -1,4 +1,13 @@
 #!/bin/bash
+# Re-run Komodo's ResourceSync against this repo, then redeploy any
+# stack whose deployed-hash diverges from current git HEAD.
+#
+# Smart-deploy pass closes the historical gap where stack.toml /
+# compose.yaml edits required a manual "Deploy" click in the UI.
+# Webhook auto-deploy (configured per stack via webhook_enabled) is
+# the steady-state push-to-deploy path; this script is the local
+# "I made changes, deploy them now" equivalent.
+
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
@@ -48,5 +57,42 @@ komodo_api execute '{
   "type": "RunSync",
   "params": { "sync": "podhaus" }
 }' > /dev/null
+
+# Redeploy any stack whose containers were built from a commit older
+# than current HEAD. Komodo tracks the commit hash that produced the
+# running compose; comparing it against git HEAD identifies stale
+# stacks without us having to walk the diff ourselves.
+head=$(git rev-parse HEAD)
+echo
+echo "Checking deployed-hash vs current HEAD (${head:0:8})..."
+
+mapfile -t stacks < <(komodo_api read '{"type":"ListStacks","params":{}}' | jq -r '.[] | .name')
+
+stale=()
+for stack in "${stacks[@]}"; do
+  deployed=$(komodo_api read "$(jq -n --arg s "$stack" '{type:"GetStack",params:{stack:$s}}')" | jq -r '.info.deployed_hash // empty')
+  if [ -z "$deployed" ]; then
+    # Never deployed — leave alone; first deploy is manual via UI.
+    continue
+  fi
+  if [ "$deployed" != "$head" ]; then
+    stale+=("$stack")
+    echo "  $stack  (deployed ${deployed:0:8})"
+  fi
+done
+
+if [ ${#stale[@]} -eq 0 ]; then
+  echo "  No stale stacks."
+  echo "Done"
+  exit 0
+fi
+
+echo
+echo "Redeploying ${#stale[@]} stale stack(s)..."
+for stack in "${stale[@]}"; do
+  printf "  %s..." "$stack"
+  komodo_api execute "$(jq -n --arg s "$stack" '{type:"DeployStack",params:{stack:$s}}')" > /dev/null
+  echo " queued."
+done
 
 echo "Done"

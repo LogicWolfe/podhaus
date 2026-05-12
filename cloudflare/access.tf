@@ -14,15 +14,6 @@
 # `*.pod.haus` wildcard, so per-host apps act as overrides and their
 # attached policies fully replace the wildcard's policy for those hosts.
 
-locals {
-  pod_haus_app_overrides = [
-    cloudflare_zero_trust_access_application.home_assistant,
-    cloudflare_zero_trust_access_application.sunshine,
-    cloudflare_zero_trust_access_application.syncthing,
-    cloudflare_zero_trust_access_application.torrents,
-  ]
-}
-
 # ============================================================================
 # Identity — group + reusable policies
 # ============================================================================
@@ -85,24 +76,8 @@ resource "cloudflare_zero_trust_access_service_token" "paperless_ios" {
 # Existing Applications (imported)
 # ============================================================================
 
-# UniFi has its own login page; bypass CF Access entirely.
-resource "cloudflare_zero_trust_access_application" "unifi" {
-  account_id           = var.account_id
-  name                 = "UniFi (bypass — own auth)"
-  type                 = "self_hosted"
-  domain               = "unifi.pod.haus"
-  self_hosted_domains  = ["unifi.pod.haus"]
-  session_duration     = "730h"
-
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = false
-  app_launcher_visible      = false
-  http_only_cookie_attribute= true
-  policies = [
-    { precedence = 1, id = cloudflare_zero_trust_access_policy.unifi_bypass.id },
-  ]
-}
+# UniFi bypass — referenced by module.unifi (see services_pod_haus.tf).
+# The Application resource itself is owned by the module.
 resource "cloudflare_zero_trust_access_policy" "unifi_bypass" {
   account_id = var.account_id
   name       = "Bypass — UniFi has its own login"
@@ -192,108 +167,13 @@ resource "cloudflare_zero_trust_access_application" "pine_lake_syncthing" {
   ]
 }
 
-# Home Assistant — Family-gated, with the Homelab service token bypass
-# layered on top for automation.
-resource "cloudflare_zero_trust_access_application" "home_assistant" {
-  account_id           = var.account_id
-  name                 = "Home Assistant"
-  type                 = "self_hosted"
-  domain               = "home.pod.haus"
-  self_hosted_domains  = ["home.pod.haus"]
-  session_duration     = "730h"
-
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = false
-  app_launcher_visible      = true
-  http_only_cookie_attribute= true
-  policies = [
-    { precedence = 1, id = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id },
-    { precedence = 2, id = cloudflare_zero_trust_access_policy.home_assistant_family.id },
-  ]
-}
-resource "cloudflare_zero_trust_access_policy" "home_assistant_family" {
-  account_id = var.account_id
-  name       = "Allow"
-  decision   = "allow"
-  include    = [{ group = { id = cloudflare_zero_trust_access_group.family.id } }]
-}
-
-resource "cloudflare_zero_trust_access_application" "sunshine" {
-  account_id           = var.account_id
-  name                 = "Sunshine"
-  type                 = "self_hosted"
-  domain               = "sunshine.pod.haus"
-  self_hosted_domains  = ["sunshine.pod.haus"]
-  session_duration     = "24h"
-
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = false
-  app_launcher_visible      = true
-  http_only_cookie_attribute= true
-  policies = [
-    { precedence = 1, id = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id },
-    { precedence = 2, id = cloudflare_zero_trust_access_policy.sunshine_family.id },
-  ]
-}
-resource "cloudflare_zero_trust_access_policy" "sunshine_family" {
-  account_id = var.account_id
-  name       = "Family"
-  decision   = "allow"
-  include    = [{ group = { id = cloudflare_zero_trust_access_group.family.id } }]
-}
-
-resource "cloudflare_zero_trust_access_application" "syncthing" {
-  account_id           = var.account_id
-  name                 = "Syncthing"
-  type                 = "self_hosted"
-  domain               = "sync.pod.haus"
-  self_hosted_domains  = ["sync.pod.haus"]
-  session_duration     = "730h"
-
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = false
-  app_launcher_visible      = true
-  http_only_cookie_attribute= true
-  policies = [
-    { precedence = 1, id = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id },
-    { precedence = 2, id = cloudflare_zero_trust_access_policy.syncthing_nathan.id },
-  ]
-}
-resource "cloudflare_zero_trust_access_policy" "syncthing_nathan" {
-  account_id = var.account_id
-  name       = "Nathan"
-  decision   = "allow"
-  # Note: capital N existing in CF — preserved to avoid drift.
-  include    = [{ email = { email = "Nathan@nathanbaxter.com" } }]
-}
-
-resource "cloudflare_zero_trust_access_application" "torrents" {
-  account_id           = var.account_id
-  name                 = "Torrents"
-  type                 = "self_hosted"
-  domain               = "torrent.pod.haus"
-  self_hosted_domains  = ["torrent.pod.haus"]
-  session_duration     = "730h"
-
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = false
-  app_launcher_visible      = true
-  http_only_cookie_attribute= true
-  policies = [
-    { precedence = 1, id = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id },
-    { precedence = 2, id = cloudflare_zero_trust_access_policy.torrents_family.id },
-  ]
-}
-resource "cloudflare_zero_trust_access_policy" "torrents_family" {
-  account_id = var.account_id
-  name       = "Family"
-  decision   = "allow"
-  include    = [{ group = { id = cloudflare_zero_trust_access_group.family.id } }]
-}
+# Home Assistant, Syncthing, Torrents, Paperless, UniFi → moved to
+# module.* in services_pod_haus.tf. Their per-app "Family" / "Nathan"
+# policies (home_assistant_family, syncthing_nathan, torrents_family,
+# paperless_family) are now replaced by the shared
+# pod_haus_family_allow / nathan reusable policies via the module's
+# default chain (or explicit override) — CF garbage-collects the
+# orphan per-app policies once nothing references them.
 
 # App Launcher — Cloudflare's SaaS app picker UI.
 resource "cloudflare_zero_trust_access_application" "app_launcher" {
@@ -323,36 +203,8 @@ resource "cloudflare_zero_trust_access_policy" "app_launcher_family" {
 }
 
 # ============================================================================
-# NEW Applications
+# Special-case Applications (not via the per-service module)
 # ============================================================================
-
-# Paperless iOS — domain-specific app overrides the wildcard so the
-# Paperless service token bypass is bounded to this one host.
-resource "cloudflare_zero_trust_access_application" "paperless" {
-  account_id           = var.account_id
-  name                 = "Paperless"
-  type                 = "self_hosted"
-  domain               = "paperless.pod.haus"
-  self_hosted_domains  = ["paperless.pod.haus"]
-  session_duration     = "730h"
-
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = false
-  app_launcher_visible      = true
-  http_only_cookie_attribute= true
-  policies = [
-    { precedence = 1, id = cloudflare_zero_trust_access_policy.paperless_ios_bypass.id },
-    { precedence = 2, id = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id },
-    { precedence = 3, id = cloudflare_zero_trust_access_policy.paperless_family.id },
-  ]
-}
-resource "cloudflare_zero_trust_access_policy" "paperless_family" {
-  account_id = var.account_id
-  name       = "Family"
-  decision   = "allow"
-  include    = [{ group = { id = cloudflare_zero_trust_access_group.family.id } }]
-}
 
 # Komodo webhook bypass — Railway-migration driver.
 # Path-scoped Application gating only the GitHub webhook delivery URL;

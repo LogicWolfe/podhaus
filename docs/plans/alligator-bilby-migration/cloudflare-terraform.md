@@ -99,9 +99,10 @@ Assumes [Terraform foundation](terraform-setup.md) has landed.
    Edit is on there before switching.
 3. **Run `cf-terraforming`** against the account to generate HCL for
    existing state:
-   - Access Applications (10 apps: Pod Haus wildcard, UniFi, Home
-     Assistant, Syncthing, Sunshine, Torrents, Pine Lake
-     SSH/Torrent/Syncthing, App Launcher)
+   - Access Applications (Pod Haus wildcard, UniFi, Home Assistant,
+     Syncthing, Torrents, Pine Lake SSH/Torrent/Syncthing, App
+     Launcher; Sunshine existed at plan time but was retired
+     2026-05-12)
    - Access Policies (attached to each Application)
    - Zone DNS records (`pod.haus`, `pinelake.haus`, currently in
      DNSControl)
