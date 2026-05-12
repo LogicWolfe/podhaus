@@ -114,10 +114,6 @@ slot into the same pattern.
 | `cloudflare/` | Terraform sources for all Cloudflare resources (DNS, Access apps, policies, service tokens). State at `s3://terraform-state/cloudflare.tfstate` in MinIO. |
 | `tf` | `op run`-wrapped `hashicorp/terraform` docker runner, attaches to `dockernet`. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state. |
-| `dns/dnsconfig.js` | DNSControl zone declarations for UniFi split-horizon only (Cloudflare moved to Terraform). |
-| `dns/creds.json` | DNSControl UniFi provider credentials (env var refs, no secrets). |
-| `dns-preview` | DNSControl dry-run script (UniFi only). |
-| `dns-push` | DNSControl apply script (UniFi only). |
 | `docs/` | The published docs (served at `docs.pod.haus`) |
 | `docs-server/` | nginx stack serving `docs/` |
 | `AGENTS.md` | This file |
@@ -135,13 +131,17 @@ slot into the same pattern.
    auto-syncs them as `OP__KOMODO__<ITEM>__<FIELD>` Komodo Variables.
 4. If the stack needs a non-secret variable, seed it in `komodo-start`
    (not in `variables.toml` alone — see `docs/secrets.html`).
-5. Run `./komodo-sync` to register the stack. Deploy it from the Komodo
-   UI.
-6. If the service needs a hostname, add an ingress rule to
-   `cloudflare-tunnel/conf/config.yml` and a `cloudflare_dns_record`
-   resource to the appropriate `cloudflare/dns_<zone>.tf`. Then
-   `cd cloudflare && op run --env-file=.env -- ../tf apply` to
-   publish the DNS change.
+5. Run `./komodo-sync` to register the stack. The smart-deploy pass
+   redeploys any stack whose `info.deployed_hash` diverges from
+   `HEAD`, so the freshly-registered stack deploys immediately.
+   Alternatively, push to GitHub — the webhook triggers the same
+   redeploy via Komodo's auto-deploy.
+6. If the service is a single-host pod.haus service, add a
+   `module "<name>"` block in `cloudflare/services_pod_haus.tf` plus
+   one entry in `tunnel.tf`'s `pod_haus_module_ingress`. The module
+   owns DNS + Access policy chain + tunnel ingress; default policy
+   chain is Homelab service-token bypass + Family allow.
+   `cd cloudflare && op run --env-file=.env -- ../tf apply` to publish.
 
 ## When adding a new instance of a shared service to another host
 
@@ -187,9 +187,16 @@ These have failure modes that you must not introduce:
   resolve against the periphery container's filesystem, not the host's,
   and Docker silently creates empty stub directories.
 - **Don't push, deploy, or change DNS / Access policy without explicit
-  user authorization.** Treat all `git push`, `./komodo-sync` (deploy),
-  `./dns-push`, and any `tf apply` against `cloudflare/` as actions that
-  require a green light. `dns-preview` and `tf plan` are fine.
+  user authorization.** Treat all `git push`, `./komodo-sync`, and
+  any `tf apply` against `cloudflare/` as actions that require a green
+  light. `tf plan` is fine. Note that `git push` now triggers the
+  GitHub webhook → Komodo auto-deploy for every stack whose files the
+  push touches — push is no longer cheap.
+- **Before adding or modifying a Cloudflare / UniFi / GitHub TF
+  resource, read the provider's resource doc.** Schemas change
+  between minor versions and `tf apply` errors with "Attribute X
+  required" or similar without making it obvious which version you
+  need. Resource docs are linked from `cloudflare/README.md`.
 - **Don't bypass git hooks (`--no-verify`, etc.) without explicit
   permission.** Same for force-push, hard reset, branch deletion.
 - **Plex identity is sacred.** Never let Plex start without an init

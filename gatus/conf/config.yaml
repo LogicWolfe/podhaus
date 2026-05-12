@@ -147,6 +147,36 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
 
+  # Komodo alert pipeline → Gatus. Komodo emits an alert any time a stack
+  # deploy fails, a state transitions to Down/Restarting unexpectedly, a
+  # build fails, or a procedure/action errors. This poll asserts zero
+  # unresolved CRITICAL alerts, so Postmark fires whenever the homelab
+  # has a deploy-grade failure that Komodo itself recognised. (WARNING-
+  # level alerts — image-update-available, etc. — don't trip this.)
+  #
+  # We poll instead of using Komodo's webhook Alerter because the Custom
+  # alerter only POSTs JSON to a URL; it can't add the Authorization
+  # header Gatus's external-endpoint API requires.
+  - name: Komodo Alerts
+    url: http://komodo-core:9120/read
+    method: POST
+    group: services
+    interval: 60s
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"ListAlerts","params":{"query":{"resolved":false,"level":"CRITICAL"}}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "len([BODY].alerts) == 0"
+    alerts:
+      - type: custom
+        description: "Komodo has unresolved CRITICAL alerts. A stack deploy, build, procedure, or action failed. Check komodo.pod.haus → Alerts for the specific resource + failure reason."
+        failure-threshold: 3
+        success-threshold: 2
+        send-on-resolved: true
+
   # Active probes for Backrest. The push-style heartbeats below only fire
   # on SNAPSHOT_SUCCESS — they catch "snapshot ran but a hook failed" but
   # cannot detect "backrest never ran" without `heartbeat.interval` set

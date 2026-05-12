@@ -4,6 +4,50 @@ Summary of everything done across the alligator → bilby migration,
 organized by chunk. Specific dates and commit hashes preserved for the
 ones that mattered.
 
+## Service exposure module + push-to-deploy — 2026-05-12
+
+- **`cloudflare/modules/pod_haus_service`** — Terraform module
+  encapsulating DNS CNAME + Access Application + default-locked
+  policy chain + tunnel ingress rule for one pod.haus hostname.
+  Default chain is "Homelab service-token bypass + Family allow";
+  `access_policy_ids` overrides for special cases (Syncthing/Nathan,
+  Paperless/iOS, UniFi/own-auth).
+- **15 pod.haus services migrated to the module.** Each was either
+  state-moved (the 4 existing per-host apps + UniFi) or freshly
+  created (9 hostnames previously gated only by the `*.pod.haus`
+  wildcard). The wildcard stays as the default-deny safety net.
+- **`cloudflare/tunnel.tf`** — single
+  `cloudflare_zero_trust_tunnel_cloudflared_config` resource that
+  concats every module's `ingress_rule` output plus the
+  `http_status:404` catch-all. cloudflared fetches the config from
+  CF's API at connect (`source = "cloudflare"`); the bind-mounted
+  `cloudflare-tunnel/conf/config.yml` is gone.
+- **UniFi DNS migrated off DNSControl.** `cloudflare/dns_unifi_split_horizon.tf`
+  declares the two A records via the `ubiquiti-community/unifi`
+  provider. `dns/`, `dns-preview`, `dns-push` deleted.
+- **GitHub webhook in Terraform.** `cloudflare/github.tf` registers
+  the webhook on `LogicWolfe/podhaus` pointing at
+  `komodo.pod.haus/auth/github/webhook`. The previously-provisioned
+  Cloudflare Access Bypass app makes the POST reachable; Komodo
+  HMAC-validates `KOMODO_WEBHOOK_SECRET` on its end.
+- **Push-to-deploy live.** Every `git push` triggers Komodo to
+  redeploy any stack whose files the push touched. Kangaroo (Linked
+  Repo) auto-clones latest origin first.
+- **Smart `komodo-sync`.** After the existing `RunSync` passes, the
+  script lists stacks, compares each `info.deployed_hash` to
+  `git rev-parse HEAD`, and calls `DeployStack` for every stale
+  stack. Closes the "I edited locally, deploy what changed" gap.
+- **Komodo→Gatus alerting.** New `Komodo Alerts` poll-style Gatus
+  endpoint queries `ListAlerts` for unresolved CRITICAL alerts every
+  60s. Postmark fires after the 3-poll failure threshold (~3 min
+  latency). Single alerting pipeline ends at Gatus → Postmark.
+- **Sunshine retired.** App and policy deleted from Cloudflare;
+  doc references stripped.
+
+Schema-quirk lessons captured in `cloudflare/README.md`. The
+authoritative source for any resource is the Terraform Registry
+docs — read the resource page before editing.
+
 ## Komodo bootstrap (2026 March)
 
 - Komodo Core deployed on bilby: postgres + ferretdb + core + periphery

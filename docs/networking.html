@@ -101,18 +101,32 @@ networks:
         (<code>kangaroo-backup.pod.haus</code>).
       </p>
       <p>
-        Scoped overrides to the wildcard:
+        Every tunnel-routed pod.haus hostname has its own Access app, created by an
+        instance of the <code>cloudflare/modules/pod_haus_service</code> Terraform module
+        (one block per service in <code>cloudflare/services_pod_haus.tf</code>). The
+        default policy chain is "Homelab service-token bypass → Family allow" — locked
+        by default, overridable per service.
+      </p>
+      <p>
+        Per-service policy overrides currently in use:
       </p>
       <ul>
-        <li><strong>UniFi</strong> — own Access app, Bypass policy (UniFi has its own LAN login).</li>
-        <li><strong>Home Assistant, Syncthing, Torrents, Paperless</strong> — per-host
-          apps that layer the Homelab service-token Bypass on top of the Family allow.</li>
+        <li><strong>UniFi</strong> — single Bypass-everyone policy (UniFi has its own LAN login).</li>
+        <li><strong>Syncthing</strong> — Homelab bypass + Nathan-only reusable policy
+          (cross-household concern, household share is private).</li>
+        <li><strong>Paperless</strong> — Paperless-iOS service-token bypass at
+          precedence 1, then the default chain.</li>
         <li><strong>Pine Lake apps</strong> — Nathan-only reusable policy, separate from the
           Family group (cross-household).</li>
         <li><strong>Komodo webhook</strong> — path-scoped Bypass on
           <code>komodo.pod.haus/auth/github/webhook</code> so GitHub webhook deliveries skip
           Access; Komodo HMAC-validates the delivery itself.</li>
       </ul>
+      <p>
+        The <code>*.pod.haus</code> wildcard Access app stays as the default-deny safety
+        net. Anything not covered by a more-specific app falls through to it; the wildcard
+        denies unless you're in the Family group or carrying the Homelab service token.
+      </p>
       <h3 id="service-tokens">Service tokens</h3>
       <p>
         Two service tokens for programmatic access. Send as
@@ -131,28 +145,30 @@ networks:
 
       <h2 id="dns">DNS</h2>
       <p>
-        Two source-of-truth tools, one per provider:
+        All DNS is Terraform-managed under <code>cloudflare/</code>, state in MinIO at
+        <code>s3://terraform-state/cloudflare.tfstate</code>:
       </p>
       <ul>
-        <li><strong>Cloudflare</strong> — every public zone managed by Terraform in
-          <code>cloudflare/dns_*.tf</code>, one file per zone. State lives in MinIO at
-          <code>s3://terraform-state/cloudflare.tfstate</code>. Run
-          <code>op run --env-file=.env -- ../tf plan</code> / <code>apply</code> from
-          <code>cloudflare/</code>.</li>
-        <li><strong>UniFi</strong> — LAN-side split-horizon (<code>unifi.pod.haus →
-          10.0.0.1</code>, <code>bilby.pod.haus → 10.0.0.119</code>) managed by DNSControl in
-          <code>dns/dnsconfig.js</code>. The UniFi controller has no Terraform provider worth
-          the burden for these two records; DNSControl stays.</li>
+        <li><strong>Cloudflare</strong> public zones — per-zone <code>dns_&lt;zone&gt;.tf</code>
+          files plus the per-service module's CNAME for each tunnel-routed pod.haus host.</li>
+        <li><strong>UniFi</strong> LAN-side split-horizon — <code>dns_unifi_split_horizon.tf</code>
+          declares the two A records (<code>unifi.pod.haus → 10.0.0.1</code>,
+          <code>bilby.pod.haus → 10.0.0.119</code>) via the
+          <code>ubiquiti-community/unifi</code> provider against the UniFi controller at
+          <code>10.0.0.1</code>.</li>
       </ul>
       <p>
-        Workflow for Cloudflare: edit the relevant <code>dns_&lt;zone&gt;.tf</code>, run
-        <code>../tf plan</code> from <code>cloudflare/</code> to see the diff, run
-        <code>../tf apply</code> to apply. The <code>tf</code> wrapper joins
+        Workflow: edit the relevant <code>dns_&lt;zone&gt;.tf</code>, run
+        <code>op run --env-file=.env -- ../tf plan</code> from <code>cloudflare/</code>,
+        then <code>../tf apply</code>. The <code>tf</code> wrapper joins
         <code>dockernet</code> so it reaches MinIO at <code>http://minio:9000</code>.
       </p>
       <p>
-        Workflow for UniFi: edit <code>dns/dnsconfig.js</code>, run <code>./dns-preview</code>,
-        run <code>./dns-push</code>.
+        DNSControl (the previous DNS tool) was retired 2026-05-12; its <code>dns/</code>
+        directory, <code>dns-preview</code>, and <code>dns-push</code> scripts are gone.
+        Provider docs (read before editing):
+        <a href="https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs/resources/dns_record">cloudflare_dns_record</a>,
+        <a href="https://registry.terraform.io/providers/ubiquiti-community/unifi/latest/docs/resources/dns_record">unifi_dns_record</a>.
       </p>
 
       <h2 id="current-ingress">Current ingress rules</h2>
@@ -173,6 +189,7 @@ networks:
           <tr><td><code>gatus.pod.haus</code></td><td>Gatus status page</td></tr>
           <tr><td><code>grafana.pod.haus</code></td><td>Grafana</td></tr>
           <tr><td><code>docs.pod.haus</code></td><td>This documentation site</td></tr>
+          <tr><td><code>minio.pod.haus</code></td><td>MinIO console (Terraform state backend)</td></tr>
         </tbody>
       </table>
 

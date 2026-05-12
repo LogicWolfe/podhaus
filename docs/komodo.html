@@ -64,8 +64,11 @@
           </tr>
           <tr>
             <td>Deploy workflow</td>
-            <td>Save file → <code>./komodo-sync</code> → deploy stack in UI</td>
-            <td>Commit + push → webhook (or <code>CloneRepo</code>) → deploy stack in UI</td>
+            <td>Commit + push (webhook auto-deploys) <em>or</em>
+              save + <code>./komodo-sync</code> (smart-deploy redeploys any stack whose
+              <code>deployed_hash</code> diverges from <code>HEAD</code>)</td>
+            <td>Commit + push → GitHub webhook fires <code>CloneRepo</code> then
+              <code>DeployStack</code>. No manual UI click.</td>
           </tr>
           <tr>
             <td>Best for</td>
@@ -133,11 +136,18 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           authoritative source — see <a href="/secrets.html#non-secret-variables">Secrets →
           non-secret variables</a>.</li>
       </ul>
-      <aside class="callout warn">
-        <span class="callout-title">Known gap</span>
-        <code>./komodo-sync</code> updates stack <em>definitions</em> in Komodo's database, but
-        doesn't currently auto-redeploy changed stacks. After syncing, click <em>Deploy</em> in
-        the Komodo UI for any stack whose compose or env block changed.
+      <aside class="callout note">
+        <span class="callout-title">Auto-deploy on push</span>
+        Every <code>git push</code> to <code>main</code> fires the GitHub webhook at
+        <code>komodo.pod.haus/auth/github/webhook</code>, which Komodo HMAC-validates and
+        translates into <code>DeployStack</code> for every stack whose files the push
+        touched. Kangaroo (Linked Repo) clones latest origin first; bilby
+        (<code>files_on_host</code>) deploys from whatever's on its working tree — usually
+        fresh because bilby is where you committed from. If you pushed from a laptop
+        without pulling on bilby first, the bilby-side deploy will read stale files;
+        commit-then-push from bilby is the safe default. <code>./komodo-sync</code>'s
+        smart-deploy is the manual equivalent for "I edited locally, deploy what
+        changed."
       </aside>
 
       <h2 id="scripts">komodo-* scripts at the repo root</h2>

@@ -41,4 +41,7 @@ exec op run --env-file=.env -- docker run --rm "${TTY_FLAGS[@]}" \
   -e AWS_ACCESS_KEY_ID \
   -e AWS_SECRET_ACCESS_KEY \
   -e CLOUDFLARE_API_TOKEN \
+  -e UNIFI_API_KEY \
+  -e GITHUB_TOKEN \
+  -e TF_VAR_komodo_webhook_secret \
   hashicorp/terraform:latest "$@"

@@ -57,20 +57,12 @@ faithful to current state.
 Once captured, link from
 [Disaster recovery](/disaster-recovery.html#bilby-rebuild).
 
-## `komodo-sync` auto-deploy
+## ~~`komodo-sync` auto-deploy~~ — done 2026-05-12
 
-ResourceSync updates stack definitions in Komodo's database but
-**doesn't trigger redeployment**. Observed: compose.yaml and
-stack.toml changes synced correctly but the running container wasn't
-recreated until a manual `docker compose up -d --force-recreate` or
-UI Deploy.
-
-Investigate: whether Komodo has a deploy-on-sync option, or extend
-`komodo-sync` to list stacks with pending changes and call
-`DeployStack` for each via the API.
-
-Without this, every compose/env change requires a manual deploy step
-after sync.
+`komodo-sync` now lists stacks after the second `RunSync`, compares
+each stack's `info.deployed_hash` against `git rev-parse HEAD`, and
+calls `DeployStack` for every stale stack. No more manual UI clicks
+after editing `stack.toml` locally.
 
 ## Document Komodo orphan-container behaviour
 
@@ -111,14 +103,14 @@ is `onepassword/komodo-op.Dockerfile`. Upstream fix is buildx
 
 Low priority but polite — submit a PR upstream.
 
-## Webhook auto-deploy for kangaroo stacks
+## ~~Webhook auto-deploy~~ — done 2026-05-12
 
-Available via Linked Repo + GitHub webhook in Komodo. Currently
-disabled (`webhook_enabled = false` in
-`komodo/sync/repos.toml`). Separate from the `komodo-sync` auto-deploy
-gap above; enables push-to-deploy specifically for kangaroo-targeted
-stacks.
-
-Decide whether the convenience is worth the security surface (the
-webhook URL has to be reachable from GitHub; ngrok/tunnel pattern
-needed since Komodo isn't directly internet-exposed).
+GitHub webhook on `LogicWolfe/podhaus` is now managed by Terraform in
+`cloudflare/github.tf`; it posts to
+`komodo.pod.haus/auth/github/webhook` on every push. Cloudflare Access
+bypasses the webhook path; Komodo HMAC-validates with
+`KOMODO_WEBHOOK_SECRET`. Push-to-deploy is live for both bilby and
+kangaroo stacks — kangaroo (Linked Repo) auto-clones the new HEAD
+before deploying; bilby (`files_on_host`) deploys whatever's on its
+local working tree, so push from bilby for safety. Failure alerting
+routed through Gatus's `Komodo Alerts` poll → Postmark.
