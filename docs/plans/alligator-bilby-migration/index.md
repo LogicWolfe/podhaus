@@ -7,10 +7,9 @@ joining mid-flight as a second managed host under one Komodo Core.
 The core work is done — **alligator was powered off 2026-04-14**, every
 service has lived on bilby/kangaroo since, and the Docker-based + Komodo-
 managed + 1Password-backed architecture has been stable for weeks. What
-remains is end-of-project polish: one auth model swap, a documentation
-cleanup window for the Paperless import, Cloudflare-as-code via Terraform,
-two Railway services not yet migrated, and a handful of non-blocking
-follow-ups.
+remains is end-of-project polish: one auth-model swap, a documentation
+cleanup window for the Paperless import, two Railway services not yet
+migrated, and a handful of non-blocking follow-ups.
 
 ## Status
 
@@ -35,7 +34,7 @@ documentation overhaul.
 
 ## Remaining work
 
-Three streams, all independent.
+Four streams, all independent.
 
 1. [**Periphery v2 keypair auth**](periphery-v2-auth.md) — migrate
    bilby's + kangaroo's Periphery agents off the legacy
@@ -47,18 +46,26 @@ Three streams, all independent.
    Trash, commit the final sidecar DB.
 3. [**Railway migrations**](railway-migrations.md) — bring doggos
    (kid's static site) and yiayia (board app) home from Railway. The
-   Komodo webhook bypass Access app is already in place (TF-managed).
+   Komodo webhook bypass Access app is already in place (TF-managed)
+   and the auto-deploy webhook + GitHub-side hook are live too.
 4. [**Deferred follow-ups**](deferred-followups.md) — non-blocking
    items surfaced during the migration: NFS bind-mount auto-recovery,
    ofelia self-restart workaround removal pending upstream PR,
-   host-package runbook, komodo-sync auto-deploy gap, orphan-container
-   behaviour documentation, komodo-start first-boot API-key automation.
+   host-package runbook, orphan-container behaviour documentation,
+   komodo-start first-boot API-key automation, the upstream komodo-op
+   PR.
 
-Both [Terraform foundation](terraform-setup.md) and
-[Cloudflare as Terraform](cloudflare-terraform.md) are **done** —
-state-backend stack live, all 11 zones (82 records) + 12 Access apps
-+ 2 service tokens managed by TF with zero drift, DNSControl is now
-UniFi-only. See [Completed work](completed-work.md) for the recap.
+[Terraform foundation](terraform-setup.md) and
+[Cloudflare as Terraform](cloudflare-terraform.md) are **done**.
+Steady-state docs live at [Terraform](/terraform.html). Summary of
+what landed: MinIO state backend, `./tf` runner, full Cloudflare
+migration (11 zones / ~82 DNS records / 15 Access apps / 2 service
+tokens / TF-managed tunnel config), per-service module
+(`cloudflare/modules/pod_haus_service`), UniFi DNS via TF,
+DNSControl retired in full, GitHub webhook driving Komodo
+push-to-deploy, smart `komodo-sync`, Komodo→Gatus deploy-failure
+alerting. See [Completed work](completed-work.md) for the chronological
+recap.
 
 ## Credentials
 

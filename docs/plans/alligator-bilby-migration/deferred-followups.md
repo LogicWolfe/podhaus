@@ -48,13 +48,16 @@ from `ofelia/compose.yaml` and note the change in
 
 ## Bilby host-package runbook
 
-Bilby has had host packages installed ad-hoc through this migration
-(zellij, sqlite3, restic, rclone, railway, op, plus various dev
-tools). Worth capturing the canonical list somewhere reproducible
-(a script or readme entry) so a fresh-bilby-from-scratch rebuild is
-faithful to current state.
+Bilby has host packages installed ad-hoc through this migration. The
+2026-05-12 working list, partially captured in
+[Hosts → bilby CLI tools](/hosts.html#bilby-cli-tools):
+`zellij`, `sqlite3`, `restic`, `rclone`, `railway`, `op`, `mcli`,
+plus various dev tools. The `./tf` runner doesn't need a host package
+(it `docker run`s `hashicorp/terraform:latest`).
 
-Once captured, link from
+Worth capturing the canonical list as a reproducible install script
+(or a dnf manifest) so a fresh-bilby-from-scratch rebuild is faithful
+to current state. Once scripted, link from
 [Disaster recovery](/disaster-recovery.html#bilby-rebuild).
 
 ## ~~`komodo-sync` auto-deploy~~ — done 2026-05-12

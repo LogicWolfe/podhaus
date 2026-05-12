@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Platform">
+  <meta name="doc-order" content="4">
+  <title>Terraform — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Terraform</h1>
+      <p class="lead text-lg text-text-muted">
+        Declarative config for everything outside Docker — Cloudflare zones, Access apps,
+        tunnel ingress, UniFi LAN DNS, and the GitHub webhook that drives push-to-deploy.
+        Single TF root at <code>cloudflare/</code>, state in MinIO, runner is the
+        <code>./tf</code> wrapper.
+      </p>
+
+      <aside class="callout warn">
+        <span class="callout-title">Read the provider docs before editing</span>
+        Schemas drift between provider minor versions and our HCL has to match. The
+        registry's resource pages are the source of truth — <strong>not</strong> Stack
+        Overflow, blog posts, or older copies of this doc. Direct links in
+        <a href="https://github.com/LogicWolfe/podhaus/blob/main/cloudflare/README.md"><code>cloudflare/README.md</code></a>.
+      </aside>
+
+      <h2 id="surface">What's TF-managed today</h2>
+      <table>
+        <thead><tr><th>Provider</th><th>Resources</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><a href="https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs"><code>cloudflare/cloudflare</code></a> v5</td>
+            <td>Public DNS (11 zones), Zero Trust Access apps + policies + groups + service tokens,
+              cloudflared tunnel config + ingress</td>
+            <td><code>cloudflare/dns_*.tf</code>, <code>cloudflare/access.tf</code>,
+              <code>cloudflare/services_pod_haus.tf</code>, <code>cloudflare/tunnel.tf</code></td>
+          </tr>
+          <tr>
+            <td><a href="https://registry.terraform.io/providers/ubiquiti-community/unifi/latest/docs"><code>ubiquiti-community/unifi</code></a> ~> 0.41</td>
+            <td>UniFi controller LAN DNS (split-horizon A records)</td>
+            <td><code>cloudflare/dns_unifi_split_horizon.tf</code></td>
+          </tr>
+          <tr>
+            <td><a href="https://registry.terraform.io/providers/integrations/github/latest/docs"><code>integrations/github</code></a> ~> 6.0</td>
+            <td>Repo webhook driving Komodo auto-deploy</td>
+            <td><code>cloudflare/github.tf</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Everything else (Docker containers, secrets, etc.) is managed by Komodo + 1Password,
+        not Terraform. See <a href="/komodo.html">Komodo</a> and
+        <a href="/secrets.html">Secrets</a>.
+      </p>
+
+      <h2 id="state">State backend — MinIO</h2>
+      <p>
+        Terraform state lives in MinIO at <code>s3://terraform-state/cloudflare.tfstate</code>.
+        The bucket has <strong>versioning enabled</strong>, so an accidental
+        <code>tf destroy</code> leaves the previous state version recoverable from MinIO's
+        web console at <a href="https://minio.pod.haus">minio.pod.haus</a>.
+      </p>
+      <p>
+        MinIO runs as a Komodo-managed single-node stack on bilby
+        (<code>minio/compose.yaml</code>, data at <code>/var/lib/minio</code>, API on
+        loopback <code>127.0.0.1:9000</code> + console via the tunnel). The S3 backend
+        uses <strong>native lockfile-in-S3</strong> (provider feature
+        <code>use_lockfile = true</code>) — no DynamoDB sidecar needed; concurrent
+        <code>tf apply</code> attempts block on a <code>.tflock</code> object with
+        S3 conditional-put semantics. Verified during the foundation smoke test.
+      </p>
+      <p>
+        Backrest covers the bucket via the <code>minio</code> plan
+        (<code>backup/bilby/config.json.tmpl</code>) — daily snapshot of
+        <code>/var/lib/minio</code>, which the nightly rclone hook ships to OneDrive.
+        Restore drill steps are in <a href="/disaster-recovery.html">disaster recovery</a>.
+      </p>
+
+      <h2 id="runner">The <code>tf</code> runner</h2>
+      <p>
+        <code>./tf</code> at the repo root is a thin bash wrapper around
+        <code>docker run hashicorp/terraform:latest</code>. It attaches the container to
+        <code>dockernet</code> so the S3 backend at <code>http://minio:9000</code> is
+        reachable, mounts the current working directory at <code>/workspace</code>, and
+        forwards the environment variables every provider needs.
+      </p>
+      <p>
+        Credentials are resolved at run time from 1Password via <code>op run</code> reading
+        <code>cloudflare/.env</code>:
+      </p>
+      <pre><code>cd cloudflare
+op run --env-file=.env -- ../tf plan
+op run --env-file=.env -- ../tf apply</code></pre>
+      <p>
+        <code>.env</code> contains only <code>op://</code> references — nothing sensitive
+        is on disk. See <code>cloudflare/.env.example</code> for the full list.
+      </p>
+
+      <h2 id="service-module">Per-service module</h2>
+      <p>
+        Every tunnel-routed pod.haus hostname is exposed via one
+        <code>module "&lt;name&gt;"</code> block in
+        <code>cloudflare/services_pod_haus.tf</code>. The module
+        (<code>cloudflare/modules/pod_haus_service/</code>) owns three resources for one
+        hostname:
+      </p>
+      <ul>
+        <li>A <code>cloudflare_dns_record</code> CNAME pointing at the tunnel target,
+          proxied through Cloudflare.</li>
+        <li>A <code>cloudflare_zero_trust_access_application</code> scoped to that one
+          hostname, with the locked-by-default policy chain attached.</li>
+        <li>A structured <code>ingress_rule</code> output that
+          <code>cloudflare/tunnel.tf</code> aggregates into the single
+          <code>cloudflare_zero_trust_tunnel_cloudflared_config</code> resource.</li>
+      </ul>
+      <p>
+        Default policy chain is <strong>Homelab service-token bypass at precedence 1,
+        Family allow at precedence 2</strong>. Service-token-bearing requests skip Access
+        entirely (programmatic clients); browser users land on the Cloudflare Access login
+        and are gated by the Family group. Override with the <code>access_policy_ids</code>
+        input for special cases — Syncthing (Nathan-only), Paperless (Paperless-iOS service
+        token first), UniFi (single Bypass-everyone for UniFi's own login).
+      </p>
+      <h3 id="adding-a-service">Adding a new service</h3>
+      <pre><code>module "myservice" {
+  source = "./modules/pod_haus_service"
+
+  account_id               = local.pod_haus_service_defaults.account_id
+  zone_id                  = local.pod_haus_service_defaults.zone_id
+  tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
+  default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
+
+  hostname = "myservice"
+  backend  = "http://myservice:8080"
+}</code></pre>
+      <p>
+        Then add <code>module.myservice.ingress_rule</code> to the
+        <code>pod_haus_module_ingress</code> list in <code>tunnel.tf</code>,
+        <code>op run --env-file=.env -- ../tf apply</code> from
+        <code>cloudflare/</code>, done. cloudflared picks up the new ingress rule from
+        CF's API automatically on its next reconnect (no container restart).
+      </p>
+      <aside class="callout note">
+        <span class="callout-title">Module-output type quirk</span>
+        Passing a module-output struct directly into a typed provider list confuses
+        the Cloudflare provider's schema validator (you'll see
+        "config.ingress[0].service required"). Wrap each entry in a
+        <code>for r in ... : { hostname = r.hostname, service = r.service, ... }</code>
+        comprehension — the explicit field-by-field reshape unifies the type cleanly.
+        See <code>tunnel.tf</code> for the pattern.
+      </aside>
+
+      <h2 id="workflow">Day-to-day workflow</h2>
+      <ol>
+        <li><strong>Read the provider docs</strong> for the resource you're about to
+          touch. Schemas vary between minor versions.</li>
+        <li>Edit the relevant <code>cloudflare/*.tf</code> file.</li>
+        <li><code>cd cloudflare && op run --env-file=.env -- ../tf plan</code>. Read the
+          diff line-by-line; provider v5 sometimes wants in-place updates that look
+          surprising at first glance (default-value normalisation, deprecated-attribute
+          flips, etc.).</li>
+        <li><code>op run --env-file=.env -- ../tf apply</code> when you're happy.</li>
+        <li>For service exposure changes, smoke-test from the host with
+          <code>curl -sI https://&lt;hostname&gt;.pod.haus</code>. A 302 redirect to
+          <code>podhaus.cloudflareaccess.com</code> means the new Access app is gating;
+          a 2xx response with the Homelab service-token headers means the bypass works.</li>
+      </ol>
+
+      <h2 id="dr">Disaster recovery</h2>
+      <p>
+        After a bilby rebuild, before any <code>tf apply</code> runs, the
+        <code>terraform-state</code> bucket has to exist in MinIO with the current state
+        objects. Order:
+      </p>
+      <ol>
+        <li>Bring MinIO up via Komodo (<code>./komodo-sync</code> + deploy).</li>
+        <li>Restore <code>/var/lib/minio</code> from the most recent Backrest snapshot
+          via the Backrest UI. The bucket + objects come back intact.</li>
+        <li><code>cd cloudflare && op run --env-file=.env -- ../tf init</code> — TF
+          finds the restored state.</li>
+        <li><code>../tf plan</code> — should show zero drift if the rebuild matched the
+          last-applied state.</li>
+      </ol>
+      <p>
+        Full bilby-rebuild runbook in <a href="/disaster-recovery.html">disaster
+        recovery</a>.
+      </p>
+
+      <h2 id="see-also">See also</h2>
+      <ul>
+        <li><a href="https://github.com/LogicWolfe/podhaus/blob/main/cloudflare/README.md"><code>cloudflare/README.md</code></a>
+          — file-level layout + provider-doc links + adding-a-resource walkthrough.</li>
+        <li><a href="/networking.html">Networking</a> — how DNS, Access, and the tunnel
+          fit together end-to-end.</li>
+        <li><a href="/komodo.html">Komodo</a> — push-to-deploy flow; the GitHub webhook
+          configured here is what triggers redeploys.</li>
+        <li><a href="/monitoring.html">Monitoring</a> — the <code>Komodo Alerts</code>
+          Gatus poll that surfaces deploy failures.</li>
+        <li><a href="/disaster-recovery.html">Disaster recovery</a> — bilby/MinIO rebuild
+          sequence.</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

@@ -55,7 +55,12 @@
         <li>Komodo's own infrastructure lives in <code>komodo/</code>
           (<code>ferretdb.compose.yaml</code>, ResourceSync TOML files).</li>
         <li>Bootstrap scripts (<code>komodo-start</code>, <code>komodo-sync</code>,
-          <code>kangaroo_bootstrap</code>, <code>dns-push</code>) sit at the repo root.</li>
+          <code>kangaroo_bootstrap</code>) sit at the repo root, alongside the
+          <code>./tf</code> wrapper for Terraform.</li>
+        <li><code>cloudflare/</code> holds the Terraform sources for everything outside
+          Docker — Cloudflare zones + Access apps + tunnel ingress, UniFi LAN DNS, and the
+          GitHub webhook that drives Komodo auto-deploy. State lives in MinIO. See
+          <a href="/terraform.html">Terraform</a>.</li>
       </ul>
       <p>
         The repo is bind-mounted into bilby's Komodo Core (for ResourceSync) and bilby's
