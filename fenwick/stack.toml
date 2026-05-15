@@ -1,0 +1,29 @@
+[[stack]]
+name = "fenwick"
+description = "Fenwick — stateful Signal/email home-helper bot (dev-mode hot-reload stack)"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/fenwick"
+run_build = true
+
+# Non-secret values (repo path, sidecar URL, the bot's own Signal
+# number, the bootstrap admin) are seeded by komodo-start. Identity is
+# SQLite-owned: env only seeds the bootstrap admin (Nathan); everyone
+# else is registered via the admin-only register_account tool. The only
+# secret is the Claude OAuth token, synced from the 1Password Homelab
+# "Claude" item by komodo-op as OP__KOMODO__CLAUDE__CREDENTIAL. The
+# signal-cli auth state lives on the /var/lib/signal-cli bind (break-
+# glass copy = the "Fenwick Signal State" 1Password document).
+environment = """
+TZ=[[TZ]]
+FENWICK_REPO=[[FENWICK_REPO]]
+SIGNAL_CLI_URL=[[FENWICK_SIGNAL_CLI_URL]]
+SIGNAL_ACCOUNT=[[FENWICK_SIGNAL_ACCOUNT]]
+FENWICK_ADMIN_SIGNAL=[[FENWICK_ADMIN_SIGNAL]]
+FENWICK_ADMIN_NAME=[[FENWICK_ADMIN_NAME]]
+CLAUDE_CODE_OAUTH_TOKEN=[[OP__KOMODO__CLAUDE__CREDENTIAL]]
+"""

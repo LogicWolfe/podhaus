@@ -59,6 +59,19 @@ module "backup" {
   backend  = "http://backrest:9898"
 }
 
+module "fenwick" {
+  source = "./modules/pod_haus_service"
+
+  account_id               = local.pod_haus_service_defaults.account_id
+  zone_id                  = local.pod_haus_service_defaults.zone_id
+  tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
+  default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
+
+  hostname = "fenwick"
+  backend  = "http://fenwick:8088"
+}
+
 module "kangaroo_backup" {
   source = "./modules/pod_haus_service"
 

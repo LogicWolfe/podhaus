@@ -1,0 +1,67 @@
+services:
+  # Owns the Signal device link. Long-lived: never restarted on a code
+  # edit (deno --watch only restarts the fenwick process). State on an
+  # NVMe bind so the link survives container/stack recreation.
+  signal-cli-rest-api:
+    container_name: signal-cli-rest-api
+    image: bbernhard/signal-cli-rest-api:latest
+    restart: unless-stopped
+    environment:
+      MODE: json-rpc
+    security_opt:
+      - label:disable
+    volumes:
+      - /var/lib/signal-cli:/home/.local/share/signal-cli
+    networks:
+      - dockernet
+
+  # The bot. Deno runs .ts directly — no build, no node_modules. The
+  # live repo is bind-mounted over /app and `deno run --watch` reloads
+  # on edit. DENO_DIR is a named volume so the module cache (incl. the
+  # Agent SDK's platform binary, warmed at image build) persists and
+  # isn't shadowed by the source bind. Durable state (SQLite) is on an
+  # NVMe bind outside the source tree — the process is runtime-stateless.
+  fenwick:
+    container_name: fenwick
+    build:
+      context: ${FENWICK_REPO}
+      dockerfile: Dockerfile
+    command: ["deno", "run", "--watch", "--allow-all", "src/index.ts"]
+    restart: unless-stopped
+    depends_on:
+      - signal-cli-rest-api
+    security_opt:
+      - label:disable
+    volumes:
+      - ${FENWICK_REPO}:/app
+      - fenwick_deno_dir:/deno-dir
+      - /var/lib/fenwick:/data
+    environment:
+      TZ: ${TZ}
+      DENO_DIR: /deno-dir
+      LOG_LEVEL: info
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN}
+      SIGNAL_CLI_URL: ${SIGNAL_CLI_URL}
+      SIGNAL_ACCOUNT: ${SIGNAL_ACCOUNT}
+      FENWICK_ADMIN_SIGNAL: ${FENWICK_ADMIN_SIGNAL}
+      FENWICK_ADMIN_NAME: ${FENWICK_ADMIN_NAME}
+      FENWICK_DB_PATH: /data/fenwick.db
+      HTTP_PORT: "8088"
+      DOCS_ROOT: /app/docs
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "deno eval \"const r=await fetch('http://127.0.0.1:8088/health');Deno.exit(r.ok?0:1)\""]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  fenwick_deno_dir:
+
+networks:
+  dockernet:
+    external: true

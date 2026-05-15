@@ -20,6 +20,7 @@ locals {
   pod_haus_module_ingress = [
     module.gatus.ingress_rule,
     module.backup.ingress_rule,
+    module.fenwick.ingress_rule,
     module.kangaroo_backup.ingress_rule,
     module.kangaroo.ingress_rule,
     module.komodo.ingress_rule,
