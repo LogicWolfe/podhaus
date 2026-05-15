@@ -8,7 +8,7 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/fenwick"
-run_build = true
+run_build = false
 
 # Non-secret values (repo path, sidecar URL, the bot's own Signal
 # number, the bootstrap admin) are seeded by komodo-start. Identity is

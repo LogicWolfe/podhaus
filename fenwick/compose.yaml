@@ -23,9 +23,8 @@ services:
   # NVMe bind outside the source tree — the process is runtime-stateless.
   fenwick:
     container_name: fenwick
-    build:
-      context: ${FENWICK_REPO}
-      dockerfile: Dockerfile
+    image: denoland/deno:2.7.14
+    working_dir: /app
     command: ["deno", "run", "--watch", "--allow-all", "src/index.ts"]
     restart: unless-stopped
     depends_on:
@@ -57,7 +56,7 @@ services:
       interval: 60s
       timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 150s
 
 volumes:
   fenwick_deno_dir:
