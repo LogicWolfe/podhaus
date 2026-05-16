@@ -61,7 +61,7 @@ loki.source.docker "containers" {
 // moved to their own parser modules; the legacy inline stage.match
 // blocks are gone.
 loki.process "containers" {
-  forward_to = [parsers.komodo_op.run.receiver]
+  forward_to = [parsers.fenwick.run.receiver]
 
   stage.decolorize {}
 }
@@ -96,9 +96,13 @@ loki.source.file "rtorrent_cleanup" {
 // only transforms its own container's streams via stage.match and
 // passes every other stream through untouched. Extend by adding
 // parsers/<svc>.alloy and inserting another link in this chain.
-// Anything without a parser here (e.g. rtorrent-cleanup, fenwick,
-// docs-server, signal-cli-rest-api) still flows and gets the generic
-// OTTL service.name + severity fallback in otelcol.processor.transform.
+// Anything without a parser here (e.g. rtorrent-cleanup, docs-server,
+// signal-cli-rest-api) still flows and gets the generic OTTL
+// service.name + severity fallback in otelcol.processor.transform.
+// fenwick is the exception: its parser DROPS the stream (it
+// self-reports OTLP directly to ClickStack) — runs first so the drop
+// is cheap. See parsers/fenwick.alloy.
+parsers.fenwick           "run" { forward_to = [parsers.komodo_op.run.receiver] }
 parsers.komodo_op         "run" { forward_to = [parsers.komodo_core.run.receiver] }
 parsers.komodo_core       "run" { forward_to = [parsers.komodo_ferretdb.run.receiver] }
 parsers.komodo_ferretdb   "run" { forward_to = [parsers.komodo_postgres.run.receiver] }

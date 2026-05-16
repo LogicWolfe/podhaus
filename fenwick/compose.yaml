@@ -47,6 +47,15 @@ services:
       FENWICK_DB_PATH: /data/fenwick.db
       HTTP_PORT: "8088"
       DOCS_ROOT: /app/docs
+      # Native Deno OpenTelemetry → ClickStack collector (same endpoint
+      # + ingestion key Alloy uses). Fenwick self-reports OTLP
+      # (traces+logs+metrics, trace-correlated); Alloy drops fenwick's
+      # stdout to avoid double-ingest (logging/bilby parsers/fenwick).
+      OTEL_DENO: "true"
+      OTEL_SERVICE_NAME: fenwick
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://clickstack-otel:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_HEADERS: authorization=${CLICKSTACK_INGESTION_KEY}
     networks:
       - dockernet
     labels:
