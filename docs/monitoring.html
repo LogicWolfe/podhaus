@@ -21,17 +21,61 @@
 
       <h1>Monitoring</h1>
       <p class="lead text-lg text-text-muted">
-        Gatus does endpoint monitoring and pushes alerts to Postmark email. Victoria Logs +
-        Alloy collects container logs. Grafana surfaces both. Autoheal restarts unhealthy
+        Gatus does endpoint monitoring and pushes alerts to Postmark email. ClickStack
+        (ClickHouse + HyperDX) is the observability backend; Alloy on both hosts ships
+        container logs and Gatus metrics to it over OTLP. Autoheal restarts unhealthy
         containers locally on each host.
       </p>
+
+      <h2 id="components">Components</h2>
+      <table>
+        <thead>
+          <tr><th>Piece</th><th>Where</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Gatus</td><td><code>gatus/</code> (bilby)</td>
+            <td>Endpoint + heartbeat monitoring, Postmark email alerts, Prometheus
+              <code>/metrics</code></td></tr>
+          <tr><td>ClickStack</td><td><code>clickstack/</code> (bilby)</td>
+            <td>Observability backend — ClickHouse store, HyperDX UI, bundled OTel
+              collector, Mongo app-state</td></tr>
+          <tr><td>Alloy (<code>logging</code> / <code>kangaroo-logging</code>)</td>
+            <td><code>logging/</code> (bilby + kangaroo)</td>
+            <td>Container-log collection + per-service parsing, bridged to OTLP</td></tr>
+          <tr><td>Autoheal</td><td><code>autoheal/</code> (bilby + kangaroo)</td>
+            <td>Restarts unhealthy labelled containers on the local daemon</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="flow">Flow</h2>
+      <pre><code>bilby Docker logs ─┐
+kangaroo Docker logs ─┤  Alloy (per-host)
+                   │   discover → ANSI-strip → per-service parser chain
+                   │   → Loki→OTLP bridge → OTTL enrich (service.name +
+                   │   severity) → batch → OTLP/HTTP exporter
+                   │
+bilby  ───────────────► clickstack-otel:4318  (in-network, by name)
+kangaroo ─────────────► 10.0.0.119:4318       (cross-LAN, plaintext)
+                          │  (HyperDX ingestion API key on every request)
+                          ▼
+                  ClickStack OTel collector
+                          │
+                          ▼
+                  ClickHouse  (otel_logs / otel_metrics_* / otel_traces)
+                          │
+                          ▼
+                  HyperDX UI  →  https://watch.pod.haus
+
+Gatus /metrics ──► bilby Alloy prometheus.scrape ──► same OTLP pipeline ──► ClickHouse
+
+Gatus endpoint/heartbeat checks ──► Postmark webhook ──► alerts@pod.haus</code></pre>
 
       <h2 id="gatus">Gatus</h2>
       <p>
         Config-as-code endpoint monitoring, defined entirely in
-        <code>gatus/config.yaml</code>. Monitors HTTP endpoints, pushed heartbeats, and
+        <code>gatus/conf/config.yaml</code>. Monitors HTTP endpoints, pushed heartbeats, and
         downstream-service-state checks. Stores results in SQLite with a 90-day cap. Alerts via
-        Postmark webhook.
+        Postmark webhook. Unchanged by the ClickStack migration.
       </p>
       <p>
         Three monitor types in use:
@@ -51,60 +95,164 @@
         kangaroo-backrest heartbeats. <code>gatus.pod.haus</code> shows the live status page.
       </p>
 
-      <h3 id="alert-body">Alert body</h3>
+      <h3 id="gatus-metrics">Gatus metrics</h3>
       <p>
-        Postmark email body is customized in <code>gatus/config.yaml</code> to surface, per
-        alert: the <code>[ALERT_DESCRIPTION]</code> string (per-alert "what this means + where
-        to investigate"), the failing conditions, and any <code>[RESULT_ERRORS]</code> from the
-        push payload. Every alert links back to <code>gatus.pod.haus</code> and
-        <code>logs.pod.haus</code> for triage.
+        <code>gatus/conf/config.yaml</code> sets <code>metrics: true</code>, exposing a
+        Prometheus <code>/metrics</code> endpoint on Gatus's existing <code>:8080</code> (the
+        same port as the UI; <code>/metrics</code> is not added to the tunnel ingress, so it
+        stays LAN-internal behind Access). bilby's Alloy <code>prometheus.scrape</code>s it at
+        a ~60s cadence and bridges Prometheus → OTLP through the same authenticated exporter
+        as the logs. The series land in ClickHouse's <code>otel_metrics_*</code> tables and
+        are queryable and dashboardable in HyperDX. Gatus's own endpoint/heartbeat monitoring
+        and the Postmark alert chain are unaffected by this.
       </p>
 
       <h3 id="adding-monitor">Adding a Gatus monitor</h3>
       <p>
-        Edit <code>gatus/config.yaml</code> — YAML anchors at the top define common defaults
-        (interval, alert config, conditions). Append a new endpoint to the appropriate group
-        (services / heartbeats / docker). Save. Gatus reloads config automatically on file
-        change — no restart.
+        Edit <code>gatus/conf/config.yaml</code> — YAML anchors at the top define common
+        defaults (interval, alert config, conditions). Append a new endpoint to the
+        appropriate group (services / heartbeats / docker). Save. Gatus reloads config
+        automatically on file change — no restart.
       </p>
 
-      <h2 id="logs">Victoria Logs + Alloy</h2>
+      <h2 id="clickstack">ClickStack</h2>
       <p>
-        Victoria Logs (port 9428) is the log store; <code>logs.pod.haus</code> serves its native
-        vmui. Backed by <code>/mnt/jump/victoria-logs/</code> on bilby; runs as
-        <code>1000:100</code> to align with the NAS Jump squash. Retention is
-        <code>-retentionPeriod=180d -retention.maxDiskSpaceUsageBytes=50GB</code>.
-      </p>
-      <p>
-        Grafana Alloy collectors scrape container logs from each host's Docker socket and push
-        to Victoria Logs via the Loki-compatible push API. Two collectors:
+        ClickStack is the observability backend (bilby-only, as VictoriaLogs was). It is the
+        <code>clickstack/</code> stack and bundles four containers:
       </p>
       <ul>
-        <li><strong>bilby</strong>: <code>logging/bilby/alloy-config.alloy</code> — has
-          per-container shaping (op-connect-api's <code>log_message</code> field and flood's
-          <code>msg</code> field get rewritten to VL's expected <code>_msg</code>).</li>
-        <li><strong>kangaroo</strong>: <code>logging/kangaroo/alloy-config.alloy</code> — same
-          general shape, slightly slimmer since the bilby-specific rewrites aren't needed. Logs
-          tagged with <code>host="kangaroo"</code> so they're filterable in vmui.</li>
+        <li><strong>ClickHouse</strong> (<code>clickstack-clickhouse</code>) — columnar store
+          for telemetry. <code>mem_limit: 4g</code> plus a <code>config.d</code> drop-in
+          (<code>clickhouse-conf/config.d/podhaus.xml</code>) that caps
+          <code>max_server_memory_usage</code>, sets <code>listen_host</code> to
+          <code>0.0.0.0</code>, enables <code>async_load_databases</code>, and bounds the
+          internal log.</li>
+        <li><strong>HyperDX</strong> (<code>hyperdx</code>) — the query/dashboard/alert UI at
+          <code>https://watch.pod.haus</code>. Also hosts the OpAMP server the collector
+          talks to.</li>
+        <li><strong>OTel collector</strong> (<code>clickstack-otel</code>) — the bundled
+          OpenTelemetry collector. Its OTLP/HTTP port <code>4318</code> is the only published
+          port on the stack (kangaroo ships to it cross-LAN; bilby reaches it by container
+          name).</li>
+        <li><strong>Mongo</strong> (<code>clickstack-mongo</code>) — HyperDX app-state only:
+          dashboards, alerts, users, source definitions, the ingestion key. Tiny but
+          irreplaceable.</li>
       </ul>
 
-      <h2 id="grafana">Grafana</h2>
+      <h3 id="alloy">Alloy log collection</h3>
       <p>
-        Grafana lives at <code>grafana.pod.haus</code>. Plugged into Victoria Logs (via the
-        <code>victoriametrics-logs-datasource</code> plugin) and Gatus (via the Infinity
-        datasource hitting Gatus's API). Two dashboards provisioned via file-based config in
-        <code>logging/dashboards/</code>:
+        Alloy still runs on <strong>both</strong> hosts as the multi-host
+        <code>logging</code> stack — <code>logging</code> on bilby,
+        <code>kangaroo-logging</code> on kangaroo, both sharing
+        <code>logging/compose.shared.yaml</code>. It scrapes container logs from each host's
+        Docker socket. Instead of pushing to VictoriaLogs over the Loki API, it now bridges to
+        OTLP (<code>otelcol.receiver.loki</code> → batch → <code>otelcol.exporter.otlphttp</code>)
+        and ships to the ClickStack collector:
       </p>
       <ul>
-        <li><strong>Container Logs</strong> — VL native panel.</li>
-        <li><strong>Uptime Status</strong> — Gatus endpoints via Infinity datasource. This is
-          the home dashboard.</li>
+        <li><strong>bilby</strong> — in-network to <code>clickstack-otel:4318</code> by
+          container name.</li>
+        <li><strong>kangaroo</strong> — cross-LAN to <code>http://10.0.0.119:4318</code>
+          (plaintext, LAN-only — same trust posture as the old cross-LAN VL push).</li>
       </ul>
       <p>
-        Grafana is intentionally stripped down: all drilldown apps disabled (Logs drilldown
-        needs Loki's full query API which VL doesn't implement), alerting disabled (Gatus owns
-        it), news feed off, plugin marketplace hidden.
+        Every request carries a HyperDX <strong>ingestion API key</strong> in the
+        <code>authorization</code> header. The key lives in 1Password as
+        <code>clickstack-ingestion-key</code>, is synced by <code>komodo-op</code> to a Komodo
+        Variable, injected via each host's <code>logging</code> <code>stack.toml</code>, and
+        read by <code>config.alloy</code> as <code>sys.env("CLICKSTACK_INGESTION_KEY")</code>.
+        An empty/wrong key means a hard 401 and no data in HyperDX — a loud, visible failure
+        with no silent fallback to the old sink.
       </p>
+
+      <h3 id="parsers">Per-service log parsing</h3>
+      <p>
+        Log parsing is config-as-code. Each parsed service has a module at
+        <code>logging/&lt;host&gt;/alloy-conf/parsers/&lt;service&gt;.alloy</code> — one Alloy
+        <code>declare</code> module per service, imported via <code>import.file</code> and
+        composed into an explicit chain in <code>config.alloy</code>. Each module:
+      </p>
+      <ul>
+        <li>parses that service's real event timestamp into the log entry,</li>
+        <li>normalizes the level to a <code>detected_level</code> attribute,</li>
+        <li>reduces the Body down to the message.</li>
+      </ul>
+      <p>
+        After the chain, an OTTL <code>transform.enrich</code> block sets
+        <code>service.name</code> from the container name and maps
+        <code>detected_level</code> → OTLP severity. That mapping is authoritative; for lines
+        with no parsed level there's a body-keyword severity fallback (anchored to the first
+        ~60 chars so e.g. "Total errors encountered: 0" isn't mislabelled ERROR). Services
+        without a parser — <code>rtorrent-cleanup</code>, <code>fenwick</code>,
+        <code>docs-server</code>, <code>ofelia</code>, <code>signal-cli-rest-api</code> —
+        still flow with the generic fallback. Roughly 20 bilby services are parsed; kangaroo
+        parses <code>alloy</code>, <code>syncthing</code>, <code>backrest</code>,
+        <code>komodo-periphery</code>, and <code>autoheal</code>.
+      </p>
+      <p>
+        To parse a new service: add
+        <code>logging/&lt;host&gt;/alloy-conf/parsers/&lt;service&gt;.alloy</code> and insert
+        one link into the parser chain in that host's <code>config.alloy</code>. Anything not
+        in the chain still ships, just with the generic fallback.
+      </p>
+
+      <h3 id="retention">Retention</h3>
+      <p>
+        Retention is enforced as ClickHouse table TTL, applied post-bootstrap via
+        <code>ALTER TABLE … MODIFY TTL</code> (the collector's default was 30d / 720h):
+      </p>
+      <table>
+        <thead><tr><th>Table</th><th>TTL</th></tr></thead>
+        <tbody>
+          <tr><td><code>otel_logs</code></td><td>180 days</td></tr>
+          <tr><td><code>otel_metrics_*</code></td><td>90 days</td></tr>
+          <tr><td><code>otel_traces</code>, <code>hyperdx_sessions</code></td><td>30 days</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="storage">Storage</h3>
+      <p>
+        ClickStack data lives on bilby's <strong>local NVMe</strong>, not Jump:
+        <code>/var/lib/clickstack/{clickhouse,clickhouse-logs,mongo,mongo-dumps}</code>.
+        ClickHouse and Mongo <code>chown</code> their data dirs to their own uid at startup;
+        the NFS Jump all-squash blocks that, so local disk is mandatory here. Steady-state
+        footprint is ~1.3 GB RAM, bounded by <code>mem_limit</code> on every container plus
+        the ClickHouse <code>config.d</code> memory caps — this is the one memory-risky stack
+        on the shared 15 GB M1.
+      </p>
+
+      <h3 id="backup">Backup</h3>
+      <p>
+        ClickHouse telemetry is deliberately <strong>not</strong> backed up — it's
+        regenerable and large. The MongoDB app-state <strong>is</strong> backed up: an ofelia
+        job at <code>03:50</code> runs <code>mongodump</code> into
+        <code>/var/lib/clickstack/mongo-dumps</code> (keeping the latest ~14 archives), and
+        the Backrest <code>clickstack</code> plan picks that directory up at <code>05:05</code>
+        into the existing restic + OneDrive chain.
+      </p>
+
+      <h3 id="access">Access</h3>
+      <p>
+        <code>watch.pod.haus</code> sits behind the existing <code>*.pod.haus</code>
+        Cloudflare Access wildcard (Family identity policy) <em>and</em> HyperDX's own login.
+        There is a single HyperDX account, <code>nathan@nathanbaxter.com</code>; credentials
+        are in 1Password as <code>clickstack-hyperdx</code>.
+      </p>
+
+      <h3 id="known-issues">Known issues</h3>
+      <ul>
+        <li><strong>kangaroo Alloy OTLP exporter can stall silently.</strong> The cross-LAN
+          exporter on <code>kangaroo-logging</code> can stop shipping and not self-recover.
+          The port-only container healthcheck can't detect this (the socket stays open). The
+          current workaround is <code>RestartStack kangaroo-logging</code>. A real guard —
+          metrics-based healthcheck/autoheal, exporter retry-queue tuning, or a scheduled
+          restart — is an open follow-up.</li>
+        <li><strong>ClickHouse MergeTree part explosion.</strong> The collector's frequent
+          small inserts create a large number of MergeTree parts.
+          <code>async_load_databases</code> decouples ClickHouse startup from part count so a
+          slow start no longer trips autoheal, but the underlying insert batching still needs
+          tuning — an open follow-up.</li>
+      </ul>
 
       <h2 id="autoheal">Autoheal</h2>
       <p>
@@ -112,7 +260,7 @@
         autoheal can't see kangaroo's Docker daemon, so each Periphery host needs one. Autoheal
         watches the local Docker daemon and restarts any container whose healthcheck reports
         unhealthy for ~3 consecutive checks, provided the container has the
-        <code>autoheal: "true"</code> label.
+        <code>autoheal: "true"</code> label. Unchanged by the ClickStack migration.
       </p>
       <p>
         Standard pattern on every healthy stack:
@@ -130,6 +278,10 @@
       start_period: 30s</code></pre>
 
       <h2 id="alerting-flow">Alerting flow</h2>
+      <p>
+        Alerting is owned entirely by Gatus and Postmark — ClickStack/HyperDX is for query and
+        dashboards, not the email alert path.
+      </p>
       <ol>
         <li>Endpoint check fails (HTTP non-2xx, body assertion fails, push missing, etc.).</li>
         <li>After <code>failure-threshold</code> consecutive failures (typically 3), Gatus fires
@@ -144,7 +296,7 @@
         <li><a href="/backup-and-recovery.html#alerts">Backup &amp; recovery → alerts</a> —
           how Backrest's nightly heartbeat plugs into Gatus.</li>
         <li><a href="/scheduling.html">Scheduling</a> — the ofelia job that pushes the daily
-          RAR-backlog heartbeat.</li>
+          RAR-backlog heartbeat, and the nightly ClickStack <code>mongodump</code> job.</li>
       </ul>
 
     </main>

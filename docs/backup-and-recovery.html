@@ -62,7 +62,8 @@ restic repo                restic repo
         <tbody>
           <tr><td><code>komodo</code></td><td>Komodo Core volumes (postgres, FerretDB)</td><td>04:00</td></tr>
           <tr><td><code>onepassword</code></td><td>1Password Connect API state</td><td>04:10</td></tr>
-          <tr><td><code>logging</code></td><td>Grafana + Alloy state</td><td>04:20</td></tr>
+          <tr><td><code>logging</code></td><td>Alloy runtime state (<code>logging_alloy-data</code>) — config-as-code parsers live in git, so this is just WAL/positions</td><td>05:00</td></tr>
+          <tr><td><code>clickstack</code></td><td>HyperDX app-state via nightly <code>mongodump</code> (dashboards/alerts/users/sources/ingestion-key). ClickHouse telemetry is deliberately <em>not</em> backed up — regenerable.</td><td>05:05</td></tr>
           <tr><td><code>flood</code></td><td><code>/var/lib/flood-db</code></td><td>04:30</td></tr>
           <tr><td><code>plex</code></td><td><code>/var/lib/plex-local</code></td><td>04:40</td></tr>
           <tr><td><code>paperless</code></td><td><code>/var/lib/paperless-data</code> + <code>/var/lib/paperless-pgdata</code></td><td>04:50</td></tr>

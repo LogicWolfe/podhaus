@@ -43,7 +43,7 @@
       <h3 id="jump">Jump (NAS SSD)</h3>
       <p>
         QNAP SSD array, RAID5, ~382 GB total / ~280 GB free. Durable storage that
-        we'd really rather not lose. Three live consumers:
+        we'd really rather not lose. Two live consumers:
       </p>
       <ul>
         <li><strong>Restic repo</strong> at <code>/mnt/jump/backups/</code> (bilby view) or
@@ -51,9 +51,11 @@
           backup target.</li>
         <li><strong>Kangaroo's restic repo</strong> at <code>/mnt/jump/backups-kangaroo/</code> —
           separate from bilby's to avoid two-client coordination.</li>
-        <li><strong>Victoria Logs</strong> at <code>/mnt/jump/victoria-logs/</code> — 180-day log
-          retention, 50 GB cap.</li>
       </ul>
+      <p>
+        ClickStack telemetry is <em>not</em> a Jump consumer — ClickHouse and MongoDB live on
+        local NVMe at <code>/var/lib/clickstack/</code> because the NFS all-squash on Jump blocks
+        their startup <code>chown</code>. See the NAS-squash quirk below.</p>
       <p>
         Bilby mounts Jump over NFS at <code>/mnt/jump</code>; kangaroo accesses it directly.
         Either-direction off-site sync to OneDrive runs out of bilby's Backrest container via

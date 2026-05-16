@@ -50,7 +50,7 @@ alerting:
         "From": "uptime@nathanbaxter.com",
         "To": "nathan@nathanbaxter.com",
         "Subject": "[ALERT_TRIGGERED_OR_RESOLVED] [ENDPOINT_NAME]",
-        "HtmlBody": "<p><strong>Status:</strong> [ALERT_TRIGGERED_OR_RESOLVED]</p><p><strong>Endpoint:</strong> [ENDPOINT_GROUP] / [ENDPOINT_NAME]</p><p><strong>What this means:</strong> [ALERT_DESCRIPTION]</p><p><strong>Details:</strong> [RESULT_ERRORS]</p><p><strong>Status page:</strong> <a href=\"https://gatus.pod.haus\">gatus.pod.haus</a> · <strong>Logs:</strong> <a href=\"https://logs.pod.haus\">logs.pod.haus</a></p><p><strong>Failed conditions:</strong><br/>[RESULT_CONDITIONS]</p>",
+        "HtmlBody": "<p><strong>Status:</strong> [ALERT_TRIGGERED_OR_RESOLVED]</p><p><strong>Endpoint:</strong> [ENDPOINT_GROUP] / [ENDPOINT_NAME]</p><p><strong>What this means:</strong> [ALERT_DESCRIPTION]</p><p><strong>Details:</strong> [RESULT_ERRORS]</p><p><strong>Status page:</strong> <a href=\"https://gatus.pod.haus\">gatus.pod.haus</a> · <strong>Logs:</strong> <a href=\"https://watch.pod.haus\">watch.pod.haus</a></p><p><strong>Failed conditions:</strong><br/>[RESULT_CONDITIONS]</p>",
         "MessageStream": "outbound"
       }
     default-alert:
@@ -71,8 +71,8 @@ _defaults: &defaults
 # --- Tunnel-routed *.pod.haus services ---
 
 endpoints:
-  - name: Grafana
-    url: https://grafana.pod.haus/
+  - name: HyperDX (ClickStack)
+    url: https://watch.pod.haus/
     <<: *defaults
 
   - name: Home Assistant
@@ -85,10 +85,6 @@ endpoints:
 
   - name: Komodo
     url: https://komodo.pod.haus/
-    <<: *defaults
-
-  - name: Logs (Victoria Logs)
-    url: https://logs.pod.haus/select/vmui/
     <<: *defaults
 
   - name: Paperless
@@ -233,7 +229,7 @@ external-endpoints:
       interval: 25h
     alerts:
       - type: custom
-        description: "Backrest's nightly backup pipeline didn't check in. Either no snapshots ran tonight, or the post-plan rclone sync to OneDrive failed. Investigate: `docker logs backrest` in logs.pod.haus, and check /mnt/pouch/backups for the expected repository state."
+        description: "Backrest's nightly backup pipeline didn't check in. Either no snapshots ran tonight, or the post-plan rclone sync to OneDrive failed. Investigate: `docker logs backrest`, or query in HyperDX (watch.pod.haus), and check /mnt/pouch/backups for the expected repository state."
         failure-threshold: 3
         success-threshold: 2
         send-on-resolved: true
@@ -267,7 +263,7 @@ external-endpoints:
       interval: 25h
     alerts:
       - type: custom
-        description: "Kangaroo's nightly Backrest pipeline didn't check in. Either no snapshots ran on kangaroo (check `docker logs backrest` filtered by host=kangaroo on logs.pod.haus), or the success-hook on the backrest-state plan failed. Manually trigger a snapshot of any kangaroo plan from gatus.pod.haus to test."
+        description: "Kangaroo's nightly Backrest pipeline didn't check in. Either no snapshots ran on kangaroo (check `docker logs backrest` filtered by host=kangaroo in HyperDX (watch.pod.haus)), or the success-hook on the backrest-state plan failed. Manually trigger a snapshot of any kangaroo plan from gatus.pod.haus to test."
         failure-threshold: 3
         success-threshold: 2
         send-on-resolved: true
