@@ -1,12 +1,19 @@
 [[stack]]
 name = "kangaroo-logging"
-description = "Alloy on kangaroo — ships container logs to bilby's Victoria Logs"
+description = "Alloy on kangaroo — ships container logs + self-telemetry to ClickStack (cross-LAN to bilby)"
 tags = ["kangaroo", "podhaus"]
 deploy = true
 
 [stack.config]
 server = "kangaroo"
 linked_repo = "podhaus"
+# Webhook runs a full DeployStack (git pull + compose) instead of the
+# default DeployStackIfChanged. Required on linked_repo stacks: the
+# change-check compares against the Periphery's clone, which only
+# advances during a deploy — so without this the push webhook 200s and
+# no-ops forever (stale-clone deadlock). bilby files_on_host stacks
+# don't need it (they diff the live bind-mount). See docs/komodo.html.
+webhook_force_deploy = true
 run_directory = "logging/kangaroo"
 file_paths = ["compose.yaml", "../compose.shared.yaml"]
 

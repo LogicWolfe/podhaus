@@ -64,11 +64,15 @@
           </tr>
           <tr>
             <td>Deploy workflow</td>
-            <td>Commit + push (webhook auto-deploys) <em>or</em>
-              save + <code>./komodo-sync</code> (smart-deploy redeploys any stack whose
-              <code>deployed_hash</code> diverges from <code>HEAD</code>)</td>
-            <td>Commit + push → GitHub webhook fires <code>CloneRepo</code> then
-              <code>DeployStack</code>. No manual UI click.</td>
+            <td>Commit + push → per-stack webhook runs
+              <code>DeployStackIfChanged</code> (only stacks whose files
+              changed) <em>or</em> save + <code>./komodo-sync</code>
+              (force-redeploys any stack whose <code>deployed_hash</code>
+              diverges from <code>HEAD</code>)</td>
+            <td>Commit + push → per-stack webhook runs a full
+              <code>DeployStack</code> (<code>git pull</code> the clone +
+              compose). Requires <code>webhook_force_deploy = true</code>.
+              No manual UI click.</td>
           </tr>
           <tr>
             <td>Best for</td>
@@ -83,34 +87,40 @@
         commit-roundtrip when the editor is on the same host.
       </p>
       <aside class="callout warn">
-        <span class="callout-title">Manual deploys on a Linked Repo host do NOT pull</span>
-        On bilby (<code>files_on_host</code>) Periphery reads the bind-mounted working
-        tree directly, so a save plus <code>DeployStack</code> (or
-        <code>./komodo-sync</code>, or an Alloy <code>/-/reload</code>) applies the
-        current files immediately. A Linked Repo host (kangaroo, future pinelake) runs
-        the stack from Komodo's <strong>local clone</strong> of
-        <code>LogicWolfe/podhaus</code> <code>main</code>. The normal delivery path —
-        commit + push → GitHub webhook → Komodo runs <code>CloneRepo</code> (pulls
-        latest <code>main</code>) <em>then</em> <code>DeployStack</code> — refreshes that
-        clone first and works correctly.
+        <span class="callout-title">Linked Repo deploys: what actually pulls (verified, Komodo 1.19.5 source)</span>
+        Long-standing field belief was "manual <code>DeployStack</code> on a
+        Linked Repo host doesn't pull." The Komodo source disproves it:
+        <code>DeployStack</code> (manual <em>or</em> webhook-triggered)
+        runs <code>git pull --rebase --force origin &lt;branch&gt;</code>
+        on the Periphery clone before composing. It is
+        <strong><code>RestartStack</code></strong> that does not pull —
+        it only <code>docker compose restart</code>s. So the corrected
+        rule is: <strong><code>RestartStack</code> = no pull;
+        <code>DeployStack</code> = pulls</strong>.
         <br><br>
-        The trap: a manual, out-of-band <code>RestartStack</code> or
-        <code>DeployStack</code> against a Linked Repo stack restarts/redeploys from the
-        <strong>existing local clone, which may be stale — it does not pull</strong>. So
-        a change that is committed and pushed but where the webhook did not fire (or
-        where you intervened by hand) silently keeps running the old config. Field
-        symptom: kangaroo's Alloy ran a stale config for an entire session despite
-        repeated <code>RestartStack</code>s; only the queue-capacity metric (a
-        config-level value) revealed it. <code>RunSync</code> does not help here — it
-        re-imports <code>stack.toml</code> definitions (e.g. the <code>environment</code>
-        block) but does not pull the Linked Repo working files; the clone is only
-        refreshed by <code>CloneRepo</code>/<code>PullRepo</code> or the push webhook.
+        The real trap is subtler. A stack webhook runs
+        <code>DeployStackIfChanged</code> <em>by default</em>
+        (<code>webhook_force_deploy = false</code>), and its change-check
+        compares against the Periphery clone — which only advances
+        <em>during</em> a deploy. On a <code>linked_repo</code> stack that
+        is a deadlock: the webhook returns HTTP&nbsp;200 and no-ops
+        forever because the stale clone always looks "unchanged."
+        <strong>Linked Repo stacks must set
+        <code>webhook_force_deploy = true</code></strong> in
+        <code>[stack.config]</code> so the webhook runs a full
+        <code>DeployStack</code> (pull + compose) unconditionally. bilby
+        <code>files_on_host</code> stacks must <em>not</em> set it — they
+        diff the live bind-mount, so <code>DeployStackIfChanged</code>
+        correctly skips genuinely-unchanged stacks (free no-churn).
         <br><br>
-        Correct manual procedure for a Linked Repo host:
-        <strong><code>PullRepo</code> (refresh the clone to latest <code>main</code>)
-        → then <code>RestartStack</code>/<code>DeployStack</code></strong>. Verify with
-        a config-level signal that proves the new config is actually live (a
-        metric/value), not merely "container is running/healthy."
+        Historical compounding bug (fixed 2026-05-16): the GitHub webhook
+        pointed at a non-existent path (<code>/auth/github/webhook</code>),
+        so <em>no</em> push ever reached Komodo (every delivery 405).
+        Webhooks are per-resource: see the Auto-deploy note below.
+        <code>RunSync</code> re-imports <code>stack.toml</code> config from
+        bilby's bind-mount (no git) but does not pull a linked clone.
+        Always confirm a deploy via a config-level signal — the
+        pulled-to commit hash or a metric — never "container healthy."
       </aside>
 
       <h2 id="stack-toml">stack.toml structure</h2>
@@ -167,17 +177,29 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           non-secret variables</a>.</li>
       </ul>
       <aside class="callout note">
-        <span class="callout-title">Auto-deploy on push</span>
-        Every <code>git push</code> to <code>main</code> fires the GitHub webhook at
-        <code>komodo.pod.haus/auth/github/webhook</code>, which Komodo HMAC-validates and
-        translates into <code>DeployStack</code> for every stack whose files the push
-        touched. Kangaroo (Linked Repo) clones latest origin first; bilby
-        (<code>files_on_host</code>) deploys from whatever's on its working tree — usually
-        fresh because bilby is where you committed from. If you pushed from a laptop
-        without pulling on bilby first, the bilby-side deploy will read stale files;
-        commit-then-push from bilby is the safe default. <code>./komodo-sync</code>'s
-        smart-deploy is the manual equivalent for "I edited locally, deploy what
-        changed."
+        <span class="callout-title">Auto-deploy on push (per-stack webhooks)</span>
+        Komodo has <strong>no single generic webhook endpoint</strong>.
+        Its only contract is per-resource:
+        <code>https://&lt;host&gt;/listener/&lt;auth&gt;/&lt;resource_type&gt;/&lt;name&gt;/&lt;execution&gt;</code>.
+        So <code>cloudflare/github.tf</code> creates <strong>one GitHub
+        webhook per stack</strong>, each hitting
+        <code>komodo.pod.haus/listener/github/stack/&lt;name&gt;/deploy</code>
+        (Access bypass is path-scoped to the <code>/listener/github</code>
+        prefix; Komodo HMAC-validates with <code>KOMODO_WEBHOOK_SECRET</code>).
+        Adding a stack means adding its <code>stack.toml</code> name to the
+        <code>komodo_stacks</code> list in <code>github.tf</code> + a
+        <code>tf apply</code> — otherwise it has no webhook.
+        <br><br>
+        Every <code>git push</code> to <code>main</code> fires all ~20
+        webhooks (Komodo only acts when the pushed branch matches the
+        resource's branch — for <code>linked_repo</code> stacks that's the
+        Repo resource's branch). bilby <code>files_on_host</code> stacks
+        run <code>DeployStackIfChanged</code> (deploy only those whose
+        files actually changed, diffed against the live bind-mount); the 3
+        kangaroo <code>linked_repo</code> stacks run a full
+        <code>DeployStack</code> (<code>webhook_force_deploy</code>, see
+        the warn above). <code>./komodo-sync</code> is the manual
+        force-redeploy / new-stack-registration equivalent.
       </aside>
 
       <h2 id="scripts">komodo-* scripts at the repo root</h2>

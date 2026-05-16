@@ -2,11 +2,13 @@
 # Re-run Komodo's ResourceSync against this repo, then redeploy any
 # stack whose deployed-hash diverges from current git HEAD.
 #
-# Smart-deploy pass closes the historical gap where stack.toml /
-# compose.yaml edits required a manual "Deploy" click in the UI.
-# Webhook auto-deploy (configured per stack via webhook_enabled) is
-# the steady-state push-to-deploy path; this script is the local
-# "I made changes, deploy them now" equivalent.
+# This is the manual "register my stack.toml changes + force-deploy
+# everything stale now" tool, and the only way to apply NEW stack
+# registrations. Steady-state push-to-deploy is handled by the
+# per-stack GitHub webhooks in cloudflare/github.tf
+# (komodo.pod.haus/listener/github/stack/<name>/deploy) — see
+# docs/komodo.html. Use this script when you want an immediate local
+# redeploy without a push, or after adding a stack.
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"

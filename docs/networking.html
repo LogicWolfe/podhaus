@@ -118,9 +118,10 @@ networks:
           precedence 1, then the default chain.</li>
         <li><strong>Pine Lake apps</strong> — Nathan-only reusable policy, separate from the
           Family group (cross-household).</li>
-        <li><strong>Komodo webhook</strong> — path-scoped Bypass on
-          <code>komodo.pod.haus/auth/github/webhook</code> so GitHub webhook deliveries skip
-          Access; Komodo HMAC-validates the delivery itself.</li>
+        <li><strong>Komodo webhook</strong> — path-scoped Bypass on the
+          <code>komodo.pod.haus/listener/github</code> prefix (Komodo's
+          per-stack webhook listeners all live under it) so GitHub webhook
+          deliveries skip Access; Komodo HMAC-validates each delivery itself.</li>
       </ul>
       <p>
         The <code>*.pod.haus</code> wildcard Access app stays as the default-deny safety

@@ -7,6 +7,10 @@ deploy = true
 [stack.config]
 server = "kangaroo"
 linked_repo = "podhaus"
+# linked_repo stacks need a forced full deploy on webhook or the
+# push 200s and no-ops forever (stale-clone deadlock). See
+# logging/kangaroo/stack.toml + docs/komodo.html for the full rationale.
+webhook_force_deploy = true
 run_directory = "backup/kangaroo"
 file_paths = ["compose.yaml", "../compose.shared.yaml"]
 # init-tools image built inline by the backrest-init service via `build:`.

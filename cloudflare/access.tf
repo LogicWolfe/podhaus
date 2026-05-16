@@ -206,16 +206,20 @@ resource "cloudflare_zero_trust_access_policy" "app_launcher_family" {
 # Special-case Applications (not via the per-service module)
 # ============================================================================
 
-# Komodo webhook bypass — Railway-migration driver.
-# Path-scoped Application gating only the GitHub webhook delivery URL;
-# bypasses Access for the service-token-bearing request, leaves the
-# rest of komodo.pod.haus on the wildcard gate.
+# Komodo webhook bypass.
+# Komodo's per-resource webhook listeners all live under
+# /listener/github/... (e.g. /listener/github/stack/<name>/deploy —
+# see github.tf). Access path matching is prefix-based and a more
+# specific app overrides the *.pod.haus wildcard, so scoping this
+# bypass to the /listener/github prefix covers every per-stack
+# listener URL while leaving the rest of komodo.pod.haus gated.
+# Komodo validates the HMAC itself, so an open bypass here is safe.
 resource "cloudflare_zero_trust_access_application" "komodo_webhook" {
   account_id           = var.account_id
   name                 = "Komodo webhook (bypass)"
   type                 = "self_hosted"
-  domain               = "komodo.pod.haus/auth/github/webhook"
-  self_hosted_domains  = ["komodo.pod.haus/auth/github/webhook"]
+  domain               = "komodo.pod.haus/listener/github"
+  self_hosted_domains  = ["komodo.pod.haus/listener/github"]
   session_duration     = "24h"
 
   policies = [

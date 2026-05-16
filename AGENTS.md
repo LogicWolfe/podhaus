@@ -144,9 +144,17 @@ slot into the same pattern.
 5. Run `./komodo-sync` to register the stack. The smart-deploy pass
    redeploys any stack whose `info.deployed_hash` diverges from
    `HEAD`, so the freshly-registered stack deploys immediately.
-   Alternatively, push to GitHub — the webhook triggers the same
-   redeploy via Komodo's auto-deploy.
-6. If the service is a single-host pod.haus service, add a
+   `komodo-sync` is the manual "register + deploy my changes now"
+   tool — not a workaround for broken webhooks (steady-state
+   push-to-deploy works; see the auto-deploy hard rule below).
+6. Register the stack's push-to-deploy webhook: add its `stack.toml`
+   `name` to the `komodo_stacks` list in `cloudflare/github.tf`, then
+   `cd cloudflare && op run --env-file=.env -- ../tf apply`. Without
+   this the stack has no GitHub webhook and never auto-deploys on
+   push. **If the stack uses `linked_repo` (kangaroo/pinelake), also
+   set `webhook_force_deploy = true` in its `[stack.config]`** — see
+   the linked-repo hard rule below for why.
+7. If the service is a single-host pod.haus service, add a
    `module "<name>"` block in `cloudflare/services_pod_haus.tf` plus
    one entry in `tunnel.tf`'s `pod_haus_module_ingress`. The module
    owns DNS + Access policy chain + tunnel ingress; default policy
@@ -192,16 +200,23 @@ These have failure modes that you must not introduce:
   fresh Komodo bootstrap. Put the secret in 1Password and reference the
   `OP__KOMODO__*` synced variable name. See
   [`docs/secrets.html`](docs/secrets.html).
-- **On a Linked Repo host (kangaroo, future pinelake), a manual
-  `RestartStack`/`DeployStack` does NOT pull.** It redeploys from
-  Komodo's existing local clone, which may be stale; only the push
-  webhook (`CloneRepo` → `DeployStack`) or an explicit `PullRepo`
-  refreshes it. `RunSync` re-imports `stack.toml` definitions but does
-  not pull working files either. To apply committed+pushed changes by
-  hand, run `PullRepo` then `RestartStack`/`DeployStack`, and confirm
-  via a config-level signal (a metric/value) that the new config is
-  live — "container healthy" is not proof. (bilby is `files_on_host`,
-  so it reads the working tree directly and has no such trap.) See
+- **Linked Repo hosts (kangaroo, future pinelake) need
+  `webhook_force_deploy = true`.** Verified against Komodo 1.19.5
+  source: `DeployStack` (manual or webhook) *does* `git pull` the
+  linked clone before composing — it is **`RestartStack`** that does
+  not pull (it only `docker compose restart`s). The real linked-repo
+  trap is subtler: a stack webhook runs `DeployStackIfChanged` by
+  default, and its change-check compares against the Periphery clone,
+  which only advances *during* a deploy — so on a `linked_repo` stack
+  it 200s and no-ops forever (stale-clone deadlock). Setting
+  `webhook_force_deploy = true` in `[stack.config]` makes the webhook
+  run a full `DeployStack` (pull + compose) unconditionally, breaking
+  the deadlock. bilby `files_on_host` stacks must **not** set it: they
+  diff the live bind-mount, so `DeployStackIfChanged` correctly skips
+  unchanged stacks (free no-churn). `RunSync` re-imports `stack.toml`
+  config from bilby's bind-mount (no git needed) but does not pull a
+  linked clone. Always confirm a deploy via a config-level signal (the
+  pulled-to hash / a metric), never "container healthy". See
   [`docs/komodo.html#operating-models`](docs/komodo.html).
 - **Always use absolute host paths in bind mounts.**
   `${PODHAUS_REPO}/<stack>/...`, never relative paths. Relative paths
@@ -210,9 +225,13 @@ These have failure modes that you must not introduce:
 - **Don't push, deploy, or change DNS / Access policy without explicit
   user authorization.** Treat all `git push`, `./komodo-sync`, and
   any `tf apply` against `cloudflare/` as actions that require a green
-  light. `tf plan` is fine. Note that `git push` now triggers the
-  GitHub webhook → Komodo auto-deploy for every stack whose files the
-  push touches — push is no longer cheap.
+  light. `tf plan` is fine. Note that every `git push` to `main`
+  fires all ~20 per-stack GitHub webhooks (`cloudflare/github.tf` →
+  `komodo.pod.haus/listener/github/stack/<name>/deploy`): bilby
+  `files_on_host` stacks run `DeployStackIfChanged` (deploy only the
+  ones whose files actually changed), the 3 kangaroo `linked_repo`
+  stacks always full-deploy (`webhook_force_deploy`). Push is not
+  cheap and not a no-op — treat it as a deploy.
 - **Before adding or modifying a Cloudflare / UniFi / GitHub TF
   resource, read the provider's resource doc.** Schemas change
   between minor versions and `tf apply` errors with "Attribute X
