@@ -151,6 +151,26 @@ prometheus.scrape "alloy_self" {
 
 otelcol.receiver.prometheus "alloy_self" {
   output {
+    metrics = [otelcol.processor.transform.svc_alloy.input]
+  }
+}
+
+// The Prometheus→OTLP bridge carries no service.name resource
+// attribute. Stamp a constant (mirrors bilby's svc_alloy and the
+// enrich logs idiom). "alloy" matches this host's Alloy container
+// logs and the tracing block, unifying all three signals under one
+// `alloy` service — both hosts' Alloy collapse into it by design.
+otelcol.processor.transform "svc_alloy" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context = "metric"
+    statements = [
+      `set(resource.attributes["service.name"], "alloy")`,
+    ]
+  }
+
+  output {
     metrics = [otelcol.processor.batch.clickstack.input]
   }
 }
