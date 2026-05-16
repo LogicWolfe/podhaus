@@ -65,6 +65,42 @@ loki.process "containers" {
 
 otelcol.receiver.loki "clickstack" {
   output {
+    logs = [otelcol.processor.transform.enrich.input]
+  }
+}
+
+// Same enrichment as bilby (service.name from container + correct
+// severity from the leading level token). See the bilby config for the
+// full rationale.
+otelcol.processor.transform "enrich" {
+  error_mode = "ignore"
+
+  log_statements {
+    context = "log"
+    statements = [
+      `set(resource.attributes["service.name"], attributes["container"]) where attributes["container"] != nil`,
+
+      `set(severity_text, "TRACE") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
+      `set(severity_number, 1) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
+
+      `set(severity_text, "DEBUG") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
+      `set(severity_number, 5) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
+
+      `set(severity_text, "INFO") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
+      `set(severity_number, 9) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
+
+      `set(severity_text, "WARN") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
+      `set(severity_number, 13) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
+
+      `set(severity_text, "ERROR") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
+      `set(severity_number, 17) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
+
+      `set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+      `set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+    ]
+  }
+
+  output {
     logs = [otelcol.processor.batch.clickstack.input]
   }
 }

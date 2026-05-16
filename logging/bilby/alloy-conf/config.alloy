@@ -120,6 +120,50 @@ loki.source.file "rtorrent_cleanup" {
 
 otelcol.receiver.loki "clickstack" {
   output {
+    logs = [otelcol.processor.transform.enrich.input]
+  }
+}
+
+// Enrich bridged logs before export:
+//  1. Set the OTLP service.name resource attribute from the Docker
+//     container name. The Loki→OTLP bridge only puts `container` in log
+//     attributes; without this HyperDX's ServiceName column, Service
+//     Map and service filters are all blank.
+//  2. Re-derive severity from the real level token at the START of the
+//     line. ClickStack otherwise keyword-scans the whole body and
+//     mislabels lines like "[INFO] ... Total errors encountered: 0" as
+//     ERROR. One delimiter-anchored pattern over the first ~60 chars
+//     ("errors" ≠ "error"); lines with no recognisable level keep
+//     whatever ClickStack inferred. OTTL, not per-container regex.
+otelcol.processor.transform "enrich" {
+  error_mode = "ignore"
+
+  log_statements {
+    context = "log"
+    statements = [
+      `set(resource.attributes["service.name"], attributes["container"]) where attributes["container"] != nil`,
+
+      `set(severity_text, "TRACE") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
+      `set(severity_number, 1) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
+
+      `set(severity_text, "DEBUG") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
+      `set(severity_number, 5) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
+
+      `set(severity_text, "INFO") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
+      `set(severity_number, 9) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
+
+      `set(severity_text, "WARN") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
+      `set(severity_number, 13) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
+
+      `set(severity_text, "ERROR") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
+      `set(severity_number, 17) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
+
+      `set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+      `set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+    ]
+  }
+
+  output {
     logs = [otelcol.processor.batch.clickstack.input]
   }
 }

@@ -138,6 +138,32 @@ dump, [Backup & DR](backup-and-dr.md)):
   *trust*, not a fixed clock. Do not run Phase D until the soak +
   one good Mongo backup are in hand.
 
+## As-built: what actually bit us (2026-05-16)
+
+- **Komodo applies the `stack.toml` `environment` block from its
+  ResourceSync-imported copy, NOT the file on disk.** Editing
+  `logging/*/stack.toml` to add `CLICKSTACK_INGESTION_KEY` and then
+  `DeployStack`-ing immediately deployed Alloy *without* the key
+  (Komodo rendered the env from its stale stored definition) → Alloy
+  shipped OTLP with empty auth → 401 → zero ingest, while every
+  container looked healthy. **Always `RunSync` (ResourceSync) after a
+  `stack.toml` env edit and confirm the stored env changed before
+  `DeployStack`.** The push→webhook path does this in the right order;
+  a manual `DeployStack` does not.
+- **bilby Alloy hot-reloads the bind-mounted config the instant the
+  file changes, but only picks up new *env* on container recreate.**
+  So swapping `config.alloy` flips the sink immediately while the
+  ingestion-key env arrives only at the redeploy — the accepted gap is
+  real and is *extended* if the redeploy is misordered (see above).
+- **"Healthy but unreachable" recurred twice** (ClickHouse loopback
+  bind; collector pre-OpAMP). Container healthchecks hit localhost;
+  always cross-check with an off-box probe before trusting green.
+- **New proxied hostname + Access app take minutes to go live at the
+  Cloudflare edge.** `watch.pod.haus` returned connection-level 000
+  (not an Access challenge code) for several minutes post-`tf apply`
+  while DNS/tunnel/origin were all already correct — edge propagation,
+  not misconfig.
+
 ## Pitfalls specific to this cutover
 
 - **Forgetting step 5 (TTL).** The single highest-consequence quiet

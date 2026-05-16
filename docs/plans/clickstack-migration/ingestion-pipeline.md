@@ -140,13 +140,44 @@ rollback (VL stopped-but-intact) covers the failure case. The shaping
 pipeline is shared, so a fan-out would also double-process; not worth
 it. See [Cutover](cutover.md) for the swap and rollback mechanics.
 
+## As-built: the ServiceName papercut (resolved 2026-05-16)
+
+The predicted papercut happened exactly as flagged. `otelcol.receiver.loki`
+puts the Loki labels (`container`, `host`, `compose_service`,
+`compose_project`, `stream`, `service`) into the OTLP log record as
+**`LogAttributes`**, and sets **no** `service.name` resource attribute.
+ClickStack's `otel_logs` therefore has an empty `ServiceName` column, and
+HyperDX's default Logs source (`serviceNameExpression: ServiceName`) shows
+every line with a blank service. Logs are *fully ingested and queryable*
+by `LogAttributes['container']` etc. — only the default UI grouping is
+affected.
+
+**Fix applied:** the HyperDX Logs (and Session) source
+`serviceNameExpression` was repointed to `LogAttributes['container']`
+(a `db.sources.updateOne` on the `hyperdx` Mongo db). Sources live in
+Mongo, so this is durable and is captured by the nightly mongodump
+backup. `DEFAULT_SOURCES` in `clickstack/compose.yaml` only seeds at
+first-run, so a from-scratch DR rebuild re-creates the source with the
+upstream `ServiceName` default — **the DR runbook must re-apply this
+Mongo update** (or, the cleaner durable fix, fold it into
+`DEFAULT_SOURCES`). The most idiomatic long-term fix is Alloy-side: an
+`otelcol.processor.resource`/`transform` stage setting
+`service.name` from the `container` attribute before export, which
+benefits any OTLP consumer and survives a Mongo wipe — deferred as a
+follow-up, not cutover-blocking.
+
 ## Validation before declaring done
 
 - HyperDX search returns live lines for `container=flood` and
   `op-connect-api` with the JSON message correctly extracted (not the
-  raw JSON envelope) — proves the shaping stages still run.
-- ANSI is stripped (komodo-core / flood lines are readable).
-- `rtorrent-cleanup` events appear under a distinct service.
-- kangaroo container logs appear (proves the cross-LAN authed path).
-- Killing the ingestion key (wrong value) makes Alloy error visibly —
-  proves no silent unauthenticated fallback.
+  raw JSON envelope) — proves the shaping stages still run. ✅
+- ANSI is stripped (komodo-core / flood lines are readable). ✅ (0/82
+  komodo-core lines carried escape codes post-cutover)
+- `rtorrent-cleanup` events appear under a distinct service —
+  ⏳ unverified: it's an erase-event-driven file tail and no torrent
+  was erased since cutover (source file mtime predates it). Config is
+  unchanged from the VL setup; will flow on the next event.
+- kangaroo container logs appear (proves the cross-LAN authed path). ✅
+  (`LogAttributes['host']='kangaroo'` rows present)
+- Killing the ingestion key (wrong value) makes ingest fail visibly —
+  ✅ proven at bootstrap (wrong key → 401, correct key → 200).
