@@ -1,9 +1,16 @@
-// Alloy config: discover local Docker containers, tail their logs,
-// ship to victoria-logs on the same dockernet network.
+// STAGED — not yet active. Alloy reads /etc/alloy/config.alloy; this
+// file is ignored until the ClickStack cutover renames it over the live
+// one and redeploys the logging stack (so Alloy restarts with the
+// CLICKSTACK_INGESTION_KEY env set). Until then bilby keeps shipping to
+// Victoria Logs via the existing config.alloy. See
+// docs/plans/clickstack-migration/cutover.md (Phase B).
 //
-// Victoria Logs accepts the Loki push protocol natively at its
-// /insert/loki/api/v1/push endpoint, so Alloy's loki.* components are
-// unchanged from the previous Loki setup — only the URL differs.
+// Diff vs the VL config: every discovery + loki.process shaping stage
+// is unchanged (ANSI strip, op-connect-api / flood JSON rewrite,
+// rtorrent-cleanup file tail). Only the sink changes — ClickStack's
+// bundled OTel collector speaks OTLP, not Loki, so we bridge
+// loki.* → OTLP inside Alloy. Gatus /metrics is scraped here too and
+// rides the same authed exporter.
 
 discovery.docker "containers" {
   host             = "unix:///var/run/docker.sock"
@@ -49,19 +56,16 @@ loki.source.docker "containers" {
 // extraction. Add a new stage.match block when another container starts
 // shipping JSON-with-non-_msg-field logs.
 loki.process "containers" {
-  forward_to = [loki.write.local.receiver]
+  forward_to = [otelcol.receiver.loki.clickstack.receiver]
 
   // Strip ANSI colour escape sequences from every log line. komodo-core
-  // and flood emit raw ANSI to stdout, which vmui has no way to render.
-  // We lose colour but gain readable text and working substring search.
-  // Using Alloy's built-in stage rather than a hand-rolled regex so any
-  // corner cases get fixed upstream.
+  // and flood emit raw ANSI to stdout. Using Alloy's built-in stage
+  // rather than a hand-rolled regex so any corner cases get fixed
+  // upstream.
   stage.decolorize {}
 
-  // op-connect-api emits JSON with the message in `log_message`. VL
-  // detects JSON-shaped Loki pushes and expects `_msg` as the message
-  // field; without that match it warns "missing _msg field" in vmui.
-  // Extract log_message and rewrite the line to just that text.
+  // op-connect-api emits JSON with the message in `log_message`.
+  // Extract it and rewrite the line to just that text.
   stage.match {
     selector = "{container=\"op-connect-api\"}"
 
@@ -106,11 +110,53 @@ local.file_match "rtorrent_cleanup" {
 
 loki.source.file "rtorrent_cleanup" {
   targets    = local.file_match.rtorrent_cleanup.targets
-  forward_to = [loki.write.local.receiver]
+  forward_to = [otelcol.receiver.loki.clickstack.receiver]
 }
 
-loki.write "local" {
-  endpoint {
-    url = "http://victoria-logs:9428/insert/loki/api/v1/push"
+// ---- ClickStack OTLP sink (replaces loki.write to Victoria Logs) ----
+// Alloy is itself an OTel Collector distro: bridge the Loki-shaped
+// entries to OTLP, batch, and ship to ClickStack's bundled collector
+// over OTLP/HTTP. bilby reaches it in-network by container name.
+
+otelcol.receiver.loki "clickstack" {
+  output {
+    logs = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
+// Gatus exposes Prometheus metrics at :8080/metrics (metrics: true in
+// gatus/conf/config.yaml). Scrape at Gatus's own ~60s cadence — faster
+// just resamples stale values — bridge Prometheus → OTLP, same sink.
+prometheus.scrape "gatus" {
+  targets = [{
+    __address__      = "gatus:8080",
+    __metrics_path__ = "/metrics",
+  }]
+  scrape_interval = "60s"
+  forward_to      = [otelcol.receiver.prometheus.gatus.receiver]
+}
+
+otelcol.receiver.prometheus "gatus" {
+  output {
+    metrics = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
+otelcol.processor.batch "clickstack" {
+  output {
+    logs    = [otelcol.exporter.otlphttp.clickstack.input]
+    metrics = [otelcol.exporter.otlphttp.clickstack.input]
+  }
+}
+
+otelcol.exporter.otlphttp "clickstack" {
+  client {
+    endpoint = "http://clickstack-otel:4318"
+    headers  = {
+      // ClickStack ingestion API key. Empty ⇒ 401 ⇒ no data in
+      // HyperDX — a loud, visible failure. No silent fallback to the
+      // old VL sink: this is a hard swap (no fallback masks failure).
+      "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
+    }
   }
 }

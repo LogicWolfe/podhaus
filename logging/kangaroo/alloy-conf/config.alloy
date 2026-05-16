@@ -1,11 +1,13 @@
-// Alloy config for kangaroo: discover local Docker containers, tail
-// their logs, push to bilby's Victoria Logs over the LAN.
+// STAGED — not yet active. See the bilby counterpart and
+// docs/plans/clickstack-migration/cutover.md. Renamed over the live
+// config.alloy + logging redeployed at cutover.
 //
-// Structurally identical to logging/alloy-config.alloy on bilby with
-// two diffs: the `host` label is "kangaroo" instead of "bilby", and
-// the loki.write URL targets bilby's published :9428 (not the in-
-// dockernet container name). VL receives both Peripheries' logs into
-// the same store; queries filter by {host="..."} as needed.
+// Structurally identical to bilby's staged config minus the bits that
+// only exist on bilby: no op-connect-api / flood JSON rewrites (those
+// containers aren't on kangaroo), no rtorrent-cleanup tail, no Gatus
+// scrape (Gatus runs on bilby). ANSI decolorize is universal so kept.
+// The OTLP exporter targets bilby's published collector cross-LAN at
+// 10.0.0.119:4318 (replacing the old VL push to 10.0.0.119:9428).
 
 discovery.docker "containers" {
   host             = "unix:///var/run/docker.sock"
@@ -46,19 +48,41 @@ loki.source.docker "containers" {
   labels        = {"host" = "kangaroo"}
 }
 
-// Per-container log shaping. The op-connect-api / flood JSON-rewrite
-// stages from bilby's config aren't needed here — those containers
-// don't exist on kangaroo. ANSI decolorize is universal so kept.
+// The op-connect-api / flood JSON-rewrite stages from bilby's config
+// aren't needed here — those containers don't exist on kangaroo. ANSI
+// decolorize is universal so kept.
 loki.process "containers" {
-  forward_to = [loki.write.bilby_vl.receiver]
+  forward_to = [otelcol.receiver.loki.clickstack.receiver]
 
   stage.decolorize {}
 }
 
-loki.write "bilby_vl" {
-  endpoint {
-    // Bilby's Victoria Logs published at :9428 on the LAN. No auth on
-    // the push API; LAN-only, no external exposure of this port.
-    url = "http://10.0.0.119:9428/insert/loki/api/v1/push"
+// ---- ClickStack OTLP sink (replaces loki.write to Victoria Logs) ----
+// kangaroo has no in-network path to the collector, so it ships
+// cross-LAN to bilby's published OTLP/HTTP port (matches the old
+// cross-LAN VL push, just OTLP now). LAN-only, plaintext — same trust
+// posture as the previous :9428 path.
+
+otelcol.receiver.loki "clickstack" {
+  output {
+    logs = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
+otelcol.processor.batch "clickstack" {
+  output {
+    logs = [otelcol.exporter.otlphttp.clickstack.input]
+  }
+}
+
+otelcol.exporter.otlphttp "clickstack" {
+  client {
+    endpoint = "http://10.0.0.119:4318"
+    headers  = {
+      // ClickStack ingestion API key (same key as bilby; injected via
+      // logging/kangaroo/stack.toml ← 1Password). Empty ⇒ 401 ⇒ no
+      // data — loud failure, no silent fallback.
+      "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
+    }
   }
 }

@@ -176,6 +176,23 @@ module "grafana" {
   backend  = "http://grafana:3000"
 }
 
+module "watch" {
+  source = "./modules/pod_haus_service"
+
+  account_id               = local.pod_haus_service_defaults.account_id
+  zone_id                  = local.pod_haus_service_defaults.zone_id
+  tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
+  default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
+
+  # HyperDX (ClickStack UI) — replaces logs.pod.haus (VL vmui) +
+  # grafana.pod.haus. Those modules stay until decommission (Phase D);
+  # watch goes up alongside them. Default chain: Homelab service-token
+  # bypass → Family allow, same as the rest of the fleet.
+  hostname = "watch"
+  backend  = "http://hyperdx:8080"
+}
+
 module "docs" {
   source = "./modules/pod_haus_service"
 

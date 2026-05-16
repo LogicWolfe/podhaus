@@ -7,6 +7,14 @@
 # every monitor drops at once (obvious signal). No need for redundant
 # internal-only checks.
 
+# Expose Prometheus metrics at :8080/metrics (same port as the UI +
+# external-endpoint hooks — no new port, no new ingress). Alloy on bilby
+# scrapes this and bridges it to ClickStack over OTLP. Non-sensitive
+# operational data; reachable only on dockernet (the public
+# gatus.pod.haus path stays Access-gated and /metrics is not added to
+# the tunnel ingress). See docs/plans/clickstack-migration/gatus-metrics.md.
+metrics: true
+
 storage:
   type: sqlite
   path: /data/gatus.db

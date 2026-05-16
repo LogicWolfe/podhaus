@@ -202,6 +202,24 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "clickstack",
+      "repo": "podhaus",
+      "paths": ["/userdata/clickstack"],
+      "schedule": {
+        "cron": "5 5 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "backrest-state",
       "repo": "podhaus",
       "paths": ["/userdata/backrest-state"],

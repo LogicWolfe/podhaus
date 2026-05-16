@@ -1,0 +1,116 @@
+// Alloy config: discover local Docker containers, tail their logs,
+// ship to victoria-logs on the same dockernet network.
+//
+// Victoria Logs accepts the Loki push protocol natively at its
+// /insert/loki/api/v1/push endpoint, so Alloy's loki.* components are
+// unchanged from the previous Loki setup — only the URL differs.
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "30s"
+}
+
+discovery.relabel "container_logs" {
+  targets = discovery.docker.containers.targets
+
+  // Drop the leading slash that Docker prepends to container names.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.container_logs.output
+  forward_to    = [loki.process.containers.receiver]
+  relabel_rules = discovery.relabel.container_logs.rules
+  labels        = {"host" = "bilby"}
+}
+
+// Per-container log shaping. Pipeline runs in order: ANSI strip first
+// (so JSON parsers don't see colour codes), then per-container JSON
+// extraction. Add a new stage.match block when another container starts
+// shipping JSON-with-non-_msg-field logs.
+loki.process "containers" {
+  forward_to = [loki.write.local.receiver]
+
+  // Strip ANSI colour escape sequences from every log line. komodo-core
+  // and flood emit raw ANSI to stdout, which vmui has no way to render.
+  // We lose colour but gain readable text and working substring search.
+  // Using Alloy's built-in stage rather than a hand-rolled regex so any
+  // corner cases get fixed upstream.
+  stage.decolorize {}
+
+  // op-connect-api emits JSON with the message in `log_message`. VL
+  // detects JSON-shaped Loki pushes and expects `_msg` as the message
+  // field; without that match it warns "missing _msg field" in vmui.
+  // Extract log_message and rewrite the line to just that text.
+  stage.match {
+    selector = "{container=\"op-connect-api\"}"
+
+    stage.json {
+      expressions = { log_message = "log_message" }
+    }
+
+    stage.output {
+      source = "log_message"
+    }
+  }
+
+  // flood emits pino-style JSON with the message in `msg`. Same shape
+  // as op-connect-api but different field name.
+  stage.match {
+    selector = "{container=\"flood\"}"
+
+    stage.json {
+      expressions = { msg = "msg" }
+    }
+
+    stage.output {
+      source = "msg"
+    }
+  }
+}
+
+// rtorrent-cleanup.sh (event.download.erased hook + ad-hoc invocations)
+// writes to /flood-db/rtorrent-cleanup.log. Bind-mounted into alloy at
+// /var/log/flood/. Tailing the file is necessary because the script is
+// forked by rtorrent — its stdout never reaches the flood container's
+// docker log stream. Distinct `service` label keeps cleanup events
+// queryable separately from flood's web JSON logs.
+local.file_match "rtorrent_cleanup" {
+  path_targets = [{
+    __path__  = "/var/log/flood/rtorrent-cleanup.log",
+    container = "flood",
+    service   = "rtorrent-cleanup",
+    host      = "bilby",
+  }]
+}
+
+loki.source.file "rtorrent_cleanup" {
+  targets    = local.file_match.rtorrent_cleanup.targets
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://victoria-logs:9428/insert/loki/api/v1/push"
+  }
+}

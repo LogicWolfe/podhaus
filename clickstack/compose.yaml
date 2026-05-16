@@ -1,0 +1,172 @@
+# ClickStack — ClickHouse + HyperDX UI + bundled OTel collector + Mongo.
+# Replaces VictoriaLogs as the observability backend (bilby-only, like
+# VL was). Alloy on both hosts ships here over OTLP; Gatus metrics ride
+# the same pipeline. See docs/plans/clickstack-migration/.
+#
+# Adaptations from upstream ClickHouse/ClickStack docker-compose.yml:
+#   - `internal` network → dockernet (reach by container name)
+#   - containers renamed (globally-unique names on the host)
+#   - data on local NVMe /var/lib/clickstack/* (NFS Jump all-squash
+#     blocks the chown clickhouse/mongo do at startup — decision 2)
+#   - only OTLP/HTTP 4318 published (kangaroo ships cross-LAN); the UI
+#     reaches the tunnel via dockernet by name, nothing else published
+#   - mem_limit on every service: this is the one memory-risky stack on
+#     a 15 GB shared M1; bound it so a bad query can't OOM the box
+#   - ClickHouse config via a config.d *directory* drop-in (Hard Rule:
+#     never single-file binds for config read after startup)
+
+services:
+  clickstack-clickhouse:
+    container_name: clickstack-clickhouse
+    image: clickhouse/clickhouse-server:26.1-alpine
+    restart: unless-stopped
+    # SELinux enforcing on Fedora Asahi: clickhouse writes its data dir
+    # and reads the bound config.d; label:disable covers both.
+    security_opt:
+      - label:disable
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      # Local NVMe (decision 2). clickhouse chowns /var/lib/clickhouse
+      # to its own uid on start — fine on local fs, impossible on the
+      # NFS Jump squash that VL had to work around with user: 1000:100.
+      - /var/lib/clickstack/clickhouse:/var/lib/clickhouse
+      - /var/lib/clickstack/clickhouse-logs:/var/log/clickhouse-server
+      # Directory drop-in, not a file bind. podhaus.xml caps server
+      # memory + bounds the internal log so neither runs away on the
+      # shared box. Upstream defaults stay; we only override specifics.
+      - ${PODHAUS_REPO}/clickstack/clickhouse-conf/config.d:/etc/clickhouse-server/config.d:ro
+    networks:
+      - dockernet
+    mem_limit: 4g
+    labels:
+      autoheal: "true"
+    healthcheck:
+      # alpine clickhouse ships wget; /ping needs no auth.
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  clickstack-mongo:
+    container_name: clickstack-mongo
+    image: mongo:5.0.32-focal
+    restart: unless-stopped
+    security_opt:
+      - label:disable
+    environment:
+      TZ: ${TZ}
+    volumes:
+      # Local NVMe. Holds HyperDX app state only (dashboards, alerts,
+      # users, source defs, ingestion key) — tiny but irreplaceable;
+      # backed up via the ofelia mongodump job below + Backrest.
+      - /var/lib/clickstack/mongo:/data/db
+      # mongodump target for the nightly backup job. Bound RO into
+      # Backrest separately (backup/bilby).
+      - /var/lib/clickstack/mongo-dumps:/dump
+    networks:
+      - dockernet
+    mem_limit: 1g
+    labels:
+      autoheal: "true"
+      # Nightly logical dump at 03:50 AWST — inside the 04:00 dead-time
+      # window, ahead of Backrest's 04:00 plans so the same night's
+      # restic run captures a fresh archive. Keeps the latest ~14.
+      # mongodump ships in the mongo image; no extra container.
+      ofelia.enabled: "true"
+      ofelia.job-exec.clickstack-mongo-dump.schedule: "50 3 * * *"
+      ofelia.job-exec.clickstack-mongo-dump.command: >-
+        bash -c "mongodump --uri='mongodb://localhost:27017/hyperdx' --gzip
+        --archive=/dump/hyperdx-$(date +%F).archive &&
+        ls -1t /dump/hyperdx-*.archive | tail -n +15 | xargs -r rm -f"
+    healthcheck:
+      # mongo:5.0 image ships the legacy `mongo` shell (not mongosh).
+      test: ["CMD-SHELL", "mongo --quiet --eval 'db.adminCommand(\"ping\").ok' localhost:27017/hyperdx | grep -q 1 || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  clickstack-otel:
+    container_name: clickstack-otel
+    image: docker.clickhouse.com/clickhouse/clickstack-otel-collector:2
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_ENDPOINT: "tcp://clickstack-clickhouse:9000?dial_timeout=10s"
+      # ClickHouse default user is password-protected (we set
+      # CLICKHOUSE_PASSWORD on the server). Upstream works without these
+      # only because its ClickHouse has a blank password. The collector's
+      # OpAMP-delivered ClickHouse exporter needs credentials or it
+      # crashes applying config ("Agent crashed during config
+      # application"). Same secret HyperDX gets via DEFAULT_CONNECTIONS.
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      HYPERDX_OTEL_EXPORTER_CLICKHOUSE_DATABASE: default
+      HYPERDX_LOG_LEVEL: info
+      OPAMP_SERVER_URL: "http://hyperdx:4320"
+      HYPERDX_OTEL_EXPORTER_CREATE_LEGACY_SCHEMA: "true"
+    ports:
+      # The ONLY published port. kangaroo's Alloy ships cross-LAN to
+      # 10.0.0.119:4318 (OTLP/HTTP); bilby's Alloy uses dockernet DNS
+      # (clickstack-otel:4318). gRPC 4317, Fluentd 24225, health 13133,
+      # self-metrics 8888 stay dockernet-internal — not published.
+      - "4318:4318"
+    networks:
+      - dockernet
+    mem_limit: 512m
+    # No healthcheck/autoheal: the collector image is distroless-ish
+    # (no shell tooling to probe 13133 reliably). Same call as VL —
+    # restart policy is the liveness guard; a dead collector shows up
+    # immediately as missing logs in HyperDX.
+    depends_on:
+      clickstack-clickhouse:
+        condition: service_healthy
+      # OpAMP server lives in hyperdx (:4320). Without this the
+      # supervisor spends its first minute failing to reach OpAMP and
+      # retrying — not fatal (it retries) but a clean start avoids it.
+      hyperdx:
+        condition: service_healthy
+
+  hyperdx:
+    container_name: hyperdx
+    image: docker.hyperdx.io/hyperdx/hyperdx:2
+    restart: unless-stopped
+    environment:
+      # Behind the Cloudflare tunnel on 443 at watch.pod.haus — set the
+      # public URL so cookies/redirects are correct (decision 5).
+      FRONTEND_URL: https://watch.pod.haus
+      HYPERDX_APP_URL: https://watch.pod.haus
+      HYPERDX_API_PORT: "8000"
+      HYPERDX_APP_PORT: "8080"
+      HYPERDX_LOG_LEVEL: info
+      OPAMP_PORT: "4320"
+      MONGO_URI: "mongodb://clickstack-mongo:27017/hyperdx"
+      SERVER_URL: "http://127.0.0.1:8000"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://clickstack-otel:4318"
+      OTEL_SERVICE_NAME: "hdx-oss-app"
+      # Homelab privacy posture — opt out of upstream usage telemetry.
+      USAGE_STATS_ENABLED: "false"
+      EXPRESS_SESSION_SECRET: ${EXPRESS_SESSION_SECRET}
+      DEFAULT_CONNECTIONS: '[{"name":"Local ClickHouse","host":"http://clickstack-clickhouse:8123","username":"default","password":"${CLICKHOUSE_PASSWORD}"}]'
+      DEFAULT_SOURCES: '[{"from":{"databaseName":"default","tableName":"otel_logs"},"kind":"log","timestampValueExpression":"TimestampTime","name":"Logs","displayedTimestampValueExpression":"Timestamp","implicitColumnExpression":"Body","serviceNameExpression":"ServiceName","bodyExpression":"Body","eventAttributesExpression":"LogAttributes","resourceAttributesExpression":"ResourceAttributes","defaultTableSelectExpression":"Timestamp,ServiceName,SeverityText,Body","severityTextExpression":"SeverityText","traceIdExpression":"TraceId","spanIdExpression":"SpanId","connection":"Local ClickHouse","traceSourceId":"Traces","sessionSourceId":"Sessions","metricSourceId":"Metrics"},{"from":{"databaseName":"default","tableName":"otel_traces"},"kind":"trace","timestampValueExpression":"Timestamp","name":"Traces","displayedTimestampValueExpression":"Timestamp","implicitColumnExpression":"SpanName","serviceNameExpression":"ServiceName","eventAttributesExpression":"SpanAttributes","resourceAttributesExpression":"ResourceAttributes","defaultTableSelectExpression":"Timestamp,ServiceName,StatusCode,round(Duration/1e6),SpanName","traceIdExpression":"TraceId","spanIdExpression":"SpanId","durationExpression":"Duration","durationPrecision":9,"parentSpanIdExpression":"ParentSpanId","spanNameExpression":"SpanName","spanKindExpression":"SpanKind","statusCodeExpression":"StatusCode","statusMessageExpression":"StatusMessage","connection":"Local ClickHouse","logSourceId":"Logs","sessionSourceId":"Sessions","metricSourceId":"Metrics"},{"from":{"databaseName":"default","tableName":""},"kind":"metric","timestampValueExpression":"TimeUnix","name":"Metrics","resourceAttributesExpression":"ResourceAttributes","metricTables":{"gauge":"otel_metrics_gauge","histogram":"otel_metrics_histogram","sum":"otel_metrics_sum","_id":"682586a8b1f81924e628e808","id":"682586a8b1f81924e628e808"},"connection":"Local ClickHouse","logSourceId":"Logs","traceSourceId":"Traces","sessionSourceId":"Sessions"},{"from":{"databaseName":"default","tableName":"hyperdx_sessions"},"kind":"session","timestampValueExpression":"TimestampTime","name":"Sessions","displayedTimestampValueExpression":"Timestamp","implicitColumnExpression":"Body","serviceNameExpression":"ServiceName","bodyExpression":"Body","eventAttributesExpression":"LogAttributes","resourceAttributesExpression":"ResourceAttributes","defaultTableSelectExpression":"Timestamp,ServiceName,SeverityText,Body","severityTextExpression":"SeverityText","traceIdExpression":"TraceId","spanIdExpression":"SpanId","connection":"Local ClickHouse","logSourceId":"Logs","traceSourceId":"Traces","metricSourceId":"Metrics"}]'
+    networks:
+      - dockernet
+    mem_limit: 1g
+    labels:
+      autoheal: "true"
+    # No healthcheck: the hyperdx node image's shell toolchain isn't
+    # guaranteed to have wget/curl; a wrong probe + autoheal would
+    # crash-loop the UI. Liveness is validated end-to-end via the
+    # tunnel during cutover, and a dead app is immediately visible.
+    depends_on:
+      clickstack-clickhouse:
+        condition: service_healthy
+      clickstack-mongo:
+        condition: service_healthy
+
+networks:
+  dockernet:
+    external: true

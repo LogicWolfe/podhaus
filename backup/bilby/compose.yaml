@@ -46,6 +46,12 @@ services:
       - /var/lib/paperless-data:/userdata/paperless/data:ro
       - /mnt/jump/paperless/documents:/userdata/paperless/documents:ro
       - /var/lib/minio:/userdata/minio:ro
+      # ClickStack HyperDX app-state: the nightly mongodump archives
+      # (ofelia job on clickstack-mongo writes /var/lib/clickstack/
+      # mongo-dumps). Quiescent gzip archives — restic-safe, unlike a
+      # live mongo data dir. ClickHouse telemetry is deliberately NOT
+      # backed up (regenerable; see clickstack-migration/backup-and-dr).
+      - /var/lib/clickstack/mongo-dumps:/userdata/clickstack/mongo:ro
       #
       # Docker named volumes from stacks that still use them (NAS squash
       # carve-out stacks + logging + onepassword). Referenced via

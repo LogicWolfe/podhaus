@@ -1,0 +1,64 @@
+// Alloy config for kangaroo: discover local Docker containers, tail
+// their logs, push to bilby's Victoria Logs over the LAN.
+//
+// Structurally identical to logging/alloy-config.alloy on bilby with
+// two diffs: the `host` label is "kangaroo" instead of "bilby", and
+// the loki.write URL targets bilby's published :9428 (not the in-
+// dockernet container name). VL receives both Peripheries' logs into
+// the same store; queries filter by {host="..."} as needed.
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "30s"
+}
+
+discovery.relabel "container_logs" {
+  targets = discovery.docker.containers.targets
+
+  // Drop the leading slash that Docker prepends to container names.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.container_logs.output
+  forward_to    = [loki.process.containers.receiver]
+  relabel_rules = discovery.relabel.container_logs.rules
+  labels        = {"host" = "kangaroo"}
+}
+
+// Per-container log shaping. The op-connect-api / flood JSON-rewrite
+// stages from bilby's config aren't needed here — those containers
+// don't exist on kangaroo. ANSI decolorize is universal so kept.
+loki.process "containers" {
+  forward_to = [loki.write.bilby_vl.receiver]
+
+  stage.decolorize {}
+}
+
+loki.write "bilby_vl" {
+  endpoint {
+    // Bilby's Victoria Logs published at :9428 on the LAN. No auth on
+    // the push API; LAN-only, no external exposure of this port.
+    url = "http://10.0.0.119:9428/insert/loki/api/v1/push"
+  }
+}
