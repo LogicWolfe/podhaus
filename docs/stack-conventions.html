@@ -108,6 +108,20 @@
         doesn't try to fetch the local-only tag. Stack.toml has <code>run_build = true</code>;
         auto_pull stays default-true so the main service still pulls upstream image updates.
       </p>
+      <p>
+        <strong>Mandatory with any init container: <code>ignore_services</code>.</strong>
+        A one-shot init exits 0 by design, but Komodo counts an exited container
+        toward stack health and marks the <em>whole stack</em>
+        <code>Unhealthy</code> — a false red that trains you to ignore the
+        Komodo signal. Every init-container stack <strong>must</strong> set
+        <code>ignore_services = ["&lt;init-service&gt;"]</code> in
+        <code>[stack.config]</code> so Komodo excludes it from the health
+        rollup. Reference: <code>plex/stack.toml</code>,
+        <code>backup/{bilby,kangaroo}/stack.toml</code>,
+        <code>flood/stack.toml</code>. (Gatus black-box endpoint checks
+        remain the authoritative health signal regardless — this just keeps
+        Komodo's at-a-glance view honest too.)
+      </p>
 
       <h2 id="bind-mounts">Bind mounts from the repo</h2>
       <p>

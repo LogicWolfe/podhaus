@@ -127,6 +127,16 @@ slot into the same pattern.
 2. Create `<name>/stack.toml` with `files_on_host = true` and
    `run_directory = "/etc/komodo/repo/<name>"` (bilby) or
    `linked_repo = "podhaus"` (kangaroo).
+   - **If the stack has a one-shot / init container** (any service that
+     exits 0 by design — e.g. an `init-tools` setup container, a config
+     renderer, an identity-merge init), you **must** add
+     `ignore_services = ["<init-service-name>"]` to `[stack.config]`.
+     Without it Komodo counts the exited init and marks the *whole
+     stack* `Unhealthy` — a false red that erodes the monitoring
+     signal (this bit `flood` until 2026-05). Pattern in:
+     `plex/stack.toml`, `backup/{bilby,kangaroo}/stack.toml`,
+     `flood/stack.toml`. If the init also builds an image inline
+     (`build:`), set `run_build = true` too (see `plex`/`backup`).
 3. Add any new secrets to the 1Password **Homelab** vault — `komodo-op`
    auto-syncs them as `OP__KOMODO__<ITEM>__<FIELD>` Komodo Variables.
 4. If the stack needs a non-secret variable, seed it in `komodo-start`
