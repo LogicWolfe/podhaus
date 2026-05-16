@@ -34,8 +34,16 @@ API key. So the migration is not "swap a URL." The real surface area:
 
 ## Status
 
-Nothing migrated. Live snapshot of the relevant podhaus state as of
-2026-05-16:
+**COMPLETE (2026-05-16).** ClickStack live at `watch.pod.haus`; both
+hosts' Alloy ship OTLP with per-service config-as-code parsers; Gatus
+metrics flowing; Mongo app-state backed up; 180/90/30d TTLs set. **Phase
+D done** — VictoriaLogs + Grafana decommissioned (services, Cloudflare
+`logs.*`/`grafana.*`, Backrest binds removed; Jump data + grafana-data
+volume reclaimed). Open follow-up: kangaroo cross-LAN exporter
+reliability (see [Ingestion pipeline](ingestion-pipeline.md) KNOWN
+ISSUE). Original pre-migration snapshot below for history.
+
+Original snapshot of the relevant podhaus state as of 2026-05-16:
 
 | Component | Current state | Target state |
 |---|---|---|
