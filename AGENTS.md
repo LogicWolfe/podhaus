@@ -154,6 +154,13 @@ slot into the same pattern.
    push. **If the stack uses `linked_repo` (kangaroo/pinelake), also
    set `webhook_force_deploy = true` in its `[stack.config]`** — see
    the linked-repo hard rule below for why.
+   **HARD CEILING: GitHub allows at most 20 `push` webhooks per repo
+   and `komodo_stacks` is already at 20.** A 21st stack (bugsink is
+   the first) cannot get its own webhook — `tf apply` 422s. Such
+   stacks deploy via `./komodo-sync` (or a manual first-deploy)
+   instead; they do not auto-deploy on push. Growing past 20
+   push-to-deploy stacks needs a consolidation redesign (a single
+   Procedure/Sync webhook that fans out), not another list entry.
 7. If the service is a single-host pod.haus service, add a
    `module "<name>"` block in `cloudflare/services_pod_haus.tf` plus
    one entry in `tunnel.tf`'s `pod_haus_module_ingress`. The module

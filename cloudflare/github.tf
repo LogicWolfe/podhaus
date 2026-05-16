@@ -41,10 +41,16 @@ locals {
   # multi-host stacks). Adding a service = add its stack.toml name
   # here so its push-to-deploy webhook is created. See AGENTS.md
   # "When adding a new service".
+  #
+  # HARD CEILING: GitHub allows at most 20 `push` webhooks per repo
+  # ("the push event cannot have more than 20 hooks"). This list is AT
+  # the cap. A 21st stack (bugsink) cannot get its own webhook — it is
+  # deployed via `./komodo-sync` / manual first-deploy instead. Growing
+  # past 20 push-to-deploy stacks needs a consolidation redesign (one
+  # Procedure/Sync webhook fanning out), not another entry here.
   komodo_stacks = [
     "autoheal",
     "backup",
-    "bugsink",
     "clickstack",
     "cloudflare-tunnel",
     "docs-server",
