@@ -1,0 +1,43 @@
+// Per-service log parser — komodo-periphery (kangaroo)
+//
+// See bilby parsers/komodo-core.alloy for the pattern/rationale.
+// komodo-periphery is the same Komodo (Rust tracing) codebase as
+// komodo-core, so the format is assumed identical:
+//   2026-05-16T03:33:14.137997Z  INFO <message>
+// (whitespace-separated, RFC3339-nanosecond UTC; ANSI already stripped
+// upstream). It logs very little, so this is unverified against live
+// data — if periphery ever diverges, non-matching lines simply pass
+// through to the generic OTTL fallback (non-breaking).
+
+declare "komodo_periphery" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"komodo-periphery\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "RFC3339Nano"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

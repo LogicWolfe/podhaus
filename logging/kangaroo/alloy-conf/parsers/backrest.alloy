@@ -1,0 +1,45 @@
+// Per-service log parser — backrest (kangaroo)
+//
+// See bilby parsers/komodo-op.alloy for the pattern/rationale.
+//
+// Backrest (zap) log format: RFC3339 with millis and a +0800 numeric
+// offset (no colon — NOT standard RFC3339), level word, message, then
+// an optional trailing JSON detail object:
+//   2026-05-16T04:20:39.162+0800 INFO running task {"task": "forget ...
+//
+// Level words (INFO/WARN/ERROR/DEBUG) map directly. Body keeps the
+// message + any trailing JSON (useful context). Non-matching lines
+// pass through to the generic OTTL fallback.
+
+declare "backrest" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"backrest\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+[+-]\\d{4}) (?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "2006-01-02T15:04:05.000-0700"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

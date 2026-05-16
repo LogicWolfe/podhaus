@@ -1,13 +1,16 @@
-// STAGED — not yet active. See the bilby counterpart and
-// docs/plans/clickstack-migration/cutover.md. Renamed over the live
-// config.alloy + logging redeployed at cutover.
+// ACTIVE kangaroo logging config. Mirrors bilby: docker discovery →
+// loki.process "containers" (ANSI strip) → per-service parser chain
+// (config-as-code, parsers/<service>.alloy) → Loki→OTLP bridge → OTTL
+// enrich → bilby's published collector cross-LAN at 10.0.0.119:4318.
 //
-// Structurally identical to bilby's staged config minus the bits that
-// only exist on bilby: no op-connect-api / flood JSON rewrites (those
-// containers aren't on kangaroo), no rtorrent-cleanup tail, no Gatus
-// scrape (Gatus runs on bilby). ANSI decolorize is universal so kept.
-// The OTLP exporter targets bilby's published collector cross-LAN at
-// 10.0.0.119:4318 (replacing the old VL push to 10.0.0.119:9428).
+// kangaroo's container set differs from bilby's (alloy, syncthing,
+// backrest, komodo-periphery, autoheal). alloy.alloy / autoheal.alloy
+// are byte-identical copies of bilby's (same images/format). No Gatus
+// scrape / rtorrent tail / op-connect / flood — those are bilby-only.
+
+import.file "parsers" {
+  filename = "/etc/alloy/parsers"
+}
 
 discovery.docker "containers" {
   host             = "unix:///var/run/docker.sock"
@@ -48,14 +51,21 @@ loki.source.docker "containers" {
   labels        = {"host" = "kangaroo"}
 }
 
-// The op-connect-api / flood JSON-rewrite stages from bilby's config
-// aren't needed here — those containers don't exist on kangaroo. ANSI
-// decolorize is universal so kept.
+// Universal pre-shaping: ANSI strip before the per-service parsers.
 loki.process "containers" {
-  forward_to = [otelcol.receiver.loki.clickstack.receiver]
+  forward_to = [parsers.komodo_periphery.run.receiver]
 
   stage.decolorize {}
 }
+
+// Per-service parser chain (config-as-code, parsers/<service>.alloy).
+// Each module only transforms its own container's streams; the rest
+// pass through and get the generic OTTL fallback.
+parsers.komodo_periphery "run" { forward_to = [parsers.alloy.run.receiver] }
+parsers.alloy            "run" { forward_to = [parsers.autoheal.run.receiver] }
+parsers.autoheal         "run" { forward_to = [parsers.syncthing.run.receiver] }
+parsers.syncthing        "run" { forward_to = [parsers.backrest.run.receiver] }
+parsers.backrest         "run" { forward_to = [otelcol.receiver.loki.clickstack.receiver] }
 
 // ---- ClickStack OTLP sink (replaces loki.write to Victoria Logs) ----
 // kangaroo has no in-network path to the collector, so it ships
@@ -97,6 +107,16 @@ otelcol.processor.transform "enrich" {
 
       `set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
       `set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+
+      // Authoritative: per-service parsers (parsers/*.alloy) set
+      // `detected_level`. Runs LAST so it overrides the body heuristic.
+      `set(severity_text, attributes["detected_level"]) where attributes["detected_level"] != nil`,
+      `set(severity_number, 1)  where attributes["detected_level"] == "TRACE"`,
+      `set(severity_number, 5)  where attributes["detected_level"] == "DEBUG"`,
+      `set(severity_number, 9)  where attributes["detected_level"] == "INFO"`,
+      `set(severity_number, 13) where attributes["detected_level"] == "WARN" or attributes["detected_level"] == "WARNING"`,
+      `set(severity_number, 17) where attributes["detected_level"] == "ERROR" or attributes["detected_level"] == "ERR"`,
+      `set(severity_number, 21) where attributes["detected_level"] == "FATAL" or attributes["detected_level"] == "PANIC"`,
     ]
   }
 

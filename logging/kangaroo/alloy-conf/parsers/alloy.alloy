@@ -1,0 +1,68 @@
+// Per-service log parser — alloy
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// Alloy emits its own logs as logfmt (UTC, RFC3339 nanosecond ts):
+//   ts=2026-05-16T03:56:20.117255871Z level=info msg="finished
+//     transferring logs" component_path=/ component_id=... written=956
+//
+// Shaping: parse the real event time into the log timestamp, lift the
+// level into a `detected_level` label (uppercase-normalized so the OTTL
+// severity mapping matches the other services), and reduce Body to just
+// the message. The extra logfmt fields (component_id, component_path,
+// written, trace_id, …) are intentionally dropped from Body — they
+// remain visible in the raw stream but the shaped line is just the
+// human-readable message, matching komodo-core/komodo-op. Non-alloy
+// streams pass through untouched (stage.match only acts on its
+// selector).
+//
+// stage.logfmt mapping semantics (verified against Loki/Alloy
+// behavior): keys are the *extracted* variable names, values are the
+// logfmt keys to read; an empty-string value means "use a logfmt key
+// with the same name as the extracted variable". So `ts = ""` reads
+// logfmt key `ts` → var `ts`; `lvl = "level"` reads logfmt key `level`
+// → var `lvl`; `msg = ""` reads logfmt key `msg` → var `msg`.
+
+declare "alloy" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"alloy\"}"
+
+      stage.logfmt {
+        mapping = {
+          ts  = "",
+          lvl = "level",
+          msg = "",
+        }
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "RFC3339Nano"
+      }
+
+      // level is a lowercase word (debug/info/warn/error); uppercase it
+      // so it lines up with the other services' detected_level values.
+      stage.template {
+        source   = "lvl"
+        template = "{{ ToUpper .Value }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

@@ -1,0 +1,51 @@
+// Per-service log parser — syncthing (kangaroo)
+//
+// See bilby parsers/komodo-op.alloy for the pattern/rationale.
+//
+// Syncthing log format, LOCAL time (kangaroo TZ = Australia/Perth),
+// 3-letter level:
+//   2026-05-16 10:24:04 INF Established secure connection (device=...)
+//   2026-05-16 10:55:05 WRN Failed to sync (path="WORK FOLDERS" ...)
+//
+// Levels: DBG/INF/WRN/ERR → canonical. Body = message; ts parsed into
+// the event time (so no duplicated timestamp). Non-matching lines pass
+// through to the generic OTTL fallback.
+
+declare "syncthing" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"syncthing\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) (?P<lvl>[A-Z]{3}) (?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "2006-01-02 15:04:05"
+        location = "Australia/Perth"
+      }
+
+      stage.template {
+        source   = "lvl"
+        template = "{{ if eq .Value \"DBG\" }}DEBUG{{ else if eq .Value \"INF\" }}INFO{{ else if eq .Value \"WRN\" }}WARN{{ else if eq .Value \"ERR\" }}ERROR{{ else }}{{ .Value }}{{ end }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}
