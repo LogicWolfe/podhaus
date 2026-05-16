@@ -61,7 +61,14 @@ services:
       ofelia.job-exec.rar-backlog.schedule: "50 4 * * *"
       ofelia.job-exec.rar-backlog.command: "/scripts/rar-backlog.sh"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/ > /dev/null && ls /flood-db > /dev/null && ls /data > /dev/null"]
+      # Stall-proof: prove the service via loopback wget, and verify the
+      # mounts via the kernel mount table (/proc/mounts is a local read —
+      # never blocks) instead of `ls`-ing them. The old `ls /data` hit
+      # the *soft* NFS Pouch mount, so a transient QNAP/NFS stall (e.g.
+      # nightly backup load) made the check time out → Docker unhealthy
+      # → Komodo latched a false red even after NFS recovered. Now red
+      # only means: flood not serving, or a mount genuinely vanished.
+      test: ["CMD-SHELL", "timeout 10 sh -c 'wget -q -O- http://localhost:3000/ >/dev/null && grep -q \" /flood-db \" /proc/mounts && grep -q \" /data \" /proc/mounts'"]
       interval: 60s
       timeout: 15s
       retries: 3
