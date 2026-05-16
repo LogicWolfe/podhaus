@@ -150,31 +150,9 @@ module "plex" {
   backend  = "http://172.18.0.1:32400"
 }
 
-module "logs" {
-  source = "./modules/pod_haus_service"
-
-  account_id               = local.pod_haus_service_defaults.account_id
-  zone_id                  = local.pod_haus_service_defaults.zone_id
-  tunnel_target            = local.pod_haus_service_defaults.tunnel_target
-  default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
-  default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
-
-  hostname = "logs"
-  backend  = "http://victoria-logs:9428"
-}
-
-module "grafana" {
-  source = "./modules/pod_haus_service"
-
-  account_id               = local.pod_haus_service_defaults.account_id
-  zone_id                  = local.pod_haus_service_defaults.zone_id
-  tunnel_target            = local.pod_haus_service_defaults.tunnel_target
-  default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
-  default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
-
-  hostname = "grafana"
-  backend  = "http://grafana:3000"
-}
+# logs.pod.haus (VictoriaLogs vmui) and grafana.pod.haus were removed
+# when ClickStack/HyperDX (watch.pod.haus) replaced them — see
+# docs/plans/clickstack-migration/cutover.md Phase D.
 
 module "watch" {
   source = "./modules/pod_haus_service"

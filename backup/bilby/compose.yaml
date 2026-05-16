@@ -61,11 +61,9 @@ services:
       - komodo_ferretdb-state:/userdata/komodo/ferretdb:ro
       - onepassword_op-connect-data:/userdata/onepassword:ro
       - logging_alloy-data:/userdata/logging/alloy:ro
-      - logging_grafana-data:/userdata/logging/grafana:ro
-      # Victoria Logs storage. Lives on Jump alongside the backup repo
-      # itself; backed up so VL history survives a Jump RAID failure
-      # (off-site via the rclone OneDrive sync hook).
-      - /mnt/jump/victoria-logs:/userdata/logging/victoria-logs:ro
+      # (grafana-data + victoria-logs binds removed — ClickStack
+      # replaced both; ClickHouse telemetry is deliberately not backed
+      # up, HyperDX app-state is the mongo-dumps plan above.)
       - gatus_gatus-data:/userdata/gatus:ro
 
 volumes:
@@ -80,8 +78,6 @@ volumes:
   onepassword_op-connect-data:
     external: true
   logging_alloy-data:
-    external: true
-  logging_grafana-data:
     external: true
   gatus_gatus-data:
     external: true

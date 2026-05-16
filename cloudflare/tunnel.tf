@@ -27,8 +27,6 @@ locals {
     module.torrents.ingress_rule,
     module.home_assistant.ingress_rule,
     module.plex.ingress_rule,
-    module.logs.ingress_rule,
-    module.grafana.ingress_rule,
     module.watch.ingress_rule,
     module.docs.ingress_rule,
     module.minio.ingress_rule,

@@ -1,46 +1,15 @@
-# Bilby's logging overlay. Adds victoria-logs (the backend that
-# kangaroo's alloy also writes to) and grafana (UI), plus bilby-specific
-# alloy bits: SELinux opt, ${PODHAUS_REPO}-rooted alloy-config bind, and
-# the /var/lib/flood-db tail for rtorrent-cleanup events that don't reach
-# docker stdout.
+# Bilby's logging overlay. Adds bilby-specific alloy bits on top of
+# compose.shared.yaml: SELinux opt, ${PODHAUS_REPO}-rooted alloy-conf
+# bind, and the /var/lib/flood-db tail for rtorrent-cleanup events that
+# don't reach docker stdout.
+#
+# VictoriaLogs and Grafana were removed when ClickStack (watch.pod.haus)
+# fully replaced them — see docs/plans/clickstack-migration/cutover.md
+# (Phase D). bilby's alloy now ships OTLP to ClickStack; the backend +
+# UI are the clickstack stack, not part of logging anymore.
 
 
 services:
-  victoria-logs:
-    container_name: victoria-logs
-    image: victoriametrics/victoria-logs:latest
-    restart: unless-stopped
-    # Run as 1000:100 to match the NAS Jump squash effective uid:gid.
-    # Without this, Victoria Logs runs as its default in-image user
-    # (different uid) and writes get squashed to 1000:100, then VL
-    # can't read its own files back. Plex follows the same pattern
-    # (PLEX_UID=1000 PLEX_GID=100) for the same reason.
-    user: "1000:100"
-    command:
-      - -storageDataPath=/victoria-logs-data
-      - -retentionPeriod=180d
-      - -retention.maxDiskSpaceUsageBytes=50GB
-      - -httpListenAddr=:9428
-      - -loggerFormat=json
-    ports:
-      # Expose to LAN so vmui is reachable directly at http://bilby:9428/select/vmui
-      # AND so kangaroo's alloy can write logs cross-LAN to 10.0.0.119:9428.
-      # Container also reachable internally via dockernet at
-      # http://victoria-logs:9428 for bilby's alloy + grafana datasource.
-      - "9428:9428"
-    volumes:
-      # Storage on Jump (NAS SSD) per the storage tier rule. Log history
-      # is "durable state we'd hate to lose"; size cap prevents Jump fill.
-      - /mnt/jump/victoria-logs:/victoria-logs-data
-    networks:
-      - dockernet
-    labels:
-      autoheal: "true"
-    # No healthcheck: victoriametrics images don't ship wget/curl/sh in
-    # their distroless base. VL's HTTP API is the actual liveness signal;
-    # if it stops accepting writes Alloy logs the failure and Grafana
-    # queries will fail visibly.
-
   alloy:
     # SELinux enforcing on Fedora Asahi denies both cross-label writes
     # to /var/run/docker.sock and cross-label reads into bind-mounted
@@ -51,82 +20,12 @@ services:
       # Directory bind (not file bind) — alloy reloads config on file
       # change, and a file-level bind pins the inode at mount time so
       # atomic-rename host edits would silently never reach the container.
-      # The bound dir contains exactly config.alloy, matching the path
-      # alloy is told to read via the shared compose's `command:` line.
+      # The bound dir contains config.alloy + parsers/ (per-service
+      # config-as-code modules imported via import.file).
       - ${PODHAUS_REPO}/logging/bilby/alloy-conf:/etc/alloy:ro
       # rtorrent-cleanup.sh writes to /flood-db/rtorrent-cleanup.log
       # inside the flood container — that's /var/lib/flood-db on host.
       # The script is forked by rtorrent (not by tini), so its output
       # never reaches docker stdout. Tailing the file directly is the
-      # only way to get cleanup-hook events into Victoria Logs.
+      # only way to get cleanup-hook events into ClickStack.
       - /var/lib/flood-db:/var/log/flood:ro
-    depends_on:
-      victoria-logs:
-        condition: service_started
-
-  grafana:
-    container_name: grafana
-    image: grafana/grafana:latest
-    restart: unless-stopped
-    # SELinux enforcing on Fedora Asahi denies cross-label reads into
-    # the bind-mounted datasources provisioning file; label:disable
-    # lifts the confinement.
-    security_opt:
-      - label:disable
-    # First-boot credentials: admin/admin. Grafana forces a password
-    # change on first login through the UI. Rotate once logs.pod.haus
-    # is wired up; no 1P item for this yet on purpose (no pinned
-    # password means no stale credential drift in the repo).
-    environment:
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: https://grafana.pod.haus
-      # Land on the PodHaus dashboards folder, not the generic home page.
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/podhaus/uptime.json
-      GF_INSTALL_PLUGINS: victoriametrics-logs-datasource,yesoreyeram-infinity-datasource
-      # --- Strip Grafana down to Dashboards + Explore ---
-      # Kill every preinstalled app (drilldowns, profile, traces).
-      GF_APPS_GRAFANA_LOKIEXPLORE_APP_ENABLED: "false"
-      GF_APPS_GRAFANA_PYROSCOPE_APP_ENABLED: "false"
-      GF_APPS_GRAFANA_EXPLORETRACES_APP_ENABLED: "false"
-      GF_APPS_GRAFANA_METRICSDRILLDOWN_APP_ENABLED: "false"
-      # Disable features we don't use — removes sidebar clutter.
-      GF_ALERTING_ENABLED: "false"
-      GF_UNIFIED_ALERTING_ENABLED: "false"
-      GF_NEWS_NEWS_FEED_ENABLED: "false"
-      GF_LIVE_ALLOWED_ORIGINS: ""
-      # Hide connections/plugins marketplace from non-admin view.
-      GF_PLUGINS_ENABLE_ALPHA: "false"
-      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
-      TZ: ${TZ}
-    volumes:
-      - grafana-data:/var/lib/grafana
-      # Single directory bind replaces three previous file binds + one
-      # directory bind. The tree is structured to mirror Grafana's
-      # provisioning convention:
-      #   grafana-provisioning/datasources/victoria-logs.yaml
-      #   grafana-provisioning/dashboards/podhaus.yaml         (provider)
-      #   grafana-provisioning/dashboards/podhaus/<*.json>     (dashboards)
-      # Grafana's other provisioning subdirs (alerting, plugins, etc.)
-      # are empty in the image by default; shadowing them with this bind
-      # is a no-op.
-      - ${PODHAUS_REPO}/logging/bilby/grafana-provisioning:/etc/grafana/provisioning:ro
-    depends_on:
-      victoria-logs:
-        condition: service_started
-    networks:
-      - dockernet
-    labels:
-      autoheal: "true"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/api/health > /dev/null"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
-volumes:
-  # alloy + grafana state stay as local docker volumes (NAS squash
-  # carve-out — same as komodo-postgres, see komodo/ferretdb.compose.yaml).
-  # victoria-logs storage is a host bind mount to /mnt/jump/victoria-logs
-  # (NFS Jump) per the storage tier rule, so no named volume here for it.
-  grafana-data:
