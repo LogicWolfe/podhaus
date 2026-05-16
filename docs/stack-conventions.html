@@ -198,6 +198,36 @@
         downstream service's logs surfacing the dependency failure, plus external Gatus
         monitoring of the public hostname.
       </p>
+      <p>
+        <strong>A healthcheck must never do filesystem I/O against a soft-NFS path.</strong>
+        In this fleet that means Pouch (<code>/mnt/pouch</code>) and Jump
+        (<code>/mnt/jump</code>), both mounted
+        <code>nfs4 ... soft,timeo=600,retrans=5</code>. <code>ls</code>, <code>stat</code>,
+        <code>cat</code>, <code>test -e</code> against such a path block until the soft
+        timeout when the export stalls — QNAP busy on nightly backups, or a network blip —
+        and Docker then marks the container <code>unhealthy</code> even though the service is
+        fine. That feeds an autoheal restart loop and a false Komodo <code>Unhealthy</code>:
+        a red that erodes trust in the signal, same failure class as the bind-mount and
+        <code>ignore_services</code> rules.
+      </p>
+      <p>
+        Prove the <em>service</em> over loopback, and prove <em>mount presence</em> via the
+        kernel mount table — never by reading the mount itself.
+        <code>grep -q " /path " /proc/mounts</code> is a local read that never blocks on
+        NFS. Optionally wrap the whole test in <code>timeout N</code> for an explicit bound.
+        This still catches the real failures (service down ⇒ wget exits non-zero; a mount
+        genuinely vanished ⇒ grep exits non-zero) without flapping on transient NFS latency.
+      </p>
+      <pre><code>test: ["CMD-SHELL", "timeout 10 sh -c 'wget -q -O- http://localhost:3000/ &gt;/dev/null && grep -q \" /mnt/pouch \" /proc/mounts'"]</code></pre>
+      <aside class="callout caution">
+        <span class="callout-title">No filesystem probe on a soft-NFS mount</span>
+        Real incident: <code>flood/compose.yaml</code> healthchecked by
+        <code>ls /data</code>, which is backed by the soft-NFS Pouch mount. Every NFS stall
+        false-flapped the container into <code>unhealthy</code> and an autoheal restart while
+        Flood itself was healthy. The fix was the pattern above — loopback wget for the
+        service plus <code>grep -q " /mnt/pouch " /proc/mounts</code> for mount presence.
+        Reference implementation: <code>flood/compose.yaml</code>.
+      </aside>
 
       <h2 id="ingress">Cloudflare Tunnel ingress</h2>
       <p>
@@ -238,6 +268,7 @@
         <li>☐ All bind mounts are <strong>directory</strong> binds, never single files (see above)</li>
         <li>☐ SELinux flag (<code>:z</code> or <code>label:disable</code>) on bilby-targeted bind mounts</li>
         <li>☐ Healthcheck + <code>autoheal: "true"</code> label (unless distroless image)</li>
+        <li>☐ Healthcheck does <strong>no</strong> filesystem I/O on a soft-NFS path (Pouch / Jump) — loopback for the service, <code>/proc/mounts</code> for mount presence</li>
         <li>☐ Secrets created in 1P, referenced via <code>OP__KOMODO__*</code></li>
         <li>☐ Cloudflare Tunnel ingress + DNS CNAME (if public hostname)</li>
         <li>☐ Backrest plan added (if there's state to preserve)</li>

@@ -82,6 +82,36 @@
         kangaroo. Bilby stays on files_on_host because tight save-and-deploy beats the
         commit-roundtrip when the editor is on the same host.
       </p>
+      <aside class="callout warn">
+        <span class="callout-title">Manual deploys on a Linked Repo host do NOT pull</span>
+        On bilby (<code>files_on_host</code>) Periphery reads the bind-mounted working
+        tree directly, so a save plus <code>DeployStack</code> (or
+        <code>./komodo-sync</code>, or an Alloy <code>/-/reload</code>) applies the
+        current files immediately. A Linked Repo host (kangaroo, future pinelake) runs
+        the stack from Komodo's <strong>local clone</strong> of
+        <code>LogicWolfe/podhaus</code> <code>main</code>. The normal delivery path —
+        commit + push → GitHub webhook → Komodo runs <code>CloneRepo</code> (pulls
+        latest <code>main</code>) <em>then</em> <code>DeployStack</code> — refreshes that
+        clone first and works correctly.
+        <br><br>
+        The trap: a manual, out-of-band <code>RestartStack</code> or
+        <code>DeployStack</code> against a Linked Repo stack restarts/redeploys from the
+        <strong>existing local clone, which may be stale — it does not pull</strong>. So
+        a change that is committed and pushed but where the webhook did not fire (or
+        where you intervened by hand) silently keeps running the old config. Field
+        symptom: kangaroo's Alloy ran a stale config for an entire session despite
+        repeated <code>RestartStack</code>s; only the queue-capacity metric (a
+        config-level value) revealed it. <code>RunSync</code> does not help here — it
+        re-imports <code>stack.toml</code> definitions (e.g. the <code>environment</code>
+        block) but does not pull the Linked Repo working files; the clone is only
+        refreshed by <code>CloneRepo</code>/<code>PullRepo</code> or the push webhook.
+        <br><br>
+        Correct manual procedure for a Linked Repo host:
+        <strong><code>PullRepo</code> (refresh the clone to latest <code>main</code>)
+        → then <code>RestartStack</code>/<code>DeployStack</code></strong>. Verify with
+        a config-level signal that proves the new config is actually live (a
+        metric/value), not merely "container is running/healthy."
+      </aside>
 
       <h2 id="stack-toml">stack.toml structure</h2>
       <p>

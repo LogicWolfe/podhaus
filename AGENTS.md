@@ -192,6 +192,17 @@ These have failure modes that you must not introduce:
   fresh Komodo bootstrap. Put the secret in 1Password and reference the
   `OP__KOMODO__*` synced variable name. See
   [`docs/secrets.html`](docs/secrets.html).
+- **On a Linked Repo host (kangaroo, future pinelake), a manual
+  `RestartStack`/`DeployStack` does NOT pull.** It redeploys from
+  Komodo's existing local clone, which may be stale; only the push
+  webhook (`CloneRepo` → `DeployStack`) or an explicit `PullRepo`
+  refreshes it. `RunSync` re-imports `stack.toml` definitions but does
+  not pull working files either. To apply committed+pushed changes by
+  hand, run `PullRepo` then `RestartStack`/`DeployStack`, and confirm
+  via a config-level signal (a metric/value) that the new config is
+  live — "container healthy" is not proof. (bilby is `files_on_host`,
+  so it reads the working tree directly and has no such trap.) See
+  [`docs/komodo.html#operating-models`](docs/komodo.html).
 - **Always use absolute host paths in bind mounts.**
   `${PODHAUS_REPO}/<stack>/...`, never relative paths. Relative paths
   resolve against the periphery container's filesystem, not the host's,

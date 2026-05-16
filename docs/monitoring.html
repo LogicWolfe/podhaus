@@ -115,6 +115,43 @@ Gatus endpoint/heartbeat checks ──► Postmark webhook ──► alerts@pod.
         automatically on file change — no restart.
       </p>
 
+      <h2 id="ingest-staleness">Ingest-staleness alerts</h2>
+      <p>
+        Monitor for the <strong>absence</strong> of expected telemetry, not just service
+        up/down. A process can be "healthy" (port open) while delivering no data — a wedged
+        Alloy exporter, a dead cross-LAN path — invisible to an ordinary up/down check. This
+        is the guard for the recurring kangaroo cross-LAN exporter failure class.
+      </p>
+      <p>
+        Implemented as Gatus endpoints that POST a ClickHouse query and assert the newest
+        log row per host is recent. Gatus is on dockernet, so it reaches ClickHouse directly
+        at <code>http://clickstack-clickhouse:8123/</code> with headers
+        <code>X-ClickHouse-User: default</code> and
+        <code>X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}</code>. Conditions:
+        <code>[STATUS] == 200</code> and <code>[BODY] == 1</code>. The body query:
+      </p>
+      <pre><code>SELECT toUInt8(max(Timestamp) &gt; now() - INTERVAL &lt;N&gt; MINUTE)
+FROM default.otel_logs
+WHERE LogAttributes['host']='&lt;host&gt;'</code></pre>
+      <p>
+        Two live endpoints in <code>gatus/conf/config.yaml</code>:
+      </p>
+      <ul>
+        <li><strong>Kangaroo Log Ingest (staleness)</strong> — 20-minute window, covering
+          kangaroo's recurring cross-LAN exporter risk.</li>
+        <li><strong>Pipeline Log Ingest (bilby / total)</strong> — 10-minute window,
+          detecting total pipeline failure (collector / ClickHouse / Alloy down).</li>
+      </ul>
+      <p>
+        Alerts ride the existing Postmark chain. <code>CLICKHOUSE_PASSWORD</code> must be
+        available to gatus — set in <strong>both</strong> the <code>gatus/stack.toml</code>
+        env block <em>and</em> the <code>gatus/compose.yaml</code> service
+        <code>environment:</code> (see the
+        <a href="/secrets.html">secrets doc</a>'s stack.toml↔compose env rule). To add
+        another source, copy an endpoint block and change the <code>host=</code> filter and
+        window.
+      </p>
+
       <h2 id="clickstack">ClickStack</h2>
       <p>
         ClickStack is the observability backend (bilby-only, as VictoriaLogs was). It is the
@@ -253,6 +290,59 @@ Gatus endpoint/heartbeat checks ──► Postmark webhook ──► alerts@pod.
           slow start no longer trips autoheal, but the underlying insert batching still needs
           tuning — an open follow-up.</li>
       </ul>
+
+      <h2 id="hyperdx-mcp">HyperDX MCP server</h2>
+      <p>
+        HyperDX ships a built-in MCP (Model Context Protocol) server, served by the
+        <strong>existing</strong> <code>hyperdx</code> container at path
+        <code>/api/mcp</code> — no new service or container. Transport is Streamable HTTP;
+        it's reachable through the tunnel at
+        <code>https://watch.pod.haus/api/mcp</code>. Verified working on HyperDX
+        <code>2.25.0-beta</code>. It gives an agent access to logs, exceptions, traces, and
+        metrics for review.
+      </p>
+      <p>
+        Tools exposed (approximately): <code>hyperdx_query</code>,
+        <code>hyperdx_query_tile</code>, <code>hyperdx_list_sources</code>,
+        <code>hyperdx_get_dashboard</code>, <code>hyperdx_save_dashboard</code>,
+        <code>hyperdx_delete_dashboard</code> — query logs/metrics/traces
+        (builder / search / raw SQL) plus manage dashboards, saved searches, and alerts.
+      </p>
+      <p>
+        Auth is two layers, both passed as HTTP headers, both required:
+      </p>
+      <ol>
+        <li><strong>Cloudflare Access</strong> on <code>*.pod.haus</code> — pass the Homelab
+          service token to bypass interactive login: headers
+          <code>CF-Access-Client-Id</code> and <code>CF-Access-Client-Secret</code>.
+          Credentials in the 1Password item
+          <code>Cloudflare Access — Homelab Service Token</code> (field
+          <code>username</code> = Client ID, field <code>credential</code> = Client
+          Secret).</li>
+        <li><strong>HyperDX Personal API Access Key</strong> as
+          <code>Authorization: Bearer &lt;key&gt;</code> — the per-user
+          <code>accessKey</code> (HyperDX Team Settings → API Keys). Stored in 1Password as
+          <code>clickstack-hyperdx-mcp-key</code>; also persisted in Mongo
+          (<code>hyperdx</code> db, <code>users.accessKey</code>) and captured by the
+          nightly mongodump → Backrest backup.</li>
+      </ol>
+      <p>
+        Register the client (Claude Code) at user scope so it's available in all projects:
+      </p>
+      <pre><code>claude mcp add --scope user --transport http hyperdx \
+  https://watch.pod.haus/api/mcp \
+  --header "CF-Access-Client-Id: &lt;id&gt;" \
+  --header "CF-Access-Client-Secret: &lt;secret&gt;" \
+  --header "Authorization: Bearer &lt;key&gt;"</code></pre>
+      <p>
+        On bilby the client config (<code>~/.claude.json</code>) is
+        <strong>chezmoi-managed</strong> — the <code>hyperdx</code> MCP block and the key
+        (templated from 1Password <code>clickstack-hyperdx-mcp-key</code>) live in the
+        chezmoi source, <strong>not</strong> hand-edited into <code>~/.claude.json</code>
+        (chezmoi regenerates and would clobber a manual <code>claude mcp add</code>). The
+        same command works from any machine — it goes via the public tunnel + Access service
+        token, with no LAN dependency.
+      </p>
 
       <h2 id="autoheal">Autoheal</h2>
       <p>
