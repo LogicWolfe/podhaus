@@ -141,4 +141,17 @@ otelcol.exporter.otlphttp "clickstack" {
       "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
     }
   }
+
+  // Resilience (clickstack-migration issue ①) — THE fix for kangaroo's
+  // recurring silent death. Cross-LAN to bilby's collector: any bilby
+  // collector outage >5min made OTel's default retry give up and the
+  // in-memory queue wedge, with the :12345 port healthcheck blind to
+  // it. Retry forever + large buffer → kangaroo rides out outages and
+  // resumes on its own; no more RestartStack needed.
+  retry_on_failure {
+    max_elapsed_time = "0s"
+  }
+  sending_queue {
+    queue_size = 100000
+  }
 }

@@ -215,4 +215,16 @@ otelcol.exporter.otlphttp "clickstack" {
       "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
     }
   }
+
+  // Resilience (clickstack-migration issue ①). The collector endpoint
+  // blips on every clickstack redeploy; OTel's default retry gives up
+  // after 5min and the in-memory queue then wedges → silent data loss
+  // until a manual restart. Retry forever + a large buffer so any
+  // collector outage self-heals on recovery instead of going dark.
+  retry_on_failure {
+    max_elapsed_time = "0s"
+  }
+  sending_queue {
+    queue_size = 100000
+  }
 }
