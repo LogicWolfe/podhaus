@@ -17,6 +17,11 @@ services:
       # (via Komodo)" check that asserts kangaroo's Server state is Ok.
       KOMODO_API_KEY: ${KOMODO_API_KEY}
       KOMODO_API_SECRET: ${KOMODO_API_SECRET}
+      # ClickHouse default-user password for the pipeline-staleness
+      # checks (query ClickHouse directly for recent log arrival). The
+      # stack.toml env block only populates the compose project .env —
+      # the service must still map the var here to receive it.
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
     # 8080 published on bilby host so kangaroo's Backrest can POST
     # heartbeat events from across the LAN. The bearer-token check on
     # each external-endpoint is the auth layer; LAN exposure is fine.
