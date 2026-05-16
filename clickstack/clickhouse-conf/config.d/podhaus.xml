@@ -26,6 +26,16 @@
     <listen_host>0.0.0.0</listen_host>
     <listen_try>1</listen_try>
 
+    <!-- The OTel collector inserts frequently → a large number of small
+         MergeTree parts. ClickHouse otherwise attaches ALL parts before
+         opening its listeners, so cold-start grew past any healthcheck
+         start_period and autoheal killed it in a loop. Async loading
+         opens 8123/9000 immediately and loads tables in the background
+         (queries to a not-yet-loaded table briefly wait) — startup time
+         is decoupled from part count. The real upstream cause (insert
+         batching / part explosion) is a separate follow-up. -->
+    <async_load_databases>true</async_load_databases>
+
     <!-- Keep ClickHouse's own footprint well under the 4g cgroup cap
          so headroom remains for queries + background merges. -->
     <max_server_memory_usage>3000000000</max_server_memory_usage>
