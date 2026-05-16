@@ -129,6 +129,29 @@ Edge cases:
   components are pure Alloy and arch-agnostic. No image changes on
   kangaroo.
 
+> **KNOWN ISSUE — kangaroo silently stops shipping (open follow-up).**
+> Observed twice (2026-05-16): kangaroo's Alloy `otelcol.exporter.otlphttp`
+> to `10.0.0.119:4318` stops delivering and does **not** self-recover —
+> typically after the bilby collector is disrupted (e.g. a `clickstack`
+> redeploy) or across a kangaroo-logging redeploy where the container
+> isn't recreated. The container stays `healthy` because the healthcheck
+> only probes Alloy's `:12345` TCP port (process alive ≠ exporting), so
+> the outage is invisible until you query for `host='kangaroo'` rows.
+> Manual fix each time: `RestartStack kangaroo-logging` (recreates the
+> container → reconnects). Two findings here, not one:
+> 1. *Bug:* the cross-LAN otlphttp exporter wedges and Alloy doesn't
+>    resume on endpoint recovery. Candidate fixes: tune
+>    `retry_on_failure`/`sending_queue` on the exporter; or a periodic
+>    kangaroo-alloy restart (the ofelia self-restart pattern already used
+>    for ofelia itself bounds a similar "stale until restarted" class).
+> 2. *Missing guard:* the healthcheck can't see "not shipping." A real
+>    guard would check Alloy's own metrics
+>    (`otelcol_exporter_sent_log_records_total` flat /
+>    `_send_failed_…_total` rising on `:12345/metrics`) so autoheal
+>    restarts it, or a Gatus push-heartbeat off kangaroo ingest volume.
+> Deferred (out of scope for the parser rollout) but must be addressed —
+> kangaroo logging is currently only as reliable as a human noticing.
+
 ## Why no dual-ship
 
 The [index](index.md) records the hard-swap decision: Alloy does **not**
@@ -185,6 +208,48 @@ per-format regex; **deliberately not done** — the raw line is the
 faithful record (VL/vmui showed it identically), and HyperDX's
 Timestamp column is canonical. Lever if ever wanted: a single
 `bodyExpression` in the HyperDX source (reversible, one place).
+
+## As-built: per-service parsers (config-as-code, 2026-05-16)
+
+The "leave the duplicated timestamp, don't regex it" stance above was
+**superseded** at the user's direction: parsing a service's log shape
+is core logging functionality and is config-as-code, tracked in git
+per service. Architecture now:
+
+- `logging/<host>/alloy-conf/parsers/<service>.alloy` — one tracked
+  file per service, an Alloy `declare` module. It owns that service's
+  shaping: `stage.regex`/`stage.json`/`stage.logfmt` to capture fields,
+  `stage.timestamp` to parse the **real event time** into the log entry
+  (this is the correct fix for the duplicated timestamp — *parsed*, not
+  stripped), `stage.template` to normalise the level to a canonical
+  `TRACE|DEBUG|INFO|WARN|ERROR|FATAL`, `stage.labels` to emit
+  `detected_level`, `stage.output` to reduce Body to the message.
+- `config.alloy` does `import.file "parsers"` and composes every module
+  in an explicit chain (`loki.process "containers"` decolorize →
+  parser chain → Loki→OTLP bridge). Each module only transforms its own
+  container via `stage.match`; everything else passes through. Order is
+  functionally irrelevant.
+- The OTTL `transform.enrich` block honours `detected_level` as
+  **authoritative severity** (runs last, overrides the body-keyword
+  heuristic). Services *without* a parser (rtorrent-cleanup, fenwick,
+  docs-server, ofelia, signal-cli-rest-api) still flow and get the
+  generic OTTL `service.name` + body-heuristic severity fallback — the
+  system works for all containers, parsed or not.
+- Extend = add `parsers/<svc>.alloy` + one link in the chain. Authored
+  via parallel fan-out (one sub-agent per container), `alloy fmt`-gated,
+  then validated against live data centrally (runtime regex bugs — e.g.
+  a sprig `get` 3-arg misuse leaving `detected_level="3"` on op-connect
+  — only surface here, not in `fmt`; this central validation step is
+  mandatory).
+- bilby ≈20 services parsed; kangaroo (alloy, syncthing, backrest,
+  komodo-periphery, autoheal — alloy/autoheal byte-identical copies).
+  Per-host parser dirs because container sets barely overlap.
+
+Known accepted imperfections (not chased — would require the per-format
+bespoke regex sprawl explicitly rejected): a minority of non-standard
+lines on komodo-postgres / gatus / clickstack-clickhouse fall to the
+generic heuristic and may get an imprecise severity. Body is clean and
+ServiceName correct for all; that was the goal.
 
 ## Validation before declaring done
 
