@@ -2,11 +2,23 @@
 // loki.process "containers" (ANSI strip) → per-service parser chain
 // (config-as-code, parsers/<service>.alloy) → Loki→OTLP bridge → OTTL
 // enrich → bilby's published collector cross-LAN at 10.0.0.119:4318.
+// Alloy self-telemetry (own pipeline spans + self metrics) rides the
+// same cross-LAN exporter; its logs do NOT (already captured via the
+// Docker discovery path + parsers.alloy — write_to here would
+// double-ingest, see fenwick/compose.yaml).
 //
 // kangaroo's container set differs from bilby's (alloy, syncthing,
 // backrest, komodo-periphery, autoheal). alloy.alloy / autoheal.alloy
 // are byte-identical copies of bilby's (same images/format). No Gatus
 // scrape / rtorrent tail / op-connect / flood — those are bilby-only.
+
+// Alloy's own internal-pipeline tracing — mirrors bilby. Gives a
+// per-host `alloy` service in HyperDX Traces (kangaroo's collector
+// hop included). Low sampling: pipeline health, not request flow.
+tracing {
+  sampling_fraction = 0.1
+  write_to          = [otelcol.processor.batch.clickstack.input]
+}
 
 import.file "parsers" {
   filename = "/etc/alloy/parsers"
@@ -125,9 +137,29 @@ otelcol.processor.transform "enrich" {
   }
 }
 
+// Alloy self metrics — Prometheus→OTLP bridge (net-new on kangaroo;
+// it has no Gatus scrape). Surfaces this host's pipeline throughput,
+// queue depth and exporter-retry counters — the cross-LAN exporter's
+// own health, the thing that used to die silently.
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy_self" {
+  targets         = prometheus.exporter.self.alloy.targets
+  scrape_interval = "60s"
+  forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
+}
+
+otelcol.receiver.prometheus "alloy_self" {
+  output {
+    metrics = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
 otelcol.processor.batch "clickstack" {
   output {
-    logs = [otelcol.exporter.otlphttp.clickstack.input]
+    logs    = [otelcol.exporter.otlphttp.clickstack.input]
+    metrics = [otelcol.exporter.otlphttp.clickstack.input]
+    traces  = [otelcol.exporter.otlphttp.clickstack.input]
   }
 }
 

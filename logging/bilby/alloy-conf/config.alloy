@@ -4,12 +4,26 @@
 //   from parsers/, one tracked file per service) → Loki→OTLP bridge →
 //   OTTL enrich (service.name + severity fallback) → ClickStack collector.
 //   Gatus /metrics is scraped here and rides the same authed exporter.
+//   Alloy self-telemetry (own pipeline spans + self metrics) rides the
+//   same exporter; its logs do NOT (already captured via the Docker
+//   discovery path + parsers.alloy — write_to here would double-ingest,
+//   see the fenwick double-ingest note in fenwick/compose.yaml).
 //
 // Per-service parsers are config-as-code: parsers/<service>.alloy is a
 // `declare` module owning that service's shaping (real event-time
 // parse, level→detected_level, Body=message). Add a service = add a
 // file in parsers/ + one line in the chain below. Unparsed services
 // pass through untouched and get the generic OTTL severity fallback.
+
+// Alloy's own internal-pipeline tracing. Net-new signal: a per-host
+// `alloy` service in HyperDX Traces showing component-eval spans —
+// the pipeline diagnosing itself. Low sampling on purpose: this is the
+// one mem-risky box (4g ClickHouse cap), span volume scales with
+// component count, and the value here is health not request flow.
+tracing {
+  sampling_fraction = 0.1
+  write_to          = [otelcol.processor.batch.clickstack.input]
+}
 
 import.file "parsers" {
   filename = "/etc/alloy/parsers"
@@ -202,10 +216,30 @@ otelcol.receiver.prometheus "gatus" {
   }
 }
 
+// Alloy self metrics — same Prometheus→OTLP bridge pattern as Gatus
+// above. prometheus.exporter.self surfaces Alloy's internal counters
+// (pipeline throughput, queue depth, exporter retries) so the log
+// pipeline's own health is queryable in HyperDX alongside everything
+// it ships.
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy_self" {
+  targets         = prometheus.exporter.self.alloy.targets
+  scrape_interval = "60s"
+  forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
+}
+
+otelcol.receiver.prometheus "alloy_self" {
+  output {
+    metrics = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
 otelcol.processor.batch "clickstack" {
   output {
     logs    = [otelcol.exporter.otlphttp.clickstack.input]
     metrics = [otelcol.exporter.otlphttp.clickstack.input]
+    traces  = [otelcol.exporter.otlphttp.clickstack.input]
   }
 }
 
