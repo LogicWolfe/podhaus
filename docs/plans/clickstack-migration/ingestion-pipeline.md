@@ -152,19 +152,39 @@ every line with a blank service. Logs are *fully ingested and queryable*
 by `LogAttributes['container']` etc. — only the default UI grouping is
 affected.
 
-**Fix applied:** the HyperDX Logs (and Session) source
+**Interim fix (reverted):** first the HyperDX Logs source
 `serviceNameExpression` was repointed to `LogAttributes['container']`
-(a `db.sources.updateOne` on the `hyperdx` Mongo db). Sources live in
-Mongo, so this is durable and is captured by the nightly mongodump
-backup. `DEFAULT_SOURCES` in `clickstack/compose.yaml` only seeds at
-first-run, so a from-scratch DR rebuild re-creates the source with the
-upstream `ServiceName` default — **the DR runbook must re-apply this
-Mongo update** (or, the cleaner durable fix, fold it into
-`DEFAULT_SOURCES`). The most idiomatic long-term fix is Alloy-side: an
-`otelcol.processor.resource`/`transform` stage setting
-`service.name` from the `container` attribute before export, which
-benefits any OTLP consumer and survives a Mongo wipe — deferred as a
-follow-up, not cutover-blocking.
+via a Mongo update — fixed filtering/grouping but not the displayed
+`ServiceName` column (that uses the literal column from
+`defaultTableSelectExpression`).
+
+**Final fix (in `b44c9ac`):** the idiomatic Alloy-side fix was
+implemented and the Mongo workaround reverted to the upstream
+`ServiceName` default. An `otelcol.processor.transform "enrich"` (OTTL)
+sits between `otelcol.receiver.loki` and the batch on **both** hosts:
+
+- `set(resource.attributes["service.name"], log.attributes["container"])`
+  — populates the OTLP resource attribute the ClickStack exporter maps
+  to the `ServiceName` column. Fixes the column, Service Map and
+  service filters uniformly; survives a Mongo wipe; benefits any OTLP
+  consumer; needs nothing re-applied on DR.
+- Severity is re-derived from the level token at the **start** of the
+  body (delimiter-anchored, first ~60 chars, ascending-severity order
+  so the most-severe present token wins). This *overrides* ClickStack's
+  body-keyword guess, which mislabelled `[INFO] … errors …` lines as
+  ERROR. ~3/172 multi-token edge lines remain imperfect — accepted, not
+  chased with per-format regex.
+
+Note: Alloy auto-rewrites the OTTL paths to their context prefix
+(`attributes`→`log.attributes`, `body`→`log.body`, etc.) on load — an
+info-level notice, not an error.
+
+The Body still carries the originating app's own timestamp/level prefix
+(we ship raw container stdout). Stripping it would need fragile
+per-format regex; **deliberately not done** — the raw line is the
+faithful record (VL/vmui showed it identically), and HyperDX's
+Timestamp column is canonical. Lever if ever wanted: a single
+`bodyExpression` in the HyperDX source (reversible, one place).
 
 ## Validation before declaring done
 

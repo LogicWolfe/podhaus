@@ -1,0 +1,45 @@
+// Per-service log parser — komodo-core
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// komodo-core (Rust tracing) log format, whitespace-separated, RFC3339
+// nanosecond UTC timestamp; ANSI already stripped upstream by
+// loki.process "containers" stage.decolorize:
+//   2026-05-16T03:27:18.601938Z INFO WriteRequest{req_id=...} ...
+//   2026-05-16T03:11:51.174Z    INFO middleware/dispatcher.go:131 ...
+//
+// (komodo-ferretdb uses the same shape but tab-separated; \s+ here
+// would cover it too, but ferretdb gets its own file when we extend.)
+
+declare "komodo_core" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"komodo-core\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "RFC3339Nano"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

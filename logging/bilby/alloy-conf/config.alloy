@@ -1,16 +1,19 @@
-// STAGED — not yet active. Alloy reads /etc/alloy/config.alloy; this
-// file is ignored until the ClickStack cutover renames it over the live
-// one and redeploys the logging stack (so Alloy restarts with the
-// CLICKSTACK_INGESTION_KEY env set). Until then bilby keeps shipping to
-// Victoria Logs via the existing config.alloy. See
-// docs/plans/clickstack-migration/cutover.md (Phase B).
+// ACTIVE bilby logging config. Pipeline:
+//   docker discovery → loki.process "containers" (ANSI strip +
+//   op-connect-api/flood JSON) → per-service parser chain (imported
+//   from parsers/, one tracked file per service) → Loki→OTLP bridge →
+//   OTTL enrich (service.name + severity fallback) → ClickStack collector.
+//   Gatus /metrics is scraped here and rides the same authed exporter.
 //
-// Diff vs the VL config: every discovery + loki.process shaping stage
-// is unchanged (ANSI strip, op-connect-api / flood JSON rewrite,
-// rtorrent-cleanup file tail). Only the sink changes — ClickStack's
-// bundled OTel collector speaks OTLP, not Loki, so we bridge
-// loki.* → OTLP inside Alloy. Gatus /metrics is scraped here too and
-// rides the same authed exporter.
+// Per-service parsers are config-as-code: parsers/<service>.alloy is a
+// `declare` module owning that service's shaping (real event-time
+// parse, level→detected_level, Body=message). Add a service = add a
+// file in parsers/ + one line in the chain below. Unparsed services
+// pass through untouched and get the generic OTTL severity fallback.
+
+import.file "parsers" {
+  filename = "/etc/alloy/parsers"
+}
 
 discovery.docker "containers" {
   host             = "unix:///var/run/docker.sock"
@@ -56,7 +59,7 @@ loki.source.docker "containers" {
 // extraction. Add a new stage.match block when another container starts
 // shipping JSON-with-non-_msg-field logs.
 loki.process "containers" {
-  forward_to = [otelcol.receiver.loki.clickstack.receiver]
+  forward_to = [parsers.komodo_op.run.receiver]
 
   // Strip ANSI colour escape sequences from every log line. komodo-core
   // and flood emit raw ANSI to stdout. Using Alloy's built-in stage
@@ -118,6 +121,18 @@ loki.source.file "rtorrent_cleanup" {
 // entries to OTLP, batch, and ship to ClickStack's bundled collector
 // over OTLP/HTTP. bilby reaches it in-network by container name.
 
+// Per-service parser chain (config-as-code, one module file per
+// service in parsers/). Order is explicit; each module only transforms
+// its own container's streams and passes the rest through. Extend by
+// adding parsers/<svc>.alloy and inserting another link here.
+parsers.komodo_op "run" {
+  forward_to = [parsers.komodo_core.run.receiver]
+}
+
+parsers.komodo_core "run" {
+  forward_to = [otelcol.receiver.loki.clickstack.receiver]
+}
+
 otelcol.receiver.loki "clickstack" {
   output {
     logs = [otelcol.processor.transform.enrich.input]
@@ -160,6 +175,17 @@ otelcol.processor.transform "enrich" {
 
       `set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
       `set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+
+      // Authoritative: per-service parsers (parsers/*.alloy) set
+      // `detected_level` from the real parsed level. Runs LAST so it
+      // overrides the body-keyword heuristic above for parsed services.
+      `set(severity_text, attributes["detected_level"]) where attributes["detected_level"] != nil`,
+      `set(severity_number, 1)  where attributes["detected_level"] == "TRACE"`,
+      `set(severity_number, 5)  where attributes["detected_level"] == "DEBUG"`,
+      `set(severity_number, 9)  where attributes["detected_level"] == "INFO"`,
+      `set(severity_number, 13) where attributes["detected_level"] == "WARN" or attributes["detected_level"] == "WARNING"`,
+      `set(severity_number, 17) where attributes["detected_level"] == "ERROR" or attributes["detected_level"] == "ERR"`,
+      `set(severity_number, 21) where attributes["detected_level"] == "FATAL" or attributes["detected_level"] == "PANIC"`,
     ]
   }
 

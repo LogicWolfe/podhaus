@@ -1,0 +1,50 @@
+// Per-service log parser — komodo-op
+//
+// Config-as-code: one tracked file per service. Imported by
+// config.alloy via `import.file "parsers"` and composed into the
+// processing chain. Adding a service = add a file here + one line in
+// the chain. See docs/plans/clickstack-migration/ingestion-pipeline.md.
+//
+// komodo-op log format (UTC):
+//   2026/05/16 03:27:18 [INFO] Syncing Komodo secret 'OP__...'
+//
+// Shaping: parse the real event time into the log timestamp, lift the
+// level into a `detected_level` label (OTTL maps it to OTLP severity),
+// and reduce Body to just the message — so HyperDX shows a clean line
+// with no duplicated timestamp/level. Non-komodo-op streams pass
+// through this component untouched (stage.match only acts on its
+// selector).
+
+declare "komodo_op" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"komodo-op\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}) \\[(?P<lvl>[A-Z]+)\\]\\s+(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "2006/01/02 15:04:05"
+        location = "UTC"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}
