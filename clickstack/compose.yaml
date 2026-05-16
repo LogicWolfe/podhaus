@@ -151,14 +151,19 @@ services:
     # to the Next.js style chunks at startup. Filename-agnostic (globs
     # *.css under any .next/static/css), idempotent (HDXHIDE marker),
     # fail-open (errors swallowed; exec runs regardless so a path/markup
-    # change just makes the banner reappear, never breaks HyperDX). The
-    # [class*=onboardingSection] selector survives CSS-module hashing;
-    # post-Mongo-fix that wrapper holds only this banner.
+    # change just makes the elements reappear, never breaks HyperDX).
+    # Two hidden bits, both ungated upstream (only !isCollapsed):
+    #   1. [class*=onboardingSection] — the cloud-upsell banner wrapper
+    #      (survives CSS-module hashing; post-Mongo-fix holds only it).
+    #   2. The "Saved searches and dashboards have moved!" notice — a
+    #      bare Mantine Text with no class hook, selected semantically
+    #      via :has() on the two stable app routes it links to. Content-
+    #      structure based, so it survives restyles/Mantine upgrades.
     entrypoint:
       - sh
       - -c
       - |
-        find /app -path '*/.next/static/css/*.css' -exec sh -c 'grep -q HDXHIDE "$1" || printf "%s" "$2" >> "$1"' _ {} '[class*=onboardingSection]{display:none!important}/*HDXHIDE*/' \; 2>/dev/null
+        find /app -path '*/.next/static/css/*.css' -exec sh -c 'grep -q HDXHIDE "$1" || printf "%s" "$2" >> "$1"' _ {} '[class*=onboardingSection],*:has(>a[href="/search/list"]):has(>a[href="/dashboards/list"]){display:none!important}/*HDXHIDE*/' \; 2>/dev/null
         exec sh /etc/local/entry.sh
     environment:
       # Behind the Cloudflare tunnel on 443 at watch.pod.haus — set the
