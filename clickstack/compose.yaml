@@ -155,15 +155,19 @@ services:
     # Two hidden bits, both ungated upstream (only !isCollapsed):
     #   1. [class*=onboardingSection] — the cloud-upsell banner wrapper
     #      (survives CSS-module hashing; post-Mongo-fix holds only it).
-    #   2. The "Saved searches and dashboards have moved!" notice — a
-    #      bare Mantine Text with no class hook, selected semantically
-    #      via :has() on the two stable app routes it links to. Content-
-    #      structure based, so it survives restyles/Mantine upgrades.
+    #   2. The "Saved searches and dashboards have moved!" notice. It is
+    #      a Mantine Text rendered as <p> containing direct-child <a>s to
+    #      /search/list and /dashboards/list. The nav's own menu links
+    #      use those same hrefs, so an unscoped :has() also matched the
+    #      navLinks <div> and hid the whole sidebar. Scoping to `p:has`
+    #      excludes the <div> container — verified against the live SSR
+    #      DOM to match exactly one element (the notice). Worst case on
+    #      a future restructure: the notice reappears, never a wipe.
     entrypoint:
       - sh
       - -c
       - |
-        find /app -path '*/.next/static/css/*.css' -exec sh -c 'grep -q HDXHIDE "$1" || printf "%s" "$2" >> "$1"' _ {} '[class*=onboardingSection],*:has(>a[href="/search/list"]):has(>a[href="/dashboards/list"]){display:none!important}/*HDXHIDE*/' \; 2>/dev/null
+        find /app -path '*/.next/static/css/*.css' -exec sh -c 'grep -q HDXHIDE "$1" || printf "%s" "$2" >> "$1"' _ {} '[class*=onboardingSection],p:has(>a[href="/search/list"]):has(>a[href="/dashboards/list"]){display:none!important}/*HDXHIDE*/' \; 2>/dev/null
         exec sh /etc/local/entry.sh
     environment:
       # Behind the Cloudflare tunnel on 443 at watch.pod.haus — set the
