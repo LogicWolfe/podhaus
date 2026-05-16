@@ -19,6 +19,7 @@ locals {
   # services_pod_haus.tf grows this list automatically.
   pod_haus_module_ingress = [
     module.gatus.ingress_rule,
+    module.bugsink.ingress_rule,
     module.backup.ingress_rule,
     module.fenwick.ingress_rule,
     module.kangaroo_backup.ingress_rule,

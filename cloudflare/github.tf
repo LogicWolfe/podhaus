@@ -44,6 +44,7 @@ locals {
   komodo_stacks = [
     "autoheal",
     "backup",
+    "bugsink",
     "clickstack",
     "cloudflare-tunnel",
     "docs-server",

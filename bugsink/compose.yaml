@@ -1,0 +1,64 @@
+services:
+  # A fresh `bugsink-data` named volume is created root:root and
+  # shadows the image-time chown of /data. Bugsink runs as UID 14237
+  # (USER bugsink) and cannot chown its own mount, so without this it
+  # can't create /data/db.sqlite3 and crash-loops. Root one-shot fixes
+  # ownership, then exits 0 (declared in stack.toml ignore_services).
+  bugsink-init:
+    container_name: bugsink-init
+    image: bugsink/bugsink:2@sha256:cf9ad368d436f0e9dd6e686d0becf5062cc079518efbf032a084c5f73fcf7754
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown -R 14237:14237 /data"]
+    volumes:
+      - bugsink-data:/data
+    networks:
+      - dockernet
+
+  bugsink:
+    container_name: bugsink
+    # Bugsink ships no granular semver tags; `2` is the upstream stable
+    # major channel (receives patches, no breaking changes). Pinned by
+    # digest so upgrades are deliberate — bump the digest to take a new
+    # release.
+    image: bugsink/bugsink:2@sha256:cf9ad368d436f0e9dd6e686d0becf5062cc079518efbf032a084c5f73fcf7754
+    restart: unless-stopped
+    depends_on:
+      bugsink-init:
+        condition: service_completed_successfully
+    environment:
+      SECRET_KEY: ${BUGSINK_SECRET_KEY}
+      CREATE_SUPERUSER: ${BUGSINK_CREATE_SUPERUSER}
+      # DSNs + email links are built from BASE_URL — the public host.
+      BASE_URL: https://bugs.pod.haus
+      # Explicit comma-separated override (independent of BASE_URL) so
+      # internal dockernet ingest with Host: bugsink is accepted while
+      # the public UI host stays bugs.pod.haus. fenwick → Bugsink goes
+      # over dockernet (http://bugsink:8000), never via Cloudflare.
+      ALLOWED_HOSTS: bugs.pod.haus,bugsink,localhost,127.0.0.1
+      # TLS terminates at the Cloudflare edge; origin is plain HTTP.
+      # Required or the login POST fails CSRF behind the tunnel.
+      BEHIND_HTTPS_PROXY: "true"
+      PORT: "8000"
+      # Single-user homelab instance — drop the multi-user/team UI.
+      SINGLE_USER: "true"
+      SINGLE_TEAM: "true"
+      TIME_ZONE: ${TZ}
+    volumes:
+      - bugsink-data:/data
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  bugsink-data:

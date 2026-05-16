@@ -274,6 +274,7 @@ The full set of pages on `docs.pod.haus`:
 - [Paperless](docs/runbooks/paperless.html)
 - [Syncthing](docs/runbooks/syncthing.html)
 - [Flood + RAR pipeline](docs/runbooks/flood.html)
+- [Bugsink](docs/runbooks/bugsink.html)
 
 **Plans**
 - [All plans](docs/plans/)

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Service runbooks">
+  <meta name="doc-order" content="6">
+  <title>Bugsink — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Bugsink</h1>
+      <p class="lead text-lg text-text-muted">
+        Self-hosted, Sentry-protocol error tracker on bilby at
+        <code>bugs.pod.haus</code>. Complements HyperDX (ClickStack), it does not
+        replace it: HyperDX owns logs + traces + exploratory debugging; Bugsink
+        owns exception <em>aggregation</em> — stack-trace fingerprinting,
+        grouping repeats into one issue, first/last-seen, regression detection.
+        Single-user, SQLite, one intended client: <strong>fenwick</strong>.
+      </p>
+
+      <aside class="callout warn">
+        <span class="callout-title">fenwick is not wired up yet</span>
+        This stack stands up a working Bugsink instance and login. The
+        app-side instrumentation (Sentry SDK in fenwick, the
+        <code>beforeSend</code> HyperDX cross-link, the project DSN) is a
+        separate follow-up — see <a href="#wiring-fenwick">Wiring fenwick</a>.
+      </aside>
+
+      <h2 id="topology">Topology</h2>
+      <ul>
+        <li><strong>Stack</strong>: <code>bugsink/</code> — bilby
+          <code>files_on_host</code>, two services on one named volume
+          (<code>bugsink-data</code> → <code>/data</code>).</li>
+        <li><strong><code>bugsink-init</code></strong>: root one-shot. A fresh
+          named volume mounts root:root and shadows the image-time chown of
+          <code>/data</code>; Bugsink runs as UID <code>14237</code> and can't
+          chown its own mount, so this <code>chown -R 14237:14237 /data</code>
+          and exits 0. It is in <code>ignore_services</code> — a deliberate
+          exit-0 service, not a failure.</li>
+        <li><strong>UI ingress</strong>: <code>bugs.pod.haus</code> →
+          Cloudflare Tunnel → <code>http://bugsink:8000</code>, gated by the
+          default Access chain (Homelab service-token bypass → Family allow).</li>
+        <li><strong>Ingest</strong>: clients send over <code>dockernet</code> to
+          <code>http://bugsink:8000</code> directly — <em>never</em> via
+          <code>bugs.pod.haus</code> (that path is behind Cloudflare Access).
+          <code>ALLOWED_HOSTS</code> is set explicitly
+          (<code>bugs.pod.haus,bugsink,localhost,127.0.0.1</code>) so a request
+          with <code>Host: bugsink</code> is accepted while <code>BASE_URL</code>
+          stays the public host for DSNs + email links — Bugsink treats the two
+          settings independently.</li>
+      </ul>
+
+      <h2 id="secrets">Secrets</h2>
+      <p>
+        Two 1Password <strong>Homelab</strong> items, each a single
+        <code>credential</code> field, auto-synced by <code>komodo-op</code>:
+      </p>
+      <table>
+        <thead><tr><th>1Password item</th><th>Komodo Variable</th><th>Holds</th></tr></thead>
+        <tbody>
+          <tr><td>Bugsink Secret Key</td><td><code>OP__KOMODO__BUGSINK_SECRET_KEY__CREDENTIAL</code></td><td>Django <code>SECRET_KEY</code> (64-char base64)</td></tr>
+          <tr><td>Bugsink Create Superuser</td><td><code>OP__KOMODO__BUGSINK_CREATE_SUPERUSER__CREDENTIAL</code></td><td><code>email:password</code> for the initial superuser</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>CREATE_SUPERUSER</code> only provisions the <em>initial</em> user
+        (Bugsink ignores it once a user exists) and is split on the first
+        <code>:</code> — the password must contain no colon. Rotating it later
+        is a UI password change, not an env edit.
+      </p>
+
+      <h2 id="backup">Backup</h2>
+      <p>
+        Standard pattern: <code>bugsink_bugsink-data</code> is mounted
+        read-only into Backrest on bilby at <code>/userdata/bugsink</code>, with
+        a daily plan (<code>25 5</code> local, 14d/4w/6m retention,
+        <code>skipIfUnchanged</code>) alongside the other stacks. SQLite on a
+        Docker named volume is an accepted trade-off for one low-volume client
+        plus the nightly snapshot; the documented escape hatch is a Postgres
+        sidecar via <code>DATABASE_URL</code> if corruption is ever observed.
+      </p>
+
+      <h2 id="bootstrap">First-run bootstrap</h2>
+      <ol>
+        <li>Deploy the stack: <code>bugsink-init</code> chowns
+          <code>/data</code>, <code>bugsink</code> boots, runs Django deploy
+          checks + migrations, and provisions the superuser from
+          <code>CREATE_SUPERUSER</code>.</li>
+        <li>Browse <code>https://bugs.pod.haus</code> → Cloudflare Access
+          (Family) → Bugsink login with the superuser credentials (the
+          "Bugsink Create Superuser" 1Password item).</li>
+        <li>Create a <strong>project</strong> (e.g. <code>fenwick</code>) and
+          copy its DSN — this is the only manual UI step; Bugsink has no
+          headless project-create that fits this flow.</li>
+      </ol>
+
+      <h2 id="wiring-fenwick">Wiring fenwick (follow-up)</h2>
+      <p>Not done by this stack. When instrumenting fenwick:</p>
+      <ul>
+        <li>Store the project DSN in 1Password in <strong>internal form</strong>
+          — take the key + project id from the UI's DSN and store it as
+          <code>http://&lt;key&gt;@bugsink:8000/&lt;project_id&gt;</code> (so
+          fenwick ingests over dockernet, not Cloudflare Access; no
+          host-rewrite code).</li>
+        <li>Add the Sentry SDK + a <code>beforeSend</code> that reads the active
+          OpenTelemetry <code>trace_id</code> and writes a clickable
+          <code>watch.pod.haus</code> search deep-link into the event's
+          <code>extra</code> — one click from a Bugsink issue to the full
+          HyperDX trace. <code>tracesSampleRate: 0</code> (HyperDX owns
+          tracing; Bugsink is errors-only).</li>
+        <li>Thread the DSN through <code>fenwick/stack.toml</code> +
+          <code>compose.yaml</code> like any other
+          <code>[[OP__KOMODO__…]]</code> var; an env change needs a fenwick
+          redeploy (code is live-reload, env is not).</li>
+        <li><strong>Validate the markdown-in-<code>extra</code> assumption</strong>
+          before relying on the cross-link; the fallback is a raw URL string +
+          a <code>trace_id</code> tag (always emit both).</li>
+      </ul>
+
+      <h2 id="upgrades">Upgrades</h2>
+      <p>
+        Image is pinned by digest off <code>bugsink/bugsink:2</code> (Bugsink
+        ships no granular semver tags; <code>2</code> is the upstream stable
+        major channel). Upgrades are deliberate: pull the new
+        <code>:2</code>, capture the digest
+        (<code>docker inspect --format '{{index .RepoDigests 0}}'</code>), and
+        bump the pin in <code>bugsink/compose.yaml</code> (both services share
+        the digest). The startup <code>bugsink-manage check --deploy</code> +
+        migrations gate a bad release; autoheal + the healthcheck catch a
+        crash-loop; the backup volume enables rollback.
+      </p>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

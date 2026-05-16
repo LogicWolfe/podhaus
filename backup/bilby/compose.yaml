@@ -65,6 +65,8 @@ services:
       # replaced both; ClickHouse telemetry is deliberately not backed
       # up, HyperDX app-state is the mongo-dumps plan above.)
       - gatus_gatus-data:/userdata/gatus:ro
+      # Bugsink SQLite db + event storage live under /data.
+      - bugsink_bugsink-data:/userdata/bugsink:ro
 
 volumes:
   # External volumes owned by other stacks — Backrest mounts them
@@ -80,4 +82,6 @@ volumes:
   logging_alloy-data:
     external: true
   gatus_gatus-data:
+    external: true
+  bugsink_bugsink-data:
     external: true

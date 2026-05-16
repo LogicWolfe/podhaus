@@ -1,0 +1,23 @@
+[[stack]]
+name = "bugsink"
+description = "Bugsink — self-hosted Sentry-protocol error tracker (fenwick is the intended client)"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/bugsink"
+# bugsink-init chowns the data volume for UID 14237 then exits 0 — not
+# a failure. Without this Komodo counts the exited init and marks the
+# whole stack Unhealthy (a false red). See AGENTS.md.
+ignore_services = ["bugsink-init"]
+
+# SECRET_KEY + CREATE_SUPERUSER come from the 1Password Homelab items
+# "Bugsink Secret Key" / "Bugsink Create Superuser" (credential field),
+# auto-synced by komodo-op. TZ is seeded by komodo-start.
+environment = """
+TZ=[[TZ]]
+BUGSINK_SECRET_KEY=[[OP__KOMODO__BUGSINK_SECRET_KEY__CREDENTIAL]]
+BUGSINK_CREATE_SUPERUSER=[[OP__KOMODO__BUGSINK_CREATE_SUPERUSER__CREDENTIAL]]
+"""

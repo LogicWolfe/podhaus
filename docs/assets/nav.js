@@ -56,6 +56,7 @@
     { path: '/runbooks/paperless.html',               group: 'Service runbooks', order: 3, title: 'Paperless' },
     { path: '/runbooks/syncthing.html',               group: 'Service runbooks', order: 4, title: 'Syncthing' },
     { path: '/runbooks/flood.html',                   group: 'Service runbooks', order: 5, title: 'Flood + RAR pipeline' },
+    { path: '/runbooks/bugsink.html',                 group: 'Service runbooks', order: 6, title: 'Bugsink' },
     { path: '/plans/index.html',                      group: 'Plans',            order: 0, title: 'All plans' },
   ];
 
