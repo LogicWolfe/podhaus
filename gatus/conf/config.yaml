@@ -181,6 +181,51 @@ endpoints:
         success-threshold: 2
         send-on-resolved: true
 
+  # --- Observability-pipeline staleness ---
+  # The Komodo badge and Alloy's :12345 port-check both prove "process
+  # alive", not "logs actually arriving". A wedged exporter / dead
+  # cross-LAN path is silent. These query ClickHouse directly (gatus is
+  # on dockernet) and assert recent log arrival per host — absence of
+  # telemetry is itself the signal. ClickHouse always 200s; freshness is
+  # in the body: `1` = a row within the window, `0` = stale.
+  - name: Kangaroo Log Ingest (staleness)
+    url: http://clickstack-clickhouse:8123/
+    method: POST
+    group: services
+    interval: 5m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: "SELECT toUInt8(max(Timestamp) > now() - INTERVAL 20 MINUTE) FROM default.otel_logs WHERE LogAttributes['host']='kangaroo'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: custom
+        description: "No kangaroo logs reached ClickHouse in 20+ min. The cross-LAN Alloy->collector pipeline is silently down (recurring known issue — exporter wedge). Investigate kangaroo Alloy; `RestartStack kangaroo-logging` restores it. See clickstack-migration/ingestion-pipeline.md."
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
+  - name: Pipeline Log Ingest (bilby / total)
+    url: http://clickstack-clickhouse:8123/
+    method: POST
+    group: services
+    interval: 5m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: "SELECT toUInt8(max(Timestamp) > now() - INTERVAL 10 MINUTE) FROM default.otel_logs WHERE LogAttributes['host']='bilby'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: custom
+        description: "No bilby logs in 10+ min — the whole observability pipeline is down (collector / ClickHouse / Alloy on bilby). High severity: nothing is being captured anywhere."
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
   # Active probes for Backrest. The push-style heartbeats below only fire
   # on SNAPSHOT_SUCCESS — they catch "snapshot ran but a hook failed" but
   # cannot detect "backrest never ran" without `heartbeat.interval` set
