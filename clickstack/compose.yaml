@@ -143,6 +143,23 @@ services:
     container_name: hyperdx
     image: docker.hyperdx.io/hyperdx/hyperdx:2
     restart: unless-stopped
+    # Hide the hardcoded "Ready to deploy on ClickHouse Cloud?" upsell
+    # banner (AppNavCloudBanner — no env/state gate exists upstream; the
+    # sibling OnboardingChecklist is instead suppressed via the team
+    # createdAt back-date in clickstack-mongo). Deliberate upstream-asset
+    # patch (no-patches exception, owner-approved): append one CSS rule
+    # to the Next.js style chunks at startup. Filename-agnostic (globs
+    # *.css under any .next/static/css), idempotent (HDXHIDE marker),
+    # fail-open (errors swallowed; exec runs regardless so a path/markup
+    # change just makes the banner reappear, never breaks HyperDX). The
+    # [class*=onboardingSection] selector survives CSS-module hashing;
+    # post-Mongo-fix that wrapper holds only this banner.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        find /app -path '*/.next/static/css/*.css' -exec sh -c 'grep -q HDXHIDE "$1" || printf "%s" "$2" >> "$1"' _ {} '[class*=onboardingSection]{display:none!important}/*HDXHIDE*/' \; 2>/dev/null
+        exec sh /etc/local/entry.sh
     environment:
       # Behind the Cloudflare tunnel on 443 at watch.pod.haus — set the
       # public URL so cookies/redirects are correct (decision 5).
