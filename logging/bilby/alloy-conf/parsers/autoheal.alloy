@@ -1,0 +1,63 @@
+// Per-service log parser — autoheal
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// autoheal (willfarrell/autoheal) log format, UTC, no level token:
+//   16-05-2026 04:00:12 Container /gatus (c12cdd3e3339) found to be unhealthy - Restarting container now with 10s timeout
+//   16-05-2026 03:41:41 Container /fenwick (77f6c4a75959) found to be restarting - don't restart
+//
+// Timezone: empirically UTC. The in-line ts (e.g. 04:00:12) matches
+// `date -u` (04:00:33 UTC) at capture time, not local AWST (12:00:33);
+// the willfarrell/autoheal entrypoint emits `date -u`-style stamps.
+// So format date is parsed with location = "UTC".
+//
+// Severity: autoheal has no level field. Every line it emits is an
+// action it took on an unhealthy/restarting container — that is the
+// service's entire purpose and is inherently noteworthy — so lines
+// mentioning "unhealthy" or "Restarting" get detected_level=WARN.
+// Anything else is left UNSET; the generic OTTL fallback handles it.
+
+declare "autoheal" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"autoheal\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{2}-\\d{2}-\\d{4} \\d{2}:\\d{2}:\\d{2}) (?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "02-01-2006 15:04:05"
+        location = "UTC"
+      }
+
+      // No level token in autoheal output; classify its action lines.
+      stage.regex {
+        expression = "(?P<lvl>unhealthy|Restarting)"
+        source     = "msg"
+      }
+
+      stage.template {
+        source   = "detected_level"
+        template  = "{{ if .lvl }}WARN{{ end }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "detected_level" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

@@ -54,46 +54,16 @@ loki.source.docker "containers" {
   labels        = {"host" = "bilby"}
 }
 
-// Per-container log shaping. Pipeline runs in order: ANSI strip first
-// (so JSON parsers don't see colour codes), then per-container JSON
-// extraction. Add a new stage.match block when another container starts
-// shipping JSON-with-non-_msg-field logs.
+// Universal pre-shaping: strip ANSI so the per-service parsers (and
+// JSON stages) never see colour codes. komodo-core, home-assistant,
+// flood etc. emit raw ANSI. Per-container shaping now lives in
+// parsers/<service>.alloy (config-as-code) — op-connect-api and flood
+// moved to their own parser modules; the legacy inline stage.match
+// blocks are gone.
 loki.process "containers" {
   forward_to = [parsers.komodo_op.run.receiver]
 
-  // Strip ANSI colour escape sequences from every log line. komodo-core
-  // and flood emit raw ANSI to stdout. Using Alloy's built-in stage
-  // rather than a hand-rolled regex so any corner cases get fixed
-  // upstream.
   stage.decolorize {}
-
-  // op-connect-api emits JSON with the message in `log_message`.
-  // Extract it and rewrite the line to just that text.
-  stage.match {
-    selector = "{container=\"op-connect-api\"}"
-
-    stage.json {
-      expressions = { log_message = "log_message" }
-    }
-
-    stage.output {
-      source = "log_message"
-    }
-  }
-
-  // flood emits pino-style JSON with the message in `msg`. Same shape
-  // as op-connect-api but different field name.
-  stage.match {
-    selector = "{container=\"flood\"}"
-
-    stage.json {
-      expressions = { msg = "msg" }
-    }
-
-    stage.output {
-      source = "msg"
-    }
-  }
 }
 
 // rtorrent-cleanup.sh (event.download.erased hook + ad-hoc invocations)
@@ -122,16 +92,33 @@ loki.source.file "rtorrent_cleanup" {
 // over OTLP/HTTP. bilby reaches it in-network by container name.
 
 // Per-service parser chain (config-as-code, one module file per
-// service in parsers/). Order is explicit; each module only transforms
-// its own container's streams and passes the rest through. Extend by
-// adding parsers/<svc>.alloy and inserting another link here.
-parsers.komodo_op "run" {
-  forward_to = [parsers.komodo_core.run.receiver]
-}
-
-parsers.komodo_core "run" {
-  forward_to = [otelcol.receiver.loki.clickstack.receiver]
-}
+// service in parsers/). Order is functionally irrelevant — each module
+// only transforms its own container's streams via stage.match and
+// passes every other stream through untouched. Extend by adding
+// parsers/<svc>.alloy and inserting another link in this chain.
+// Anything without a parser here (e.g. rtorrent-cleanup, fenwick,
+// docs-server, signal-cli-rest-api) still flows and gets the generic
+// OTTL service.name + severity fallback in otelcol.processor.transform.
+parsers.komodo_op         "run" { forward_to = [parsers.komodo_core.run.receiver] }
+parsers.komodo_core       "run" { forward_to = [parsers.komodo_ferretdb.run.receiver] }
+parsers.komodo_ferretdb   "run" { forward_to = [parsers.komodo_postgres.run.receiver] }
+parsers.komodo_postgres   "run" { forward_to = [parsers.paperless_postgres.run.receiver] }
+parsers.paperless_postgres "run" { forward_to = [parsers.op_connect_api.run.receiver] }
+parsers.op_connect_api    "run" { forward_to = [parsers.op_connect_sync.run.receiver] }
+parsers.op_connect_sync   "run" { forward_to = [parsers.clickstack_mongo.run.receiver] }
+parsers.clickstack_mongo  "run" { forward_to = [parsers.hyperdx.run.receiver] }
+parsers.hyperdx           "run" { forward_to = [parsers.clickstack_otel.run.receiver] }
+parsers.clickstack_otel   "run" { forward_to = [parsers.alloy.run.receiver] }
+parsers.alloy             "run" { forward_to = [parsers.grafana.run.receiver] }
+parsers.grafana           "run" { forward_to = [parsers.gatus.run.receiver] }
+parsers.gatus             "run" { forward_to = [parsers.paperless.run.receiver] }
+parsers.paperless         "run" { forward_to = [parsers.home_assistant.run.receiver] }
+parsers.home_assistant    "run" { forward_to = [parsers.cloudflare_tunnel.run.receiver] }
+parsers.cloudflare_tunnel "run" { forward_to = [parsers.unpackerr.run.receiver] }
+parsers.unpackerr         "run" { forward_to = [parsers.clickstack_clickhouse.run.receiver] }
+parsers.clickstack_clickhouse "run" { forward_to = [parsers.autoheal.run.receiver] }
+parsers.autoheal          "run" { forward_to = [parsers.flood.run.receiver] }
+parsers.flood             "run" { forward_to = [otelcol.receiver.loki.clickstack.receiver] }
 
 otelcol.receiver.loki "clickstack" {
   output {

@@ -1,0 +1,54 @@
+// Per-service log parser — clickstack-otel
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// clickstack-otel (the OpenTelemetry Collector supervisor) emits
+// zap-style JSON, one object per line:
+//   {"level":"info","ts":1778902378.3935137,"logger":"supervisor",
+//    "caller":"supervisor/supervisor.go:668","msg":"Connected ..."}
+//
+// `ts` is a float epoch in fractional SECONDS — Alloy's "Unix"
+// timestamp token consumes float seconds (UnixMs/UnixUs/UnixNs are for
+// integer sub-second epochs, which this is not). `level` is a lowercase
+// zap word; we uppercase it and fold zap's dpanic/panic onto FATAL so
+// it lands on a canonical TRACE|DEBUG|INFO|WARN|ERROR|FATAL set before
+// OTTL maps it to OTLP severity. Body is reduced to just `msg`.
+// Non-JSON lines (and other streams) pass through untouched.
+
+declare "clickstack_otel" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"clickstack-otel\"}"
+
+      stage.json {
+        expressions = {lvl = "level", ts = "ts", msg = "msg"}
+      }
+
+      stage.template {
+        source   = "lvl"
+        template = "{{ $u := ToUpper .Value }}{{ if or (eq $u \"DPANIC\") (eq $u \"PANIC\") }}FATAL{{ else }}{{ $u }}{{ end }}"
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "Unix"
+      }
+
+      stage.labels {
+        values = {detected_level = "lvl"}
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

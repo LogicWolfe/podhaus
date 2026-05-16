@@ -1,0 +1,48 @@
+// Per-service log parser — unpackerr
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// unpackerr log format, LOCAL time (Australia/Perth — the container's
+// TZ), bracketed level first, then a slash date + clock, then a
+// bracketed component tag that is part of the message body:
+//   [INFO] 2026/05/16 11:45:48 [Unpackerr] Queue: 0 waiting, ...
+//
+// Level is already an UPPERCASE word (INFO/WARN/ERROR/DEBUG) so it maps
+// straight to detected_level — no stage.template needed. The component
+// tag (`[Unpackerr]`, `[Radarr]`, etc.) is kept in the message: it's a
+// useful per-event subsystem marker and not a fixed prefix to strip.
+// Non-unpackerr streams pass through untouched (stage.match scoping).
+
+declare "unpackerr" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"unpackerr\"}"
+
+      stage.regex {
+        expression = "^\\[(?P<lvl>[A-Z]+)\\] (?P<ts>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}) (?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "2006/01/02 15:04:05"
+        location = "Australia/Perth"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

@@ -1,0 +1,65 @@
+// Per-service log parser — clickstack-clickhouse
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// ClickHouse server native log format (UTC, dotted date, microseconds);
+// the real server log goes to a file inside the container, only the
+// tail of it (and entrypoint noise) reaches stdout:
+//   2026.05.16 12:00:24.261660 [ 747 ] {ebe9491d-...} <Debug> default.otel_logs (...): Create MergeTreeSink, deduplicate=false
+//   2026.05.16 12:00:25.324953 [ 700 ] {} <Trace> default.otel_logs (...): Removed 1 old parts
+//
+// Fields: <ts YYYY.MM.DD HH:MM:SS.uuuuuu> [ <thread> ] {<query_id>}
+// <Level> <message>. The query id is frequently empty ({}). Level
+// words are full English (Information, not INFO) — mapped below to the
+// canonical UPPERCASE set the OTTL severity step expects.
+//
+// Entrypoint / init lines (e.g. `/entrypoint.sh: create new user
+// 'default' instead 'default'`) do not match the regex and pass
+// through this component unchanged — acceptable, they are startup
+// noise with no native timestamp/level to lift.
+
+declare "clickstack_clickhouse" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"clickstack-clickhouse\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}\\.\\d{2}\\.\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+) \\[ (?P<thread>\\d+) \\] \\{(?P<qid>[^}]*)\\} <(?P<lvl>[A-Za-z]+)> (?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "2006.01.02 15:04:05.000000"
+        location = "UTC"
+      }
+
+      // ClickHouse level words → canonical UPPERCASE severity. lower
+      // first so the mapping table only needs one key per level.
+      stage.template {
+        source   = "lvl"
+        template = "{{ ToLower .Value }}"
+      }
+
+      stage.template {
+        source   = "lvl"
+        template = "{{ if eq .Value \"trace\" }}TRACE{{ else if eq .Value \"debug\" }}DEBUG{{ else if eq .Value \"information\" }}INFO{{ else if eq .Value \"notice\" }}INFO{{ else if eq .Value \"warning\" }}WARN{{ else if eq .Value \"error\" }}ERROR{{ else if eq .Value \"fatal\" }}FATAL{{ else }}{{ ToUpper .Value }}{{ end }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

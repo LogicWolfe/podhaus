@@ -1,0 +1,58 @@
+// Per-service log parser — komodo-postgres
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// PostgreSQL stderr log format (UTC; the literal " UTC" is in the line,
+// not a Go-parseable zone, so we capture ts without it and pin
+// location="UTC"):
+//   2026-05-16 03:32:56.677 UTC [81] LOG:  cron job 2 starting: CALL ...
+//
+// Fields: <ts: YYYY-MM-DD HH:MM:SS.mmm> UTC [<pid>] <PGLEVEL>:  <message>
+//
+// PostgreSQL severities don't match OTLP levels 1:1; stage.template maps
+// the raw level to a canonical TRACE|DEBUG|INFO|WARN|ERROR|FATAL token:
+//   LOG/INFO/NOTICE/STATEMENT/DETAIL/HINT/CONTEXT -> INFO
+//   WARNING                                       -> WARN
+//   ERROR                                         -> ERROR
+//   FATAL/PANIC                                   -> FATAL
+//   DEBUG / DEBUG1..5                             -> DEBUG
+//   (anything unrecognized)                       -> INFO
+
+declare "komodo_postgres" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"komodo-postgres\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) UTC \\[\\d+\\] (?P<pglvl>[A-Z][A-Z0-9]*):\\s+(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "2006-01-02 15:04:05.000"
+        location = "UTC"
+      }
+
+      stage.template {
+        source   = "lvl"
+        template = "{{ regexReplaceAll \"^DEBUG[0-9]*$\" .pglvl \"DEBUG\" | get (dict \"LOG\" \"INFO\" \"INFO\" \"INFO\" \"NOTICE\" \"INFO\" \"STATEMENT\" \"INFO\" \"DETAIL\" \"INFO\" \"HINT\" \"INFO\" \"CONTEXT\" \"INFO\" \"WARNING\" \"WARN\" \"ERROR\" \"ERROR\" \"FATAL\" \"FATAL\" \"PANIC\" \"FATAL\" \"DEBUG\" \"DEBUG\") | default \"INFO\" }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

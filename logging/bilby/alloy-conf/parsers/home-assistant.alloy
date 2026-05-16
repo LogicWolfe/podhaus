@@ -1,0 +1,68 @@
+// Per-service log parser — home-assistant
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// Home Assistant (Python logging) format. The leading timestamp is
+// LOCAL wall-clock in the container's TZ (Australia/Perth), millisecond
+// precision, then level / thread / component / message:
+//   2026-05-16 11:34:52.126 ERROR (MainThread) [homeassistant.components.twinkly.coordinator] Error fetching twinkly data: ...
+//
+// ANSI color codes (HA wraps lines in \e[31m … \e[0m) are already
+// stripped upstream by loki.process "containers" stage.decolorize, same
+// as komodo-core.
+//
+// Lines that don't match the timestamp prefix pass through untouched:
+//   - s6 supervisor startup banners ("s6-rc: info: service … started")
+//   - multiline Python traceback continuations ("Traceback …", "  File …")
+// stage.regex leaves Body/timestamp unchanged when it doesn't match, so
+// these keep their original line and stay attached after the parsed
+// header line in HyperDX.
+//
+// The .mmm milliseconds are captured into `ms` but intentionally not
+// fed to stage.timestamp — Go's reference layout only resolves to the
+// second here; sub-second ordering within a service is not meaningful
+// for this low-volume stream. `ms` is otherwise unused.
+//
+// Level vocabulary is Python's: DEBUG / INFO / WARNING / ERROR /
+// CRITICAL. Mapped to the canonical set the rest of the pipeline /
+// OTTL severity mapping expects: WARNING → WARN, CRITICAL → FATAL;
+// the others pass through unchanged.
+
+declare "home_assistant" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"home-assistant\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})\\.(?P<ms>\\d+) (?P<lvl>[A-Z]+) \\((?P<thread>[^)]+)\\) \\[(?P<comp>[^\\]]+)\\]\\s+(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "2006-01-02 15:04:05"
+        location = "Australia/Perth"
+      }
+
+      stage.template {
+        source   = "level"
+        template  = "{{ if eq .lvl \"WARNING\" }}WARN{{ else if eq .lvl \"CRITICAL\" }}FATAL{{ else }}{{ .lvl }}{{ end }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "level" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

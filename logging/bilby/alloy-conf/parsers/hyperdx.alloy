@@ -1,0 +1,75 @@
+// Per-service log parser — hyperdx
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// hyperdx (HyperDX / ClickStack app server, Node + pino) emits a
+// bracketed component prefix followed by a pino JSON object:
+//   [API] {"level":30,"time":1778903804921,"pid":14,"hostname":"...","req":{...},"msg":"HTTP GET /health"}
+//   [ALERT-TASK] {"level":30,"time":1778903820031,"msg":"check-alerts started at ..."}
+//
+// pino fields used: `level` (numeric: 10/20/30/40/50/60), `time`
+// (epoch MILLISECONDS), `msg` (the human line). Component prefix
+// (API, ALERT-TASK, ...) is preserved by re-prefixing Body so the
+// HyperDX line still shows which subsystem logged it.
+//
+// Early-boot / framework lines that aren't `[COMP] {json}` (plain
+// text, no JSON object) don't match the regex and fall straight
+// through this component untouched — Body/timestamp left as ingested.
+
+declare "hyperdx" {
+	argument "forward_to" { }
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector = "{container=\"hyperdx\"}"
+
+			// Split "[COMP] {json}". Non-matching lines (no bracket prefix
+			// or no trailing JSON object) leave all groups empty and the
+			// later stages no-op, so plain boot lines pass through clean.
+			stage.regex {
+				expression = "^\\[(?P<comp>[^\\]]+)\\]\\s+(?P<json>\\{.*\\})$"
+			}
+
+			stage.json {
+				source      = "json"
+				expressions = {lvl = "level", t = "time", msg = "msg"}
+			}
+
+			// pino numeric level -> canonical UPPERCASE severity. OTTL
+			// downstream maps detected_level to OTLP SeverityNumber.
+			stage.template {
+				source   = "lvl"
+				template = "{{ if eq .Value \"10\" }}TRACE{{ else if eq .Value \"20\" }}DEBUG{{ else if eq .Value \"30\" }}INFO{{ else if eq .Value \"40\" }}WARN{{ else if eq .Value \"50\" }}ERROR{{ else if eq .Value \"60\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
+			}
+
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+
+			// pino `time` is epoch milliseconds; "UnixMs" is the documented
+			// Alloy/Loki predefined token for ms-since-epoch (peers: Unix,
+			// UnixUs, UnixNs). The 13-digit string parses directly.
+			stage.timestamp {
+				source = "t"
+				format = "UnixMs"
+			}
+
+			// Body = pino msg, re-prefixed with the component tag so the
+			// subsystem (API / ALERT-TASK / ...) stays visible in HyperDX.
+			stage.template {
+				source   = "line"
+				template = "[{{ .comp }}] {{ .msg }}"
+			}
+
+			stage.output {
+				source = "line"
+			}
+		}
+	}
+
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
+}

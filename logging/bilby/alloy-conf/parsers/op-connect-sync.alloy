@@ -1,0 +1,66 @@
+// Per-service log parser — op-connect-sync
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// 1Password Connect sync (connect-sync) emits the same JSON shape as
+// op-connect-api, one object per line:
+//   {"log_message":"(I) ### starting sync ###",
+//    "timestamp":"2026-05-16T03:43:03.428714669Z","level":3}
+//
+// `log_message` carries a one-letter level prefix: (I)=INFO, (E)=ERROR,
+// (W)=WARN, (D)=DEBUG. Cross-checked live (low volume, 7-day window):
+// every observed line is level=3 with an `(I)` prefix, confirming
+// 3 == INFO. The numeric `level` is the 1Password Connect logrus-style
+// level; mapped here to a canonical OTTL token via stage.template:
+//   1 -> ERROR   2 -> WARN   3 -> INFO   4 -> DEBUG   5 -> TRACE
+// Anything outside 1..5 falls back to INFO (a valid token — never drop
+// severity). The `(X) ` prefix is intentionally left on the Body: it is
+// short, human-meaningful, and lets the generic OTTL severity fallback
+// re-derive level for any line stage.json failed to parse.
+//
+// Non-JSON plain lines make stage.json a no-op (non-fatal); ts/lvl stay
+// empty so stage.timestamp/stage.labels skip, and stage.output falls
+// back to leaving the raw line as Body — the line passes through, never
+// dropped.
+
+declare "op_connect_sync" {
+	argument "forward_to" { }
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector = "{container=\"op-connect-sync\"}"
+
+			stage.json {
+				expressions = {
+					log_message = "log_message",
+					ts          = "timestamp",
+					lvl         = "level",
+				}
+			}
+
+			stage.timestamp {
+				source = "ts"
+				format = "RFC3339Nano"
+			}
+
+			stage.template {
+				source   = "lvl"
+				template = "{{ if eq .Value \"1\" }}ERROR{{ else if eq .Value \"2\" }}WARN{{ else if eq .Value \"3\" }}INFO{{ else if eq .Value \"4\" }}DEBUG{{ else if eq .Value \"5\" }}TRACE{{ else }}INFO{{ end }}"
+			}
+
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+
+			stage.output {
+				source = "log_message"
+			}
+		}
+	}
+
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
+}

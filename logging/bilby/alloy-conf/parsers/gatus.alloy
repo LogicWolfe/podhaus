@@ -1,0 +1,59 @@
+// Per-service log parser — gatus
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// gatus log format, LOCAL time (the container runs TZ=Australia/Perth,
+// UTC+8 — gatus prints wall-clock, not UTC):
+//   2026/05/16 11:33:32 [watchdog.executeEndpoint] Monitored group=...
+//   2026/05/16 11:29:22 Received termination signal, attempting to ...
+//
+// Two real shapes: a bracketed `[component]` (a Go function name like
+// `watchdog.executeEndpoint`, NOT a level) and bare lines with no
+// bracket (`Shutting down`). The regex makes the bracket optional so
+// both get their timestamp parsed and stripped from Body. The Fiber
+// startup banner (box-drawing lines, no timestamp) doesn't match and
+// passes through untouched.
+//
+// Shaping decisions:
+//  - timestamp: parsed with location=Australia/Perth so the local
+//    wall-clock instant is anchored to the correct UTC time.
+//  - severity: gatus emits NO level token. `[component]` is a function
+//    name, and `success=false` (a monitored-endpoint failure, not a
+//    gatus-process error) has not appeared in 7d of data. There is no
+//    crisp, reliable severity signal, so we do NOT set detected_level —
+//    the generic OTTL fallback derives severity from message content.
+//    Fabricating a level here would be worse than the fallback.
+//  - body: reduced to just the message; the `[component]` capture is
+//    intentionally dropped (not lifted to a label — it's a high-
+//    cardinality function name) and kept out of Body to match the
+//    clean single-line shape of the other parsers.
+
+declare "gatus" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"gatus\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}) (?:\\[(?P<comp>[^\\]]+)\\]\\s+)?(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "2006/01/02 15:04:05"
+        location = "Australia/Perth"
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

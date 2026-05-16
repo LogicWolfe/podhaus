@@ -1,0 +1,53 @@
+// Per-service log parser — flood (rtorrent web UI)
+//
+// See parsers/komodo-op.alloy for the pattern/rationale. Replaces the
+// legacy stage.match for flood that lived in loki.process "containers".
+//
+// flood emits pino JSON, e.g.:
+//   {"level":30,"time":"2026-05-16T04:01:34.737Z","pid":7,
+//    "name":"flood:web-server","msg":"request completed","res":{...}}
+// It ALSO emits non-JSON morgan HTTP lines ("GET / 200 3.186 ms - 873",
+// ANSI already stripped upstream) — those don't match stage.json and
+// pass through untouched.
+//
+// pino numeric level → canonical UPPERCASE; pino `time` is an RFC3339
+// string (note: unlike hyperdx, which uses epoch-ms); Body = msg.
+
+declare "flood" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"flood\"}"
+
+      stage.json {
+        expressions = { lvl = "level", ts = "time", msg = "msg" }
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "RFC3339Nano"
+      }
+
+      // pino numeric levels → canonical level tokens.
+      stage.template {
+        source   = "lvl"
+        template = "{{ if eq .Value \"10\" }}TRACE{{ else if eq .Value \"20\" }}DEBUG{{ else if eq .Value \"30\" }}INFO{{ else if eq .Value \"40\" }}WARN{{ else if eq .Value \"50\" }}ERROR{{ else if eq .Value \"60\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

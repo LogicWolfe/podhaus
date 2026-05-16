@@ -1,0 +1,73 @@
+// Per-service log parser — clickstack-mongo
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// MongoDB Log v2: one structured-JSON object per line. The event time
+// is a nested `{"t":{"$date":"..."}}` with a local (+08:00) offset, not
+// UTC like the Komodo services:
+//   {"t":{"$date":"2026-05-16T11:56:30.664+08:00"},"s":"I",
+//    "c":"NETWORK","id":22943,"ctx":"listener","msg":"Connection
+//    accepted","attr":{...}}
+//
+// Field map: s = severity (single char), c = component, msg = the
+// human message, attr = structured detail (dropped from Body — it's
+// noisy and varies per event; keep Body to component + message).
+//
+// Shaping mirrors the other parsers: real event time → log timestamp,
+// Mongo severity → canonical `detected_level` label (OTTL maps it to
+// OTLP severity), Body reduced to "<component>  <message>". Verified
+// end-to-end against grafana/alloy + a local Loki: the +08:00 offset
+// resolves to the correct UTC instant and the level mapping holds.
+//
+// The timestamp lives at the JSON path `t.$date`. `$date` is not a
+// bare JMESPath identifier (the `$` is a syntax error unquoted), so the
+// expression quotes it: `t."$date"` — written here as `t.\"$date\"`.
+// A single stage.json pass extracts it directly; no second pass needed.
+
+declare "clickstack_mongo" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"clickstack-mongo\"}"
+
+      stage.json {
+        expressions = {
+          ts   = "t.\"$date\"",
+          sev  = "s",
+          comp = "c",
+          msg  = "msg",
+        }
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "RFC3339Nano"
+      }
+
+      stage.template {
+        source   = "lvl"
+        template = "{{ if eq .sev \"D\" }}DEBUG{{ else if eq .sev \"I\" }}INFO{{ else if eq .sev \"W\" }}WARN{{ else if eq .sev \"E\" }}ERROR{{ else if eq .sev \"F\" }}FATAL{{ else }}{{ .sev }}{{ end }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.template {
+        source   = "body"
+        template = "{{ .comp }}  {{ .msg }}"
+      }
+
+      stage.output {
+        source = "body"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

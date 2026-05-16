@@ -1,0 +1,55 @@
+// Per-service log parser — cloudflare-tunnel
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// cloudflared log format (UTC, RFC3339 second precision; the regex also
+// tolerates a fractional part for safety). The level uses cloudflared's
+// three-letter abbreviations and is frequently followed by TWO spaces
+// (the message column is space-padded when the message starts with a
+// key=value pair, e.g. `ERR  error="..."`):
+//   2026-05-16T03:42:59Z ERR  error="Unable to reach the origin ..."
+//   2026-05-15T09:13:25Z INF Updated to new configuration config="..."
+//
+// Shaping: lift the event time into the log timestamp, map cloudflared's
+// abbreviated level to a canonical UPPERCASE `detected_level` label
+// (OTTL maps that to OTLP severity), and reduce Body to just the
+// message. \s+ after the level absorbs the single-or-double space.
+
+declare "cloudflare_tunnel" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"cloudflare-tunnel\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z) (?P<lvl>[A-Z]{3})\\s+(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "RFC3339Nano"
+      }
+
+      // cloudflared abbreviations → canonical UPPERCASE levels.
+      stage.template {
+        source   = "lvl"
+        template = "{{ if eq .Value \"DBG\" }}DEBUG{{ else if eq .Value \"INF\" }}INFO{{ else if eq .Value \"WRN\" }}WARN{{ else if eq .Value \"ERR\" }}ERROR{{ else if eq .Value \"FTL\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

@@ -1,0 +1,46 @@
+// Per-service log parser — komodo-ferretdb
+//
+// See parsers/komodo-op.alloy for the pattern/rationale.
+//
+// komodo-ferretdb (FerretDB / Go zap) log format, TAB-separated,
+// RFC3339 millisecond UTC timestamp; fields are
+// <ts>\t<LEVEL>\t<caller>\t<message...> where message may itself
+// contain tabs + a trailing JSON object — captured greedily:
+//   2026-05-16T03:57:41.742Z	INFO	middleware/dispatcher.go:131	Command handled	{"command":"hello",...}
+//
+// Levels are already uppercase canonical words (INFO/WARN/ERROR/...).
+// Shaping: parse the real event time into the log timestamp, lift the
+// level into a `detected_level` label, reduce Body to just the message.
+
+declare "komodo_ferretdb" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{container=\"komodo-ferretdb\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)\\t(?P<lvl>[A-Z]+)\\t[^\\t]*\\t(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "RFC3339Nano"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}
