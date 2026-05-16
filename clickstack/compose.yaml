@@ -167,7 +167,7 @@ services:
       - sh
       - -c
       - |
-        find /app -path '*/.next/static/css/*.css' -exec sh -c 'grep -q HDXHIDE "$1" || printf "%s" "$2" >> "$1"' _ {} '[class*=onboardingSection],p:has(>a[href="/search/list"]):has(>a[href="/dashboards/list"]){display:none!important}/*HDXHIDE*/' \; 2>/dev/null
+        find /app -path '*/.next/static/css/*.css' -exec sh -c 'grep -q HDXHIDE "$1" || printf "%s" "$2" >> "$1"' _ {} '[class*=onboardingSection],p.mantine-Text-root:has(>a[href="/search/list"]):has(>a[href="/dashboards/list"]){display:none!important}/*HDXHIDE*/' \; 2>/dev/null
         exec sh /etc/local/entry.sh
     environment:
       # Behind the Cloudflare tunnel on 443 at watch.pod.haus — set the
