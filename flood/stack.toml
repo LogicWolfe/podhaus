@@ -8,6 +8,12 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/flood"
+# `flood-init` is a one-shot init container — it installs .rtorrent.rc
+# into /flood-db then exits 0 (flood depends_on it via
+# service_completed_successfully). Without this exclusion Komodo counts
+# its exited state and marks the whole stack Unhealthy. Same pattern as
+# plex/stack.toml and backup/{bilby,kangaroo}/stack.toml.
+ignore_services = ["flood-init"]
 
 environment = """
 FLOOD_SECRET=[[OP__KOMODO__FLOOD_SECRET__PASSWORD]]
