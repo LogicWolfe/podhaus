@@ -234,6 +234,24 @@ Bootstrap itself was **fully headless** — no wizard. `POST
 the team's `apiKey` (uuidv4) read straight from Mongo
 (`db.teams.findOne().apiKey`) and stored to 1P `clickstack-ingestion-key`.
 
+3. **ClickHouse part-explosion → autoheal restart loop (fixed; has a
+   follow-up).** Surfaced during Phase D. The bundled OTel collector
+   inserts frequently → many small MergeTree parts. ClickHouse attaches
+   *all* parts before opening `:8123`, so cold-start time grew with the
+   data until it exceeded the healthcheck `start_period` (60s); autoheal
+   then killed it before it was ready, every ~3 min, a self-perpetuating
+   loop (not a crash — functional between kills; ingest held via the
+   collector's retry buffer). Two-part fix: (a) `start_period` 60s→300s,
+   `retries` 3→5 so a slow start / heavy query never trips autoheal on
+   the whole DB; (b) `<async_load_databases>true</async_load_databases>`
+   in the config.d drop-in so ClickHouse opens listeners immediately and
+   loads tables in the background — startup is decoupled from part
+   count. **Open follow-up:** the underlying part explosion (collector
+   insert batching / `async_insert`) should be tuned so merges keep up
+   and part count stays bounded; the OpAMP-managed collector config is
+   the lever (out of scope for the migration itself). Watch
+   `system.parts` count and background-merge backlog during the soak.
+
 ## Open questions for this stream
 
 - Exact ClickHouse memory ceiling — needs `free -m` on bilby at steady
