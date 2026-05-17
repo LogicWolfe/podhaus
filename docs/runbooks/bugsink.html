@@ -29,12 +29,12 @@
         Single-user, SQLite, one intended client: <strong>fenwick</strong>.
       </p>
 
-      <aside class="callout warn">
-        <span class="callout-title">fenwick is not wired up yet</span>
-        This stack stands up a working Bugsink instance and login. The
-        app-side instrumentation (Sentry SDK in fenwick, the
-        <code>beforeSend</code> HyperDX cross-link, the project DSN) is a
-        separate follow-up — see <a href="#wiring-fenwick">Wiring fenwick</a>.
+      <aside class="callout note">
+        <span class="callout-title">fenwick is wired up</span>
+        fenwick reports exceptions here (project <code>fenwick</code>,
+        id 1) via <code>@sentry/deno</code> at its single
+        <code>recordError</code> seam, verified end to end. As-built
+        detail: <a href="#wiring-fenwick">Wiring fenwick</a>.
       </aside>
 
       <h2 id="topology">Topology</h2>
@@ -63,21 +63,49 @@
 
       <h2 id="secrets">Secrets</h2>
       <p>
-        Two 1Password <strong>Homelab</strong> items, each a single
-        <code>credential</code> field, auto-synced by <code>komodo-op</code>:
+        Two 1Password <strong>Homelab</strong> items, auto-synced by
+        <code>komodo-op</code>:
       </p>
       <table>
-        <thead><tr><th>1Password item</th><th>Komodo Variable</th><th>Holds</th></tr></thead>
+        <thead><tr><th>1Password item</th><th>Komodo Variable(s)</th><th>Holds</th></tr></thead>
         <tbody>
           <tr><td>Bugsink Secret Key</td><td><code>OP__KOMODO__BUGSINK_SECRET_KEY__CREDENTIAL</code></td><td>Django <code>SECRET_KEY</code> (64-char base64)</td></tr>
-          <tr><td>Bugsink Create Superuser</td><td><code>OP__KOMODO__BUGSINK_CREATE_SUPERUSER__CREDENTIAL</code></td><td><code>email:password</code> for the initial superuser</td></tr>
+          <tr><td>Bugsink Create Superuser</td><td><code>OP__KOMODO__BUGSINK_CREATE_SUPERUSER__USERNAME</code><br><code>OP__KOMODO__BUGSINK_CREATE_SUPERUSER__CREDENTIAL</code></td><td>superuser email / password (see below — the item <em>splits</em>)</td></tr>
         </tbody>
       </table>
+      <aside class="callout warn">
+        <span class="callout-title">The superuser item is stored split — stack.toml reconstructs it</span>
+        "Bugsink Create Superuser" is stored with the email in the item's
+        <code>username</code> field and the password in its
+        <code>credential</code> field (kept split deliberately, for
+        human convenience reading it in 1Password). <code>komodo-op</code>
+        emits <strong>one Komodo Variable per 1Password field</strong>, so
+        this yields <em>two</em> variables —
+        <code>__USERNAME</code> (email) and <code>__CREDENTIAL</code>
+        (password). Bugsink's <code>CREATE_SUPERUSER</code> env must be the
+        full <code>email:password</code> (its <code>prestart.py</code> raises
+        <code>ValueError</code> if the value has no colon), so
+        <code>bugsink/stack.toml</code> rebuilds it from both:
+        <pre><code>BUGSINK_CREATE_SUPERUSER=[[OP__KOMODO__BUGSINK_CREATE_SUPERUSER__USERNAME]]:[[OP__KOMODO__BUGSINK_CREATE_SUPERUSER__CREDENTIAL]]</code></pre>
+        <strong>Coupling to know:</strong> the reconstruction is bound to the
+        split layout. If the 1Password item is ever flattened back to a
+        single <code>credential = email:password</code> field,
+        <code>__USERNAME</code> goes empty and this expression yields a
+        leading-colon value (<code>:email:password</code>) — change
+        <code>stack.toml</code> back to a single
+        <code>[[…__CREDENTIAL]]</code> reference at the same time. (History:
+        created single-field, deployed once green, then the item was split
+        by hand — the next redeploy crash-looped until stack.toml was
+        updated to reconstruct. Lesson: validate a secret-bearing stack on a
+        <strong>redeploy</strong>, not just first deploy.)
+        <code>SECRET_KEY</code> is unaffected — its item has an empty
+        username, so it stays a single <code>__CREDENTIAL</code>.
+      </aside>
       <p>
-        <code>CREATE_SUPERUSER</code> only provisions the <em>initial</em> user
-        (Bugsink ignores it once a user exists) and is split on the first
-        <code>:</code> — the password must contain no colon. Rotating it later
-        is a UI password change, not an env edit.
+        <code>CREATE_SUPERUSER</code> only provisions the <em>initial</em>
+        user; the password must contain no colon (Bugsink splits the env on
+        the first <code>:</code> only). Rotating it later is a UI password
+        change, not an env edit.
       </p>
 
       <h2 id="backup">Backup</h2>
@@ -91,12 +119,33 @@
         sidecar via <code>DATABASE_URL</code> if corruption is ever observed.
       </p>
 
+      <h2 id="push-to-deploy">Push-to-deploy</h2>
+      <p>
+        No per-stack webhook. The fleet's single GitHub <code>push</code>
+        webhook drives the <code>podhaus-push-deploy</code> Komodo Procedure
+        (<code>komodo/sync/procedures.toml</code>); its Stage 1
+        <code>BatchDeployStackIfChanged "*"</code> already covers
+        <code>bugsink</code> — the wildcard matches every stack, so a push
+        that changes <code>bugsink/</code> redeploys only Bugsink (other
+        unchanged bilby stacks self-skip — no churn). Nothing to register;
+        adding/removing the stack needs no <code>cloudflare/github.tf</code>
+        edit. (Bugsink was in fact the 21st stack that hit GitHub's hard
+        20-webhook cap and motivated the per-stack→procedure consolidation —
+        see <a href="/komodo.html#operating-models">Komodo → auto-deploy</a>.)
+        First registration of a brand-new stack is still
+        <code>./komodo-sync</code> (or a manual deploy); steady-state
+        push-to-deploy is automatic thereafter.
+      </p>
+
       <h2 id="bootstrap">First-run bootstrap</h2>
       <ol>
         <li>Deploy the stack: <code>bugsink-init</code> chowns
           <code>/data</code>, <code>bugsink</code> boots, runs Django deploy
           checks + migrations, and provisions the superuser from
-          <code>CREATE_SUPERUSER</code>.</li>
+          <code>CREATE_SUPERUSER</code>. Redeploys are idempotent:
+          <code>prestart.py</code> sees a user already exists and logs
+          <em>"Superuser not created: … already exist(s)"</em> then continues
+          — it never re-creates or errors on an existing instance.</li>
         <li>Browse <code>https://bugs.pod.haus</code> → Cloudflare Access
           (Family) → Bugsink login with the superuser credentials (the
           "Bugsink Create Superuser" 1Password item).</li>
@@ -105,27 +154,39 @@
           headless project-create that fits this flow.</li>
       </ol>
 
-      <h2 id="wiring-fenwick">Wiring fenwick (follow-up)</h2>
-      <p>Not done by this stack. When instrumenting fenwick:</p>
+      <h2 id="wiring-fenwick">Wiring fenwick (as-built)</h2>
+      <p>Done and verified end to end. How it is wired:</p>
       <ul>
-        <li>Store the project DSN in 1Password in <strong>internal form</strong>
-          — take the key + project id from the UI's DSN and store it as
-          <code>http://&lt;key&gt;@bugsink:8000/&lt;project_id&gt;</code> (so
-          fenwick ingests over dockernet, not Cloudflare Access; no
-          host-rewrite code).</li>
-        <li>Add the Sentry SDK + a <code>beforeSend</code> that reads the active
-          OpenTelemetry <code>trace_id</code> and writes a clickable
-          <code>watch.pod.haus</code> search deep-link into the event's
-          <code>extra</code> — one click from a Bugsink issue to the full
-          HyperDX trace. <code>tracesSampleRate: 0</code> (HyperDX owns
-          tracing; Bugsink is errors-only).</li>
-        <li>Thread the DSN through <code>fenwick/stack.toml</code> +
-          <code>compose.yaml</code> like any other
-          <code>[[OP__KOMODO__…]]</code> var; an env change needs a fenwick
-          redeploy (code is live-reload, env is not).</li>
-        <li><strong>Validate the markdown-in-<code>extra</code> assumption</strong>
-          before relying on the cross-link; the fallback is a raw URL string +
-          a <code>trace_id</code> tag (always emit both).</li>
+        <li><strong>Project</strong> <code>fenwick</code> (id 1, team
+          Bugsink) — created via <code>bugsink-manage shell</code>
+          (Bugsink has no headless project-create).</li>
+        <li><strong>DSN</strong> in 1Password Homelab item
+          <code>Bugsink Fenwick DSN</code>, internal dockernet form
+          <code>http://&lt;key&gt;@bugsink:8000/1</code>, synced by
+          komodo-op as
+          <code>OP__KOMODO__BUGSINK_FENWICK_DSN__CREDENTIAL</code>.
+          Provisioned via the <code>op</code> CLI with the podhaus
+          service-account token (the Connect token is read-only by
+          design).</li>
+        <li><strong>fenwick</strong> reports at its single
+          <code>recordError</code> seam via <code>@sentry/deno</code>
+          (<code>tracesSampleRate: 0</code> — HyperDX owns tracing;
+          Bugsink is errors-only). Well-behaved tools return error
+          <em>text</em>, so only real turn/handler failures and the
+          <code>admin_test_exception</code> lever raise issues. An
+          absent or unrendered-placeholder DSN is treated as
+          <em>disabled</em>, never handed to Sentry.</li>
+        <li>DSN threaded through <code>fenwick/stack.toml</code> +
+          <code>compose.yaml</code> as <code>BUGSINK_DSN</code>; env is
+          not live-reload, so a fenwick redeploy applies it.</li>
+        <li><strong>Cross-link — markdown-in-<code>extra</code> assumption
+          was false.</strong> Bugsink renders <code>extra</code> with
+          Django <code>linebreaks</code> (HTML-escaped, no markdown, no
+          urlize). So the link is the <em>raw URL string</em> at
+          <code>extra.hyperdx_trace_url</code> (copy-pasteable) plus a
+          <code>trace_id</code> <strong>tag</strong> — the real
+          cross-reference: the same id is queried in HyperDX and
+          searchable in Bugsink. The markdown form is not emitted.</li>
       </ul>
 
       <h2 id="upgrades">Upgrades</h2>

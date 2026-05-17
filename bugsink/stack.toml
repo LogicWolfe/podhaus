@@ -15,13 +15,16 @@ ignore_services = ["bugsink-init"]
 
 # SECRET_KEY + CREATE_SUPERUSER come from the 1Password Homelab items
 # "Bugsink Secret Key" / "Bugsink Create Superuser", auto-synced by
-# komodo-op. NOTE: "Bugsink Create Superuser" is an API-Credential
-# item; 1Password splits a `user:pass` credential into the item's
-# username + credential fields, so komodo-op emits TWO variables
-# (__USERNAME = the email, __CREDENTIAL = the password). Bugsink's
-# CREATE_SUPERUSER must be `email:password` (prestart.py raises if it
-# has no colon), so reconstruct it from both. TZ is seeded by
-# komodo-start.
+# komodo-op (one Komodo Variable per 1Password field). NOTE: "Bugsink
+# Create Superuser" is stored split on purpose — email in the item's
+# username field, password in credential — so komodo-op emits TWO
+# vars (__USERNAME, __CREDENTIAL). Bugsink's CREATE_SUPERUSER must be
+# `email:password` (prestart.py raises if it has no colon), so we
+# reconstruct it from both below. This expression is coupled to the
+# split layout: if the 1P item is ever flattened to a single
+# credential=email:password field, switch this back to a single
+# [[…__CREDENTIAL]] reference (else you get a leading colon). TZ is
+# seeded by komodo-start.
 environment = """
 TZ=[[TZ]]
 BUGSINK_SECRET_KEY=[[OP__KOMODO__BUGSINK_SECRET_KEY__CREDENTIAL]]
