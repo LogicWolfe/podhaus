@@ -56,6 +56,10 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://clickstack-otel:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_EXPORTER_OTLP_HEADERS: authorization=${CLICKSTACK_INGESTION_KEY}
+      # Bugsink (Sentry-protocol) error aggregation, internal dockernet
+      # form. Empty until the 1P item exists + a redeploy (env is not
+      # live-reload) → fenwick treats absent as "reporting disabled".
+      BUGSINK_DSN: ${FENWICK_BUGSINK_DSN}
     networks:
       - dockernet
     labels:

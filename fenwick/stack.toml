@@ -13,11 +13,14 @@ run_build = false
 # Non-secret values (repo path, sidecar URL, the bot's own Signal
 # number, the bootstrap admin) are seeded by komodo-start. Identity is
 # SQLite-owned: env only seeds the bootstrap admin (Nathan); everyone
-# else is registered via the admin-only register_account tool. The only
-# secret is the Claude OAuth token, synced from the 1Password Homelab
-# "Claude" item by komodo-op as OP__KOMODO__CLAUDE__CREDENTIAL. The
-# signal-cli auth state lives on the /var/lib/signal-cli bind (break-
-# glass copy = the "Fenwick Signal State" 1Password document).
+# else is registered via the admin-only register_account tool. Secrets
+# come from the 1Password Homelab vault via komodo-op: the Claude OAuth
+# token ("Claude" -> OP__KOMODO__CLAUDE__CREDENTIAL), the ClickStack
+# ingestion key, and the Bugsink DSN ("Bugsink Fenwick DSN" ->
+# OP__KOMODO__BUGSINK_FENWICK_DSN__CREDENTIAL, internal dockernet form;
+# absent = error reporting disabled, not a failure). The signal-cli
+# auth state lives on the /var/lib/signal-cli bind (break-glass copy =
+# the "Fenwick Signal State" 1Password document).
 environment = """
 TZ=[[TZ]]
 FENWICK_REPO=[[FENWICK_REPO]]
@@ -27,4 +30,5 @@ FENWICK_ADMIN_SIGNAL=[[FENWICK_ADMIN_SIGNAL]]
 FENWICK_ADMIN_NAME=[[FENWICK_ADMIN_NAME]]
 CLAUDE_CODE_OAUTH_TOKEN=[[OP__KOMODO__CLAUDE__CREDENTIAL]]
 CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
+FENWICK_BUGSINK_DSN=[[OP__KOMODO__BUGSINK_FENWICK_DSN__CREDENTIAL]]
 """
