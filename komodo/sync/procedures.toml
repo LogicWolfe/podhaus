@@ -1,0 +1,50 @@
+# Single push-to-deploy entrypoint for the whole fleet.
+#
+# Why a procedure instead of per-stack webhooks: GitHub hard-caps a
+# repo at 20 `push` webhooks ("the push event cannot have more than 20
+# hooks"). One per stack does not scale past 20. Instead ONE GitHub
+# webhook hits this procedure's listener
+# (komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main,
+# branch-filtered to main), and the procedure fans out internally.
+# Validated against Komodo 1.19.5 source (client/core/rs/src/api/
+# execute/stack.rs: BatchDeployStackIfChanged/BatchDeployStack take an
+# id/name/wildcard/regex pattern; bin/core/src/listener/router.rs:
+# "/procedure/{id}/{branch}").
+#
+# Stage 1 — every stack, deploy ONLY if its files changed. bilby
+# files_on_host stacks diff the live bind-mount, so unchanged stacks
+# are a no-op (no churn — identical to the old per-stack
+# DeployStackIfChanged webhook). kangaroo linked_repo stacks no-op
+# here (the documented stale-clone deadlock: the change-check compares
+# the Periphery clone, which only advances during a deploy).
+#
+# Stage 2 — the kangaroo linked_repo stacks, force-deployed
+# unconditionally (full DeployStack = git pull + compose). This is the
+# linked-repo hard rule (see docs/komodo.html), now expressed once
+# here instead of per-stack `webhook_force_deploy = true`.
+#
+# Wildcard `*` means new stacks are covered automatically — no repo
+# edit, no list, no 20-cap, ever.
+
+[[procedure]]
+name = "podhaus-push-deploy"
+description = "Push-to-deploy fan-out: deploy-if-changed all stacks, force-deploy kangaroo linked_repo stacks. Triggered by the single GitHub push webhook."
+tags = ["podhaus"]
+config.webhook_enabled = true
+# Webhook-only — no schedule. (schedule_enabled defaults true in
+# Komodo; pinned false so it's unambiguous this never runs on a timer.)
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Deploy changed stacks (surgical, no-churn)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStackIfChanged", execution.params = { pattern = "*" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Force-deploy kangaroo linked_repo stacks"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "kangaroo-*" }, enabled = true }
+]

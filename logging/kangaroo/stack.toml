@@ -7,13 +7,14 @@ deploy = true
 [stack.config]
 server = "kangaroo"
 linked_repo = "podhaus"
-# Webhook runs a full DeployStack (git pull + compose) instead of the
-# default DeployStackIfChanged. Required on linked_repo stacks: the
-# change-check compares against the Periphery's clone, which only
-# advances during a deploy — so without this the push webhook 200s and
-# no-ops forever (stale-clone deadlock). bilby files_on_host stacks
-# don't need it (they diff the live bind-mount). See docs/komodo.html.
-webhook_force_deploy = true
+# No webhook_force_deploy / no per-stack webhook. The single push
+# webhook drives the podhaus-push-deploy procedure, whose Stage 2
+# (BatchDeployStack "kangaroo-*") force-deploys this linked_repo stack
+# unconditionally (git pull + compose), sidestepping the stale-clone
+# deadlock (the change-check compares the Periphery clone, which only
+# advances during a deploy). bilby files_on_host stacks ride Stage 1's
+# DeployStackIfChanged (they diff the live bind-mount — no churn).
+# See komodo/sync/procedures.toml + docs/komodo.html.
 run_directory = "logging/kangaroo"
 file_paths = ["compose.yaml", "../compose.shared.yaml"]
 

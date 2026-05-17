@@ -147,20 +147,17 @@ slot into the same pattern.
    `komodo-sync` is the manual "register + deploy my changes now"
    tool — not a workaround for broken webhooks (steady-state
    push-to-deploy works; see the auto-deploy hard rule below).
-6. Register the stack's push-to-deploy webhook: add its `stack.toml`
-   `name` to the `komodo_stacks` list in `cloudflare/github.tf`, then
-   `cd cloudflare && op run --env-file=.env -- ../tf apply`. Without
-   this the stack has no GitHub webhook and never auto-deploys on
-   push. **If the stack uses `linked_repo` (kangaroo/pinelake), also
-   set `webhook_force_deploy = true` in its `[stack.config]`** — see
-   the linked-repo hard rule below for why.
-   **HARD CEILING: GitHub allows at most 20 `push` webhooks per repo
-   and `komodo_stacks` is already at 20.** A 21st stack (bugsink is
-   the first) cannot get its own webhook — `tf apply` 422s. Such
-   stacks deploy via `./komodo-sync` (or a manual first-deploy)
-   instead; they do not auto-deploy on push. Growing past 20
-   push-to-deploy stacks needs a consolidation redesign (a single
-   Procedure/Sync webhook that fans out), not another list entry.
+6. **Nothing to do for push-to-deploy.** There is ONE GitHub `push`
+   webhook for the whole repo; it drives the `podhaus-push-deploy`
+   Komodo Procedure (`komodo/sync/procedures.toml`), whose Stage 1
+   `BatchDeployStackIfChanged "*"` already covers every current and
+   future stack (deploy-only-if-its-files-changed; bilby no-churn),
+   and whose Stage 2 `BatchDeployStack "kangaroo-*"` force-deploys
+   linked_repo stacks. A new stack auto-deploys on the next push with
+   no `cloudflare/` edit. (This replaced 20 per-stack webhooks: GitHub
+   hard-caps a repo at 20 `push` webhooks, and the fleet outgrew it.)
+   Do **not** set `webhook_force_deploy` — there are no per-stack
+   webhooks for it to affect; the kangaroo force path is Stage 2.
 7. If the service is a single-host pod.haus service, add a
    `module "<name>"` block in `cloudflare/services_pod_haus.tf` plus
    one entry in `tunnel.tf`'s `pod_haus_module_ingress`. The module
@@ -207,24 +204,27 @@ These have failure modes that you must not introduce:
   fresh Komodo bootstrap. Put the secret in 1Password and reference the
   `OP__KOMODO__*` synced variable name. See
   [`docs/secrets.html`](docs/secrets.html).
-- **Linked Repo hosts (kangaroo, future pinelake) need
-  `webhook_force_deploy = true`.** Verified against Komodo 1.19.5
-  source: `DeployStack` (manual or webhook) *does* `git pull` the
-  linked clone before composing — it is **`RestartStack`** that does
-  not pull (it only `docker compose restart`s). The real linked-repo
-  trap is subtler: a stack webhook runs `DeployStackIfChanged` by
-  default, and its change-check compares against the Periphery clone,
-  which only advances *during* a deploy — so on a `linked_repo` stack
-  it 200s and no-ops forever (stale-clone deadlock). Setting
-  `webhook_force_deploy = true` in `[stack.config]` makes the webhook
-  run a full `DeployStack` (pull + compose) unconditionally, breaking
-  the deadlock. bilby `files_on_host` stacks must **not** set it: they
-  diff the live bind-mount, so `DeployStackIfChanged` correctly skips
-  unchanged stacks (free no-churn). `RunSync` re-imports `stack.toml`
-  config from bilby's bind-mount (no git needed) but does not pull a
-  linked clone. Always confirm a deploy via a config-level signal (the
-  pulled-to hash / a metric), never "container healthy". See
-  [`docs/komodo.html#operating-models`](docs/komodo.html).
+- **Linked Repo hosts (kangaroo, future pinelake) must be force-deployed
+  on push — handled centrally by `podhaus-push-deploy` Stage 2, not
+  per-stack.** Verified against Komodo 1.19.5 source: `DeployStack`
+  *does* `git pull` the linked clone before composing — it is
+  **`RestartStack`** that does not pull (it only `docker compose
+  restart`s). The linked-repo trap: `DeployStackIfChanged`'s change-check
+  compares against the Periphery clone, which only advances *during* a
+  deploy — so on a `linked_repo` stack it no-ops forever (stale-clone
+  deadlock). The push procedure resolves this structurally: Stage 1
+  (`BatchDeployStackIfChanged "*"`) no-ops on kangaroo (harmless), then
+  Stage 2 (`BatchDeployStack "kangaroo-*"`) runs an unconditional full
+  `DeployStack` (pull + compose). So **no `webhook_force_deploy` on
+  linked_repo stacks** — there are no per-stack webhooks; the pattern
+  `kangaroo-*` is the contract (name new linked_repo stacks `kangaroo-`
+  / future-host-prefixed accordingly, or extend Stage 2's pattern in
+  `komodo/sync/procedures.toml`). bilby `files_on_host` stacks ride
+  Stage 1 and self-skip when unchanged (free no-churn). `RunSync`
+  re-imports `stack.toml` config from bilby's bind-mount (no git) but
+  does not pull a linked clone. Always confirm a deploy via a
+  config-level signal (the pulled-to hash / a metric), never "container
+  healthy". See [`docs/komodo.html#operating-models`](docs/komodo.html).
 - **Always use absolute host paths in bind mounts.**
   `${PODHAUS_REPO}/<stack>/...`, never relative paths. Relative paths
   resolve against the periphery container's filesystem, not the host's,
@@ -232,12 +232,13 @@ These have failure modes that you must not introduce:
 - **Don't push, deploy, or change DNS / Access policy without explicit
   user authorization.** Treat all `git push`, `./komodo-sync`, and
   any `tf apply` against `cloudflare/` as actions that require a green
-  light. `tf plan` is fine. Note that every `git push` to `main`
-  fires all ~20 per-stack GitHub webhooks (`cloudflare/github.tf` →
-  `komodo.pod.haus/listener/github/stack/<name>/deploy`): bilby
-  `files_on_host` stacks run `DeployStackIfChanged` (deploy only the
-  ones whose files actually changed), the 3 kangaroo `linked_repo`
-  stacks always full-deploy (`webhook_force_deploy`). Push is not
+  light. `tf plan` is fine. Note that every `git push` to `main` fires
+  the single GitHub webhook (`cloudflare/github.tf` →
+  `komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main`),
+  which runs the procedure: Stage 1 `BatchDeployStackIfChanged "*"`
+  redeploys every bilby stack whose files actually changed (unchanged
+  ones self-skip — no churn), Stage 2 `BatchDeployStack "kangaroo-*"`
+  always full-deploys the 3 kangaroo `linked_repo` stacks. Push is not
   cheap and not a no-op — treat it as a deploy.
 - **Before adding or modifying a Cloudflare / UniFi / GitHub TF
   resource, read the provider's resource doc.** Schemas change

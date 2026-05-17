@@ -64,15 +64,16 @@
           </tr>
           <tr>
             <td>Deploy workflow</td>
-            <td>Commit + push → per-stack webhook runs
-              <code>DeployStackIfChanged</code> (only stacks whose files
-              changed) <em>or</em> save + <code>./komodo-sync</code>
-              (force-redeploys any stack whose <code>deployed_hash</code>
-              diverges from <code>HEAD</code>)</td>
-            <td>Commit + push → per-stack webhook runs a full
+            <td>Commit + push → the single webhook runs the
+              <code>podhaus-push-deploy</code> procedure; Stage 1
+              <code>BatchDeployStackIfChanged&nbsp;"*"</code> redeploys
+              only the bilby stacks whose files changed <em>or</em> save +
+              <code>./komodo-sync</code> (force-redeploys any stack whose
+              <code>deployed_hash</code> diverges from <code>HEAD</code>)</td>
+            <td>Commit + push → same procedure; Stage 2
+              <code>BatchDeployStack&nbsp;"kangaroo-*"</code> runs a full
               <code>DeployStack</code> (<code>git pull</code> the clone +
-              compose). Requires <code>webhook_force_deploy = true</code>.
-              No manual UI click.</td>
+              compose) unconditionally. No per-stack flag, no UI click.</td>
           </tr>
           <tr>
             <td>Best for</td>
@@ -98,27 +99,29 @@
         rule is: <strong><code>RestartStack</code> = no pull;
         <code>DeployStack</code> = pulls</strong>.
         <br><br>
-        The real trap is subtler. A stack webhook runs
-        <code>DeployStackIfChanged</code> <em>by default</em>
-        (<code>webhook_force_deploy = false</code>), and its change-check
-        compares against the Periphery clone — which only advances
-        <em>during</em> a deploy. On a <code>linked_repo</code> stack that
-        is a deadlock: the webhook returns HTTP&nbsp;200 and no-ops
-        forever because the stale clone always looks "unchanged."
-        <strong>Linked Repo stacks must set
-        <code>webhook_force_deploy = true</code></strong> in
-        <code>[stack.config]</code> so the webhook runs a full
-        <code>DeployStack</code> (pull + compose) unconditionally. bilby
-        <code>files_on_host</code> stacks must <em>not</em> set it — they
-        diff the live bind-mount, so <code>DeployStackIfChanged</code>
-        correctly skips genuinely-unchanged stacks (free no-churn).
+        The real trap is subtler. <code>DeployStackIfChanged</code>'s
+        change-check compares against the Periphery clone — which only
+        advances <em>during</em> a deploy. On a <code>linked_repo</code>
+        stack that is a deadlock: it no-ops forever because the stale
+        clone always looks "unchanged." This is resolved
+        <strong>structurally by the push procedure, not per-stack</strong>:
+        Stage 1 (<code>BatchDeployStackIfChanged&nbsp;"*"</code>) no-ops
+        harmlessly on kangaroo, then Stage 2
+        (<code>BatchDeployStack&nbsp;"kangaroo-*"</code>) runs an
+        unconditional full <code>DeployStack</code> (pull + compose). So
+        <strong>linked_repo stacks set no
+        <code>webhook_force_deploy</code></strong> — there are no
+        per-stack webhooks; the <code>kangaroo-*</code> name pattern is
+        the contract. bilby <code>files_on_host</code> stacks ride
+        Stage 1 and self-skip when genuinely unchanged (free no-churn).
         <br><br>
-        Historical compounding bug (fixed 2026-05-16): the GitHub webhook
-        pointed at a non-existent path (<code>/auth/github/webhook</code>),
-        so <em>no</em> push ever reached Komodo (every delivery 405).
-        Webhooks are per-resource: see the Auto-deploy note below.
-        <code>RunSync</code> re-imports <code>stack.toml</code> config from
-        bilby's bind-mount (no git) but does not pull a linked clone.
+        Historical compounding bugs (both fixed): the GitHub webhook once
+        pointed at a non-existent path (every delivery 405, fixed
+        2026-05-16); and per-stack webhooks hit GitHub's hard 20-hook
+        ceiling, replaced 2026-05-17 by the single procedure webhook (see
+        the Auto-deploy note below). <code>RunSync</code> re-imports
+        <code>stack.toml</code> config from bilby's bind-mount (no git)
+        but does not pull a linked clone.
         Always confirm a deploy via a config-level signal — the
         pulled-to commit hash or a metric — never "container healthy."
       </aside>
@@ -175,31 +178,42 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <li><code>komodo/sync/variables.toml</code> — non-secret variable declarations. Not the
           authoritative source — see <a href="/secrets.html#non-secret-variables">Secrets →
           non-secret variables</a>.</li>
+        <li><code>komodo/sync/procedures.toml</code> — the
+          <code>podhaus-push-deploy</code> procedure (the single
+          push-to-deploy fan-out; see the Auto-deploy note below).</li>
       </ul>
       <aside class="callout note">
-        <span class="callout-title">Auto-deploy on push (per-stack webhooks)</span>
-        Komodo has <strong>no single generic webhook endpoint</strong>.
-        Its only contract is per-resource:
-        <code>https://&lt;host&gt;/listener/&lt;auth&gt;/&lt;resource_type&gt;/&lt;name&gt;/&lt;execution&gt;</code>.
-        So <code>cloudflare/github.tf</code> creates <strong>one GitHub
-        webhook per stack</strong>, each hitting
-        <code>komodo.pod.haus/listener/github/stack/&lt;name&gt;/deploy</code>
-        (Access bypass is path-scoped to the <code>/listener/github</code>
-        prefix; Komodo HMAC-validates with <code>KOMODO_WEBHOOK_SECRET</code>).
-        Adding a stack means adding its <code>stack.toml</code> name to the
-        <code>komodo_stacks</code> list in <code>github.tf</code> + a
-        <code>tf apply</code> — otherwise it has no webhook.
+        <span class="callout-title">Auto-deploy on push (one webhook → one procedure)</span>
+        Komodo's webhook contract is per-resource:
+        <code>https://&lt;host&gt;/listener/&lt;auth&gt;/&lt;resource_type&gt;/&lt;id&gt;/&lt;seg&gt;</code>.
+        We do <strong>not</strong> use one webhook per stack: GitHub
+        hard-caps a repo at <strong>20 <code>push</code> webhooks</strong>
+        and the fleet outgrew it (2026-05-17). Instead
+        <code>cloudflare/github.tf</code> creates <strong>one</strong>
+        webhook → <code>komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main</code>
+        (resource_type <code>procedure</code>; the trailing
+        <code>/main</code> is the branch filter, not a verb — Komodo
+        1.19.5 <code>router.rs</code> <code>"/procedure/{id}/{branch}"</code>).
+        Access bypass is path-scoped to <code>/listener/github</code>;
+        Komodo HMAC-validates with <code>KOMODO_WEBHOOK_SECRET</code>
+        (the procedure's <code>webhook_secret</code> is empty → the global
+        secret applies).
         <br><br>
-        Every <code>git push</code> to <code>main</code> fires all ~20
-        webhooks (Komodo only acts when the pushed branch matches the
-        resource's branch — for <code>linked_repo</code> stacks that's the
-        Repo resource's branch). bilby <code>files_on_host</code> stacks
-        run <code>DeployStackIfChanged</code> (deploy only those whose
-        files actually changed, diffed against the live bind-mount); the 3
-        kangaroo <code>linked_repo</code> stacks run a full
-        <code>DeployStack</code> (<code>webhook_force_deploy</code>, see
-        the warn above). <code>./komodo-sync</code> is the manual
-        force-redeploy / new-stack-registration equivalent.
+        The procedure (<code>komodo/sync/procedures.toml</code>) fans out:
+        <strong>Stage 1</strong>
+        <code>BatchDeployStackIfChanged&nbsp;"*"</code> — every stack,
+        deploy only if its files changed (bilby diffs the live bind-mount
+        → unchanged stacks self-skip, zero churn; kangaroo no-ops here).
+        <strong>Stage 2</strong>
+        <code>BatchDeployStack&nbsp;"kangaroo-*"</code> — the linked_repo
+        stacks, full <code>DeployStack</code> (pull + compose)
+        unconditionally. The <code>"*"</code> pattern means
+        <strong>new stacks auto-deploy on the next push with no
+        <code>github.tf</code> edit, no list, no 20-cap, ever</strong>.
+        <code>./komodo-sync</code> remains the manual force-redeploy /
+        new-stack-registration equivalent. Single point of failure: a
+        broken procedure breaks all push-deploys (vs. one stack's hook) —
+        it is trivial config-as-code and komodo-sync is the fallback.
       </aside>
 
       <h2 id="scripts">komodo-* scripts at the repo root</h2>
