@@ -60,6 +60,14 @@ services:
       # form. Empty until the 1P item exists + a redeploy (env is not
       # live-reload) → fenwick treats absent as "reporting disabled".
       BUGSINK_DSN: ${FENWICK_BUGSINK_DSN}
+      # Internal HTTP injection-transport producer token (local /
+      # dockernet auth branch). REQUIRED — fenwick fails its boot gate
+      # if this is absent or an unrendered [[…]] placeholder, by
+      # design (a missing secret is a loud error, never a partially
+      # working bot). Provisioned: "Fenwick Internal Token" (1P
+      # Homelab) → komodo-op → this var; a redeploy renders it (env is
+      # not live-reload).
+      INTERNAL_HTTP_TOKEN: ${FENWICK_INTERNAL_HTTP_TOKEN}
     networks:
       - dockernet
     labels:

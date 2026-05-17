@@ -18,9 +18,14 @@ run_build = false
 # token ("Claude" -> OP__KOMODO__CLAUDE__CREDENTIAL), the ClickStack
 # ingestion key, and the Bugsink DSN ("Bugsink Fenwick DSN" ->
 # OP__KOMODO__BUGSINK_FENWICK_DSN__CREDENTIAL, internal dockernet form;
-# absent = error reporting disabled, not a failure). The signal-cli
-# auth state lives on the /var/lib/signal-cli bind (break-glass copy =
-# the "Fenwick Signal State" 1Password document).
+# absent = error reporting disabled, not a failure), and the internal
+# HTTP injection-transport producer token ("Fenwick Internal Token" ->
+# OP__KOMODO__FENWICK_INTERNAL_TOKEN__CREDENTIAL). Unlike the Bugsink
+# DSN, this token is *required* — fenwick fails its boot gate without
+# it (a missing secret is a loud error, never a silently-disabled
+# transport). The signal-cli auth state lives on the
+# /var/lib/signal-cli bind (break-glass copy = the "Fenwick Signal
+# State" 1Password document).
 environment = """
 TZ=[[TZ]]
 FENWICK_REPO=[[FENWICK_REPO]]
@@ -31,4 +36,5 @@ FENWICK_ADMIN_NAME=[[FENWICK_ADMIN_NAME]]
 CLAUDE_CODE_OAUTH_TOKEN=[[OP__KOMODO__CLAUDE__CREDENTIAL]]
 CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
 FENWICK_BUGSINK_DSN=[[OP__KOMODO__BUGSINK_FENWICK_DSN__CREDENTIAL]]
+FENWICK_INTERNAL_HTTP_TOKEN=[[OP__KOMODO__FENWICK_INTERNAL_TOKEN__CREDENTIAL]]
 """
