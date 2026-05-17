@@ -1,3 +1,5 @@
+# Push-to-deploy: covered by the single podhaus-push-deploy procedure
+# webhook (Stage 1 BatchDeployStackIfChanged "*") — no github.tf entry.
 services:
   # A fresh `bugsink-data` named volume is created root:root and
   # shadows the image-time chown of /data. Bugsink runs as UID 14237
