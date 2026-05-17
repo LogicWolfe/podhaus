@@ -174,8 +174,11 @@
           Bugsink is errors-only). Well-behaved tools return error
           <em>text</em>, so only real turn/handler failures and the
           <code>admin_test_exception</code> lever raise issues. An
-          absent or unrendered-placeholder DSN is treated as
-          <em>disabled</em>, never handed to Sentry.</li>
+          <em>absent</em> DSN is disabled (local/dev); a DSN that is
+          <em>set but unresolved</em> (an unrendered
+          <code>[[OP__KOMODO__…]]</code> placeholder, or empty) fails
+          fast at fenwick's boot gate — a misconfigured deploy crash-
+          loops visibly, it is never silently degraded.</li>
         <li>DSN threaded through <code>fenwick/stack.toml</code> +
           <code>compose.yaml</code> as <code>BUGSINK_DSN</code>; env is
           not live-reload, so a fenwick redeploy applies it.</li>
