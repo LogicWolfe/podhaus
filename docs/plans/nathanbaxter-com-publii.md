@@ -51,69 +51,82 @@ Nothing is pushed — all local commits on `main`; deployed via
 Komodo/Terraform directly. A `git push` fires the
 `podhaus-push-deploy` webhook (user's call when to sync the remote).
 
-## OPEN ISSUE — external publish over a VPN fails (MTU / TLS handshake)
+## OPEN ISSUE — storage.pod.haus unreachable for genuine external clients (UDM WAN:443 shadow)
 
-**Severity: blocks the actual use case.** Sky must be able to publish
-from anywhere, *including a coffee-shop VPN*. Confirmed 2026-05-19:
-Publii from a laptop **with a VPN active** fails with *"Client network
-socket disconnected before secure TLS connection was established"*;
-**VPN off, it works**. The LAN split-horizon fixes only the *home*
-case — a remote client on a VPN still hits the WAN port-forward →
-Caddy and fails.
+**Severity: blocks the actual use case.** Sky must publish from
+anywhere. Symptom: an external client (Publii, or `terraform`) to
+`storage.pod.haus` gets *"Client network socket disconnected before
+secure TLS connection was established"* / `unexpected eof`. Site
+*viewing* (`nathanbaxter.com`, Cloudflare-proxied) is fine — only the
+direct-WAN-forward S3 publish path is broken.
 
-Diagnosis (evidence-backed, 2026-05-19 — packet capture from bilby
-over the WAN hairpin):
-- **The cert is already ECDSA P-256** (LE `E8` ECDSA chain), *not*
-  RSA. An earlier draft of this section claimed "LE RSA leaf +
-  intermediate ≈ 3–4 KB" and proposed switching to ECDSA — both were
-  **wrong**: ECDSA is already in place and is not an available lever.
-- The handshake is large because client and server negotiate the
-  **`X25519MLKEM768` post-quantum hybrid KEM**. Measured payload:
-  **ClientHello ≈ 1580 B, server flight ≈ 3631 B**. Controlled
-  measurement with the PQ hybrid disabled client-side (`curl --curves
-  X25519`) drops these to **517 B / 2543 B** — i.e. ML-KEM-768 adds
-  **~1.1 KB in each direction**. The cert chain is a minor contributor.
-- Mechanism: a VPN/Wi-Fi path whose effective MTU is reduced by tunnel
-  encapsulation, **with ICMP frag-needed blackholed** (near-universal
-  on UDP VPNs / public Wi-Fi), silently drops the full-size DF
-  segments carrying this oversized handshake; they retransmit
-  identically → socket dies before TLS completes (the exact error).
-  Small packets (SYN, Publii "test connection") survive, so it reports
-  "connected" then fails on the flight. VPN-off works (path MTU ≥
-  negotiated MSS). The WAN path itself is proven healthy for
-  normal-MTU clients (small request → `HTTP/2 200`).
-- **Not yet reproduced under a real constrained path** — the exact
-  trigger MTU and confirmation the fix fully closes it are open.
-  bilby's hairpin is 1500-MTU so it cannot reproduce the failure; a
-  real VPN client (Sky-side or a throwaway VPN container) is the
-  decisive repro and the fix-verification harness.
+**The earlier VPN / MTU / PQ-handshake diagnosis in this section was
+wrong and is fully retracted.** It was inference from an error string,
+not evidence. A reproduction harness (the `vpn-diagnostics` stack:
+real NordVPN/NordLynx egress + netshoot) disproved it on 2026-05-19:
 
-**Candidate fixes (server-side — we can't change Sky's VPN), to
-execute next:**
-1. **TCP MSS clamping at the UniFi gateway (primary, most general).**
-   Clamp WAN MSS to PMTU (or a fixed low value, e.g. ~1360). Sizes
-   *both directions'* segments to cross a reduced-MTU VPN even with
-   PMTUD broken — the only lever that is both direction- and
-   client-agnostic, so it covers the 1.6 KB ClientHello *and* the
-   3.6 KB server flight for any client/VPN. UniFi has a "Clamp TCP
-   MSS" setting; read the UniFi doc before changing.
-2. **Disable the PQ hybrid in Caddy's TLS (complementary,
-   server-side, no client change).** Removing `X25519MLKEM768` from
-   Caddy's offered key-exchange groups shrinks the dominant server
-   flight ~3.6 → ~2.5 KB with zero Sky-side change (honors the
-   zero-client-software constraint). *Replaces the earlier, wrong
-   "ECDSA cert" lever.* Not sufficient alone — the client's ~1.6 KB
-   ClientHello is client-controlled and unaffected — so pair with #1.
-3. Fallbacks if 1+2 insufficient: lower Caddy/host MTU; or a
-   host-level `nft`/`iptables` `TCPMSS --clamp-mss-to-pmtu` on the
-   port-forward path.
+- General HTTPS over the VPN works; Cloudflare-proxied `docs.pod.haus`
+  / `komodo.pod.haus` / `nathanbaxter.com` all succeed over the *same*
+  tunnel. Only `storage.pod.haus` (grey-cloud A → WAN:443 → Caddy)
+  fails.
+- It fails **identically at tunnel MTU 1320 and 1500**, and
+  **identically with the PQ hybrid disabled** — so size/MTU is not the
+  trigger.
+- Packet capture, client side: TCP connects, ClientHello is sent and
+  **ACKed**, then **zero** bytes return; the peer's FIN arrives at
+  rel-seq 1 (no data ever delivered). Server side on bilby: **not a
+  single packet from the NordVPN exit IP is seen** across repeated
+  failing attempts (`sudo tcpdump` verified working).
+- On `144.6.147.203` only **:443 answers TCP** (:22/:4444 refused) —
+  the port-forward exists; SYN-ACK MSS is **1380** vs bilby's own
+  **1460** on the hairpin (different responder).
+- No CGNAT / double-NAT: the UDM's own WAN IP **is** `144.6.147.203`.
+  UniFi port-forward rule is **correct** (`WAN tcp/443 →
+  10.0.0.119:443`, enabled, src any). IPS `disabled`, no WAN_LOCAL
+  443 rule. bilby's LAN-side Caddy serves `:443` → `HTTP 200`.
+- The "VPN off works / VPN on fails" observation was a red herring:
+  VPN-off testing was on the home LAN = **NAT-hairpin** (internal
+  reflection path), never a true external ingress. The real variable
+  was hairpin vs genuine WAN ingress, not VPN.
 
-Recommended: **gateway WAN MSS clamp (primary) + disable PQ hybrid in
-Caddy (complementary)**, then verify with a real VPN client. Until
-fixed, the
-documented workaround is "publish with VPN off" (acceptable short
-term; NOT acceptable as the final state — Sky needs VPN-on to work).
-Honors `[[project_sky_publii_zero_client]]` (no client-side change).
+**Diagnosis (settled, evidence-backed):** the gateway is a **UDM Pro
+SE** running UniFi OS, which **binds WAN tcp/443 itself**. UniFi OS's
+own listener shadows the `storage.pod.haus` port-forward: it
+TCP-accepts the external client and absorbs the ClientHello but never
+proxies to Caddy and emits no ServerHello (no cert on unknown SNI).
+Hairpin works because reflected/internal DNAT bypasses the UniFi-OS
+WAN listener. This is the documented UDM platform constraint (UniFi
+OS reserves 443/tcp on the UDM). It breaks **all** off-LAN clients —
+Publii *and* remote `terraform` to `storage.pod.haus`.
+
+**Residual unknown (small):** the exact UniFi-OS knob/port to vacate
+or relocate 443 (UniFi console / Remote Access port reassignment vs
+moving the public S3 entry off :443). Identifying which determines
+the precise steps within the chosen option below.
+
+**Options + trade-offs (decision pending — not yet chosen):**
+
+1. **Relocate UniFi OS off WAN:443 / free the port** so the existing
+   port-forward delivers to Caddy. Cleanest if the UDM exposes a
+   console-port setting; risk: may affect UniFi remote console access;
+   verify the UDM firmware actually frees WAN:443 for forwards.
+2. **Move the public S3 entry off :443** — WAN:`<alt>` → bilby:443,
+   `storage.pod.haus:<alt>` in the S3 endpoint. Sidesteps the UDM
+   bind entirely; cost: non-standard port in every client/Terraform
+   backend config; must re-audit the from-anywhere contract and the
+   `minio-public-caddy.md` invariants.
+3. **Front `storage.pod.haus` via Cloudflare Tunnel** like every
+   other pod.haus service (no WAN port-forward at all). Removes the
+   UDM problem and the exposed-IP surface; cost: re-opens the exact
+   SigV4/`Accept-Encoding` rewrite incompatibility that
+   `minio-public-caddy.md` documents as *why* this path bypasses
+   Cloudflare — needs that re-validated, not assumed.
+4. **Accept LAN-only publish** (status quo via split-horizon);
+   rejected by the requirement — listed only for completeness.
+
+Until a fix is chosen, the only working publish path is on-LAN
+(split-horizon). Honors `[[project_sky_publii_zero_client]]` (every
+option above is server-side; no Sky-side change).
 
 ## Context & goal
 
