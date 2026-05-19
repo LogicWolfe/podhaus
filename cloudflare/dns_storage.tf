@@ -2,21 +2,23 @@
 # (grey-cloud): Cloudflare is authoritative DNS but NEVER in the data
 # path (its HTTP proxy mangles the SigV4-signed Accept-Encoding header
 # and its single-level Universal SSL cert can't cover Publii's
-# virtual-host buckets). Traffic goes: client → this A record (home
-# WAN IP) → UniFi port-forward (unifi_port_forward.tf) → Caddy on
-# bilby (own LE *.storage.pod.haus wildcard) → MinIO. See
-# docs/plans/minio-public-caddy.md.
+# virtual-host buckets). Traffic now goes: client → this A record
+# (kookaburra relay reserved IP) → rathole reverse tunnel → Caddy on
+# bilby (own LE *.storage.pod.haus wildcard) → MinIO. The old home-WAN
+# / UniFi port-forward path is dead (UDM WAN:443 shadow — see
+# docs/plans/storage-public-relay.md). LAN clients still hit Caddy
+# directly via the split-horizon record (dns_unifi_split_horizon.tf).
 
-# The A record's VALUE is owned by the cloudflare-ddns stack (the WAN
-# IP is contractually static today but DDNS removes the hidden
-# dependency — esp. across a house move). Terraform owns the record's
-# existence/type; DDNS owns its content. `ignore_changes` makes that
-# boundary explicit so `tf apply` never reverts a DDNS update.
+# Static reserved IP of the kookaburra DigitalOcean relay (output of
+# the terraform/ root). cloudflare-ddns is retired for this name — the
+# IP no longer tracks a dynamic home WAN. Terraform owns content now;
+# `settings` stays ignored because past DDNS API writes normalized it
+# away and un-ignoring it would show perpetual cosmetic drift.
 resource "cloudflare_dns_record" "storage_a" {
   zone_id = local.zones["pod.haus"]
   name    = "storage.pod.haus"
   type    = "A"
-  content = "144.6.147.203" # bootstrap value; thereafter DDNS-managed
+  content = "170.64.241.136" # kookaburra relay reserved IP
   proxied = false
   ttl     = 300
   settings = {
@@ -24,12 +26,8 @@ resource "cloudflare_dns_record" "storage_a" {
     ipv4_only     = false
     ipv6_only     = false
   }
-  # DDNS (cloudflare-ddns) owns this record's live value. Its API
-  # writes also normalize `settings` away, so ignore both — TF owns
-  # the record's existence/name/type, DDNS owns the rest. Without
-  # ignoring `settings` every plan perpetually shows in-place drift.
   lifecycle {
-    ignore_changes = [content, settings]
+    ignore_changes = [settings]
   }
 }
 

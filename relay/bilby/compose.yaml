@@ -1,0 +1,35 @@
+# bilby rathole CLIENT — dials OUT to kookaburra's public control
+# port, forwards the tunneled connection to Caddy over dockernet.
+# TLS terminates at Caddy (existing LE wildcard); this only moves
+# ciphertext. noise transport + token is the boundary (rathole is
+# public-outward by design — no Tailscale needed for the data path).
+services:
+  rathole-client:
+    container_name: rathole-client
+    build:
+      context: ..
+    image: rathole:local
+    pull_policy: never
+    restart: unless-stopped
+    # SELinux enforcing on Fedora Asahi denies cross-label reads into
+    # the bind-mounted template dir — same pattern as every other
+    # bilby stack (caddy/docs-server/gatus/...).
+    security_opt:
+      - label:disable
+    environment:
+      RATHOLE_CONFIG_TEMPLATE: /etc/rathole/client.toml.tmpl
+      RATHOLE_TOKEN: ${RATHOLE_TOKEN}
+      RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}
+      RATHOLE_NOISE_LOCAL_PRIVATE_KEY: ${RATHOLE_NOISE_LOCAL_PRIVATE_KEY:-unused}
+    volumes:
+      # Directory bind (never single-file) — the committed template;
+      # the rendered config lives only in the container at /run.
+      - ${PODHAUS_REPO}/relay/bilby:/etc/rathole:ro
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+
+networks:
+  dockernet:
+    external: true

@@ -1,0 +1,69 @@
+#!/bin/bash
+# One-time bring-up of the rathole SERVER on the kookaburra relay
+# droplet (parallels kangaroo_bootstrap; Fedora/cloud deltas: plain
+# docker, systemd, public dial-in). Idempotent. Run from bilby with
+# the op-unlock SSH agent active.
+#
+# The rendered server.toml carries rathole's noise private key + token
+# (rathole has no env interpolation, so it must read them from a
+# file). These protect the TUNNEL ONLY — the droplet holds no MinIO
+# data / TLS / data creds (ciphertext-only relay), so this is
+# intrinsic relay config, not the backup-triggering "meaningful
+# state" of the AGENTS hard rule.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+DROPLET_IP="${DROPLET_IP:-134.199.167.124}"
+SSH_HOST="root@${DROPLET_IP}"
+REMOTE_DIR=/opt/relay
+
+export OP_SERVICE_ACCOUNT_TOKEN="$(tr -d '\n' < OP_SERVICE_ACCOUNT_TOKEN)"
+SOCK="$(ls /tmp/op-unlock-*.sock 2>/dev/null | head -1)"
+[ -n "$SOCK" ] || { echo "no op-unlock SSH socket; run op-unlock first" >&2; exit 1; }
+export SSH_AUTH_SOCK="$SOCK"
+# Connection multiplexing: one TCP session reused for every mkdir/
+# scp/compose op. Rapid fresh SSH connections to a just-booted DO
+# droplet can get reset; a persistent master avoids that.
+CP="/tmp/kb-ssh-%r@%h:%p"
+SSHO="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+ -o ServerAliveInterval=15 -o ControlMaster=auto -o ControlPersist=120 -o ControlPath=$CP"
+retry() { local n=0; until "$@"; do n=$((n+1)); [ $n -ge 5 ] && return 1; echo "  retry $n: $*" >&2; sleep 8; done; }
+
+echo "== render server.toml from 1Password (secrets never hit bilby disk) =="
+RATHOLE_TOKEN="$(op read 'op://Homelab/rathole relay/token')" \
+RATHOLE_NOISE_LOCAL_PRIVATE_KEY="$(op read 'op://Homelab/rathole relay/noise_private_key')" \
+  envsubst '${RATHOLE_TOKEN} ${RATHOLE_NOISE_LOCAL_PRIVATE_KEY}' \
+  < relay/kookaburra/server.toml.tmpl > /tmp/kb-server.toml
+
+echo "== ship build context + rendered config =="
+retry ssh $SSHO "$SSH_HOST" "mkdir -p $REMOTE_DIR/conf && chmod 700 $REMOTE_DIR/conf"
+retry scp -q $SSHO relay/Dockerfile relay/entrypoint.sh "$SSH_HOST:$REMOTE_DIR/"
+retry scp -q $SSHO relay/kookaburra/server.toml.tmpl "$SSH_HOST:$REMOTE_DIR/"
+# rendered (secret) config via a mode-600 file, then shred locally
+retry scp -q $SSHO /tmp/kb-server.toml "$SSH_HOST:$REMOTE_DIR/conf/server.toml"
+retry ssh $SSHO "$SSH_HOST" "chmod 600 $REMOTE_DIR/conf/server.toml"
+shred -u /tmp/kb-server.toml 2>/dev/null || rm -f /tmp/kb-server.toml
+
+echo "== compose on the droplet (build x86_64 rathole, run server) =="
+retry ssh $SSHO "$SSH_HOST" "cat > $REMOTE_DIR/compose.yaml" <<'YAML'
+services:
+  rathole-server:
+    container_name: rathole-server
+    build:
+      context: .
+    image: rathole:local
+    pull_policy: never
+    restart: unless-stopped
+    # config already rendered with secrets — skip the envsubst
+    # entrypoint, run rathole directly against it.
+    entrypoint: ["rathole"]
+    command: ["/etc/rathole/server.toml"]
+    network_mode: host
+    volumes:
+      - ./conf:/etc/rathole:ro
+YAML
+retry ssh $SSHO "$SSH_HOST" "cd $REMOTE_DIR && docker compose up -d --build"
+
+echo "== verify rathole server is listening (:443 data, :2333 control) =="
+retry ssh $SSHO "$SSH_HOST" "sleep 3; docker ps --filter name=rathole-server --format '{{.Names}} {{.Status}}'; ss -ltn 2>/dev/null | grep -E ':(443|2333) ' || (echo '--- logs ---'; docker logs --tail 20 rathole-server 2>&1)"
+echo "kookaburra_bootstrap: done"

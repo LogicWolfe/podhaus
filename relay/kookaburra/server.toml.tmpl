@@ -1,0 +1,13 @@
+[server]
+bind_addr = "0.0.0.0:2333"
+
+[server.transport]
+type = "noise"
+
+[server.transport.noise]
+local_private_key = "${RATHOLE_NOISE_LOCAL_PRIVATE_KEY}"
+
+[server.services.storage]
+type = "tcp"
+bind_addr = "0.0.0.0:443"
+token = "${RATHOLE_TOKEN}"

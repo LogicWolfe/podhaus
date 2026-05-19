@@ -1,0 +1,13 @@
+[client]
+remote_addr = "170.64.241.136:2333"
+
+[client.transport]
+type = "noise"
+
+[client.transport.noise]
+remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
+
+[client.services.storage]
+type = "tcp"
+local_addr = "caddy:443"
+token = "${RATHOLE_TOKEN}"
