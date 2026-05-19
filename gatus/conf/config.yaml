@@ -125,6 +125,13 @@ endpoints:
     url: https://storage.pod.haus/minio/health/live
     <<: *defaults
 
+  # Publii site: Cloudflare-proxied → pod_haus tunnel → Caddy →
+  # nathanbaxter-com bucket. Catches a tunnel/Caddy/bucket break.
+  # See docs/plans/nathanbaxter-com-publii.md.
+  - name: nathanbaxter.com (Publii)
+    url: https://nathanbaxter.com/
+    <<: *defaults
+
   # Surfaces "Komodo Core can't reach <Periphery>" as a Gatus alert.
   # Periphery's :8120 isn't on dockernet so we check via Komodo Core's API:
   # POST GetServerState, assert status == Ok. Headers carry Komodo's API
