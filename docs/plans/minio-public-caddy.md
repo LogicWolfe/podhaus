@@ -2,10 +2,29 @@
 
 ## Status
 
-**IN PROGRESS.** Authorized end-to-end. Supersedes the Cloudflare-
-proxied `storage.pod.haus` approach committed in `11a84cd` (that gets
-torn down here). Related: `tf-runner-decommission.md` (stock Terraform
-+ chezmoi creds — already applied; finished off here).
+**COMPLETE (2026-05-19).** Built and verified end-to-end. This is the
+authoritative as-built record; it supersedes the Cloudflare-proxied
+`storage.pod.haus` approach (`11a84cd`, torn down) and the planning in
+`tf-runner-decommission.md` / `skycroeser-net-migration.md` (those
+predate this architecture — read this doc for what actually exists).
+
+**Verified:**
+- `terraform init -reconfigure` + `plan` + `apply` against
+  `https://storage.pod.haus` — **zero drift**, no `SignatureDoesNotMatch`
+  (Caddy preserves the SigV4-signed `Accept-Encoding`/`Host`; the
+  original Cloudflare-proxy blocker is gone).
+- **Publii proven**: authenticated virtual-host PUT/GET via Publii's
+  exact client (`@aws-sdk/client-s3` v3, no `forcePathStyle`,
+  `endpoint=https://storage.pod.haus`) round-tripped through the real
+  public path (`<bucket>.storage.pod.haus` → port-forward → Caddy LE
+  wildcard → MinIO `MINIO_DOMAIN`).
+- `/minio/admin/*` → 403 at Caddy; `terraform-state` not anonymously
+  listable; valid public LE cert (apex + wildcard); cloudflare-ddns
+  holding the A record; Gatus check added.
+- Stock `terraform` from any machine (creds from the chezmoi-rendered
+  `~/.config/fish/conf.d/podhaus-tf.fish`); `tf` runner deleted.
+
+Original plan retained below as the rationale of record.
 
 ## Why this shape — and explicitly NOT Cloudflare or Tailscale Funnel
 

@@ -85,9 +85,17 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
           <code>terraform-state</code> bucket exists with the <code>cloudflare.tfstate</code>
           object via the MinIO console (<a href="https://minio.pod.haus">minio.pod.haus</a>)
           or <code>mcli ls local/terraform-state</code>.</li>
+        <li>Deploy <code>caddy</code> and <code>cloudflare-ddns</code> next: Terraform's
+          backend is the public <code>https://storage.pod.haus</code> (Caddy + LE
+          wildcard behind the UniFi port-forward; <code>cloudflare-ddns</code> keeps
+          the A record on the WAN IP). Until <code>caddy</code> is up + has its cert,
+          <code>terraform</code> cannot reach state. Set <code>MINIO_DOMAIN</code> (in
+          <code>minio/stack.toml</code>) is part of the minio deploy. See
+          <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">MinIO public access via Caddy + UniFi</a>.</li>
         <li>Deploy every other stack from the Komodo UI in dependency order. The repo's
           ResourceSync has already created the stack definitions.</li>
-        <li>Verify DNS: <code>cd cloudflare && op run --env-file=.env -- ../tf plan</code>
+        <li>Verify DNS (stock <code>terraform</code>, no wrapper, creds from the
+          chezmoi fish env): <code>cd cloudflare && terraform plan</code>
           from the working directory. Should report no changes (state restored from
           Backrest matches the deployed Cloudflare + UniFi resources). If there's drift,
           stop and investigate before applying — drift here means either the restored

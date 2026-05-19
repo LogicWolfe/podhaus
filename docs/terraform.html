@@ -23,8 +23,9 @@
       <p class="lead text-lg text-text-muted">
         Declarative config for everything outside Docker — Cloudflare zones, Access apps,
         tunnel ingress, UniFi LAN DNS, and the GitHub webhook that drives push-to-deploy.
-        Single TF root at <code>cloudflare/</code>, state in MinIO, runner is the
-        <code>./tf</code> wrapper.
+        Single TF root at <code>cloudflare/</code>, state in MinIO via the public
+        <code>storage.pod.haus</code>, run with <strong>stock <code>terraform</code></strong>
+        from any machine — no wrapper.
       </p>
 
       <aside class="callout warn">
@@ -68,8 +69,10 @@
       <p>
         Terraform state lives in MinIO at <code>s3://terraform-state/cloudflare.tfstate</code>.
         The bucket has <strong>versioning enabled</strong>, so an accidental
-        <code>tf destroy</code> leaves the previous state version recoverable from MinIO's
-        web console at <a href="https://minio.pod.haus">minio.pod.haus</a>.
+        <code>terraform destroy</code> leaves the previous state version recoverable from MinIO's
+        web console at <a href="https://minio.pod.haus">minio.pod.haus</a>. Terraform
+        reaches the backend over the public <code>https://storage.pod.haus</code>
+        (Caddy → MinIO; see the runner section for why not Cloudflare-proxied).
       </p>
       <p>
         MinIO runs as a Komodo-managed single-node stack on bilby
@@ -77,7 +80,7 @@
         loopback <code>127.0.0.1:9000</code> + console via the tunnel). The S3 backend
         uses <strong>native lockfile-in-S3</strong> (provider feature
         <code>use_lockfile = true</code>) — no DynamoDB sidecar needed; concurrent
-        <code>tf apply</code> attempts block on a <code>.tflock</code> object with
+        <code>terraform apply</code> attempts block on a <code>.tflock</code> object with
         S3 conditional-put semantics. Verified during the foundation smoke test.
       </p>
       <p>
@@ -87,24 +90,40 @@
         Restore drill steps are in <a href="/disaster-recovery.html">disaster recovery</a>.
       </p>
 
-      <h2 id="runner">The <code>tf</code> runner</h2>
+      <h2 id="runner">Running Terraform (stock, from any machine)</h2>
       <p>
-        <code>./tf</code> at the repo root is a thin bash wrapper around
-        <code>docker run hashicorp/terraform:latest</code>. It attaches the container to
-        <code>dockernet</code> so the S3 backend at <code>http://minio:9000</code> is
-        reachable, mounts the current working directory at <code>/workspace</code>, and
-        forwards the environment variables every provider needs.
-      </p>
-      <p>
-        Credentials are resolved at run time from 1Password via <code>op run</code> reading
-        <code>cloudflare/.env</code>:
+        There is <strong>no wrapper script</strong> (the old <code>./tf</code>
+        docker runner was decommissioned). Run <strong>stock
+        <code>terraform</code></strong> directly:
       </p>
       <pre><code>cd cloudflare
-op run --env-file=.env -- ../tf plan
-op run --env-file=.env -- ../tf apply</code></pre>
+terraform init   # one-time per machine
+terraform plan
+terraform apply</code></pre>
       <p>
-        <code>.env</code> contains only <code>op://</code> references — nothing sensitive
-        is on disk. See <code>cloudflare/.env.example</code> for the full list.
+        <strong>Hard requirement: this works from any machine</strong> —
+        clone podhaus + have chezmoi-provisioned creds ⇒ <code>terraform</code>
+        runs. The provider/backend credentials are exported into every
+        fish shell by the chezmoi-rendered
+        <code>~/.config/fish/conf.d/podhaus-tf.fish</code> (resolved from
+        1Password at <code>chezmoi apply</code> time), so they are simply
+        present in the environment — nothing to invoke. The
+        <code>.terraform.lock.hcl</code> is <strong>not</strong> committed;
+        each machine self-locks within the <code>~&gt;</code> version
+        constraints (no cross-platform hash drift, zero maintenance).
+      </p>
+      <p>
+        The S3 state backend is the public
+        <code>https://storage.pod.haus</code> — MinIO behind its own Caddy
+        + Let's Encrypt wildcard, reached via a UniFi WAN port-forward,
+        <strong>not</strong> Cloudflare-proxied. Cloudflare's HTTP proxy
+        rewrites the SigV4-signed <code>Accept-Encoding</code> header and
+        breaks <code>aws-sdk-go</code> (<code>SignatureDoesNotMatch</code>);
+        its single-level Universal SSL also can't cover Publii's
+        virtual-host buckets. Full rationale + architecture:
+        <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">MinIO public access via Caddy + UniFi</a>.
+        The UniFi provider talks to <code>https://unifi.pod.haus</code> (not
+        a LAN IP), so nothing here is host- or LAN-pinned.
       </p>
 
       <h2 id="service-module">Per-service module</h2>
@@ -148,7 +167,7 @@ op run --env-file=.env -- ../tf apply</code></pre>
       <p>
         Then add <code>module.myservice.ingress_rule</code> to the
         <code>pod_haus_module_ingress</code> list in <code>tunnel.tf</code>,
-        <code>op run --env-file=.env -- ../tf apply</code> from
+        <code>terraform apply</code> from
         <code>cloudflare/</code>, done. cloudflared picks up the new ingress rule from
         CF's API automatically on its next reconnect (no container restart).
       </p>
@@ -167,11 +186,11 @@ op run --env-file=.env -- ../tf apply</code></pre>
         <li><strong>Read the provider docs</strong> for the resource you're about to
           touch. Schemas vary between minor versions.</li>
         <li>Edit the relevant <code>cloudflare/*.tf</code> file.</li>
-        <li><code>cd cloudflare && op run --env-file=.env -- ../tf plan</code>. Read the
+        <li><code>cd cloudflare && terraform plan</code>. Read the
           diff line-by-line; provider v5 sometimes wants in-place updates that look
           surprising at first glance (default-value normalisation, deprecated-attribute
           flips, etc.).</li>
-        <li><code>op run --env-file=.env -- ../tf apply</code> when you're happy.</li>
+        <li><code>terraform apply</code> when you're happy.</li>
         <li>For service exposure changes, smoke-test from the host with
           <code>curl -sI https://&lt;hostname&gt;.pod.haus</code>. A 302 redirect to
           <code>podhaus.cloudflareaccess.com</code> means the new Access app is gating;
@@ -188,9 +207,9 @@ op run --env-file=.env -- ../tf apply</code></pre>
         <li>Bring MinIO up via Komodo (<code>./komodo-sync</code> + deploy).</li>
         <li>Restore <code>/var/lib/minio</code> from the most recent Backrest snapshot
           via the Backrest UI. The bucket + objects come back intact.</li>
-        <li><code>cd cloudflare && op run --env-file=.env -- ../tf init</code> — TF
+        <li><code>cd cloudflare && terraform init</code> — TF
           finds the restored state.</li>
-        <li><code>../tf plan</code> — should show zero drift if the rebuild matched the
+        <li><code>terraform plan</code> — should show zero drift if the rebuild matched the
           last-applied state.</li>
       </ol>
       <p>

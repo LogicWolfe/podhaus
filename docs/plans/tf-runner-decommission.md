@@ -1,5 +1,13 @@
 # Decommission the `tf` runner → stock Terraform + chezmoi creds
 
+> **DONE (2026-05-19), but built differently than planned below.** The
+> runner was decommissioned and Terraform now runs stock from any
+> machine — but the backend is the public `https://storage.pod.haus`
+> (MinIO behind Caddy + a UniFi port-forward), *not* a loopback/VPN
+> path; Cloudflare's proxy mangles SigV4 and can't be used. This
+> document is planning history. **As-built record:**
+> [MinIO public access via Caddy + UniFi](minio-public-caddy.md).
+
 ## Status
 
 **NOT STARTED.** This is a prerequisite plan. The MinIO-exposure /

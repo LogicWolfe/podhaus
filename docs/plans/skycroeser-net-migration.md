@@ -1,5 +1,15 @@
 # skycroeser.net — WordPress.com → self-hosted Publii
 
+> **Infra note (2026-05-19):** the MinIO/S3 deploy target for Publii is
+> built and proven — public at `https://<bucket>.storage.pod.haus`
+> (MinIO behind Caddy + a UniFi port-forward, own LE wildcard, **not**
+> Cloudflare-proxied; verified with Publii's exact `@aws-sdk/client-s3`
+> v3 client). The earlier sections here that assume a Cloudflare-proxied
+> S3 path are superseded by
+> [MinIO public access via Caddy + UniFi](minio-public-caddy.md). The
+> remaining skycroeser.net-specific work (bucket + scoped key per site,
+> Publii config, content migration) is unchanged.
+
 Migrate Sky's academic website from WordPress.com to self-hosted **Publii**
 (static-site output) served from the podhaus fleet behind Cloudflare
 Tunnel. Authoring stays on Sky's Linux laptop; podhaus only ever serves

@@ -35,21 +35,31 @@ Resources actively used in this root, with direct links:
 From this directory:
 
 ```sh
-op run --env-file=.env -- ../tf init   # one-time per workstation
-op run --env-file=.env -- ../tf plan
-op run --env-file=.env -- ../tf apply
+terraform init      # one-time per machine
+terraform plan
+terraform apply
 ```
 
-The `../tf` wrapper attaches to the `dockernet` Docker network so the
-state backend is reachable as `http://minio:9000`. `op run` resolves
-the `op://` references in `.env` to actual secrets at execution time;
-no credentials hit disk. Required env vars (see `.env.example`):
+Run **stock `terraform` directly** — there is no wrapper script and it
+works from **any machine** (clone podhaus + have chezmoi-provisioned
+creds). The credentials are exported into every fish shell by the
+chezmoi-rendered `~/.config/fish/conf.d/podhaus-tf.fish` (resolved from
+1Password at `chezmoi apply` time), so they're just present in the
+environment; nothing to invoke.
+
+The S3 state backend is the public `https://storage.pod.haus`
+(MinIO behind its own Caddy + LE wildcard, **not** Cloudflare-proxied —
+Cloudflare's HTTP proxy rewrites the SigV4-signed `Accept-Encoding`
+and breaks `aws-sdk-go`). Full rationale + architecture:
+[`docs/plans/minio-public-caddy.md`](../docs/plans/minio-public-caddy.md).
+The lockfile is **not** committed (each machine self-locks within the
+`~>` constraints). Env vars supplied by the chezmoi shim:
 
 | Env var | Purpose |
 |---|---|
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | MinIO state-backend creds (`op://Homelab/MinIO Terraform User`). |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare provider auth (`op://Homelab/Cloudflare API Token`). |
-| `UNIFI_API_KEY` | UniFi controller (`op://Homelab/UniFi API Key`). |
+| `UNIFI_API_KEY` | UniFi controller via `https://unifi.pod.haus` (`op://Homelab/UniFi API Key`). |
 | `GITHUB_TOKEN` | GitHub webhook resource (`op://Homelab/Homelab GitHub Personal Access Token`). |
 | `TF_VAR_komodo_webhook_secret` | HMAC secret shared with Komodo (`op://Homelab/Komodo Webhook Secret`). |
 
@@ -88,7 +98,7 @@ module "myservice" {
 ```
 
 Then add `module.myservice.ingress_rule` to the `pod_haus_module_ingress`
-list in `tunnel.tf`, run `op run --env-file=.env -- ../tf apply`, done.
+list in `tunnel.tf`, run `terraform apply`, done.
 
 Default policy chain is locked: Homelab service-token bypass at
 precedence 1, Family allow at precedence 2. Override with the

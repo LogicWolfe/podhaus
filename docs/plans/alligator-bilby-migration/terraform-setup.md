@@ -1,5 +1,13 @@
 # Terraform foundation
 
+> **Superseded (2026-05-19) for the runner + backend endpoint.** The
+> `tf` docker runner described here was decommissioned: Terraform now
+> runs as stock `terraform` from any machine (creds via the chezmoi
+> fish env) and the S3 backend is the public `https://storage.pod.haus`
+> (MinIO behind Caddy, not Cloudflare-proxied). This page is retained
+> as history; the as-built record is
+> [MinIO public access via Caddy + UniFi](../minio-public-caddy.md).
+
 **Status: complete (2026-05-11).** MinIO is live, the `tf` runner is in
 place, the smoke test + restore drill passed, and
 [Cloudflare as Terraform](cloudflare-terraform.md) is consuming this

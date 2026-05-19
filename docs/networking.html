@@ -62,6 +62,19 @@ networks:
       </p>
 
       <h2 id="tunnel">Cloudflare Tunnel</h2>
+      <aside class="callout warn">
+        <span class="callout-title">One deliberate exception: storage.pod.haus</span>
+        Every pod.haus hostname is tunnel-routed <strong>except
+        <code>storage.pod.haus</code></strong> (the public MinIO S3
+        endpoint). It is a grey-cloud DNS record → a <strong>UniFi WAN
+        port-forward</strong> → Caddy on bilby (own LE wildcard) → MinIO.
+        This is the fleet's only inbound WAN port. The S3 data path
+        <em>cannot</em> traverse Cloudflare's HTTP proxy: it rewrites the
+        SigV4-signed <code>Accept-Encoding</code> (breaks
+        <code>aws-sdk-go</code>/Terraform) and its single-level cert
+        can't cover Publii's virtual-host buckets. Full rationale:
+        <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">MinIO public access via Caddy + UniFi</a>.
+      </aside>
       <p>
         A single <code>cloudflared</code> container on bilby holds the tunnel credential. Ingress
         rules live in <code>cloudflare-tunnel/config.yml</code> (bind-mounted into the container)
@@ -74,7 +87,7 @@ networks:
       <p>
         Anything not listed returns 404 at the tunnel edge. New service that needs a hostname?
         Add the rule here, add a <code>cloudflare_dns_record</code> to the relevant
-        <code>cloudflare/dns_*.tf</code> file, run <code>op run --env-file=.env -- ../tf apply</code>
+        <code>cloudflare/dns_*.tf</code> file, run <code>terraform apply</code>
         from <code>cloudflare/</code>, then <code>./komodo-sync</code> to refresh the tunnel container.
       </p>
       <aside class="callout warn">
@@ -160,9 +173,13 @@ networks:
       </ul>
       <p>
         Workflow: edit the relevant <code>dns_&lt;zone&gt;.tf</code>, run
-        <code>op run --env-file=.env -- ../tf plan</code> from <code>cloudflare/</code>,
-        then <code>../tf apply</code>. The <code>tf</code> wrapper joins
-        <code>dockernet</code> so it reaches MinIO at <code>http://minio:9000</code>.
+        <code>terraform plan</code> from <code>cloudflare/</code>,
+        then <code>terraform apply</code> (stock <code>terraform</code>, no
+        wrapper, from any machine — creds from the chezmoi-rendered fish
+        env). The S3 state backend is the public
+        <code>https://storage.pod.haus</code> (Caddy → MinIO), not
+        Cloudflare-proxied — see
+        <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">MinIO public access via Caddy + UniFi</a>.
       </p>
       <p>
         DNSControl (the previous DNS tool) was retired 2026-05-12; its <code>dns/</code>
