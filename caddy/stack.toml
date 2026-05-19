@@ -1,0 +1,19 @@
+[[stack]]
+name = "caddy"
+description = "Public TLS front for MinIO S3 (own LE wildcard; not Cloudflare-proxied) — see docs/plans/minio-public-caddy.md"
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/caddy"
+# Builds the caddy+cloudflare-dns image inline (Dockerfile) — same as
+# plex/backup. No init/one-shot service, so no ignore_services.
+run_build = true
+
+environment = """
+TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
+CLOUDFLARE_API_TOKEN=[[OP__KOMODO__CLOUDFLARE_API_TOKEN__CREDENTIAL]]
+"""

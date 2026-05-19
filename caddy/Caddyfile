@@ -1,0 +1,25 @@
+# Public TLS front for MinIO's S3 API. Owns its own Let's Encrypt
+# wildcard so the S3 data path never touches Cloudflare's proxy (which
+# rewrites the SigV4-signed Accept-Encoding header and only has a
+# single-level Universal SSL cert). See docs/plans/minio-public-caddy.md.
+#
+# One endpoint serves every S3 client:
+#   - path-style   https://storage.pod.haus            (Terraform)
+#   - virtual-host  https://<bucket>.storage.pod.haus   (Publii, aws-sdk-js v3)
+# MinIO (MINIO_DOMAIN=storage.pod.haus) discriminates by Host, which
+# Caddy's reverse_proxy forwards unchanged — as it does Accept-Encoding
+# (no `encode` here, deliberately) — so SigV4 validates for Go and JS
+# SDKs alike.
+
+storage.pod.haus, *.storage.pod.haus {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
+	# MinIO's admin API rides the same :9000 port. Keep it off the
+	# internet (re-homed from the old Cloudflare WAF rule).
+	@admin path /minio/admin/*
+	respond @admin 403
+
+	reverse_proxy minio:9000
+}

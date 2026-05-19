@@ -1,0 +1,54 @@
+services:
+  caddy:
+    container_name: caddy
+    build:
+      context: .
+    image: caddy-cloudflare:local
+    pull_policy: never
+    restart: unless-stopped
+    # SELinux enforcing on Fedora Asahi denies cross-label reads into
+    # the bind-mounted Caddyfile; same pattern as every other bilby
+    # stack (docs-server / gatus / cloudflare-tunnel).
+    security_opt:
+      - label:disable
+    # Public TLS front: must be reachable on the host LAN interface so
+    # the UniFi WAN:443 port-forward (and the split-horizon LAN name)
+    # land here. Unlike MinIO (loopback-only), Caddy is intentionally
+    # LAN/WAN-facing.
+    ports:
+      - 443:443
+    environment:
+      TZ: ${TZ}
+      # Cloudflare token for the ACME DNS-01 challenge (wildcard
+      # issuance). DNS-edit scope only; from 1Password via komodo-op.
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+    volumes:
+      # Directory bind (not file bind) so atomic-rename edits to the
+      # Caddyfile on the host surface in the container — same gotcha
+      # documented across the fleet. Read-only: Caddy never writes it.
+      - ${PODHAUS_REPO}/caddy:/etc/caddy:ro
+      # Cert + ACME account state MUST persist — Let's Encrypt rate
+      # limits make losing /data expensive.
+      - caddy-data:/data
+      - caddy-config:/config
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+    healthcheck:
+      # Caddy's localhost admin API answers when the server is up
+      # (busybox wget is present in the alpine-based caddy image).
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:2019/config/ > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  caddy-data:
+  caddy-config:
