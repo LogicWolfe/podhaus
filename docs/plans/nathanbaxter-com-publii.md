@@ -99,34 +99,41 @@ WAN listener. This is the documented UDM platform constraint (UniFi
 OS reserves 443/tcp on the UDM). It breaks **all** off-LAN clients —
 Publii *and* remote `terraform` to `storage.pod.haus`.
 
-**Residual unknown (small):** the exact UniFi-OS knob/port to vacate
-or relocate 443 (UniFi console / Remote Access port reassignment vs
-moving the public S3 entry off :443). Identifying which determines
-the precise steps within the chosen option below.
+**Option-1 verdict (investigated 2026-05-19, read-only): not viable.**
+UDM Pro SE, fw `UDMPROSE.al324.v5.0.16`. No console/management
+HTTPS-port knob exists in the UniFi Network API *or* UniFi OS
+`/api/system` (only `remoteAccessEnabled=true`; legacy 8443; SSH).
+External fingerprint: WAN:443 accepts TCP then terminates with **no
+cert at any SNI**, WAN:80 no response — UniFi OS reserves 80/443 on
+the UDM at the platform level and the console port is not
+user-configurable on UDM hardware (matches Ubiquiti's documented
+limitation; see the "Port 443 Forwarding Conflict on UDM Pro" forum
+threads). The only way to "free" 443 would be an unsupported
+SSH-into-UniFi-OS nginx rebind — forbidden by the no-appliance-patch
+rule. Options 2 and 3 also rejected (non-standard port everywhere;
+Cloudflare re-opens the documented SigV4 rewrite).
 
-**Options + trade-offs (decision pending — not yet chosen):**
+**Bigger finding:** this same UDM bug means **remote `terraform` to
+the `storage.pod.haus` S3 state backend is *also* broken from
+anywhere** — the "from-anywhere TF" hard rule has been silently
+violated for every root since the public endpoint went live; it only
+ever worked on-LAN via split-horizon. The relay below restores that
+contract too, not just Publii.
 
-1. **Relocate UniFi OS off WAN:443 / free the port** so the existing
-   port-forward delivers to Caddy. Cleanest if the UDM exposes a
-   console-port setting; risk: may affect UniFi remote console access;
-   verify the UDM firmware actually frees WAN:443 for forwards.
-2. **Move the public S3 entry off :443** — WAN:`<alt>` → bilby:443,
-   `storage.pod.haus:<alt>` in the S3 endpoint. Sidesteps the UDM
-   bind entirely; cost: non-standard port in every client/Terraform
-   backend config; must re-audit the from-anywhere contract and the
-   `minio-public-caddy.md` invariants.
-3. **Front `storage.pod.haus` via Cloudflare Tunnel** like every
-   other pod.haus service (no WAN port-forward at all). Removes the
-   UDM problem and the exposed-IP surface; cost: re-opens the exact
-   SigV4/`Accept-Encoding` rewrite incompatibility that
-   `minio-public-caddy.md` documents as *why* this path bypasses
-   Cloudflare — needs that re-validated, not assumed.
-4. **Accept LAN-only publish** (status quo via split-horizon);
-   rejected by the requirement — listed only for completeness.
-
-Until a fix is chosen, the only working publish path is on-LAN
-(split-horizon). Honors `[[project_sky_publii_zero_client]]` (every
-option above is server-side; no Sky-side change).
+**Chosen direction (2026-05-19): self-hosted public ingress relay on
+a DigitalOcean droplet.** A minimal VPS holds a static public IP and
+listens on :443, **L4 (raw TCP) passthrough** over a reverse tunnel
+back to bilby's Caddy — so TLS still terminates at Caddy (its LE
+wildcard), the SigV4-signed bytes and `Host` are untouched (the
+droplet only ever sees ciphertext; it cannot MITM and holds no
+creds), and MinIO's SigV4 remains the sole access boundary. Droplet
+provisioned by a new Terraform root (config-as-code, honors
+from-anywhere), the tunnel endpoint runs as a Komodo-managed stack
+with Periphery on the droplet as a third linked-repo host.
+`storage.pod.haus` A-record → droplet IP (split-horizon keeps LAN
+direct); the `cloudflare-ddns` home-WAN updater for that name
+retires. Design + open forks tracked here until split into a
+dedicated plan doc. Honors `[[project_sky_publii_zero_client]]`.
 
 ## Context & goal
 
