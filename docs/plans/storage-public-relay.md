@@ -46,6 +46,27 @@ LAN clients ── split-horizon (unchanged) ──▶ bilby 10.0.0.119 directly
 - Fail-closed: if the tunnel is down the droplet's :443 simply refuses
   — no degraded/insecure path.
 
+### Two independent planes (key architectural separation)
+
+```
+DATA plane  (public, credential-free, ciphertext-only):
+  clients ─▶ droplet :443 ─ rathole ─▶ bilby Caddy   [NO Tailscale, ever]
+
+MGMT plane  (private, sensitive — never internet-exposed):
+  bilby Komodo Core ─┐
+  central logging ───┤── Tailscale tailnet ──▶ kookaburra: Periphery,
+  Gatus (tunnel/host)┘                          log-shipper
+  Gatus (EXTERNAL probe) ── public internet ──▶ droplet :443  (deliberate)
+```
+
+The data plane never touches Tailscale — Sky/clients stay
+zero-software (`[[project_sky_publii_zero_client]]`); the earlier
+"no Tailscale" decision was scoped to *end clients*, not inter-host.
+The sensitive control channel (Periphery/logs) is private-only. One
+Gatus check deliberately rides the *public* internet to the droplet
+IP — the external-reachability probe whose absence let this incident
+go undetected (every prior check was an internal hairpin).
+
 ## Components (config-as-code)
 
 Organised by component, following the existing multi-host service
@@ -100,14 +121,15 @@ hard rule: `backend.tf` S3 → `https://storage.pod.haus`
   stack with the host prefix and extend Stage 2's pattern in
   `komodo/sync/procedures.toml` (currently `kangaroo-*`) to also match
   the relay host prefix. No `webhook_force_deploy`.
-- Host name: **TBD by user** (bilby/kangaroo/pinelake theme). Used as
-  the stack-name prefix and the servers.toml entry.
+- Host name: **`kookaburra`** (AU bird, fits the theme). Used as the
+  servers.toml entry and the `kookaburra-*` stack-name prefix that
+  push-deploy Stage 2 must force-deploy.
 
 ### 3. `relay/` — rathole stacks (shared-service layout)
 
 - `relay/compose.shared.yaml` — common rathole bits + the contract
   (control port, service = tcp/443, token via 1Password).
-- `relay/<relay-host>/compose.yaml` (`include` shared) — **rathole
+- `relay/kookaburra/compose.yaml` (`include` shared) — **rathole
   server**: listens public :443, control port; bind tightly. Komodo
   stack on the droplet host (linked-repo, run_build only if needed).
 - `relay/bilby/compose.yaml` (`include` shared) — **rathole client**:
@@ -140,6 +162,61 @@ hard rule: `backend.tf` S3 → `https://storage.pod.haus`
   so the public path is documented as the relay, not the WAN forward
   (docs-as-first-class so the stale "WAN port-forward" model can't
   mislead later).
+
+### 6. `tailscale/` — management-plane fabric (Komodo-managed stack)
+
+Shared-service layout (`tailscale/compose.shared.yaml` +
+`tailscale/{bilby,kookaburra}/`). One `tailscale` container per host
+as its own Komodo stack — config-as-code, **not** host-level
+`tailscaled`. Tailscale **SaaS free tier** as the control plane.
+
+- Auth via a Tailscale **auth key** (reusable/ephemeral, tagged) in
+  1Password Homelab → komodo-op `OP__KOMODO__*` (item field layout =
+  var contract). ACL: a tag (e.g. `tag:podhaus-mgmt`) scoping the
+  tailnet to the management plane only.
+- Carries **only** the mgmt plane: Komodo Core→Periphery and the log
+  ship-back. The rathole data plane never joins the tailnet.
+- bilby + kookaburra now; pinelake later joins the same fabric (this
+  is the reusable inter-host fabric, not a per-target hack).
+
+### 7. `logging/kookaburra/` — log ship-back
+
+Add a per-host overlay to the existing `logging/` shared service
+(same pattern as `logging/kangaroo/`): kookaburra's container/system
+logs ship to the central ClickStack/HyperDX **over the tailnet**
+(bilby's tailscale address — the ingestion endpoint is never
+internet-exposed). Variable *names* match the shared contract; values
+are kookaburra-specific (1Password).
+
+### 8. Monitoring / health
+
+- **Container healthchecks**: real healthchecks on the rathole
+  server (kookaburra) and client (bilby) so Komodo health is
+  accurate. rathole has no init/one-shot service → no
+  `ignore_services` needed (but verify the healthcheck actually
+  proves the tunnel, not just "process up").
+- **Gatus external probe (the gap-closer)**: a Gatus endpoint that
+  hits `storage.pod.haus` **forced to the droplet reserved IP**
+  (so it exercises the real public relay→tunnel→Caddy path, not the
+  LAN split-horizon) with a SigV4-free liveness path
+  (`/minio/health/live`). This is the check whose absence hid the
+  UDM incident — every prior probe was an internal hairpin.
+- Optional: Gatus over the tailnet for Periphery/tunnel liveness.
+
+### Out of scope (deliberate, not an oversight)
+
+- **Backups: none — *contingent on statelessness*.** kookaburra is
+  stateless today — no MinIO data, no certs, no creds (ciphertext-only
+  relay; all state is on bilby). Adding it to `backup/` now would be
+  additive complexity for zero recoverable state. DR = `terraform
+  apply` rebuilds the droplet from code; the reserved IP keeps DNS
+  stable across a rebuild.
+  **Revisit trigger (hard):** if *any* meaningful state ever lands on
+  kookaburra (persistent volume, local cert/key, app data, anything
+  not reconstructible from `terraform apply`), the backup decision
+  MUST be reopened — add it to `backup/` then. This exemption is
+  conditional, not permanent; a future reader finding state here
+  should treat missing backup as a bug, not a deliberate choice.
 
 ## Hard-rule compliance checklist
 
@@ -190,10 +267,10 @@ Region `syd1`; size `s-1vcpu-512mb-10gb`; Fedora image; existing
 `podhaus` DO project (data-sourced); existing ed25519 public key
 (committed non-secret); rathole tunnel; Periphery linked-repo host.
 
-## Open items for the user
+## Open items
 
-- **Relay host name** (servers.toml entry + stack-name prefix; the
-  bilby/kangaroo/pinelake theme). The only true blocker.
-- ~~Exact 1Password item for the DO token~~ — resolved:
-  `op://Homelab/DigitalOcean Personal Access Token/token`.
+All resolved. Host = `kookaburra`. DO token =
+`op://Homelab/DigitalOcean Personal Access Token/token`. Next:
+scaffold config-as-code (after the mandated DO-provider + rathole doc
+research), then `terraform plan`; apply/deploy/DNS remain gated.
 </body></html>

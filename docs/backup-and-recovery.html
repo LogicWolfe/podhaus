@@ -99,6 +99,24 @@ restic repo                restic repo
         no NFS roundtrip from inside the container.
       </p>
 
+      <h2 id="kookaburra-no-backup">Kookaburra — intentionally unbacked (conditional)</h2>
+      <p>
+        <code>kookaburra</code> (the off-LAN DigitalOcean public-ingress relay; see
+        <a href="plans/storage-public-relay.md">storage-public-relay</a>) has <strong>no backup
+        plan by design</strong>. It is a ciphertext-only rathole passthrough — no MinIO data,
+        no certificates, no credentials; all state lives on bilby. Disaster recovery is
+        <code>terraform apply</code>, and the DigitalOcean reserved IP keeps DNS stable across a
+        rebuild, so there is nothing recoverable to snapshot.
+      </p>
+      <p>
+        <strong>This exemption is conditional, not permanent.</strong> If any meaningful state
+        ever lands on kookaburra — a persistent volume, a local key/cert, app data, anything not
+        reconstructible from <code>terraform apply</code> — the backup decision <em>must</em> be
+        reopened and kookaburra added to <code>backup/</code> with its own plan. A future reader
+        who finds state on kookaburra with no backup should treat that as a bug, not a deliberate
+        choice (this is also a hard rule in <code>AGENTS.md</code>).
+      </p>
+
       <h2 id="encryption">Encryption</h2>
       <p>
         Restic repos are encrypted with a 48-character base64 password (~288 bits of entropy).

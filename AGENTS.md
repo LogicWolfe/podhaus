@@ -277,6 +277,19 @@ These have failure modes that you must not introduce:
   container that confirms `Preferences.xml` has the expected
   `MachineIdentifier`. See
   [`docs/runbooks/plex.html`](docs/runbooks/plex.html).
+- **The `kookaburra` ingress relay is stateless by design — adding
+  state reopens backups.** kookaburra (the off-LAN DigitalOcean
+  public-ingress relay; see
+  [`docs/plans/storage-public-relay.md`](docs/plans/storage-public-relay.md))
+  is a ciphertext-only rathole passthrough: no MinIO data, certs, or
+  creds — all state lives on bilby, and DR is `terraform apply`. It
+  is **deliberately excluded from `backup/`**. If *any* meaningful
+  state ever lands on it (a persistent volume, a local key/cert, app
+  data — anything not reconstructible from `terraform apply`), that
+  exemption is void: you **must** reopen the backup decision and add
+  kookaburra to `backup/`. A future reader finding state there with
+  no backup should treat it as a bug, not a deliberate choice. See
+  [`docs/backup-and-recovery.html`](docs/backup-and-recovery.html).
 
 ---
 
