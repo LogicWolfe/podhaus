@@ -61,38 +61,56 @@ socket disconnected before secure TLS connection was established"*;
 case — a remote client on a VPN still hits the WAN port-forward →
 Caddy and fails.
 
-Diagnosis (high confidence): VPN tunnels lower the path MTU; the TLS
-**ServerHello+Certificate** flight is large (LE **RSA** leaf +
-intermediate chain ≈ 3–4 KB → multiple full-MTU packets). With PMTUD
-blackholed (near-universal on UDP VPNs / public Wi-Fi) the server's
-large packets are dropped → handshake never completes → socket
-disconnected. Small packets (SYN, the Publii "test connection") get
-through, so it reports "connected" then fails on the upload flight.
-Server side is healthy (40 concurrent conns over WAN clean, valid
-cert, no Caddy errors) — it's purely the large-handshake-vs-low-MTU
-path. bilby can't reproduce it (hairpin bypasses WAN ingress, and
-no VPN).
+Diagnosis (evidence-backed, 2026-05-19 — packet capture from bilby
+over the WAN hairpin):
+- **The cert is already ECDSA P-256** (LE `E8` ECDSA chain), *not*
+  RSA. An earlier draft of this section claimed "LE RSA leaf +
+  intermediate ≈ 3–4 KB" and proposed switching to ECDSA — both were
+  **wrong**: ECDSA is already in place and is not an available lever.
+- The handshake is large because client and server negotiate the
+  **`X25519MLKEM768` post-quantum hybrid KEM**. Measured payload:
+  **ClientHello ≈ 1580 B, server flight ≈ 3631 B**. Controlled
+  measurement with the PQ hybrid disabled client-side (`curl --curves
+  X25519`) drops these to **517 B / 2543 B** — i.e. ML-KEM-768 adds
+  **~1.1 KB in each direction**. The cert chain is a minor contributor.
+- Mechanism: a VPN/Wi-Fi path whose effective MTU is reduced by tunnel
+  encapsulation, **with ICMP frag-needed blackholed** (near-universal
+  on UDP VPNs / public Wi-Fi), silently drops the full-size DF
+  segments carrying this oversized handshake; they retransmit
+  identically → socket dies before TLS completes (the exact error).
+  Small packets (SYN, Publii "test connection") survive, so it reports
+  "connected" then fails on the flight. VPN-off works (path MTU ≥
+  negotiated MSS). The WAN path itself is proven healthy for
+  normal-MTU clients (small request → `HTTP/2 200`).
+- **Not yet reproduced under a real constrained path** — the exact
+  trigger MTU and confirmation the fix fully closes it are open.
+  bilby's hairpin is 1500-MTU so it cannot reproduce the failure; a
+  real VPN client (Sky-side or a throwaway VPN container) is the
+  decisive repro and the fix-verification harness.
 
 **Candidate fixes (server-side — we can't change Sky's VPN), to
 execute next:**
 1. **TCP MSS clamping at the UniFi gateway (primary, most general).**
-   Clamp WAN MSS to the path MTU (or a fixed low value, e.g. ~1360
-   / "clamp to PMTU"). Then the big TLS Certificate message is
-   delivered as several smaller TCP segments that traverse a
-   reduced-MTU VPN even with PMTUD broken. UniFi has an MSS-clamp /
-   "Clamp TCP MSS" setting (Internet/WAN or firewall). Read the UniFi
-   doc before changing (provider/UI). This covers *any* client/VPN
-   (incl. Sky's unknown one) — the robust lever.
-2. **ECDSA certificate in Caddy (complementary).** `key_type p256`
-   (or equivalent) so Caddy serves a much smaller ECDSA cert chain →
-   smaller handshake flight → fits in fewer/smaller packets. LE
-   issues ECDSA. Shrinks the problem; combine with #1.
+   Clamp WAN MSS to PMTU (or a fixed low value, e.g. ~1360). Sizes
+   *both directions'* segments to cross a reduced-MTU VPN even with
+   PMTUD broken — the only lever that is both direction- and
+   client-agnostic, so it covers the 1.6 KB ClientHello *and* the
+   3.6 KB server flight for any client/VPN. UniFi has a "Clamp TCP
+   MSS" setting; read the UniFi doc before changing.
+2. **Disable the PQ hybrid in Caddy's TLS (complementary,
+   server-side, no client change).** Removing `X25519MLKEM768` from
+   Caddy's offered key-exchange groups shrinks the dominant server
+   flight ~3.6 → ~2.5 KB with zero Sky-side change (honors the
+   zero-client-software constraint). *Replaces the earlier, wrong
+   "ECDSA cert" lever.* Not sufficient alone — the client's ~1.6 KB
+   ClientHello is client-controlled and unaffected — so pair with #1.
 3. Fallbacks if 1+2 insufficient: lower Caddy/host MTU; or a
-   host-level `iptables`/`nft` `TCPMSS --clamp-mss-to-pmtu` on the
+   host-level `nft`/`iptables` `TCPMSS --clamp-mss-to-pmtu` on the
    port-forward path.
 
-Recommended: **gateway WAN MSS clamp + ECDSA cert**, then verify with
-a real VPN client (Sky-side or a test VPN). Until fixed, the
+Recommended: **gateway WAN MSS clamp (primary) + disable PQ hybrid in
+Caddy (complementary)**, then verify with a real VPN client. Until
+fixed, the
 documented workaround is "publish with VPN off" (acceptable short
 term; NOT acceptable as the final state — Sky needs VPN-on to work).
 Honors `[[project_sky_publii_zero_client]]` (no client-side change).
