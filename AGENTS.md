@@ -197,7 +197,7 @@ These have failure modes that you must not introduce:
 
 - **podhaus Terraform must run from any machine — NO TF root is
   exempt.** Contract: clone podhaus + have chezmoi-provisioned creds ⇒
-  `terraform` works, for *every* root (`cloudflare/`, `minio/tf/`,
+  `terraform` works, for *every* root (`cloudflare/`, `minio/terraform/`,
   any future one). No host-pinned backend endpoint (the S3 state
   backend uses the public `https://storage.pod.haus`, never
   `minio:9000`/loopback), no LAN-only provider `api_url` (UniFi uses
@@ -216,7 +216,7 @@ These have failure modes that you must not introduce:
   live only in 1Password + the chezmoi Terraform env;
   unauthenticated calls incl. `/minio/admin/` get `AccessDenied`).
   **Do not add an edge `/minio/admin/` 403 / WAF block** — it breaks
-  the from-anywhere `minio/tf/` root and contradicts the rule above.
+  the from-anywhere `minio/terraform/` root and contradicts the rule above.
   Data-plane isolation is done with per-bucket least-priv keys (e.g.
   per-Publii-site service accounts), not network filtering.
 - **Never use single-file bind mounts** for any config the running

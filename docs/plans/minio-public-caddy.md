@@ -21,7 +21,7 @@ predate this architecture — read this doc for what actually exists).
 - The full MinIO API (S3 + admin) is served; access control is
   MinIO's own SigV4 — unauthenticated `/minio/admin/` → MinIO
   `AccessDenied`. **Deliberately NOT edge-blocked**: an admin 403
-  would break the from-anywhere `minio/tf/` root, and no TF root is
+  would break the from-anywhere `minio/terraform/` root, and no TF root is
   exempt from the from-anywhere rule. `terraform-state` not
   anonymously listable; valid public LE cert (apex + wildcard);
   cloudflare-ddns holding the A record; Gatus check added.
@@ -115,7 +115,7 @@ LAN/bilby clients reach Caddy directly via UniFi split-horizon DNS
   - `reverse_proxy minio:9000` (Caddy forwards Host + Accept-Encoding
     unchanged — the whole point). The **full** MinIO API (S3 + admin)
     is served; access control is MinIO SigV4. **No `/minio/admin/`
-    edge 403** — it would break the from-anywhere `minio/tf/` root
+    edge 403** — it would break the from-anywhere `minio/terraform/` root
     (no TF root is exempt; see AGENTS.md). Unauthenticated admin calls
     get MinIO `AccessDenied`; root creds live only in 1Password + the
     chezmoi Terraform env.
@@ -193,7 +193,7 @@ make all the changes; the backend is flipped to the public endpoint
    `terraform plan` clean; an `mcli`/aws-js virtual-host PUT to
    `skycroeser-net.storage.pod.haus` succeeds; unauthenticated
    `/minio/admin/` → MinIO `AccessDenied` (cred-gated, not a Caddy
-   403) while an authenticated `minio/tf/` reaches it from anywhere;
+   403) while an authenticated `minio/terraform/` reaches it from anywhere;
    `terraform-state` private.
 
 ## Acceptance
@@ -211,7 +211,7 @@ DDNS-maintained with TF `ignore_changes`.
   (S3 + admin) is internet-reachable; the control is **MinIO SigV4**
   (root/admin creds only in 1Password + the chezmoi Terraform env).
   Deliberately **not** edge-blocked — an admin 403 would break the
-  from-anywhere `minio/tf/` root and no TF root is exempt. Keep
+  from-anywhere `minio/terraform/` root and no TF root is exempt. Keep
   Caddy/MinIO patched.
 - Caddy must forward `Host` + `Accept-Encoding` unmodified (default
   `reverse_proxy` behaviour — verify; do **not** add `encode` on the

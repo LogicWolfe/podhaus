@@ -36,7 +36,7 @@ proxy normally).
 
 ## Workstreams (all server-side)
 
-### 1. MinIO provisioning — new Terraform root `minio/tf/`
+### 1. MinIO provisioning — new Terraform root `minio/terraform/`
 
 Use the **`aminueza/minio`** provider (config-as-code; **read its
 resource docs before writing HCL** — new provider, hard rule).
@@ -71,14 +71,14 @@ resource docs before writing HCL** — new provider, hard rule).
   - `minio_iam_user` + attachment + `minio_iam_service_account`
     (`target_user` = that user) → `output "publii_access_key"` /
     `"publii_secret_key"` (sensitive).
-- `minio/tf/.gitignore`: ignore `.terraform.lock.hcl` + `.terraform/`
+- `minio/terraform/.gitignore`: ignore `.terraform.lock.hcl` + `.terraform/`
   (same self-lock policy as cloudflare/).
 - **Accepted caveat:** the SA secret lands in `minio.tfstate`
   (unencrypted terraform-state bucket — same risk class as the CF
   token in `cloudflare.tfstate`; bounded by the least-priv scope —
   worst case = the public website bucket, recoverable from
   versioning + Backrest + a re-publish).
-- Run from bilby: `cd minio/tf && terraform init && terraform apply`.
+- Run from bilby: `cd minio/terraform && terraform init && terraform apply`.
 
 ### 2. chezmoi — MinIO-root creds in the env shim
 
@@ -90,7 +90,7 @@ set -gx TF_VAR_minio_user     {{ onepasswordRead "op://Homelab/MinIO Root/userna
 set -gx TF_VAR_minio_password {{ onepasswordRead "op://Homelab/MinIO Root/credential" "my" }}
 ```
 
-Commit the chezmoi repo; `chezmoi apply`. (Consumed by the `minio/tf/`
+Commit the chezmoi repo; `chezmoi apply`. (Consumed by the `minio/terraform/`
 root, which runs from anywhere like the `cloudflare/` root; harmless
 elsewhere.)
 
@@ -160,7 +160,7 @@ pass through, 404→`404.html`). cloudflared reaches it as
 
 ### 5. Populate the 1Password item (server-side, from TF outputs)
 
-After the `minio/tf/` apply, create the single item you'll read:
+After the `minio/terraform/` apply, create the single item you'll read:
 
 ```
 op item create --vault Homelab --title 'Publii nathanbaxter.com S3' --category 'API Credential' \
@@ -169,8 +169,8 @@ op item create --vault Homelab --title 'Publii nathanbaxter.com S3' --category '
   'region[text]=us-east-1' \
   'addressing[text]=virtual-host (do NOT force path style)' \
   'site url[text]=https://nathanbaxter.com' \
-  "access key id[text]=$(terraform -chdir=minio/tf output -raw publii_access_key)" \
-  "secret access key[password]=$(terraform -chdir=minio/tf output -raw publii_secret_key)"
+  "access key id[text]=$(terraform -chdir=minio/terraform output -raw publii_access_key)" \
+  "secret access key[password]=$(terraform -chdir=minio/terraform output -raw publii_secret_key)"
 ```
 
 (One server-side command. This is the credential you read on the
@@ -207,7 +207,7 @@ path style)**; Test connection; Publish. Live.
   SRV/Fastmail/Postmark before apply. This is why this plan is
   review-gated rather than auto-run.
 - **MinIO admin API is internet-reachable, SigV4-gated** (not
-  edge-blocked — that would break the from-anywhere `minio/tf/` root;
+  edge-blocked — that would break the from-anywhere `minio/terraform/` root;
   no TF root is exempt). The boundary is MinIO's root SigV4; creds
   live only in 1Password + the chezmoi Terraform env. Eyes-open,
   agreed posture (see minio-public-caddy.md).

@@ -152,7 +152,7 @@ Reviewed actual `cloudflare/` usage against the hard requirement:
    lockfile** (no committed lock — component 7); delete `tf`; add the
    hard rule to `AGENTS.md`/`docs/terraform.html`.
 3. **Verify from a non-bilby machine** (the acceptance test).
-4. Resume the rest of the MinIO/Publii plan (`minio/tf/` buckets) —
+4. Resume the rest of the MinIO/Publii plan (`minio/terraform/` buckets) —
    stock `terraform`, backend also `https://storage.pod.haus`,
    from anywhere.
 
@@ -330,7 +330,7 @@ don't retype. Properties:
 
 - Building the **rest** of the MinIO/Publii plan
   (`/home/nathan/.claude/plans/okay-make-a-plan-quiet-sprout.md`):
-  the `minio/tf/` buckets/service-account root, Publii prep, etc.
+  the `minio/terraform/` buckets/service-account root, Publii prep, etc.
   Resumes after this on the from-anywhere foundation.
 - **In scope by necessity (was previously deferred):** the MinIO S3
   Cloudflare exposure (`storage.pod.haus` ingress + WAF) — Ordering

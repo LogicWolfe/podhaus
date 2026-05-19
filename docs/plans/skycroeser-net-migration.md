@@ -321,7 +321,7 @@ same gotcha as before, but reset via `mc rm` not filesystem delete.
 > **edge `/minio/admin/` WAF/Caddy 403 block was never a ratified
 > decision** — it was a defence-in-depth proposal in this draft that
 > conflicts with the enshrined **from-anywhere Terraform hard rule**
-> (an admin 403 breaks the `minio/tf/` root, and **no TF root is
+> (an admin 403 breaks the `minio/terraform/` root, and **no TF root is
 > exempt**). It has been removed. The real, sole access-control
 > boundary for the public MinIO endpoint is **MinIO's own SigV4**
 > (root/admin creds, held only in 1Password + the chezmoi Terraform
