@@ -1,0 +1,30 @@
+[[stack]]
+name = "vpn-diagnostics"
+description = "On-demand NordVPN egress + netshoot toolbox for reproducing off-LAN/VPN ingress failures (first case: storage.pod.haus MTU/TLS). Normally stopped — deploy to investigate, stop when done."
+tags = ["podhaus"]
+# Not always-on. Registered for config-as-code visibility but not
+# auto-deployed by ResourceSync. Bring it up explicitly when
+# diagnosing; stop it when done. (If a push deploys it because its
+# files changed, just stop the stack — that only happens when it is
+# being actively edited, i.e. when it is wanted up anyway.)
+deploy = false
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/vpn-diagnostics"
+
+# Secrets come from the 1Password Homelab item "NordVPN" via komodo-op
+# (OP__KOMODO__NORDVPN__<FIELD>). The item's field labels ARE the
+# variable contract — see the credential-fetch guide and the
+# komodo-op credential-split convention. WIREGUARD_MTU is the
+# diagnostic knob; override per investigation.
+environment = """
+TZ=[[TZ]]
+VPN_TYPE=wireguard
+WIREGUARD_PRIVATE_KEY=[[OP__KOMODO__NORDVPN__WIREGUARD_PRIVATE_KEY]]
+SERVICE_USERNAME=[[OP__KOMODO__NORDVPN__SERVICE_USERNAME]]
+SERVICE_PASSWORD=[[OP__KOMODO__NORDVPN__SERVICE_PASSWORD]]
+SERVER_COUNTRIES=Australia
+WIREGUARD_MTU=1320
+"""

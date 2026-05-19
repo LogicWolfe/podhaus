@@ -1,0 +1,57 @@
+# On-demand VPN-egress diagnostic harness. Purpose: reproduce and
+# verify fixes for failures that only manifest for off-LAN clients
+# behind a VPN/constrained path (first case: the storage.pod.haus
+# oversized-PQ-handshake vs low-MTU/blackholed-PMTUD issue —
+# docs/plans/nathanbaxter-com-publii.md OPEN ISSUE).
+#
+# gluetun provides a NordVPN egress netns with a built-in kill switch;
+# the netshoot toolbox shares that netns so every curl/openssl/tcpdump
+# it runs traverses the real VPN path. Normally stopped — deploy when
+# investigating, stop when done (stack.toml deploy = false).
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: vpn-diagnostics-gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    # Manual diagnostic tool — must not resurrect on daemon restart.
+    restart: "no"
+    environment:
+      TZ: ${TZ}
+      VPN_SERVICE_PROVIDER: nordvpn
+      # NordLynx (WireGuard) is what modern VPN apps actually use, so
+      # it is the most representative path for the MTU diagnosis.
+      # Switch to "openvpn" (uses SERVICE_USERNAME/PASSWORD) if a
+      # NordLynx key is unavailable — OpenVPN is also a common
+      # coffee-shop path.
+      VPN_TYPE: ${VPN_TYPE:-wireguard}
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:-}
+      OPENVPN_USER: ${SERVICE_USERNAME:-}
+      OPENVPN_PASSWORD: ${SERVICE_PASSWORD:-}
+      # Exit location — default close to Sky's real scenario (an
+      # Australian coffee shop). Override per-investigation to model
+      # other paths.
+      SERVER_COUNTRIES: ${SERVER_COUNTRIES:-Australia}
+      # THE diagnostic knob: gluetun sets the wg interface MTU. Step
+      # this down to model a constrained tunnel and find the threshold
+      # at which the TLS handshake to storage.pod.haus breaks, then up
+      # to confirm a server-side fix actually closes it.
+      WIREGUARD_MTU: ${WIREGUARD_MTU:-1320}
+
+  toolbox:
+    image: nicolaka/netshoot:latest
+    container_name: vpn-diagnostics-toolbox
+    # Share gluetun's network namespace: all traffic egresses via the
+    # VPN, and the kill switch fails closed if the tunnel drops.
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    restart: "no"
+    # Stay up so diagnostics run via `docker exec`, not a fixed script.
+    command: ["sleep", "infinity"]
