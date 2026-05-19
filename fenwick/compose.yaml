@@ -15,6 +15,27 @@ services:
     networks:
       - dockernet
 
+  # Local secret-detector: scrubs credentials out of inbound text
+  # before the LLM/log/spans (gitleaks ∪ GLiNER). Fully offline at
+  # runtime — weights baked at build, no egress. fenwick's inbound is
+  # fail-closed on this, so fenwick waits for it to be healthy. Image
+  # built on-host from the fenwick repo's secret-detector/ (config-as-
+  # code); arch arm64 (bilby).
+  secret-detector:
+    container_name: secret-detector
+    image: fenwick-secret-detector:0.1
+    restart: unless-stopped
+    security_opt:
+      - label:disable
+    networks:
+      - dockernet
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
   # The bot. Deno runs .ts directly — no build, no node_modules. The
   # live repo is bind-mounted over /app and `deno run --watch` reloads
   # on edit. DENO_DIR is a named volume so the module cache (incl. the
@@ -28,7 +49,12 @@ services:
     command: ["deno", "run", "--watch", "--allow-all", "src/index.ts"]
     restart: unless-stopped
     depends_on:
-      - signal-cli-rest-api
+      signal-cli-rest-api:
+        condition: service_started
+      # fenwick's inbound scrub is fail-closed — don't start it until
+      # the detector is actually answering, or every message bounces.
+      secret-detector:
+        condition: service_healthy
     security_opt:
       - label:disable
     volumes:
@@ -79,6 +105,11 @@ services:
       FENWICK_OP_VAULT: ${FENWICK_OP_VAULT}
       FENWICK_OP_TOKEN: ${FENWICK_OP_TOKEN}
       OP_CONNECT_HOST: http://op-connect-api:8080
+      # The local secret-detector (static internal dockernet address,
+      # non-secret like OP_CONNECT_HOST). REQUIRED — fenwick's inbound
+      # scrub is fail-closed, so a missing URL fails the boot gate
+      # loudly rather than silently leaving inbound unscrubbed.
+      SECRET_DETECTOR_URL: http://secret-detector:8000
     networks:
       - dockernet
     labels:
