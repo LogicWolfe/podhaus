@@ -522,7 +522,20 @@ only) ⇒ nothing to clean.
 4. OAuth client (scopes `acl`, `auth_keys`/`devices`) → 1P Homelab
    item `Tailscale OAuth Client` (`client_id`, `client_secret`) →
    consumed by the **onepassword TF provider** for the Tailscale TF
-   provider (ACL-as-code).
+   provider (ACL-as-code). OAuth client creds are long-lived (no
+   90-day clock) — they are the durable anchor that makes the
+   auth-key rotation loop work, including in cold-start DR.
+
+> **Deferred-trap warning (DR/rebuild):** the 90-day key expiry is
+> silent — existing nodes never break, so nothing looks wrong. It
+> only bites when a *new/rebuilt* tailscale node is brought up >90d
+> after the stored key was minted (e.g. rebuilt kookaburra droplet,
+> added pinelake): that node can't authenticate and, since kookaburra
+> *is* the public ingress, it presents as "relay won't come back."
+> The TF+OAuth rotation loop (mint key on `apply` → write back to the
+> `Tailscale Auth Key` 1P item) closes this. **Until that loop is
+> actually built**, a rebuild needing Tailscale requires a 2-minute
+> manual key regen in the console → 1P (same as the bootstrap step).
 
 **Generated & stored at build time (no user action):** rathole
 control token (`openssl rand`) + `noise` keypair (`rathole
