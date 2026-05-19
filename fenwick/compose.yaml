@@ -68,6 +68,17 @@ services:
       # Homelab) → komodo-op → this var; a redeploy renders it (env is
       # not live-reload).
       INTERNAL_HTTP_TOKEN: ${FENWICK_INTERNAL_HTTP_TOKEN}
+      # Per-member email credentials live in a dedicated 1Password
+      # "Fenwick" vault, read/written at runtime via the self-hosted
+      # Connect server on dockernet (not in fenwick.db). REQUIRED —
+      # fenwick fails its boot gate if absent or an unrendered [[…]]
+      # placeholder. Provisioned: "Fenwick 1Password" (1P Homelab,
+      # fields vault id / access token) → komodo-op → these vars; a
+      # redeploy renders them (env is not live-reload). OP_CONNECT_HOST
+      # is the static internal dockernet address (non-secret).
+      FENWICK_OP_VAULT: ${FENWICK_OP_VAULT}
+      FENWICK_OP_TOKEN: ${FENWICK_OP_TOKEN}
+      OP_CONNECT_HOST: http://op-connect-api:8080
     networks:
       - dockernet
     labels:
