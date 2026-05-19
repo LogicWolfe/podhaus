@@ -519,7 +519,11 @@ only) ⇒ nothing to clean.
    manual key is bootstrap-only; thereafter the Tailscale TF provider
    (via the OAuth client) mints a tagged key on `apply` and writes it
    back to this 1P item — rotation is config-as-code, not a chore.
-4. OAuth client (scopes `acl`, `auth_keys`/`devices`) → 1P Homelab
+4. OAuth client — **minimal scopes only: Policy File/ACL write +
+   Auth Keys write (tagged `tag:podnet`); NOT devices/dns/users**
+   (scoping here is two checkboxes, not the painful MinIO-IAM case,
+   so least-privilege is free). OAuth clients don't 90-day-expire →
+   the durable anchor. → 1P Homelab
    item `Tailscale OAuth Client` (`client_id`, `client_secret`) →
    consumed by the **onepassword TF provider** for the Tailscale TF
    provider (ACL-as-code). OAuth client creds are long-lived (no
