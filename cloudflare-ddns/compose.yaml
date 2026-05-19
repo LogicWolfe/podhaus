@@ -1,0 +1,36 @@
+services:
+  cloudflare-ddns:
+    container_name: cloudflare-ddns
+    # Minimal, well-maintained DDNS updater. Keeps ONLY the
+    # storage.pod.haus A record pointed at the current WAN IP. The IP
+    # is contractually static today, but this removes the hidden
+    # dependency (esp. across a house move) and is fleet-side so it
+    # survives any router/ISP change. Terraform owns the record's
+    # existence (dns_storage.tf, lifecycle ignore_changes=[content]);
+    # this owns its value. See docs/plans/minio-public-caddy.md.
+    image: favonia/cloudflare-ddns:latest
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [all]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TZ: ${TZ}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      # Only this record is ever touched.
+      DOMAINS: storage.pod.haus
+      # Grey-cloud (DNS-only) — must match dns_storage.tf.
+      PROXIED: "false"
+      # IPv4 only; do not manage AAAA.
+      IP6_PROVIDER: none
+      # Re-check / re-assert on a sane cadence.
+      UPDATE_CRON: "@every 5m"
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+
+networks:
+  dockernet:
+    external: true
