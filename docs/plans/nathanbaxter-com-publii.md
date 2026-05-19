@@ -2,9 +2,100 @@
 
 ## Status
 
-**NOT STARTED — plan for review.** Touches the **live-email
-`nathanbaxter.com` zone**, so the DNS apply wants eyeballing before
-execution (it is strictly additive — see Risks).
+**BUILT & VERIFIED (2026-05-19) — one open issue (external-VPN
+publish, see below).** This section is the as-built record; the plan
+body underneath is retained as rationale.
+
+Done & verified:
+- `minio/terraform/` root applied from-anywhere via
+  `https://storage.pod.haus` — bucket `nathanbaxter-com` (versioning,
+  anon `GetObject`-only policy), least-priv Publii IAM
+  user/policy/service-account. Commits: `f183dfa` (root + the
+  `minio/tf`→`minio/terraform` rename sweep).
+- chezmoi `f3f5775`: `TF_VAR_minio_user/password`
+  (`op://Homelab/MinIO Root`) added to the rendered
+  `~/.config/fish/conf.d/podhaus-tf.fish`; `chezmoi apply` done.
+- Caddy serves `nathanbaxter.com`/`www` from the bucket (commit
+  `5b2529a`): mutually-exclusive `handle` blocks map clean URLs →
+  `<dir>/index.html` keys, missing → bucket `404.html`, `www`→apex
+  301. HTTP-origin behind the tunnel (Cloudflare owns TLS).
+- Cloudflare web DNS + tunnel ingress applied (commit `3657a5f`,
+  gated/reviewed: `Plan: 2 add, 1 change, 0 destroy`, **mail records
+  untouched** — Fastmail MX/DKIM/SRV + Postmark verified intact):
+  proxied apex + `www` CNAME → pod_haus tunnel; two bespoke public
+  (no-Access) ingress entries → `http://caddy:80`.
+- 1Password Homelab item **`Publii nathanbaxter.com S3`** created
+  from the TF outputs (endpoint, bucket, region, addressing note,
+  site URL, access key, secret key) — the single credential to read.
+- Gatus monitors `https://nathanbaxter.com/` (commit `e1256d0`).
+- LAN split-horizon `nathanbaxter-com.storage.pod.haus → bilby`
+  (commit `a62444e`) so on-LAN Publii hits Caddy directly (no
+  WAN/hairpin).
+- Verified end-to-end on the real public hostname: `/`, `/about[/]`,
+  asset, 404-fallback, `www`→apex 301, valid Cloudflare TLS;
+  scoped-key Publii-exact (`@aws-sdk/client-s3` v3, vhost)
+  PUT/GET/DELETE round-trip OK; scoped key **denied** on
+  `terraform-state` (least-priv holds); mail DNS unchanged. Bucket
+  holds a tidy holding `index.html` + `404.html` (Publii overwrites
+  on first publish).
+
+Known minor (not blocking): missing URLs serve the Publii 404 page
+with HTTP **200** (classic S3-static behaviour); refine to a real 404
+status later if SEO matters.
+
+**Remaining user step (laptop, ~5 min):** install Publii, clean site,
+site URL `https://nathanbaxter.com`, Server→S3 from the 1Password
+item (**virtual-host; do NOT force path style**), Publish.
+
+Nothing is pushed — all local commits on `main`; deployed via
+Komodo/Terraform directly. A `git push` fires the
+`podhaus-push-deploy` webhook (user's call when to sync the remote).
+
+## OPEN ISSUE — external publish over a VPN fails (MTU / TLS handshake)
+
+**Severity: blocks the actual use case.** Sky must be able to publish
+from anywhere, *including a coffee-shop VPN*. Confirmed 2026-05-19:
+Publii from a laptop **with a VPN active** fails with *"Client network
+socket disconnected before secure TLS connection was established"*;
+**VPN off, it works**. The LAN split-horizon fixes only the *home*
+case — a remote client on a VPN still hits the WAN port-forward →
+Caddy and fails.
+
+Diagnosis (high confidence): VPN tunnels lower the path MTU; the TLS
+**ServerHello+Certificate** flight is large (LE **RSA** leaf +
+intermediate chain ≈ 3–4 KB → multiple full-MTU packets). With PMTUD
+blackholed (near-universal on UDP VPNs / public Wi-Fi) the server's
+large packets are dropped → handshake never completes → socket
+disconnected. Small packets (SYN, the Publii "test connection") get
+through, so it reports "connected" then fails on the upload flight.
+Server side is healthy (40 concurrent conns over WAN clean, valid
+cert, no Caddy errors) — it's purely the large-handshake-vs-low-MTU
+path. bilby can't reproduce it (hairpin bypasses WAN ingress, and
+no VPN).
+
+**Candidate fixes (server-side — we can't change Sky's VPN), to
+execute next:**
+1. **TCP MSS clamping at the UniFi gateway (primary, most general).**
+   Clamp WAN MSS to the path MTU (or a fixed low value, e.g. ~1360
+   / "clamp to PMTU"). Then the big TLS Certificate message is
+   delivered as several smaller TCP segments that traverse a
+   reduced-MTU VPN even with PMTUD broken. UniFi has an MSS-clamp /
+   "Clamp TCP MSS" setting (Internet/WAN or firewall). Read the UniFi
+   doc before changing (provider/UI). This covers *any* client/VPN
+   (incl. Sky's unknown one) — the robust lever.
+2. **ECDSA certificate in Caddy (complementary).** `key_type p256`
+   (or equivalent) so Caddy serves a much smaller ECDSA cert chain →
+   smaller handshake flight → fits in fewer/smaller packets. LE
+   issues ECDSA. Shrinks the problem; combine with #1.
+3. Fallbacks if 1+2 insufficient: lower Caddy/host MTU; or a
+   host-level `iptables`/`nft` `TCPMSS --clamp-mss-to-pmtu` on the
+   port-forward path.
+
+Recommended: **gateway WAN MSS clamp + ECDSA cert**, then verify with
+a real VPN client (Sky-side or a test VPN). Until fixed, the
+documented workaround is "publish with VPN off" (acceptable short
+term; NOT acceptable as the final state — Sky needs VPN-on to work).
+Honors `[[project_sky_publii_zero_client]]` (no client-side change).
 
 ## Context & goal
 

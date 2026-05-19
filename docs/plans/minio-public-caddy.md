@@ -28,6 +28,17 @@ predate this architecture — read this doc for what actually exists).
 - Stock `terraform` from any machine (creds from the chezmoi-rendered
   `~/.config/fish/conf.d/podhaus-tf.fish`); `tf` runner deleted.
 
+**KNOWN OPEN ISSUE (2026-05-19): external clients on a low-MTU VPN
+fail the TLS handshake** to `storage.pod.haus` (large LE-RSA cert
+flight + PMTUD blackhole → "socket disconnected before secure TLS
+connection was established"). Affects *any* external TLS client over
+a constrained VPN — Publii from a coffee shop *and* `terraform` run
+remotely over a VPN. Server is healthy; fix is server-side (UniFi WAN
+**MSS clamp** + **ECDSA cert** in Caddy). Full diagnosis + candidate
+fixes + status: see the "OPEN ISSUE" section of
+[nathanbaxter-com-publii.md](nathanbaxter-com-publii.md). Workaround
+until fixed: publish/terraform with VPN off.
+
 Original plan retained below as the rationale of record.
 
 ## Why this shape — and explicitly NOT Cloudflare or Tailscale Funnel
