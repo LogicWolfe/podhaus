@@ -493,9 +493,14 @@ only) ⇒ nothing to clean.
 
 **You acquire (only Tailscale; order matters — tag owned before key):**
 1. Tailscale account/tailnet (free tier).
-2. Seed the ACL by hand once: `"tagOwners": {"tag:podnet":
-   ["autogroup:admin"]}` + the two `podnet` ACL rules (breaks the
-   ACL-as-code chicken-and-egg; TF owns it after).
+2. Seed the ACL by hand once **in the policy *file* editor**
+   (`/admin/acls/file` — the *visual* rule builder cannot set
+   `tagOwners`): add `"tagOwners": {"tag:podnet":
+   ["autogroup:admin"]}` + the two `podnet` `acls` rules. Note this
+   *replaces* the permissive default; if the tailnet is used for
+   other personal device-to-device traffic, keep a
+   member→member rule too. Breaks the ACL-as-code chicken-and-egg;
+   the Tailscale TF provider owns the file after.
 3. Auth key — **reusable, pre-approved, non-ephemeral, tag
    `tag:podnet`** → 1P Homelab item `Tailscale Auth Key` field
    `credential` → komodo-op `OP__KOMODO__TAILSCALE_AUTH_KEY__
