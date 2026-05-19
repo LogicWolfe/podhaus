@@ -24,8 +24,12 @@ resource "cloudflare_dns_record" "storage_a" {
     ipv4_only     = false
     ipv6_only     = false
   }
+  # DDNS (cloudflare-ddns) owns this record's live value. Its API
+  # writes also normalize `settings` away, so ignore both — TF owns
+  # the record's existence/name/type, DDNS owns the rest. Without
+  # ignoring `settings` every plan perpetually shows in-place drift.
   lifecycle {
-    ignore_changes = [content]
+    ignore_changes = [content, settings]
   }
 }
 

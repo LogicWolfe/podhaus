@@ -1,17 +1,18 @@
 provider "cloudflare" {
-  # api_token comes from CLOUDFLARE_API_TOKEN env var (set by `./tf` via op run).
+  # api_token from CLOUDFLARE_API_TOKEN — set by the chezmoi-rendered
+  # ~/.config/fish/conf.d/podhaus-tf.fish (no wrapper).
 }
 
 provider "unifi" {
-  # api_url + api_key + insecure-TLS allowance come from env (UNIFI_API_URL,
-  # UNIFI_API_KEY, UNIFI_INSECURE) injected by `./tf` via op run. The
-  # controller speaks HTTPS to its own self-signed cert, so allow_insecure
-  # is required.
-  api_url        = "https://10.0.0.1"
-  allow_insecure = true
+  # Reach the controller via its public tunnel hostname (module.unifi
+  # publishes unifi.pod.haus → the controller), so Terraform runs from
+  # any machine, not just the LAN. api_key from UNIFI_API_KEY (chezmoi
+  # env file). The tunnel presents a valid Cloudflare edge cert, so no
+  # allow_insecure needed.
+  api_url = "https://unifi.pod.haus"
 }
 
 provider "github" {
   owner = "LogicWolfe"
-  # token comes from GITHUB_TOKEN env var (set by ./tf via op run).
+  # token from GITHUB_TOKEN (chezmoi env file).
 }

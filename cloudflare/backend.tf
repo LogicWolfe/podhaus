@@ -25,7 +25,13 @@ terraform {
 
   backend "s3" {
     endpoints = {
-      s3 = "http://minio:9000"
+      # Public endpoint so Terraform runs from any machine. Path goes
+      # storage.pod.haus → (split-horizon on LAN / WAN port-forward
+      # off-LAN) → Caddy (own LE cert) → MinIO. Caddy forwards the
+      # SigV4-signed Accept-Encoding/Host unchanged, so the aws-sdk-go
+      # signature validates — the whole reason this is not Cloudflare-
+      # proxied. See docs/plans/minio-public-caddy.md.
+      s3 = "https://storage.pod.haus"
     }
     bucket                      = "terraform-state"
     key                         = "cloudflare.tfstate"
