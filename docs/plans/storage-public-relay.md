@@ -189,16 +189,26 @@ per host as its own Komodo stack (config-as-code; **not** host-level
   into your laptop — it can only answer connections you start, via
   Tailscale's stateful replies). This is a *replace-the-default* ACL:
 
+  Tailscale's current default file uses **grants** syntax, so the
+  policy is written in grants (not classic `acls`):
+
   ```jsonc
   {
     "tagOwners": { "tag:podnet": ["autogroup:admin"] },
-    "acls": [
-      { "action": "accept", "src": ["autogroup:member"], "dst": ["tag:podnet:*"] },
-      { "action": "accept", "src": ["tag:podnet"],        "dst": ["tag:podnet:*"] }
+    "grants": [
+      // optional: preserves personal device↔device use (drop if
+      // this tailnet is podhaus-only and you want max restriction)
+      { "src": ["autogroup:member"], "dst": ["autogroup:member"], "ip": ["*"] },
+      { "src": ["autogroup:member"], "dst": ["tag:podnet"],        "ip": ["*"] },
+      { "src": ["tag:podnet"],       "dst": ["tag:podnet"],        "ip": ["*"] }
       // intentionally NO  src tag:podnet -> dst autogroup:member
     ]
+    // keep the default `ssh` block (autogroup:self, check mode) as-is
   }
   ```
+  Set via the policy **file** editor (`/admin/acls/file`) — the
+  visual builder can't express `tagOwners`. Replaces the default
+  wide-open `{"src":["*"],"dst":["*"],"ip":["*"]}` grant.
 
   Managed via the Tailscale Terraform provider / an ACL file in the
   repo (config-as-code), not hand-edited in the Tailscale console.
