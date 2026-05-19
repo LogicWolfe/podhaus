@@ -111,9 +111,9 @@ slot into the same pattern.
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
-| `cloudflare/` | Terraform sources for all Cloudflare resources (DNS, Access apps, policies, service tokens). State at `s3://terraform-state/cloudflare.tfstate` in MinIO. |
-| `tf` | `op run`-wrapped `hashicorp/terraform` docker runner, attaches to `dockernet`. |
-| `minio/` | Single-node MinIO — S3 backend for Terraform state. |
+| `cloudflare/` | Terraform sources for all Cloudflare resources (DNS, Access apps, policies, service tokens). State at `s3://terraform-state/cloudflare.tfstate` in MinIO via `https://storage.pod.haus`. Run **stock `terraform`** directly (creds from the chezmoi-rendered `~/.config/fish/conf.d/podhaus-tf.fish`; no wrapper). |
+| `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (Publii) via `storage.pod.haus`. |
+| `caddy/` | TLS front (own LE wildcard) for `storage.pod.haus` → MinIO; reached via the UniFi WAN port-forward, not Cloudflare. See `docs/plans/minio-public-caddy.md`. |
 | `docs/` | The published docs (served at `docs.pod.haus`) |
 | `docs-server/` | nginx stack serving `docs/` |
 | `AGENTS.md` | This file |
@@ -163,7 +163,9 @@ slot into the same pattern.
    one entry in `tunnel.tf`'s `pod_haus_module_ingress`. The module
    owns DNS + Access policy chain + tunnel ingress; default policy
    chain is Homelab service-token bypass + Family allow.
-   `cd cloudflare && op run --env-file=.env -- ../tf apply` to publish.
+   `cd cloudflare && terraform apply` to publish (creds are ambient
+   from the chezmoi-rendered fish env; no wrapper, runs from any
+   machine).
 
 ## When adding a new instance of a shared service to another host
 
@@ -193,6 +195,15 @@ only touch genuinely host-specific bits.
 
 These have failure modes that you must not introduce:
 
+- **podhaus Terraform must run from any machine.** Contract: clone
+  podhaus + have chezmoi-provisioned creds ⇒ `terraform` works. No
+  host-pinned backend endpoint (the S3 state backend uses the public
+  `https://storage.pod.haus`, never `minio:9000`/loopback), no
+  LAN-only provider `api_url` (UniFi uses `https://unifi.pod.haus`,
+  never `10.0.0.1`), no dockernet assumption in any TF root. Reject
+  any change reintroducing a LAN IP, dockernet name, or loopback in a
+  TF root. Run `terraform` directly — there is no wrapper script.
+  See [`docs/plans/tf-runner-decommission.md`](docs/plans/tf-runner-decommission.md).
 - **Never use single-file bind mounts** for any config the running
   service reads after startup. File-level binds pin the inode at mount
   time, so atomic-rename editor saves on the host leave the container
@@ -231,8 +242,8 @@ These have failure modes that you must not introduce:
   and Docker silently creates empty stub directories.
 - **Don't push, deploy, or change DNS / Access policy without explicit
   user authorization.** Treat all `git push`, `./komodo-sync`, and
-  any `tf apply` against `cloudflare/` as actions that require a green
-  light. `tf plan` is fine. Note that every `git push` to `main` fires
+  any `terraform apply` against `cloudflare/` as actions that require a
+  green light. `terraform plan` is fine. Note that every `git push` to `main` fires
   the single GitHub webhook (`cloudflare/github.tf` →
   `komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main`),
   which runs the procedure: Stage 1 `BatchDeployStackIfChanged "*"`
@@ -242,7 +253,7 @@ These have failure modes that you must not introduce:
   cheap and not a no-op — treat it as a deploy.
 - **Before adding or modifying a Cloudflare / UniFi / GitHub TF
   resource, read the provider's resource doc.** Schemas change
-  between minor versions and `tf apply` errors with "Attribute X
+  between minor versions and `terraform apply` errors with "Attribute X
   required" or similar without making it obvious which version you
   need. Resource docs are linked from `cloudflare/README.md`.
 - **Don't bypass git hooks (`--no-verify`, etc.) without explicit
