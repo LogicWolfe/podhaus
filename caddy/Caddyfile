@@ -21,7 +21,50 @@ storage.pod.haus, *.storage.pod.haus {
 	# /minio/admin/) get AccessDenied; root/admin creds live only in
 	# 1Password + the chezmoi-rendered Terraform env. Deliberately NOT
 	# edge-blocked: an admin-path 403 would break the from-anywhere
-	# `minio/tf/` Terraform root (no TF root is exempt from the
+	# `minio/terraform/` Terraform root (no TF root is exempt from the
 	# from-anywhere rule — see AGENTS.md / docs/plans/minio-public-caddy.md).
 	reverse_proxy minio:9000
+}
+
+# nathanbaxter.com — public Publii site, served from the
+# `nathanbaxter-com` bucket (anonymous GetObject). The PUBLIC site is
+# https + Cloudflare-proxied; this `http://` is only the internal
+# cloudflared→Caddy hop (like every other pod.haus tunnel service) and
+# the deliberate signal that Caddy must NOT ACME this name (Cloudflare
+# owns the cert). See docs/plans/nathanbaxter-com-publii.md.
+http://nathanbaxter.com, http://www.nathanbaxter.com {
+	@www host www.nathanbaxter.com
+	redir @www https://nathanbaxter.com{uri} permanent
+
+	# Mutually-exclusive handle blocks, each mapping one URL class to
+	# the COMPLETE bucket key in a single rewrite (no rewrite chaining
+	# — Caddy doesn't reliably chain sequential rewrites here). Publii
+	# emits <dir>/index.html; assets carry a file extension.
+	route {
+		@dirslash path_regexp dirslash ^(/.+)/$
+		@noext path_regexp noext ^(/[^.]+)$
+
+		handle / {
+			rewrite * /nathanbaxter-com/index.html
+		}
+		handle @dirslash {
+			rewrite * /nathanbaxter-com{re.dirslash.1}/index.html
+		}
+		handle @noext {
+			rewrite * /nathanbaxter-com{re.noext.1}/index.html
+		}
+		handle {
+			rewrite * /nathanbaxter-com{path}
+		}
+
+		reverse_proxy minio:9000 {
+			# Missing object → MinIO 404 (NoSuchKey). Serve Publii's
+			# 404 page instead of MinIO's XML.
+			@missing status 404
+			handle_response @missing {
+				rewrite * /nathanbaxter-com/404.html
+				reverse_proxy minio:9000
+			}
+		}
+	}
 }
