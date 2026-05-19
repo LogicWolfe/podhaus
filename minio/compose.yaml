@@ -16,6 +16,13 @@ services:
       TZ: ${TZ}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Enables S3 virtual-hosted-style addressing: a request with Host
+      # <bucket>.storage.pod.haus is parsed as bucket <bucket>. Publii's
+      # aws-sdk-js v3 only does virtual-host, so this is required for it;
+      # path-style (Host == storage.pod.haus, and internal/loopback
+      # Hosts like 127.0.0.1/minio:9000 which aren't under this domain)
+      # is unaffected. See docs/plans/minio-public-caddy.md.
+      MINIO_DOMAIN: ${MINIO_DOMAIN}
       # Tells the console to use the tunnel hostname when issuing OAuth
       # redirects so links from the UI stay valid behind Cloudflare
       # Access. Harmless if the console isn't exposed.
