@@ -4,6 +4,16 @@
 applied, deployed, or pushed. All `apply` / deploy / DNS steps gated;
 `terraform plan` is fine.**
 
+> **DEPENDS ON [`terraform-foundation.md`](plan-viewer.html?file=terraform-foundation.md)
+> — do that first.** The relay is **not** a separate Terraform root.
+> Its resources (DigitalOcean provider, droplet, reserved IP,
+> firewall, project attach) are added to the **single consolidated
+> `terraform/` root** the foundation establishes. Provider creds come
+> from the **1Password provider** (`data "onepassword_item"`), not a
+> chezmoi dump. The reserved-IP → `storage.pod.haus` A record is a
+> **direct intra-root reference** (`digitalocean_reserved_ip.x
+> .ip_address`) — the old cross-root literal-copy seam is gone.
+
 ## Why this exists
 
 `storage.pod.haus` is unreachable for genuine external clients: the
@@ -83,48 +93,32 @@ use `linked_repo = "podhaus"`, **repo-relative** `run_directory`,
 host-prefixed name; secrets are `[[OP__KOMODO__ITEM__FIELD]]` (item
 title + field label → UPPER, spaces/hyphens→`_`).
 
-### 1. `relay/terraform/` — new Terraform root
+### 1. Relay resources in the consolidated `terraform/` root
 
-Mirrors `minio/terraform/` exactly.
+**Not a new root.** Per `terraform-foundation.md`, there is one
+`terraform/` root with one state (`podhaus.tfstate`) and the
+`onepassword` provider as the sole credential mechanism. The relay
+adds the DigitalOcean provider + resources to it:
 
-`backend.tf` — identical S3 backend, only the key differs:
+- `providers.tf` (foundation root): add
+  `digitalocean = { source = "digitalocean/digitalocean", version =
+  "~> 2.0" }` to `required_providers`, and:
 
-```hcl
-terraform {
-  required_version = ">= 1.10.0"
-  required_providers {
-    digitalocean = { source = "digitalocean/digitalocean", version = "~> 2.0" }
+  ```hcl
+  data "onepassword_item" "do" {
+    vault = local.homelab_vault_uuid
+    title = "DigitalOcean Personal Access Token"
   }
-  backend "s3" {
-    endpoints                   = { s3 = "https://storage.pod.haus" }
-    bucket                      = "terraform-state"
-    key                         = "relay.tfstate"
-    region                      = "us-east-1"
-    use_path_style              = true
-    skip_credentials_validation = true
-    skip_region_validation      = true
-    skip_metadata_api_check     = true
-    skip_requesting_account_id  = true
-    use_lockfile                = true
-    encrypt                     = false
+  provider "digitalocean" {
+    token = data.onepassword_item.do.credential   # field "token"
   }
-}
-```
+  ```
+  No `TF_VAR_do_token`, no chezmoi, no tfvars — the only secret at
+  rest is the 1P service-account token (foundation §2). Backend,
+  `.gitignore`, lockfile policy are all inherited from the root.
 
-`providers.tf` / `variables.tf` — provider auth via a TF var fed by
-`TF_VAR_*` from the chezmoi-rendered TF env (same pattern as
-`minio_user`); **never** a tfvars file or hardcode:
-
-```hcl
-provider "digitalocean" { token = var.do_token }
-# variables.tf: variable "do_token" { type = string, sensitive = true }
-#   value via TF_VAR_do_token ← chezmoi ← op://Homelab/DigitalOcean Personal Access Token/token
-```
-
-`.gitignore` — `.terraform.lock.hcl`, `.terraform/`, `crash.log`
-(lockfile NOT committed; same policy as the other roots).
-
-`main.tf` (resources — schemas verified against the v2 provider):
+A relay `.tf` file (e.g. `terraform/relay.tf`) holds the resources
+(schemas verified against the DO v2 provider):
 
 - `data "digitalocean_project" "podhaus" { name = "podhaus" }` —
   reuse the **existing** project; never create one.
@@ -164,8 +158,10 @@ provider "digitalocean" { token = var.do_token }
     firewall footgun is called out so it isn't missed.
   - **No inbound 8120 (Periphery)** — Periphery rides Tailscale only,
     never the public internet.
-- `outputs.tf` — `reserved_ip = digitalocean_reserved_ip.kookaburra
-  .ip_address` (public, non-secret; feeds the DNS step in §4).
+- `digitalocean_reserved_ip.kookaburra.ip_address` is referenced
+  **directly** by the `storage.pod.haus` A record in the same root
+  (§4) — no output-and-copy, no `terraform_remote_state`. An
+  `output` is optional (visibility only).
 - `digitalocean_project_resources` — attach the droplet + reserved IP
   URNs to `data.digitalocean_project.podhaus.id` (pre-existing
   project resources untouched).
@@ -283,15 +279,15 @@ though the channel is already inside Tailscale WG).
 
 ### 4. DNS cutover (`cloudflare/`)
 
-- `cloudflare/dns_storage.tf`: set the `storage.pod.haus` A record
-  `content` to the **reserved IP** (the §1 output value, committed as
-  a literal — it is a public, non-secret, now-*static* IP) and
-  **remove `lifecycle.ignore_changes = [content]`**. That ignore only
-  existed because `cloudflare-ddns` mutated `content`; with DDNS
-  retired (§5) Terraform should own it again. `*.storage.pod.haus`
-  CNAME unchanged. Low coupling by design: no `terraform_remote_state`
-  across roots — the IP is a stable literal, matching how the repo
-  already treats this record.
+- The `storage.pod.haus` A record (now in the consolidated
+  `terraform/` root): set `content =
+  digitalocean_reserved_ip.kookaburra.ip_address` — a **direct
+  same-root reference**, not a literal or remote-state. Atomic: the
+  droplet, its reserved IP, and the DNS record converge in one plan.
+  **Remove `lifecycle.ignore_changes = [content]`** — that ignore
+  only existed because `cloudflare-ddns` mutated `content`; with DDNS
+  retired (§5) Terraform owns it. `*.storage.pod.haus` CNAME
+  unchanged.
 - `cloudflare/dns_unifi_split_horizon.tf`: **unchanged**. LAN keeps
   resolving `storage.pod.haus` (+ per-site vhosts) → `10.0.0.119` and
   hitting Caddy directly; the relay is the off-LAN path only.
@@ -300,9 +296,9 @@ though the channel is already inside Tailscale WG).
 
 ### 5. Decommissions (net subtractive)
 
-- Delete `cloudflare/unifi_port_forward.tf` (`unifi_port_forward
-  "minio_caddy_https"`, WAN:443→10.0.0.119:443) — no home inbound
-  needed any more.
+- Delete the `unifi_port_forward "minio_caddy_https"` resource
+  (WAN:443→10.0.0.119:443; lives in the consolidated `terraform/`
+  root post-foundation) — no home inbound needed any more.
 - Retire `cloudflare-ddns` for `storage.pod.haus`: it existed only to
   track the dynamic home WAN IP for this record; the relay IP is a
   static reserved IP. (`cloudflare-ddns`'s `DOMAINS` is *only*
@@ -405,12 +401,13 @@ kookaburra-scoped key item if we want per-host revocability).
 
 ## Hard-rule compliance checklist
 
-- [ ] `relay/terraform/` backend `https://storage.pod.haus`; no LAN
-      IP / loopback / dockernet in any TF root. From-anywhere holds
-      (and is *restored* for all roots once live).
+- [ ] Foundation (`terraform-foundation.md`) landed first: single
+      `terraform/` root, backend `https://storage.pod.haus`,
+      onepassword provider. From-anywhere holds (and is *restored*).
 - [ ] No secret in tracked source — only `op://`/env refs; rathole
       token+noise keys & Tailscale authkey via 1Password→komodo-op;
-      DO token via chezmoi `TF_VAR_do_token`. SSH **public** key is
+      **DO token via the onepassword provider** (`data
+      "onepassword_item"`), no chezmoi/`TF_VAR`. SSH **public** key is
       non-secret and committed (correct).
 - [ ] Directory bind mounts only (rathole template dir; alloy conf
       dir) — never single-file binds.
@@ -430,10 +427,13 @@ kookaburra-scoped key item if we want per-host revocability).
 
 Each `apply` / DNS change / deploy individually gated. `plan` is fine.
 
-1. Scaffold all config-as-code locally (after confirming the one open
-   Tailscale container-schema item). No apply. Review.
-2. `cd relay/terraform && terraform plan` → review → **(gated)**
-   `apply` from bilby/LAN. Capture the reserved IP output.
+0. **`terraform-foundation.md` complete first** (single root,
+   onepassword provider, komodo-start state-bucket bootstrap, zero-diff
+   migration proven). The relay does not start until this is done.
+1. Scaffold the relay `.tf` + stacks locally (after confirming the
+   one open Tailscale container-schema item). No apply. Review.
+2. `cd terraform && terraform plan` → review → **(gated)** `apply`
+   from bilby/LAN. The droplet+reserved IP+DNS A converge atomically.
 3. `kookaburra_bootstrap` (Periphery on the droplet over Tailscale);
    register host (servers/repos/procedures); `komodo-sync`;
    **(gated)** deploy `tailscale` (both hosts), then `kookaburra-relay`
@@ -444,11 +444,13 @@ Each `apply` / DNS change / deploy individually gated. `plan` is fine.
    external/VPN client) **forced to the reserved IP**: full SigV4
    PUT/GET + a Publii-style flow must succeed end-to-end; Periphery +
    logs visible over the tailnet.
-5. **(gated)** DNS cutover: `cloudflare/dns_storage.tf` → reserved IP,
-   drop `ignore_changes[content]`; `terraform apply`. Re-verify
-   externally; confirm LAN still uses split-horizon.
-6. **(gated)** Decommission: remove `unifi_port_forward.tf` +
-   `cloudflare-ddns`; `terraform apply` (cloudflare). Update
+5. **(gated)** DNS cutover: the `storage.pod.haus` A record →
+   `digitalocean_reserved_ip.kookaburra.ip_address`, drop
+   `ignore_changes[content]`; `terraform apply` (single root —
+   atomic with the relay). Re-verify externally; confirm LAN still
+   uses split-horizon.
+6. **(gated)** Decommission: remove the `unifi_port_forward`
+   resource + the `cloudflare-ddns` stack; `terraform apply`. Update
    `minio-public-caddy.md`, `AGENTS.md`, architecture docs; flip this
    doc + the OPEN ISSUE in `nathanbaxter-com-publii.md` to DONE.
 
@@ -481,9 +483,11 @@ Each `apply` / DNS change / deploy individually gated. `plan` is fine.
 ## Rollback
 
 DNS A back to the home WAN IP instantly reverts to the prior
-(broken-external but LAN-working) state; stop the relay stacks;
-`terraform destroy` on `relay/terraform/` removes the droplet. No data
-path through the droplet (ciphertext only) ⇒ nothing to clean.
+(broken-external but LAN-working) state; stop the relay stacks; a
+**targeted** `terraform destroy -target` of the DigitalOcean relay
+resources (single root — scope the destroy, don't nuke the root)
+removes the droplet. No data path through the droplet (ciphertext
+only) ⇒ nothing to clean.
 
 ## Open items (must close before scaffolding)
 
