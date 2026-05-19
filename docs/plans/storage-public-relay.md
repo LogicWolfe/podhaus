@@ -489,6 +489,35 @@ resources (single root — scope the destroy, don't nuke the root)
 removes the droplet. No data path through the droplet (ciphertext
 only) ⇒ nothing to clean.
 
+## Credential ledger (pre-"go")
+
+**You acquire (only Tailscale; order matters — tag owned before key):**
+1. Tailscale account/tailnet (free tier).
+2. Seed the ACL by hand once: `"tagOwners": {"tag:podnet":
+   ["autogroup:admin"]}` + the two `podnet` ACL rules (breaks the
+   ACL-as-code chicken-and-egg; TF owns it after).
+3. Auth key — **reusable, pre-approved, non-ephemeral, tag
+   `tag:podnet`** → 1P Homelab item `Tailscale Auth Key` field
+   `credential` → komodo-op `OP__KOMODO__TAILSCALE_AUTH_KEY__
+   CREDENTIAL` (consumed by the Tailscale Komodo stacks).
+4. OAuth client (scopes `acl`, `auth_keys`/`devices`) → 1P Homelab
+   item `Tailscale OAuth Client` (`client_id`, `client_secret`) →
+   consumed by the **onepassword TF provider** for the Tailscale TF
+   provider (ACL-as-code).
+
+**Generated & stored at build time (no user action):** rathole
+control token (`openssl rand`) + `noise` keypair (`rathole
+--genkey`) → 1P Homelab item `rathole relay`
+(`token`/`noise_private_key`/`noise_public_key`), written via the
+service-account token.
+
+**Already exist, verify only:** 1P service-account token (the sole
+at-rest secret); Cloudflare/UniFi/GitHub/MinIO-root/DigitalOcean
+items; Komodo Passkey + GitHub PAT (Periphery linked-repo); `NordVPN`
+(verification harness); the committed ed25519 public key.
+Non-credential precondition: DO account active/billable + the
+existing `podhaus` DO project.
+
 ## Open items (must close before scaffolding)
 
 - **One verification:** exact `tailscale/tailscale` container env/
