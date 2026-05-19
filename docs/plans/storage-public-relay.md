@@ -194,6 +194,6 @@ Region `syd1`; size `s-1vcpu-512mb-10gb`; Fedora image; existing
 
 - **Relay host name** (servers.toml entry + stack-name prefix; the
   bilby/kangaroo/pinelake theme). The only true blocker.
-- Exact 1Password item title holding the DO token (`.../token`
-  field) — I can discover it from the Homelab vault if you prefer.
+- ~~Exact 1Password item for the DO token~~ — resolved:
+  `op://Homelab/DigitalOcean Personal Access Token/token`.
 </body></html>
