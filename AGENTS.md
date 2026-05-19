@@ -195,15 +195,30 @@ only touch genuinely host-specific bits.
 
 These have failure modes that you must not introduce:
 
-- **podhaus Terraform must run from any machine.** Contract: clone
-  podhaus + have chezmoi-provisioned creds ⇒ `terraform` works. No
-  host-pinned backend endpoint (the S3 state backend uses the public
-  `https://storage.pod.haus`, never `minio:9000`/loopback), no
-  LAN-only provider `api_url` (UniFi uses `https://unifi.pod.haus`,
-  never `10.0.0.1`), no dockernet assumption in any TF root. Reject
-  any change reintroducing a LAN IP, dockernet name, or loopback in a
-  TF root. Run `terraform` directly — there is no wrapper script.
-  See [`docs/plans/tf-runner-decommission.md`](docs/plans/tf-runner-decommission.md).
+- **podhaus Terraform must run from any machine — NO TF root is
+  exempt.** Contract: clone podhaus + have chezmoi-provisioned creds ⇒
+  `terraform` works, for *every* root (`cloudflare/`, `minio/tf/`,
+  any future one). No host-pinned backend endpoint (the S3 state
+  backend uses the public `https://storage.pod.haus`, never
+  `minio:9000`/loopback), no LAN-only provider `api_url` (UniFi uses
+  `https://unifi.pod.haus`, never `10.0.0.1`; the MinIO provider uses
+  `https://storage.pod.haus`, never `127.0.0.1`), no dockernet
+  assumption anywhere. Reject any change reintroducing a LAN IP,
+  dockernet name, or loopback in a TF root — and reject any "this root
+  is bilby-only / admin tooling" carve-out (that exact rationalisation
+  was caught and removed once). Run `terraform` directly — there is no
+  wrapper script.
+  See [`docs/plans/minio-public-caddy.md`](docs/plans/minio-public-caddy.md)
+  and [`docs/plans/tf-runner-decommission.md`](docs/plans/tf-runner-decommission.md).
+- **MinIO public access-control model: SigV4, not an edge block.**
+  `storage.pod.haus` serves the full MinIO API (S3 *and* admin); the
+  sole boundary is MinIO's own per-request SigV4 (root/scoped creds
+  live only in 1Password + the chezmoi Terraform env;
+  unauthenticated calls incl. `/minio/admin/` get `AccessDenied`).
+  **Do not add an edge `/minio/admin/` 403 / WAF block** — it breaks
+  the from-anywhere `minio/tf/` root and contradicts the rule above.
+  Data-plane isolation is done with per-bucket least-priv keys (e.g.
+  per-Publii-site service accounts), not network filtering.
 - **Never use single-file bind mounts** for any config the running
   service reads after startup. File-level binds pin the inode at mount
   time, so atomic-rename editor saves on the host leave the container

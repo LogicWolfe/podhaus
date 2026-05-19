@@ -317,6 +317,20 @@ same gotcha as before, but reset via `mc rm` not filesystem delete.
 
 ### 4a. Public S3 API — access-control & threat model (DECIDED: expose the whole API)
 
+> **RETRACTED / SUPERSEDED (2026-05-19).** This section's
+> **edge `/minio/admin/` WAF/Caddy 403 block was never a ratified
+> decision** — it was a defence-in-depth proposal in this draft that
+> conflicts with the enshrined **from-anywhere Terraform hard rule**
+> (an admin 403 breaks the `minio/tf/` root, and **no TF root is
+> exempt**). It has been removed. The real, sole access-control
+> boundary for the public MinIO endpoint is **MinIO's own SigV4**
+> (root/admin creds, held only in 1Password + the chezmoi Terraform
+> env); unauthenticated calls — including `/minio/admin/` — get MinIO
+> `AccessDenied`. The whole `storage.pod.haus` architecture is also
+> no longer Cloudflare-proxied. **As-built source of truth:**
+> [minio-public-caddy.md](minio-public-caddy.md). Do not re-derive an
+> edge admin block from the text below.
+
 **Decision**: expose the entire MinIO S3 API at the new public
 hostname. The framing that makes this sound rather than reckless:
 **MinIO's S3 API is designed to be internet-facing — exactly like AWS

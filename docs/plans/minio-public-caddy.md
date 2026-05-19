@@ -18,9 +18,13 @@ predate this architecture — read this doc for what actually exists).
   `endpoint=https://storage.pod.haus`) round-tripped through the real
   public path (`<bucket>.storage.pod.haus` → port-forward → Caddy LE
   wildcard → MinIO `MINIO_DOMAIN`).
-- `/minio/admin/*` → 403 at Caddy; `terraform-state` not anonymously
-  listable; valid public LE cert (apex + wildcard); cloudflare-ddns
-  holding the A record; Gatus check added.
+- The full MinIO API (S3 + admin) is served; access control is
+  MinIO's own SigV4 — unauthenticated `/minio/admin/` → MinIO
+  `AccessDenied`. **Deliberately NOT edge-blocked**: an admin 403
+  would break the from-anywhere `minio/tf/` root, and no TF root is
+  exempt from the from-anywhere rule. `terraform-state` not
+  anonymously listable; valid public LE cert (apex + wildcard);
+  cloudflare-ddns holding the A record; Gatus check added.
 - Stock `terraform` from any machine (creds from the chezmoi-rendered
   `~/.config/fish/conf.d/podhaus-tf.fish`); `tf` runner deleted.
 
@@ -79,7 +83,8 @@ Cloudflare DNS (grey-cloud / DNS-only, NOT proxied)
 Home WAN  ──UniFi port-forward 443→bilby:443 (TF-managed)──▶
         ▼
 bilby: Caddy  (LE SAN cert: storage.pod.haus + *.storage.pod.haus,
-               DNS-01 via Cloudflare token; blocks /minio/admin/*)
+               DNS-01 via Cloudflare token; full S3+admin API,
+               MinIO SigV4 is the access control)
         │  reverse_proxy (Host + Accept-Encoding untouched)
         ▼
 MinIO :9000  (MINIO_DOMAIN=storage.pod.haus → vhost + path-style both)
@@ -107,10 +112,13 @@ LAN/bilby clients reach Caddy directly via UniFi split-horizon DNS
   - site `storage.pod.haus, *.storage.pod.haus`
   - `tls` with `dns cloudflare {env.CLOUDFLARE_API_TOKEN}` (DNS-01;
     issues the SAN wildcard automatically, auto-renews)
-  - `@admin path /minio/admin/*` → `respond 403` (the admin-API edge
-    block, re-homed from the Cloudflare WAF)
   - `reverse_proxy minio:9000` (Caddy forwards Host + Accept-Encoding
-    unchanged — the whole point)
+    unchanged — the whole point). The **full** MinIO API (S3 + admin)
+    is served; access control is MinIO SigV4. **No `/minio/admin/`
+    edge 403** — it would break the from-anywhere `minio/tf/` root
+    (no TF root is exempt; see AGENTS.md). Unauthenticated admin calls
+    get MinIO `AccessDenied`; root creds live only in 1Password + the
+    chezmoi Terraform env.
 - `caddy/stack.toml`: `server=podhaus`, `files_on_host=true`,
   `run_directory=/etc/komodo/repo/caddy`. `CLOUDFLARE_API_TOKEN` via
   `[[OP__KOMODO__CLOUDFLARE_API_TOKEN__*]]` (1Password → komodo-op;
@@ -183,7 +191,9 @@ make all the changes; the backend is flipped to the public endpoint
 6. Delete `tf` runner + doc sweep; Gatus check; commit (podhaus).
 7. **Verify:** from bilby and (record for the user to test) off-LAN —
    `terraform plan` clean; an `mcli`/aws-js virtual-host PUT to
-   `skycroeser-net.storage.pod.haus` succeeds; `/minio/admin/` → 403;
+   `skycroeser-net.storage.pod.haus` succeeds; unauthenticated
+   `/minio/admin/` → MinIO `AccessDenied` (cred-gated, not a Caddy
+   403) while an authenticated `minio/tf/` reaches it from anywhere;
    `terraform-state` private.
 
 ## Acceptance
@@ -191,13 +201,18 @@ make all the changes; the backend is flipped to the public endpoint
 `terraform apply` works against `https://storage.pod.haus` from bilby
 (and is portable to any machine with chezmoi creds); a virtual-host S3
 client (Publii-equivalent) can PUT/GET `*.storage.pod.haus`;
-`/minio/admin/*` blocked; `terraform-state` not publicly listable;
-Gatus green; DNS A record DDNS-maintained with TF `ignore_changes`.
+MinIO admin API reachable but SigV4-gated (unauth → `AccessDenied`);
+`terraform-state` not publicly listable; Gatus green; DNS A record
+DDNS-maintained with TF `ignore_changes`.
 
 ## Risks / notes
 
-- First public WAN exposure on the fleet (accepted). Mitigations:
-  Caddy admin-path block, MinIO SigV4, keep Caddy/MinIO patched.
+- First public WAN exposure on the fleet (accepted). The MinIO API
+  (S3 + admin) is internet-reachable; the control is **MinIO SigV4**
+  (root/admin creds only in 1Password + the chezmoi Terraform env).
+  Deliberately **not** edge-blocked — an admin 403 would break the
+  from-anywhere `minio/tf/` root and no TF root is exempt. Keep
+  Caddy/MinIO patched.
 - Caddy must forward `Host` + `Accept-Encoding` unmodified (default
   `reverse_proxy` behaviour — verify; do **not** add `encode` on the
   proxied site).

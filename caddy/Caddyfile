@@ -16,10 +16,12 @@ storage.pod.haus, *.storage.pod.haus {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 
-	# MinIO's admin API rides the same :9000 port. Keep it off the
-	# internet (re-homed from the old Cloudflare WAF rule).
-	@admin path /minio/admin/*
-	respond @admin 403
-
+	# The full MinIO API (S3 + admin) is served. The access-control
+	# boundary is MinIO's own SigV4 — unauthenticated calls (incl. to
+	# /minio/admin/) get AccessDenied; root/admin creds live only in
+	# 1Password + the chezmoi-rendered Terraform env. Deliberately NOT
+	# edge-blocked: an admin-path 403 would break the from-anywhere
+	# `minio/tf/` Terraform root (no TF root is exempt from the
+	# from-anywhere rule — see AGENTS.md / docs/plans/minio-public-caddy.md).
 	reverse_proxy minio:9000
 }
