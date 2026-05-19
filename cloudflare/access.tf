@@ -85,18 +85,6 @@ resource "cloudflare_zero_trust_access_policy" "unifi_bypass" {
   include    = [{ everyone = {} }]
 }
 
-# Public bypass — reusable "no Access gate at all" policy. Auth is the
-# origin's responsibility (e.g. MinIO SigV4 on storage.pod.haus). A
-# more-specific app carrying only this policy overrides the *.pod.haus
-# wildcard for that hostname, making it genuinely public. Same shape as
-# unifi_bypass / komodo_webhook_bypass.
-resource "cloudflare_zero_trust_access_policy" "public_bypass" {
-  account_id = var.account_id
-  name       = "Bypass — public (auth handled by origin)"
-  decision   = "bypass"
-  include    = [{ everyone = {} }]
-}
-
 # Pod Haus wildcard — the default deny-by-default gate for everything
 # not covered by a more-specific Application.
 resource "cloudflare_zero_trust_access_application" "pod_haus_wildcard" {

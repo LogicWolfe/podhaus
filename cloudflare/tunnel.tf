@@ -31,7 +31,6 @@ locals {
     module.watch.ingress_rule,
     module.docs.ingress_rule,
     module.minio.ingress_rule,
-    module.storage.ingress_rule,
     module.syncthing.ingress_rule,
     module.paperless.ingress_rule,
     module.unifi.ingress_rule,

@@ -271,25 +271,9 @@ module "unifi" {
   ]
 }
 
-# storage.pod.haus — public MinIO S3 API endpoint (Publii deploy
-# target + future from-anywhere Terraform state backend). MUST be
-# public: S3 clients send SigV4, not CF-Access headers, so the
-# bypass-everyone policy overrides the *.pod.haus wildcard. Auth is
-# MinIO's per-request SigV4 + per-bucket policy; the WAF in waf.tf
-# blocks the same-port /minio/admin/ surface and rate-limits auth
-# failures. Console stays separate at minio.pod.haus → :9001.
-module "storage" {
-  source = "./modules/pod_haus_service"
-
-  account_id    = local.pod_haus_service_defaults.account_id
-  zone_id       = local.pod_haus_service_defaults.zone_id
-  tunnel_target = local.pod_haus_service_defaults.tunnel_target
-
-  hostname             = "storage"
-  backend              = "http://minio:9000"
-  app_launcher_visible = false
-
-  access_policy_ids = [
-    cloudflare_zero_trust_access_policy.public_bypass.id,
-  ]
-}
+# storage.pod.haus is NOT a Cloudflare-proxied service. Its S3 API is
+# served via its own Caddy + LE wildcard behind a UniFi port-forward,
+# with grey-cloud (DNS-only) records in dns_storage.tf — Cloudflare's
+# HTTP proxy mangles SigV4 (Accept-Encoding) and its single-level cert
+# can't cover Publii's virtual-host buckets. See
+# docs/plans/minio-public-caddy.md.

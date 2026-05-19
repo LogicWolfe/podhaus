@@ -25,3 +25,16 @@ resource "unifi_dns_record" "bilby_pod_haus" {
   ttl         = 300
   enabled     = true
 }
+
+# storage.pod.haus → bilby directly for LAN clients, so Terraform run
+# from bilby/LAN (path-style) hits Caddy without NAT hairpin off the
+# public A record. Off-LAN clients (Sky's Publii) use the grey-cloud
+# Cloudflare record → WAN port-forward. (Wildcard vhost names from LAN
+# fall through to the public path/hairpin — fine; Publii is off-LAN.)
+resource "unifi_dns_record" "storage_pod_haus" {
+  name        = "storage.pod.haus"
+  record_type = "A"
+  value       = "10.0.0.119"
+  ttl         = 300
+  enabled     = true
+}
