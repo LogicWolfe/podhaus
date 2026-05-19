@@ -26,13 +26,25 @@ resource "unifi_dns_record" "bilby_pod_haus" {
   enabled     = true
 }
 
-# storage.pod.haus → bilby directly for LAN clients, so Terraform run
-# from bilby/LAN (path-style) hits Caddy without NAT hairpin off the
-# public A record. Off-LAN clients (Sky's Publii) use the grey-cloud
-# Cloudflare record → WAN port-forward. (Wildcard vhost names from LAN
-# fall through to the public path/hairpin — fine; Publii is off-LAN.)
+# storage.pod.haus + per-site Publii vhost names → bilby directly for
+# LAN clients (Caddy on the LAN, no WAN/NAT-hairpin/VPN path). UniFi's
+# DNS records are per-name (no wildcard), so each Publii bucket vhost
+# gets its own split-horizon A record alongside the apex. Off-LAN
+# clients (remote, e.g. Sky) use the grey-cloud Cloudflare record →
+# WAN port-forward as normal.
 resource "unifi_dns_record" "storage_pod_haus" {
   name        = "storage.pod.haus"
+  record_type = "A"
+  value       = "10.0.0.119"
+  ttl         = 300
+  enabled     = true
+}
+
+# Publii uploads to <bucket>.storage.pod.haus (virtual-host). Keep LAN
+# publishes off the WAN/hairpin path (was the cause of VPN-MTU TLS
+# handshake failures from a home laptop). One per Publii site.
+resource "unifi_dns_record" "nathanbaxter_com_storage" {
+  name        = "nathanbaxter-com.storage.pod.haus"
   record_type = "A"
   value       = "10.0.0.119"
   ttl         = 300
