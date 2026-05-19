@@ -511,10 +511,14 @@ only) ⇒ nothing to clean.
    other personal device-to-device traffic, keep a
    member→member rule too. Breaks the ACL-as-code chicken-and-egg;
    the Tailscale TF provider owns the file after.
-3. Auth key — **reusable, pre-approved, non-ephemeral, tag
-   `tag:podnet`** → 1P Homelab item `Tailscale Auth Key` field
-   `credential` → komodo-op `OP__KOMODO__TAILSCALE_AUTH_KEY__
-   CREDENTIAL` (consumed by the Tailscale Komodo stacks).
+3. Auth key — **reusable, non-ephemeral, Tags ON → `tag:podnet`**
+   (Tags disables node-key expiry, so the Free-tier 90-day *key*
+   expiry does NOT disconnect joined nodes — it only limits enrolling
+   new ones) → 1P Homelab item `Tailscale Auth Key` field
+   `credential` → `OP__KOMODO__TAILSCALE_AUTH_KEY__CREDENTIAL`. This
+   manual key is bootstrap-only; thereafter the Tailscale TF provider
+   (via the OAuth client) mints a tagged key on `apply` and writes it
+   back to this 1P item — rotation is config-as-code, not a chore.
 4. OAuth client (scopes `acl`, `auth_keys`/`devices`) → 1P Homelab
    item `Tailscale OAuth Client` (`client_id`, `client_secret`) →
    consumed by the **onepassword TF provider** for the Tailscale TF
