@@ -6,7 +6,7 @@ deploy = true
 
 [stack.config]
 server = "kookaburra"
-linked_repo = "podhaus"
+linked_repo = "podhaus-kookaburra"
 run_directory = "relay/kookaburra"
 file_paths = ["compose.yaml"]
 run_build = true

@@ -14,11 +14,26 @@
 
 [[repo]]
 name = "podhaus"
-description = "Komodo-managed clone of this monorepo on remote Peripheries (kangaroo, future pinelake)"
-tags = ["podhaus"]
+description = "Komodo-managed clone of this monorepo on kangaroo's Periphery"
+tags = ["podhaus", "kangaroo"]
 
 [repo.config]
 server = "kangaroo"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/podhaus"
+branch = "main"
+
+# kookaburra clone — separate Komodo Repo resource because Repo
+# resources are per-Periphery (each host's clone is independent
+# state). kookaburra stacks reference linked_repo = "podhaus-kookaburra".
+[[repo]]
+name = "podhaus-kookaburra"
+description = "Komodo-managed clone of this monorepo on kookaburra's Periphery (off-LAN DigitalOcean relay host)"
+tags = ["podhaus", "kookaburra"]
+
+[repo.config]
+server = "kookaburra"
 git_provider = "github.com"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"

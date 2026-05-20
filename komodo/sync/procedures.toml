@@ -43,8 +43,9 @@ executions = [
 ]
 
 [[procedure.config.stage]]
-name = "Force-deploy kangaroo linked_repo stacks"
+name = "Force-deploy linked_repo stacks (kangaroo + kookaburra)"
 enabled = true
 executions = [
-  { execution.type = "BatchDeployStack", execution.params = { pattern = "kangaroo-*" }, enabled = true }
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "kangaroo-*" }, enabled = true },
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "kookaburra-*" }, enabled = true },
 ]
