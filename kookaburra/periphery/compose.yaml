@@ -2,10 +2,14 @@
 # Fedora 43 x86_64). Like kangaroo, this is the only stack on
 # kookaburra that is NOT itself Komodo-managed — it has to come up
 # before kookaburra can be a Komodo target. Bootstrapped via
-# ./kookaburra_bootstrap from bilby. Same applies to the tailscale
-# container (tailscale/kookaburra/compose.yaml): bootstrap-only,
-# because Komodo→Periphery connectivity *depends* on tailscale being
-# up, so it can't be torn down by a Komodo redeploy.
+# ./kookaburra_bootstrap from bilby.
+#
+# Tailscale on kookaburra IS Komodo-managed
+# (tailscale/kookaburra/stack.toml). The bootstrap only does the
+# initial `docker compose up` of tailscale so Periphery can join the
+# tailnet; Komodo manages it thereafter. If a tailscale redeploy ever
+# cuts off Core→Periphery connectivity, SSH from bilby is the
+# recovery path — same posture as Periphery itself.
 #
 # Off-LAN ⇒ reachable only over the tailnet (DO firewall blocks
 # inbound 8120 publicly; tailscale traffic arrives via tailscale0

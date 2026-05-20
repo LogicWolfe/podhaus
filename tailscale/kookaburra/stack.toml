@@ -1,0 +1,17 @@
+[[stack]]
+name = "kookaburra-tailscale"
+description = "Tailscale management-plane node on kookaburra (tag:podnet). Komodo-managed; if a redeploy ever cuts off Core→Periphery connectivity, SSH from bilby is the recovery path (same posture as Periphery itself, which is also bootstrap-managed)."
+tags = ["kookaburra", "podhaus"]
+deploy = true
+
+[stack.config]
+server = "kookaburra"
+linked_repo = "podhaus-kookaburra"
+run_directory = "tailscale/kookaburra"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]
+
+environment = """
+TZ=[[TZ]]
+TS_AUTHKEY=[[OP__KOMODO__TAILSCALE_AUTH_KEY__CREDENTIAL]]
+TS_HOSTNAME=kookaburra
+"""
