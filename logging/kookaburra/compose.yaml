@@ -1,17 +1,14 @@
 # kookaburra's logging overlay. Ships container logs cross-tailnet to
-# bilby's ClickStack collector (bilby's tailnet IP, port 4318). Uses
-# host networking on the droplet — there's no dockernet on kookaburra
-# (only bilby + kangaroo have their own bridges), and host net lets
-# alloy reach bilby's tailnet IP directly via the host's tailscale0.
+# bilby's ClickStack collector (bilby's tailnet IP, port 4318). alloy
+# stays on the shared compose's `dockernet` network — kookaburra has
+# its own dockernet bridge created during bootstrap (mirrors kangaroo).
+# Outbound packets to bilby's tailnet IP route via the host's
+# tailscale0 (bridge → host → tailscale0 → over WG → bilby).
 services:
   alloy:
     # SELinux Enforcing on Fedora 43 — same pattern as bilby's stacks.
     security_opt:
       - label:disable
-    # Override the shared network (which expects dockernet) with host
-    # networking so we don't need to create a bridge solely for alloy.
-    network_mode: host
-    networks: !reset []
     volumes:
       # Absolute host path because Periphery's container-side relative-
       # path resolution doesn't match the kookaburra host's view of the

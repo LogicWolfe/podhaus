@@ -37,6 +37,9 @@ retry() { local n=0; until "$@"; do n=$((n+1)); [ $n -ge 5 ] && return 1; echo "
 echo "== prep dirs =="
 retry ssh $SSHO "$SSH_HOST" "mkdir -p $TS_DIR $REMOTE_DIR/etc-komodo"
 
+echo "== ensure dockernet bridge (needed by Komodo-managed stacks that use the shared logging compose) =="
+retry ssh $SSHO "$SSH_HOST" "docker network inspect dockernet >/dev/null 2>&1 || docker network create dockernet"
+
 echo "== ship + render tailscale env (TS_AUTHKEY from 1P) =="
 retry scp -q $SSHO tailscale/compose.shared.yaml "$SSH_HOST:$TS_DIR/compose.yaml"
 TS_AUTHKEY="$(op read 'op://Homelab/Tailscale Auth Key/credential')"
