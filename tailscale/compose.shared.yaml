@@ -22,6 +22,14 @@ services:
       # tagged tag:podnet (the tag is baked into the auth key itself,
       # so no --advertise-tags needed).
       TS_USERSPACE: "false"
+      # Accept Tailscale's DNS (100.100.100.100) so the host can
+      # resolve MagicDNS hostnames (kookaburra, bilby-1, ...).
+      # Containers on dockernet pick this up via the `dns:` field in
+      # the consuming stack's compose (set explicitly to
+      # 100.100.100.100). MagicDNS itself is a tailnet-wide setting in
+      # the Tailscale admin (currently TF-unmanaged: OAuth client
+      # needs `dns:write` to manage it as code — follow-up).
+      TS_EXTRA_ARGS: "--accept-dns=true"
     restart: unless-stopped
     labels:
       autoheal: "true"

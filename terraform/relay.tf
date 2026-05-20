@@ -67,23 +67,19 @@ resource "digitalocean_firewall" "kookaburra" {
     port_range       = "2333"
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
-  # SSH locked to bilby's home WAN + the Tailscale CGNAT range.
-  # Originally open to the world for the Periphery bootstrap; the
-  # public exposure attracted enough internet SSH-scanner pressure to
-  # keep sshd's MaxStartups (10:30:100) unauthenticated-session
-  # counter in the random-early-drop band, RST-ing legit connections
-  # from bilby (kex_exchange_identification: read: Connection reset
-  # by peer). Locking the source set eliminates the noise — and SSH
-  # is no longer reachable from anywhere else on the internet.
-  #
-  # bilby.wan:    144.6.147.203/32 (home; static-ish — if it ever
-  #               changes, recovery is via the tailnet route).
-  # tailscale:    100.64.0.0/10 (Tailscale CGNAT range — any
-  #               tag:podnet node, incl. bilby's tailscale stack).
+  # SSH public — deliberately kept open as a recovery path. Internet
+  # SSH-scanner pressure does keep sshd's MaxStartups (10:30:100)
+  # counter elevated, occasionally RST-ing legit bursts from bilby
+  # (kex_exchange_identification: read: Connection reset by peer) —
+  # but for normal/recovery use (occasional single connections,
+  # especially with SSH ControlMaster reuse) this is mostly invisible.
+  # If it becomes routine pain, mitigations are: raise MaxStartups,
+  # add fail2ban, or move sshd to a non-default port — NOT close
+  # public SSH (that defeats the recovery purpose).
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"
-    source_addresses = ["144.6.147.203/32", "100.64.0.0/10"]
+    source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
   # A DO firewall with NO outbound block silently drops ALL egress
