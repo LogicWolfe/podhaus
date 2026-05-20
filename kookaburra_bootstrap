@@ -40,6 +40,12 @@ retry ssh $SSHO "$SSH_HOST" "mkdir -p $TS_DIR $REMOTE_DIR/etc-komodo"
 echo "== ensure dockernet bridge (needed by Komodo-managed stacks that use the shared logging compose) =="
 retry ssh $SSHO "$SSH_HOST" "docker network inspect dockernet >/dev/null 2>&1 || docker network create dockernet"
 
+echo "== SSH hardening (auto-allowlist successful-auth IPs, NO banning) =="
+# Bake in: ship + run kookaburra/ssh-hardening/apply.sh on the droplet.
+# Idempotent — re-runs refresh the config and the nftables ruleset.
+retry scp -q $SSHO kookaburra/ssh-hardening/apply.sh "$SSH_HOST:/usr/local/sbin/kookaburra-ssh-harden"
+retry ssh $SSHO "$SSH_HOST" "chmod +x /usr/local/sbin/kookaburra-ssh-harden && BILBY_WAN=$(curl -s --max-time 6 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | sed -n 's/^ip=//p') /usr/local/sbin/kookaburra-ssh-harden" 2>&1 | tail -8
+
 echo "== ship + render tailscale env (TS_AUTHKEY from 1P) =="
 retry scp -q $SSHO tailscale/compose.shared.yaml "$SSH_HOST:$TS_DIR/compose.yaml"
 TS_AUTHKEY="$(op read 'op://Homelab/Tailscale Auth Key/credential')"
