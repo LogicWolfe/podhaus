@@ -66,14 +66,37 @@ networks:
         <span class="callout-title">One deliberate exception: storage.pod.haus</span>
         Every pod.haus hostname is tunnel-routed <strong>except
         <code>storage.pod.haus</code></strong> (the public MinIO S3
-        endpoint). It is a grey-cloud DNS record → a <strong>UniFi WAN
-        port-forward</strong> → Caddy on bilby (own LE wildcard) → MinIO.
-        This is the fleet's only inbound WAN port. The S3 data path
-        <em>cannot</em> traverse Cloudflare's HTTP proxy: it rewrites the
-        SigV4-signed <code>Accept-Encoding</code> (breaks
-        <code>aws-sdk-go</code>/Terraform) and its single-level cert
-        can't cover Publii's virtual-host buckets. Full rationale:
-        <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">MinIO public access via Caddy + UniFi</a>.
+        endpoint). It is a grey-cloud DNS A → the <strong>kookaburra
+        rathole relay</strong> (DigitalOcean droplet, public IP
+        <code>170.64.241.136</code>) → rathole reverse tunnel → Caddy
+        on bilby (own LE wildcard) → MinIO. <strong>The home network
+        has NO inbound WAN port</strong> — bilby dials out to
+        kookaburra. The S3 data path <em>cannot</em> traverse
+        Cloudflare's HTTP proxy (rewrites the SigV4-signed
+        <code>Accept-Encoding</code>; single-level cert can't cover
+        Publii vhost buckets); the rathole tunnel is raw TCP
+        passthrough so SigV4 + Host stay intact. Full rationale +
+        as-built:
+        <a href="/plans/plan-viewer.html?file=storage-public-relay.md">storage public ingress relay</a>.
+        (The earlier <em>UniFi WAN port-forward</em> path was
+        replaced — the UDM Pro SE binds WAN:443 with UniFi OS itself,
+        shadowing the forward; see
+        <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">minio-public-caddy.md</a>
+        for the historical record.)
+      </aside>
+
+      <aside class="callout note">
+        <span class="callout-title">Management plane: Tailscale (<code>tag:podnet</code>)</span>
+        Inter-host management traffic (Komodo Core→Periphery for kookaburra,
+        log ship-back from kookaburra to bilby's ClickStack) rides a
+        private Tailscale tailnet — bilby (<code>bilby-1</code>,
+        <code>100.122.138.120</code>) and kookaburra (<code>kookaburra</code>,
+        <code>100.77.153.10</code>). ACL is asymmetric:
+        <em>your devices → podnet freely; podnet ↛ your devices</em>
+        (blast-radius containment — a popped relay can't pivot into
+        your laptop). The rathole data tunnel is independent (public,
+        noise+token, NOT on the tailnet — clients reaching
+        storage.pod.haus never touch any private network).
       </aside>
       <p>
         A single <code>cloudflared</code> container on bilby holds the tunnel credential. Ingress

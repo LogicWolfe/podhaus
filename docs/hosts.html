@@ -134,6 +134,47 @@
         <a href="/disaster-recovery.html#kangaroo-rebuild">disaster recovery</a>.
       </aside>
 
+      <h2 id="kookaburra">kookaburra</h2>
+      <p>
+        DigitalOcean droplet, syd1 region, 1 vCPU / 512 MB RAM, 10 GB disk, Fedora 43 x86_64.
+        <strong>Off-LAN public-ingress relay host</strong> — its sole job is terminating TCP for
+        <code>storage.pod.haus</code> on its public reserved IP <code>170.64.241.136</code> and
+        passing the bytes through a rathole reverse tunnel to bilby's Caddy. TLS terminates on
+        bilby (LE wildcard), so this droplet only ever sees ciphertext — no MinIO data, no certs,
+        no creds. <strong>Stateless by design</strong> (see the AGENTS hard rule).
+      </p>
+      <p>
+        Why it exists: the UDM Pro SE binds WAN tcp/443 with UniFi OS itself and shadows any
+        direct WAN port-forward, so genuine external clients never reached bilby's Caddy via the
+        home WAN IP. The relay sidesteps the UDM entirely: bilby <em>dials out</em> to kookaburra,
+        no home inbound. See <a href="/plans/plan-viewer.html?file=storage-public-relay.md">the
+        relay plan</a>.
+      </p>
+      <ul>
+        <li><strong>Public surface:</strong> :443 (rathole data) and :2333 (rathole control,
+          noise+token). Nothing else inbound from the internet (DO firewall).</li>
+        <li><strong>Management plane:</strong> Tailscale (<code>tag:podnet</code>); kookaburra
+          appears as <code>kookaburra</code> at <code>100.77.153.10</code>. Komodo Core on bilby
+          reaches kookaburra Periphery (<code>:8120</code>) <em>only</em> over the tailnet —
+          Periphery is never internet-exposed (<code>PERIPHERY_ALLOWED_IPS=100.64.0.0/10</code>).</li>
+        <li><strong>Bootstrap-only services</strong> (not Komodo-managed because Komodo→Periphery
+          depends on them being up):
+          <code>tailscale</code> (joins the tailnet) and <code>komodo-periphery</code>. Brought up
+          by <code>kookaburra_bootstrap</code> via SSH + <code>docker compose</code>; reboot-
+          persistent via <code>restart: unless-stopped</code>.</li>
+        <li><strong>Komodo-managed stacks:</strong> <code>kookaburra-relay</code> (rathole server)
+          and <code>kookaburra-logging</code> (alloy → bilby ClickStack cross-tailnet). Linked-repo
+          clone (<code>podhaus-kookaburra</code>) at
+          <code>/opt/komodo-periphery/etc-komodo/repos/podhaus-kookaburra/</code>.</li>
+      </ul>
+      <p>
+        Disaster recovery: <code>terraform apply</code> in <code>terraform/</code> rebuilds the
+        droplet (reserved IP survives), <code>./kookaburra_bootstrap</code> reinstalls tailscale +
+        Periphery, push-deploy fans the rest out. The droplet is intentionally excluded from
+        backups; if meaningful state ever lands on it, that hard rule (AGENTS.md) is voided —
+        reopen the backup decision then.
+      </p>
+
       <h2 id="pinelake">pinelake (planned)</h2>
       <p>
         A second household's primary host, paralleling bilby's role for that environment.

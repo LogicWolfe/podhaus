@@ -2,6 +2,21 @@
 
 ## Status
 
+**⚠️ SUPERSEDED (2026-05-20).** The "UniFi WAN port-forward → Caddy"
+path documented below is **DEAD** — the UDM Pro SE binds WAN tcp/443
+with UniFi OS itself and shadows any port-forward (the platform
+constraint hidden by NAT-hairpin "external" testing for months).
+Replaced by the **kookaburra DigitalOcean rathole relay**: see
+[`storage-public-relay.md`](plan-viewer.html?file=storage-public-relay.md)
+for the as-built. Caddy's role (LE wildcard cert; reverse-proxy to
+MinIO) is unchanged — only the off-LAN ingress mechanism flipped from
+WAN-forward to relay tunnel. This doc is kept for historical context
+on the Caddy/MinIO/SigV4 design (why-not-Cloudflare, etc.).
+
+---
+
+### Original status (historical)
+
 **COMPLETE (2026-05-19).** Built and verified end-to-end. This is the
 authoritative as-built record; it supersedes the Cloudflare-proxied
 `storage.pod.haus` approach (`11a84cd`, torn down) and the planning in
