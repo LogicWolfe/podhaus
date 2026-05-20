@@ -13,5 +13,5 @@ file_paths = ["compose.yaml", "../compose.shared.yaml"]
 environment = """
 TZ=[[TZ]]
 TS_AUTHKEY=[[OP__KOMODO__TAILSCALE_AUTH_KEY__CREDENTIAL]]
-TS_HOSTNAME=bilby
+TS_HOSTNAME=bilby-podnet
 """

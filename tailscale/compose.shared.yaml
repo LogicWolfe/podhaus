@@ -6,7 +6,11 @@
 services:
   tailscale:
     image: tailscale/tailscale:latest
-    container_name: tailscale
+    # Container name = Tailscale device name = ${TS_HOSTNAME} (set per
+    # host in stack.toml: bilby-podnet, kookaburra-podnet, ...). One
+    # knob, one source of truth, and `docker ps` on any host shows the
+    # tailnet identity unambiguously vs the outer host.
+    container_name: ${TS_HOSTNAME}
     cap_add:
       - NET_ADMIN
     devices:

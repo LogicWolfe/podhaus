@@ -22,7 +22,16 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 DROPLET_IP="${DROPLET_IP:-134.199.167.124}"
 SSH_HOST="root@${DROPLET_IP}"
 REMOTE_DIR=/opt/komodo-periphery
-TS_DIR=/opt/tailscale
+# Bootstrap-side tailscale dir. Project name matches the eventual
+# Komodo-managed stack (kookaburra-tailscale) so the named volume
+# (kookaburra-tailscale_tailscale-state) is identical from day one —
+# Komodo's first DeployStack adopts the running container with NO
+# tailnet identity (and IP) regenerated. Same goes for container_name
+# / TS_HOSTNAME: kookaburra-podnet is the single name across docker
+# ps and the Tailscale admin.
+TS_DIR=/opt/kookaburra-tailscale
+TS_PROJECT=kookaburra-tailscale
+TS_HOSTNAME=kookaburra-podnet
 
 export OP_SERVICE_ACCOUNT_TOKEN="$(tr -d '\n' < OP_SERVICE_ACCOUNT_TOKEN)"
 SOCK="$(ls /tmp/op-unlock-*.sock 2>/dev/null | head -1)"
@@ -33,37 +42,47 @@ SSHO="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 
  -o ServerAliveInterval=15 -o ControlMaster=auto -o ControlPersist=120 -o ControlPath=$CP"
 retry() { local n=0; until "$@"; do n=$((n+1)); [ $n -ge 5 ] && return 1; echo "  retry $n: $*" >&2; sleep 8; done; }
 
-# --- 1. tailscale (joins tag:podnet) ---
+# --- 1. SSH hardening FIRST (no Docker dependency; makes every
+# subsequent bootstrap SSH call reliable for the slower docker steps).
 echo "== prep dirs =="
 retry ssh $SSHO "$SSH_HOST" "mkdir -p $TS_DIR $REMOTE_DIR/etc-komodo"
 
+echo "== SSH hardening (auto-allowlist successful-auth IPs, NO banning) =="
+# Ship + run kookaburra/ssh-hardening/apply.sh on the droplet.
+# Idempotent — re-runs refresh sshd config + nftables ruleset.
+BILBY_WAN=$(curl -s --max-time 6 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | sed -n 's/^ip=//p')
+retry scp -q $SSHO kookaburra/ssh-hardening/apply.sh "$SSH_HOST:/usr/local/sbin/kookaburra-ssh-harden"
+retry ssh $SSHO "$SSH_HOST" "chmod +x /usr/local/sbin/kookaburra-ssh-harden && BILBY_WAN=$BILBY_WAN /usr/local/sbin/kookaburra-ssh-harden 2>&1 | tail -6"
+
+# --- 2. dockernet bridge (Docker-dependent; cloud-init installs Docker)
 echo "== ensure dockernet bridge (needed by Komodo-managed stacks that use the shared logging compose) =="
 retry ssh $SSHO "$SSH_HOST" "docker network inspect dockernet >/dev/null 2>&1 || docker network create dockernet"
 
-echo "== SSH hardening (auto-allowlist successful-auth IPs, NO banning) =="
-# Bake in: ship + run kookaburra/ssh-hardening/apply.sh on the droplet.
-# Idempotent — re-runs refresh the config and the nftables ruleset.
-retry scp -q $SSHO kookaburra/ssh-hardening/apply.sh "$SSH_HOST:/usr/local/sbin/kookaburra-ssh-harden"
-retry ssh $SSHO "$SSH_HOST" "chmod +x /usr/local/sbin/kookaburra-ssh-harden && BILBY_WAN=$(curl -s --max-time 6 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | sed -n 's/^ip=//p') /usr/local/sbin/kookaburra-ssh-harden" 2>&1 | tail -8
+# --- 3. tailscale (joins tag:podnet as kookaburra-podnet) ---
+# Use the SAME compose files + project name Komodo will use for the
+# kookaburra-tailscale stack, so the named volume + container identity
+# survive the bootstrap→Komodo handover (no tailnet IP regeneration).
+echo "== ship tailscale compose (overlay + shared) =="
+retry scp -q $SSHO tailscale/compose.shared.yaml "$SSH_HOST:$TS_DIR/compose.shared.yaml"
+retry scp -q $SSHO tailscale/kookaburra/compose.yaml "$SSH_HOST:$TS_DIR/compose.yaml"
 
-echo "== ship + render tailscale env (TS_AUTHKEY from 1P) =="
-retry scp -q $SSHO tailscale/compose.shared.yaml "$SSH_HOST:$TS_DIR/compose.yaml"
+echo "== render .env (TS_AUTHKEY from 1P) =="
 TS_AUTHKEY="$(op read 'op://Homelab/Tailscale Auth Key/credential')"
-{ echo "TS_AUTHKEY=$TS_AUTHKEY"; echo "TS_HOSTNAME=kookaburra"; } | \
+{ echo "TS_AUTHKEY=$TS_AUTHKEY"; echo "TS_HOSTNAME=$TS_HOSTNAME"; echo "TZ=Australia/Perth"; } | \
   ssh $SSHO "$SSH_HOST" "cat > $TS_DIR/.env && chmod 600 $TS_DIR/.env"
 
-echo "== tailscale up =="
-retry ssh $SSHO "$SSH_HOST" "cd $TS_DIR && docker compose up -d"
+echo "== tailscale up (project=$TS_PROJECT, container=$TS_HOSTNAME) =="
+retry ssh $SSHO "$SSH_HOST" "cd $TS_DIR && docker compose -p $TS_PROJECT -f compose.yaml -f compose.shared.yaml up -d"
 
 # Wait for tailscale interface + IP
 TS_IP=""
 for i in $(seq 1 20); do
-  TS_IP="$(ssh $SSHO "$SSH_HOST" "docker exec tailscale tailscale ip -4 2>/dev/null | head -1" 2>/dev/null | tr -d '\r')"
+  TS_IP="$(ssh $SSHO "$SSH_HOST" "docker exec $TS_HOSTNAME tailscale ip -4 2>/dev/null | head -1" 2>/dev/null | tr -d '\r')"
   [ -n "$TS_IP" ] && break
   echo "  waiting for tailnet IP ($i)..."; sleep 3
 done
-[ -n "$TS_IP" ] || { echo "tailscale failed to come up" >&2; ssh $SSHO "$SSH_HOST" "docker logs --tail 30 tailscale"; exit 1; }
-echo "kookaburra tailnet IP: $TS_IP"
+[ -n "$TS_IP" ] || { echo "tailscale failed to come up" >&2; ssh $SSHO "$SSH_HOST" "docker logs --tail 30 $TS_HOSTNAME"; exit 1; }
+echo "$TS_HOSTNAME tailnet IP: $TS_IP"
 
 # --- 2. Periphery ---
 echo "== ship Periphery compose =="
@@ -95,10 +114,11 @@ for i in $(seq 1 15); do
   echo "  Periphery starting ($i)... http=$c"; sleep 4
 done
 
-# --- 3. final state summary ---
+# --- final state summary ---
 echo "== kookaburra state =="
 ssh $SSHO "$SSH_HOST" "docker ps --format 'table {{.Names}}\t{{.Status}}'"
 echo
-echo "next: register kookaburra in komodo/sync/servers.toml with"
-echo "  address = \"https://$TS_IP:8120\""
+echo "next: komodo/sync/servers.toml should have kookaburra registered as"
+echo "  address = \"https://${TS_HOSTNAME}:8120\"  (MagicDNS resolves it)"
+echo "  (or https://$TS_IP:8120 if MagicDNS is unavailable on the resolver chain)"
 echo "then commit + push + komodo-sync; Komodo Core will connect via tailnet."
