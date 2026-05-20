@@ -35,14 +35,27 @@ to reach the goal. So:
 - [x] P0  rathole token + noise keypair generated & stored (1P `rathole relay`)
 - [x] P1  `terraform/` root scaffolded (digitalocean; tailscale ACL deferred to review)
 - [x] P2  `terraform apply` → droplet/reserved-IP/firewall live (IP 170.64.241.136)
-- [x] P3  rathole SERVER bootstrapped on kookaburra (kookaburra_bootstrap, SSH)
-- [~] P4  rathole CLIENT up on bilby (direct compose; Komodo-adopt = follow-up)
+- [x] P3  rathole SERVER bootstrapped on kookaburra (then Komodo-adopted, see P10)
+- [x] P4  rathole CLIENT up on bilby (then Komodo-adopted, see P10)
 - [x] P5  rathole tunnel ESTABLISHED (bilby dialed out 144.6.147.203→kookaburra; :443 bound)
 - [x] P6  end-to-end VERIFIED: SigV4 PUT/HEAD/DELETE + anon GET + valid TLS via relay IP
-- [x] P7  DNS cutover applied (storage.pod.haus A→170.64.241.136; authoritative confirmed;
-          resolver TTL propagation in progress); cloudflare-ddns stopped
-- [ ] P8  decommission UDM forward (left in place — safe, unused; cleanup follow-up)
-- [ ] P9  foundation consolidation + Tailscale/Komodo-mgmt scaffold for review
+- [x] P7  DNS cutover applied (storage.pod.haus A→170.64.241.136; verified over public DNS)
+- [x] P8  decommission UDM `unifi_port_forward` + entire `cloudflare-ddns` stack
+- [x] P9  Gatus external-path probe deployed (`MinIO S3 (via kookaburra relay)`);
+          UniFi split-horizon record sources the IP from the relay TF state
+          (`terraform_remote_state`) — no hardcoded IPs anywhere
+- [x] P10 **Komodo/Periphery adoption (2026-05-20):**
+          • tailscale node on bilby — Komodo-managed (`tailscale` stack)
+          • tailscale on kookaburra — bootstrap-managed (Komodo can't manage its own
+            connectivity dep — same pattern as Periphery itself)
+          • kookaburra Komodo Periphery — bootstrap, reachable over tailnet only
+          • rathole server (kookaburra) + client (bilby) — both Komodo-managed
+            (`kookaburra-relay` + `relay` stacks)
+          • alloy on kookaburra — Komodo-managed (`kookaburra-logging`), ships to
+            bilby's ClickStack cross-tailnet
+- [ ] P11 Foundation consolidation (one `terraform/` root + onepassword provider +
+          komodo-start state-bucket bootstrap) — gated, review-first; tracked in
+          `terraform-foundation.md`
 
 ## RESULT — CONFIRMED OVER REAL PUBLIC DNS
 

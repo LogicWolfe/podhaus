@@ -41,12 +41,33 @@ aren't obvious from the compose files alone.
 
 ## What podhaus is
 
-Docker container infrastructure for two home servers — **bilby** (Apple
-M1 Mac mini, primary; Fedora Asahi Linux) and **kangaroo** (QNAP NAS,
-QTS + Container Station). Managed as Docker Compose stacks under a
-single Komodo Core; secrets flow from 1Password; ingress via Cloudflare
-Tunnel + Access at `*.pod.haus`. A planned third host **pinelake** will
-slot into the same pattern.
+Docker container infrastructure for **three** hosts:
+- **bilby** (Apple M1 Mac mini, primary; Fedora Asahi Linux) — runs
+  Komodo Core, MinIO, Caddy, every primary service.
+- **kangaroo** (QNAP NAS, QTS + Container Station) — secondary LAN
+  deploy target via linked-repo Periphery.
+- **kookaburra** (DigitalOcean droplet, syd1, Fedora 43, x86_64) —
+  off-LAN public-ingress relay host. Runs rathole (server) so external
+  clients reaching `storage.pod.haus` are tunneled back to bilby's
+  Caddy (TLS terminates at bilby; the droplet only sees ciphertext —
+  intrinsic relay config only, no MinIO data/certs/creds).
+
+Managed as Docker Compose stacks under a single Komodo Core; secrets
+flow from 1Password; ingress for most services via Cloudflare Tunnel
++ Access at `*.pod.haus`, and for `storage.pod.haus` specifically via
+the kookaburra rathole relay (the UDM Pro SE binds WAN:443 itself, so
+direct port-forward never worked from genuine external clients — see
+`docs/plans/storage-public-relay.md`). A planned fourth host
+**pinelake** will slot into the kookaburra pattern (linked-repo
+Periphery + tailscale).
+
+**Management plane (tag:podnet on Tailscale):** Komodo Core →
+kookaburra Periphery + log ship-back ride a private tailnet between
+bilby (`bilby-1`) and kookaburra (`kookaburra`) — kookaburra's
+Periphery is never internet-exposed; the public surface there is
+only :443 (rathole data) + :2333 (rathole control, noise+token).
+ACL is asymmetric: your devices → podnet freely; podnet ↛ your
+devices (blast-radius containment).
 
 ---
 
@@ -103,17 +124,23 @@ slot into the same pattern.
 | `<name>/compose.yaml` | Docker Compose file for each service stack |
 | `<name>/stack.toml` | Komodo stack metadata (server assignment, environment block) |
 | `komodo/sync/variables.toml` | Non-secret variable declarations (descriptive, see `komodo-start` for authoritative) |
-| `komodo/sync/servers.toml` | Server definitions (bilby + kangaroo) |
-| `komodo/sync/repos.toml` | Linked Repo definitions for kangaroo |
+| `komodo/sync/servers.toml` | Server definitions (bilby + kangaroo + kookaburra) |
+| `komodo/sync/repos.toml` | Linked Repo definitions for kangaroo (`podhaus`) + kookaburra (`podhaus-kookaburra`) |
 | `komodo-start` | Bootstrap script (Core + variables + ResourceSync). Idempotent. |
 | `komodo-sync` | Trigger ResourceSync without a full Core restart |
 | `komodo-stop` | Stop Komodo Core |
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
-| `cloudflare/` | Terraform sources for all Cloudflare resources (DNS, Access apps, policies, service tokens). State at `s3://terraform-state/cloudflare.tfstate` in MinIO via `https://storage.pod.haus`. Run **stock `terraform`** directly (creds from the chezmoi-rendered `~/.config/fish/conf.d/podhaus-tf.fish`; no wrapper). |
+| `kookaburra_bootstrap` | Idempotent kookaburra bring-up (tailscale + Periphery + dockernet bridge — the bootstrap-managed services Komodo can't manage itself) |
+| `cloudflare/` | Terraform sources for all Cloudflare + UniFi + GitHub resources (DNS, Access apps, policies, service tokens, split-horizon, github webhook). State at `s3://terraform-state/cloudflare.tfstate` in MinIO via `https://storage.pod.haus`. Run **stock `terraform`** directly (creds from the chezmoi-rendered `~/.config/fish/conf.d/podhaus-tf.fish`; no wrapper). Reads `terraform_remote_state` from `relay.tfstate` for the kookaburra reserved IP. |
+| `terraform/` | Terraform root for the kookaburra relay infra (DigitalOcean droplet, reserved IP, firewall, project attach). State `s3://terraform-state/relay.tfstate`. Outputs `reserved_ip` consumed by cloudflare/. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (Publii) via `storage.pod.haus`. |
-| `caddy/` | TLS front (own LE wildcard) for `storage.pod.haus` → MinIO; reached via the UniFi WAN port-forward, not Cloudflare. See `docs/plans/minio-public-caddy.md`. |
+| `caddy/` | TLS front (own LE wildcard) for `storage.pod.haus` → MinIO; for genuine external clients, traffic arrives via the kookaburra rathole tunnel (the UDM Pro SE binds WAN:443 itself so direct port-forward is a dead path). LAN clients reach Caddy directly via UniFi split-horizon. See `docs/plans/storage-public-relay.md`. |
+| `relay/` | rathole stacks — `relay/bilby/` (Komodo-managed client, dials out) + `relay/kookaburra/` (Komodo-managed server, public :443 + :2333). Built from upstream release binary (no arm64 image). |
+| `tailscale/` | Komodo-managed Tailscale node on bilby (`tailscale/bilby/`). kookaburra's tailscale + Periphery are bootstrap-managed (Komodo can't manage its own connectivity dep — see `kookaburra_bootstrap`); `tailscale/kookaburra/compose.yaml` is the source the bootstrap docker-composes. |
+| `kookaburra/periphery/` | kookaburra Komodo Periphery compose. Bootstrap-managed (parallels `kangaroo/periphery/`). Reachable only over tailnet (PERIPHERY_ALLOWED_IPS=100.64.0.0/10). |
+| `logging/kookaburra/` | Alloy on kookaburra — ships container logs cross-tailnet to bilby's ClickStack at `100.122.138.120:4318`. |
 | `docs/` | The published docs (served at `docs.pod.haus`) |
 | `docs-server/` | nginx stack serving `docs/` |
 | `AGENTS.md` | This file |
@@ -152,8 +179,8 @@ slot into the same pattern.
    Komodo Procedure (`komodo/sync/procedures.toml`), whose Stage 1
    `BatchDeployStackIfChanged "*"` already covers every current and
    future stack (deploy-only-if-its-files-changed; bilby no-churn),
-   and whose Stage 2 `BatchDeployStack "kangaroo-*"` force-deploys
-   linked_repo stacks. A new stack auto-deploys on the next push with
+   and whose Stage 2 `BatchDeployStack "kangaroo-*" + "kookaburra-*"`
+   force-deploys linked_repo stacks. A new stack auto-deploys on the next push with
    no `cloudflare/` edit. (This replaced 20 per-stack webhooks: GitHub
    hard-caps a repo at 20 `push` webhooks, and the fleet outgrew it.)
    Do **not** set `webhook_force_deploy` — there are no per-stack
@@ -230,7 +257,7 @@ These have failure modes that you must not introduce:
   fresh Komodo bootstrap. Put the secret in 1Password and reference the
   `OP__KOMODO__*` synced variable name. See
   [`docs/secrets.html`](docs/secrets.html).
-- **Linked Repo hosts (kangaroo, future pinelake) must be force-deployed
+- **Linked Repo hosts (kangaroo, kookaburra, future pinelake) must be force-deployed
   on push — handled centrally by `podhaus-push-deploy` Stage 2, not
   per-stack.** Verified against Komodo 1.19.5 source: `DeployStack`
   *does* `git pull` the linked clone before composing — it is
@@ -239,12 +266,14 @@ These have failure modes that you must not introduce:
   compares against the Periphery clone, which only advances *during* a
   deploy — so on a `linked_repo` stack it no-ops forever (stale-clone
   deadlock). The push procedure resolves this structurally: Stage 1
-  (`BatchDeployStackIfChanged "*"`) no-ops on kangaroo (harmless), then
-  Stage 2 (`BatchDeployStack "kangaroo-*"`) runs an unconditional full
-  `DeployStack` (pull + compose). So **no `webhook_force_deploy` on
-  linked_repo stacks** — there are no per-stack webhooks; the pattern
-  `kangaroo-*` is the contract (name new linked_repo stacks `kangaroo-`
-  / future-host-prefixed accordingly, or extend Stage 2's pattern in
+  (`BatchDeployStackIfChanged "*"`) no-ops on linked-repo hosts
+  (harmless), then Stage 2 force-deploys them via TWO executions —
+  `BatchDeployStack "kangaroo-*"` AND `BatchDeployStack
+  "kookaburra-*"` — running unconditional full `DeployStack` (pull +
+  compose). So **no `webhook_force_deploy` on linked_repo stacks** —
+  there are no per-stack webhooks; the per-host-prefix patterns are
+  the contract (name new linked_repo stacks `<host>-` accordingly
+  and add the matching execution to Stage 2 in
   `komodo/sync/procedures.toml`). bilby `files_on_host` stacks ride
   Stage 1 and self-skip when unchanged (free no-churn). `RunSync`
   re-imports `stack.toml` config from bilby's bind-mount (no git) but
@@ -263,8 +292,8 @@ These have failure modes that you must not introduce:
   `komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main`),
   which runs the procedure: Stage 1 `BatchDeployStackIfChanged "*"`
   redeploys every bilby stack whose files actually changed (unchanged
-  ones self-skip — no churn), Stage 2 `BatchDeployStack "kangaroo-*"`
-  always full-deploys the 3 kangaroo `linked_repo` stacks. Push is not
+  ones self-skip — no churn), Stage 2 force-deploys `kangaroo-*` AND
+  `kookaburra-*` linked-repo stacks unconditionally. Push is not
   cheap and not a no-op — treat it as a deploy.
 - **Before adding or modifying a Cloudflare / UniFi / GitHub TF
   resource, read the provider's resource doc.** Schemas change

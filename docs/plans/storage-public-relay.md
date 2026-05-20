@@ -1,18 +1,22 @@
 # Storage public ingress relay — DigitalOcean + rathole
 
-**Status: PLANNED (detailed/complete, ready for review). Nothing
-applied, deployed, or pushed. All `apply` / deploy / DNS steps gated;
-`terraform plan` is fine.**
+**Status: ✅ COMPLETE (2026-05-20).** The relay is live, Komodo-managed
+on both sides, the UDM port-forward + cloudflare-ddns are decommissioned,
+the Gatus external-path probe (gap-closer) is in place, Publii Test
+connection works over real public DNS. See
+`docs/plans/relay-build-progress.md` for the phase-by-phase build log.
 
-> **DEPENDS ON [`terraform-foundation.md`](plan-viewer.html?file=terraform-foundation.md)
-> — do that first.** The relay is **not** a separate Terraform root.
-> Its resources (DigitalOcean provider, droplet, reserved IP,
-> firewall, project attach) are added to the **single consolidated
-> `terraform/` root** the foundation establishes. Provider creds come
-> from the **1Password provider** (`data "onepassword_item"`), not a
-> chezmoi dump. The reserved-IP → `storage.pod.haus` A record is a
-> **direct intra-root reference** (`digitalocean_reserved_ip.x
-> .ip_address`) — the old cross-root literal-copy seam is gone.
+> **Deferred-foundation note.** This plan was originally written as
+> "foundation-first then relay drops into one root". In execution the
+> foundation consolidation (one `terraform/` root + onepassword
+> provider + komodo-start state-bucket bootstrap, per
+> `terraform-foundation.md`) was held back as a higher-risk
+> review-first change. The relay therefore lives in its own
+> `terraform/` root (`relay.tfstate`); the public storage A record is
+> in the existing `cloudflare/` root, pulling the kookaburra reserved
+> IP via `terraform_remote_state` (single source of truth). The full
+> foundation consolidation remains on the books as a separate gated
+> step.
 
 ## Why this exists
 

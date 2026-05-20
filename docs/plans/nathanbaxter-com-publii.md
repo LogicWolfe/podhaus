@@ -51,14 +51,33 @@ Nothing is pushed — all local commits on `main`; deployed via
 Komodo/Terraform directly. A `git push` fires the
 `podhaus-push-deploy` webhook (user's call when to sync the remote).
 
-## OPEN ISSUE — storage.pod.haus unreachable for genuine external clients (UDM WAN:443 shadow)
+## ✅ RESOLVED (2026-05-20) — kookaburra rathole relay supersedes the broken UDM WAN:443 path
 
-**Severity: blocks the actual use case.** Sky must publish from
-anywhere. Symptom: an external client (Publii, or `terraform`) to
-`storage.pod.haus` gets *"Client network socket disconnected before
-secure TLS connection was established"* / `unexpected eof`. Site
-*viewing* (`nathanbaxter.com`, Cloudflare-proxied) is fine — only the
-direct-WAN-forward S3 publish path is broken.
+External `storage.pod.haus` (Publii Test-connection + publish, remote
+`terraform`) is **working over real public DNS**. The fix landed via
+the `kookaburra` DigitalOcean relay (`docs/plans/storage-public-relay.md`):
+`storage.pod.haus` A → `170.64.241.136` (kookaburra reserved IP) →
+rathole reverse tunnel (bilby dials out, noise+token, public-outward)
+→ bilby Caddy (LE wildcard cert terminates TLS here — droplet sees
+only ciphertext) → MinIO. UDM `unifi_port_forward.minio_caddy_https`
+deleted, `cloudflare-ddns` stack removed.
+
+Final verification (real public DNS, no overrides): SigV4 PUT/HEAD/
+DELETE + anon GET path-style + anon GET virtual-host (Publii's
+aws-sdk-js v3 style on `nathanbaxter-com.storage.pod.haus`) all pass,
+TLS cert `*.storage.pod.haus` LE wildcard, TLS1.3. A Gatus probe
+(`MinIO S3 (via kookaburra relay — external path)`) now monitors the
+external path continuously — the gap-closer for the original
+"hairpin-only" blind spot. Architecture below is preserved for
+historical reference.
+
+### Historical context (the diagnostic journey, kept for memory)
+
+The original symptom: external client to `storage.pod.haus` gets
+*"Client network socket disconnected before secure TLS connection
+was established"* / `unexpected eof`. Site *viewing*
+(`nathanbaxter.com`, Cloudflare-proxied) is fine — only the
+direct-WAN-forward S3 publish path was broken.
 
 **The earlier VPN / MTU / PQ-handshake diagnosis in this section was
 wrong and is fully retracted.** It was inference from an error string,
