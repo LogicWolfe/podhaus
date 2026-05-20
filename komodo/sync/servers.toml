@@ -28,8 +28,11 @@ tags = ["kookaburra", "podhaus"]
 [server.config]
 # kookaburra's tailnet IP — Periphery is never internet-exposed
 # (DO firewall blocks 8120 publicly; this only reaches via the
-# WireGuard tailnet bilby's own tailscale stack joined).
-address = "https://100.77.153.10:8120"
+# WireGuard tailnet bilby's own tailscale stack joined). IP changes
+# when tailscale's persistent state volume is reset (e.g., during
+# the bootstrap→Komodo cutover, since the projects use different
+# named volumes). Update here on each such re-registration.
+address = "https://100.109.22.101:8120"
 enabled = true
 disk_warning = 85.0
 disk_critical = 95.0
