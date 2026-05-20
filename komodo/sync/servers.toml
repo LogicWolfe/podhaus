@@ -26,12 +26,17 @@ description = "DigitalOcean droplet (syd1, Fedora) — off-LAN public-ingress re
 tags = ["kookaburra", "podhaus"]
 
 [server.config]
-# kookaburra's tailnet IP — Periphery is never internet-exposed
-# (DO firewall blocks 8120 publicly; this only reaches via the
-# WireGuard tailnet bilby's own tailscale stack joined). IP changes
-# when tailscale's persistent state volume is reset (e.g., during
-# the bootstrap→Komodo cutover, since the projects use different
-# named volumes). Update here on each such re-registration.
+# kookaburra-podnet's tailnet IP. The hostname (MagicDNS FQDN
+# kookaburra-podnet.tail9ceb.ts.net) would be cleaner, but per-
+# container dns: replaces Docker's embedded DNS — Komodo Core then
+# loses service-name resolution for ferretdb/caddy. Daemon-wide
+# dns config (/etc/docker/daemon.json on bilby host) is the proper
+# fix and is the deferred follow-up. The IP is stable as long as
+# kookaburra-tailscale_tailscale-state volume persists (preserved
+# across redeploys + bootstrap→Komodo handoff because bootstrap
+# and Komodo use the same compose project name).
+# Periphery is never internet-exposed (DO firewall blocks 8120;
+# reaches only via WireGuard tailnet — tag:podnet ACL gates it).
 address = "https://100.109.22.101:8120"
 enabled = true
 disk_warning = 85.0
