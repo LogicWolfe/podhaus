@@ -47,6 +47,35 @@
         patterns at the root of each shared folder are picked up automatically.
       </p>
 
+      <h2 id="stignore">The Pouch .stignore (mixed-source)</h2>
+      <p>
+        Pouch's <code>.stignore</code> is structured as an allow-list: top-level dirs are
+        ignored by default, then specific <code>!TV/&lt;Show&gt;</code>,
+        <code>!Movies/&lt;Title&gt;</code>, <code>!Kids/...</code> entries opt items back in
+        (the trailing <code>**</code> at the end of the file ignores everything else not
+        matched). Inside each <code>!&lt;TopLevel&gt;/</code> block, entries are sorted
+        case-insensitively.
+      </p>
+      <p>
+        Entries come from two sources:
+      </p>
+      <ul>
+        <li><strong>Hand-curated</strong> — the bulk of the file. Edited directly on
+          <code>/share/CACHEDEV1_DATA/Pouch/.stignore</code> (or any peer's view via the
+          syncthing folder root).</li>
+        <li><strong>Auto-injected by flood</strong> — torrents tagged <code>pinelake</code> in
+          Flood get a <code>!${base_path#/data/}</code> line written here on completion. Driven
+          by <code>flood/scripts/pinelake-stignore.sh</code> (see the
+          <a href="/runbooks/flood.html#pinelake-stignore">flood runbook</a>). The script writes
+          across NFS from bilby into Pouch — kangaroo's syncthing reads the change locally and
+          rescans.</li>
+      </ul>
+      <p>
+        The two sources share the file without sentinels: the reconciler is insert-only and
+        idempotent, so a hand-curated entry that happens to match a tagged-torrent entry is
+        harmless. Removals are always manual.
+      </p>
+
       <h2 id="storage">Storage layout</h2>
       <table>
         <thead><tr><th>Mount</th><th>Path on kangaroo</th><th>Purpose</th></tr></thead>

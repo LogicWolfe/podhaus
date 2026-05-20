@@ -31,6 +31,16 @@ Folders configured (from `config.xml`):
 post-migration (don't change `config.xml` mid-migration; the principle
 is "preserve identity, defer cleanup").
 
+The `pouch` folder's `.stignore` is now partly auto-managed: torrents
+tagged `pinelake` in Flood get a `!<rel>` allow-list line injected on
+completion by `flood/scripts/pinelake-stignore.sh` (see
+[flood runbook](../../runbooks/flood.html#pinelake-stignore) and
+[syncthing runbook](../../runbooks/syncthing.html#stignore)). Once
+pinelake's syncthing is live and accepting the `pouch` folder, those
+auto-injected lines are what gate which torrents land on the Mac mini's
+TerraMaster — the migration doesn't need to do anything special with
+`.stignore`; the file already carries the right allow-list.
+
 ## State preservation strategy
 
 Bind-mount the existing state directory directly into the container at

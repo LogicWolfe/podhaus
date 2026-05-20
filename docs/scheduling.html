@@ -58,6 +58,7 @@
         <tbody>
           <tr><td><code>plex-stats-cleanup</code></td><td>plex</td><td>04:00 on the 1st of each month</td><td>Online DELETE on <code>statistics_bandwidth</code> rows older than 30 days + VACUUM.</td></tr>
           <tr><td><code>rar-backlog</code></td><td>flood</td><td>04:50 daily</td><td>Scans <code>/data/{Movies,TV,Kids}</code> for folders with RAR pieces ≥2h old and no extracted keepers. Pushes Gatus heartbeat with success or failure context.</td></tr>
+          <tr><td><code>pinelake-stignore</code></td><td>flood</td><td>every 5 min</td><td>Reconciles Pouch's <code>.stignore</code> with rtorrent's <code>pinelake</code>-tagged complete torrents. Safety net for the <code>event.download.finished</code> rtorrent hook (which can't catch tags applied post-completion). See <a href="/runbooks/flood.html#pinelake-stignore">flood runbook</a>.</td></tr>
           <tr><td><code>daily-self-restart</code></td><td>ofelia</td><td>04:00 daily</td><td>Workaround — see below.</td></tr>
         </tbody>
       </table>

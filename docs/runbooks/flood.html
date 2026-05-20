@@ -54,7 +54,8 @@
           container-volume-only.</li>
         <li><code>${PODHAUS_REPO}/flood/scripts</code> overlaid onto <code>/scripts</code>
           (directory bind, so host edits propagate without restart). Contains
-          <code>rtorrent-cleanup.sh</code> and <code>rar-backlog.sh</code>.</li>
+          <code>rtorrent-cleanup.sh</code>, <code>rar-backlog.sh</code>, and
+          <code>pinelake-stignore.sh</code>.</li>
       </ul>
       <aside class="callout note">
         <span class="callout-title">Directory bind, not file bind, for the scripts dir</span>
@@ -106,6 +107,46 @@
           — Gatus alerts within minutes instead of waiting for the missing heartbeat.</li>
       </ul>
 
+      <h2 id="pinelake-stignore">Pinelake .stignore auto-sync</h2>
+      <p>
+        Tagging a torrent <code>pinelake</code> in Flood marks it as "I want this on the
+        pinelake household Mac." On completion, its <code>base_path</code> is inserted as a
+        <code>!&lt;rel&gt;</code> allow-list line into Pouch's <code>.stignore</code>
+        (alphabetically into the matching <code>!&lt;TopLevel&gt;/</code> block, case-insensitive
+        sort to match the file's existing convention). Receive-only peers like pinelake's
+        syncthing then pick the file up via the next folder rescan.
+      </p>
+      <p>
+        Source of truth is rtorrent's own session state — Flood persists tags into
+        <code>d.custom1</code> in each torrent's <code>.torrent.rtorrent</code> file under
+        <code>/flood-db</code>. The reconciler bencode-walks the session files; no XMLRPC, no
+        Flood API dependency.
+      </p>
+      <ul>
+        <li><strong><code>flood/scripts/pinelake-stignore.sh</code></strong> — the reconciler.
+          Filters <code>complete=1 &amp;&amp; "pinelake" ∈ split(custom1, ",")</code>, computes
+          <code>!${base_path#/data/}</code>, idempotent insert with <code>grep -Fxq</code>
+          dedupe and <code>flock</code> single-flight.</li>
+        <li><strong>Triggers</strong> — two, same code path:
+          <ul>
+            <li>rtorrent <code>event.download.finished</code> hook in <code>rtorrent.rc</code>
+              (zero-latency on a fresh completion).</li>
+            <li>ofelia <code>*/5min</code> tick on the flood container (catches the
+              tag-applied-after-completion case).</li>
+          </ul>
+        </li>
+        <li><strong>Writes</strong> — to <code>/data/.stignore</code> (= <code>/mnt/pouch/.stignore</code>
+          on bilby, NFS-backed by kangaroo). Tempfile-then-atomic-rename in the same dir;
+          <code>/mnt/pouch</code>'s setgid bit preserves group ownership across the swap.</li>
+        <li><strong>Insert-only by design</strong> — untagging or deleting a torrent does
+          <em>not</em> remove its <code>.stignore</code> line. Manual removal is the user's
+          call; this avoids the "managed vs hand-curated entries" distinction the
+          <code>.stignore</code> mixes (see <a href="/runbooks/syncthing.html#stignore">syncthing
+          runbook</a>).</li>
+        <li><strong>Log</strong> — append-only at <code>/flood-db/pinelake-stignore.log</code>,
+          one timestamped line per inserted entry. Quiet on no-op runs.</li>
+      </ul>
+
       <h2 id="legacy-cleanup">One-shot RAR-backlog cleanup tooling</h2>
       <p>
         Before the live pipeline went on, the existing 139-folder legacy RAR backlog was
@@ -119,10 +160,12 @@
 
       <h2 id="see-also">See also</h2>
       <ul>
-        <li><a href="/scheduling.html">Scheduling</a> — the ofelia label that schedules
-          <code>rar-backlog.sh</code>.</li>
+        <li><a href="/scheduling.html">Scheduling</a> — the ofelia labels that schedule
+          <code>rar-backlog.sh</code> and <code>pinelake-stignore.sh</code>.</li>
         <li><a href="/monitoring.html">Monitoring</a> — the Gatus push endpoint that receives
           the heartbeat.</li>
+        <li><a href="/runbooks/syncthing.html#stignore">Syncthing → .stignore</a> — the file
+          this stack writes into, and how hand-curated and auto-injected entries co-exist.</li>
         <li><a href="/plans/index.html">Plans</a> — Phase 7.5 of the migration plan documents
           the pipeline's design end-to-end.</li>
       </ul>
