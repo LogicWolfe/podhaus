@@ -42,4 +42,12 @@ schedule = insufficient_disk_space,1,30,close_low_diskspace=500M
 # combined form does not.)
 method.set_key=event.download.erased,rar_cleanup,"execute.nothrow.bg={/scripts/rtorrent-cleanup.sh,$d.base_path=}"
 
+# pinelake-tag → Pouch .stignore sync. On finish, kick a full reconciler
+# pass over /flood-db/*.torrent.rtorrent that inserts the base_path of
+# every complete + pinelake-tagged torrent into .stignore (alphabetically
+# into the matching !<TopLevel>/ block). The hook is the zero-latency
+# trigger; an ofelia label runs the same script every 5 min to catch the
+# tag-applied-after-completion case. See flood/scripts/pinelake-stignore.sh.
+method.set_key=event.download.finished,pinelake_stignore,"execute.nothrow.bg={/scripts/pinelake-stignore.sh}"
+
 method.set_key=event.download.inserted_new,loaded_time,"d.custom.set=addtime,$cat=$system.time=;d.save_full_session="

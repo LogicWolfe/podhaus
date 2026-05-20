@@ -60,6 +60,12 @@ services:
       ofelia.enabled: "true"
       ofelia.job-exec.rar-backlog.schedule: "50 4 * * *"
       ofelia.job-exec.rar-backlog.command: "/scripts/rar-backlog.sh"
+      # pinelake-tag → Pouch .stignore reconciler. 5min tick catches the
+      # tag-applied-after-completion case the rtorrent event.download.finished
+      # hook in rtorrent.rc can't cover. Script is idempotent (insert-only,
+      # grep -Fxq dedupe), so collisions with the event hook are harmless.
+      ofelia.job-exec.pinelake-stignore.schedule: "*/5 * * * *"
+      ofelia.job-exec.pinelake-stignore.command: "/scripts/pinelake-stignore.sh"
     healthcheck:
       # Stall-proof: prove the service via loopback wget, and verify the
       # mounts via the kernel mount table (/proc/mounts is a local read —
