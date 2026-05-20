@@ -1,0 +1,18 @@
+[[stack]]
+name = "kookaburra-logging"
+description = "Alloy on kookaburra — ships container logs + self-telemetry to ClickStack (cross-tailnet to bilby at 100.122.138.120:4318)"
+tags = ["kookaburra", "podhaus"]
+deploy = true
+
+[stack.config]
+server = "kookaburra"
+linked_repo = "podhaus-kookaburra"
+# Stage 2 of podhaus-push-deploy force-deploys kookaburra-* (the
+# linked-repo hard rule — same as kangaroo).
+run_directory = "logging/kookaburra"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]
+
+environment = """
+TZ=[[TZ]]
+CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
+"""

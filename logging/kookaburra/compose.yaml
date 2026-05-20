@@ -1,0 +1,21 @@
+# kookaburra's logging overlay. Ships container logs cross-tailnet to
+# bilby's ClickStack collector (bilby's tailnet IP, port 4318). Uses
+# host networking on the droplet — there's no dockernet on kookaburra
+# (only bilby + kangaroo have their own bridges), and host net lets
+# alloy reach bilby's tailnet IP directly via the host's tailscale0.
+services:
+  alloy:
+    # SELinux Enforcing on Fedora 43 — same pattern as bilby's stacks.
+    security_opt:
+      - label:disable
+    # Override the shared network (which expects dockernet) with host
+    # networking so we don't need to create a bridge solely for alloy.
+    network_mode: host
+    networks: !reset []
+    volumes:
+      # Absolute host path because Periphery's container-side relative-
+      # path resolution doesn't match the kookaburra host's view of the
+      # cloned repo (same reason as relay/kookaburra). Directory bind
+      # (not file bind) — alloy reloads on file change; file-binding
+      # would pin the inode.
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-kookaburra/logging/kookaburra/alloy-conf:/etc/alloy:ro
