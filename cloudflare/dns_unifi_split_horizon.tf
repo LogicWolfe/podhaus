@@ -50,3 +50,18 @@ resource "unifi_dns_record" "nathanbaxter_com_storage" {
   ttl         = 300
   enabled     = true
 }
+
+# Gatus external-path probe — UniFi returns the kookaburra relay
+# reserved IP for this *.storage.pod.haus subdomain so the on-bilby
+# gatus container (which uses host DNS via UniFi) reaches the relay
+# instead of the LAN split-horizon target. The hostname is under
+# *.storage.pod.haus so Caddy's wildcard LE cert validates the TLS.
+# Source of truth: the relay TF root's reserved_ip output (read via
+# terraform_remote_state in remote_state.tf) — no hardcoded IP.
+resource "unifi_dns_record" "kookaburra_probe_storage" {
+  name        = "kookaburra-probe.storage.pod.haus"
+  record_type = "A"
+  value       = data.terraform_remote_state.relay.outputs.reserved_ip
+  ttl         = 300
+  enabled     = true
+}

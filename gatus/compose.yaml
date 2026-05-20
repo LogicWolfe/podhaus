@@ -27,6 +27,14 @@ services:
     # each external-endpoint is the auth layer; LAN exposure is fine.
     ports:
       - 8080:8080
+    # Relay external-path probe DNS: a UniFi split-horizon record
+    # (unifi_dns_record.kookaburra_probe_storage in cloudflare/) maps
+    # kookaburra-probe.storage.pod.haus → relay reserved IP, so LAN
+    # DNS (which gatus uses) routes that probe out to kookaburra and
+    # back through the rathole tunnel — the actual external path —
+    # while regular storage.pod.haus stays split-horizoned to bilby.
+    # No container-level config needed; the IP source of truth is the
+    # relay TF root, referenced via terraform_remote_state.
     volumes:
       # Directory bind (not file bind) — gatus auto-reloads its config on
       # change, but an atomic-rename save on the host would leave the

@@ -117,12 +117,23 @@ endpoints:
     url: https://yiayia.pod.haus/boards/health
     <<: *defaults
 
-  # --- Direct (UniFi port-forward → Caddy, NOT Cloudflare-tunnel) ---
-  # Public MinIO S3 endpoint. Catches a WAN-IP/DDNS break or a Caddy/
-  # MinIO/cert failure before Sky's Publii (or Terraform) silently
-  # breaks. See docs/plans/minio-public-caddy.md.
-  - name: MinIO S3 (storage.pod.haus)
+  # --- storage.pod.haus paths ---
+  # On-bilby probe (LAN/split-horizon resolves to bilby:443 directly):
+  # tests Caddy + MinIO. Independent of the relay. Catches a
+  # Caddy/MinIO/cert failure on-box. See docs/plans/storage-public-relay.md.
+  - name: MinIO S3 (storage.pod.haus, on-bilby)
     url: https://storage.pod.haus/minio/health/live
+    <<: *defaults
+
+  # THE GAP-CLOSER: external-path probe via the kookaburra relay.
+  # gatus/compose.yaml `extra_hosts` pins kookaburra-probe.storage.pod.haus
+  # to the relay's reserved IP (170.64.241.136) ONLY inside this gatus
+  # container — the rest of bilby keeps using split-horizon. Hostname is
+  # under *.storage.pod.haus so the LE wildcard cert validates. Catches
+  # exactly the failure mode that hid the UDM WAN:443 incident: bilby/
+  # Caddy itself is fine but external clients can't reach it.
+  - name: MinIO S3 (via kookaburra relay — external path)
+    url: https://kookaburra-probe.storage.pod.haus/minio/health/live
     <<: *defaults
 
   # Publii site: Cloudflare-proxied → pod_haus tunnel → Caddy →

@@ -9,16 +9,17 @@
 # docs/plans/storage-public-relay.md). LAN clients still hit Caddy
 # directly via the split-horizon record (dns_unifi_split_horizon.tf).
 
-# Static reserved IP of the kookaburra DigitalOcean relay (output of
-# the terraform/ root). cloudflare-ddns is retired for this name — the
-# IP no longer tracks a dynamic home WAN. Terraform owns content now;
-# `settings` stays ignored because past DDNS API writes normalized it
-# away and un-ignoring it would show perpetual cosmetic drift.
+# Kookaburra reserved IP from the relay TF root (single source of
+# truth via terraform_remote_state — see remote_state.tf). cloudflare-
+# ddns is retired for this name; the IP is static (DigitalOcean
+# Reserved IP) and survives droplet rebuilds. `settings` stays ignored
+# because past DDNS API writes normalized it away and un-ignoring it
+# would show perpetual cosmetic drift.
 resource "cloudflare_dns_record" "storage_a" {
   zone_id = local.zones["pod.haus"]
   name    = "storage.pod.haus"
   type    = "A"
-  content = "170.64.241.136" # kookaburra relay reserved IP
+  content = data.terraform_remote_state.relay.outputs.reserved_ip
   proxied = false
   ttl     = 300
   settings = {
