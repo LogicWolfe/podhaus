@@ -1,0 +1,30 @@
+# tailscale — the management-plane fabric (tag:podnet). Host-mode +
+# kernel WG so the tailscale0 interface lives on the host network
+# namespace; other containers (Komodo Core, the alloy log shipper,
+# Periphery on kookaburra) reach tailnet IPs through normal host
+# routing — no SOCKS5/sidecar gymnastics needed.
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    network_mode: host
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_HOSTNAME: ${TS_HOSTNAME}
+      TS_STATE_DIR: /var/lib/tailscale
+      # No subnet routes, no exit-node, no Funnel. Just a tailnet node
+      # tagged tag:podnet (the tag is baked into the auth key itself,
+      # so no --advertise-tags needed).
+      TS_USERSPACE: "false"
+    restart: unless-stopped
+    labels:
+      autoheal: "true"
+
+volumes:
+  tailscale-state:

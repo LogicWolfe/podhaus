@@ -1,69 +1,95 @@
 #!/bin/bash
-# One-time bring-up of the rathole SERVER on the kookaburra relay
-# droplet (parallels kangaroo_bootstrap; Fedora/cloud deltas: plain
-# docker, systemd, public dial-in). Idempotent. Run from bilby with
-# the op-unlock SSH agent active.
+# One-time (idempotent) bring-up of the bootstrap-managed services on
+# the kookaburra relay droplet:
+#   1. tailscale  — joins tag:podnet; brings the mgmt-plane fabric up
+#   2. Periphery  — listens on kookaburra's tailnet IP (DO firewall
+#                   blocks 8120 publicly; tailscale traffic bypasses it)
+# Run from bilby with the op-unlock SSH agent active.
 #
-# The rendered server.toml carries rathole's noise private key + token
-# (rathole has no env interpolation, so it must read them from a
-# file). These protect the TUNNEL ONLY — the droplet holds no MinIO
-# data / TLS / data creds (ciphertext-only relay), so this is
-# intrinsic relay config, not the backup-triggering "meaningful
-# state" of the AGENTS hard rule.
+# Periphery + tailscale are bootstrap-only — they are NOT Komodo
+# stacks because Komodo→Periphery connectivity *depends* on tailscale
+# being up, so a Komodo redeploy of either would break itself. (Same
+# applies to kangaroo's Periphery.) Every OTHER service on kookaburra
+# (rathole-server, logging, etc.) IS Komodo-managed via the linked-repo
+# pattern once this bootstrap is done.
+#
+# Idempotent: safe to re-run. Re-runs refresh secrets + recreate
+# containers if compose files changed; existing containers persist
+# otherwise (restart=unless-stopped survives reboots).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 DROPLET_IP="${DROPLET_IP:-134.199.167.124}"
 SSH_HOST="root@${DROPLET_IP}"
-REMOTE_DIR=/opt/relay
+REMOTE_DIR=/opt/komodo-periphery
+TS_DIR=/opt/tailscale
 
 export OP_SERVICE_ACCOUNT_TOKEN="$(tr -d '\n' < OP_SERVICE_ACCOUNT_TOKEN)"
 SOCK="$(ls /tmp/op-unlock-*.sock 2>/dev/null | head -1)"
 [ -n "$SOCK" ] || { echo "no op-unlock SSH socket; run op-unlock first" >&2; exit 1; }
 export SSH_AUTH_SOCK="$SOCK"
-# Connection multiplexing: one TCP session reused for every mkdir/
-# scp/compose op. Rapid fresh SSH connections to a just-booted DO
-# droplet can get reset; a persistent master avoids that.
 CP="/tmp/kb-ssh-%r@%h:%p"
 SSHO="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
  -o ServerAliveInterval=15 -o ControlMaster=auto -o ControlPersist=120 -o ControlPath=$CP"
 retry() { local n=0; until "$@"; do n=$((n+1)); [ $n -ge 5 ] && return 1; echo "  retry $n: $*" >&2; sleep 8; done; }
 
-echo "== render server.toml from 1Password (secrets never hit bilby disk) =="
-RATHOLE_TOKEN="$(op read 'op://Homelab/rathole relay/token')" \
-RATHOLE_NOISE_LOCAL_PRIVATE_KEY="$(op read 'op://Homelab/rathole relay/noise_private_key')" \
-  envsubst '${RATHOLE_TOKEN} ${RATHOLE_NOISE_LOCAL_PRIVATE_KEY}' \
-  < relay/kookaburra/server.toml.tmpl > /tmp/kb-server.toml
+# --- 1. tailscale (joins tag:podnet) ---
+echo "== prep dirs =="
+retry ssh $SSHO "$SSH_HOST" "mkdir -p $TS_DIR $REMOTE_DIR/etc-komodo"
 
-echo "== ship build context + rendered config =="
-retry ssh $SSHO "$SSH_HOST" "mkdir -p $REMOTE_DIR/conf && chmod 700 $REMOTE_DIR/conf"
-retry scp -q $SSHO relay/Dockerfile relay/entrypoint.sh "$SSH_HOST:$REMOTE_DIR/"
-retry scp -q $SSHO relay/kookaburra/server.toml.tmpl "$SSH_HOST:$REMOTE_DIR/"
-# rendered (secret) config via a mode-600 file, then shred locally
-retry scp -q $SSHO /tmp/kb-server.toml "$SSH_HOST:$REMOTE_DIR/conf/server.toml"
-retry ssh $SSHO "$SSH_HOST" "chmod 600 $REMOTE_DIR/conf/server.toml"
-shred -u /tmp/kb-server.toml 2>/dev/null || rm -f /tmp/kb-server.toml
+echo "== ship + render tailscale env (TS_AUTHKEY from 1P) =="
+retry scp -q $SSHO tailscale/compose.shared.yaml "$SSH_HOST:$TS_DIR/compose.yaml"
+TS_AUTHKEY="$(op read 'op://Homelab/Tailscale Auth Key/credential')"
+{ echo "TS_AUTHKEY=$TS_AUTHKEY"; echo "TS_HOSTNAME=kookaburra"; } | \
+  ssh $SSHO "$SSH_HOST" "cat > $TS_DIR/.env && chmod 600 $TS_DIR/.env"
 
-echo "== compose on the droplet (build x86_64 rathole, run server) =="
-retry ssh $SSHO "$SSH_HOST" "cat > $REMOTE_DIR/compose.yaml" <<'YAML'
-services:
-  rathole-server:
-    container_name: rathole-server
-    build:
-      context: .
-    image: rathole:local
-    pull_policy: never
-    restart: unless-stopped
-    # config already rendered with secrets — skip the envsubst
-    # entrypoint, run rathole directly against it.
-    entrypoint: ["rathole"]
-    command: ["/etc/rathole/server.toml"]
-    network_mode: host
-    volumes:
-      - ./conf:/etc/rathole:ro
-YAML
-retry ssh $SSHO "$SSH_HOST" "cd $REMOTE_DIR && docker compose up -d --build"
+echo "== tailscale up =="
+retry ssh $SSHO "$SSH_HOST" "cd $TS_DIR && docker compose up -d"
 
-echo "== verify rathole server is listening (:443 data, :2333 control) =="
-retry ssh $SSHO "$SSH_HOST" "sleep 3; docker ps --filter name=rathole-server --format '{{.Names}} {{.Status}}'; ss -ltn 2>/dev/null | grep -E ':(443|2333) ' || (echo '--- logs ---'; docker logs --tail 20 rathole-server 2>&1)"
-echo "kookaburra_bootstrap: done"
+# Wait for tailscale interface + IP
+TS_IP=""
+for i in $(seq 1 20); do
+  TS_IP="$(ssh $SSHO "$SSH_HOST" "docker exec tailscale tailscale ip -4 2>/dev/null | head -1" 2>/dev/null | tr -d '\r')"
+  [ -n "$TS_IP" ] && break
+  echo "  waiting for tailnet IP ($i)..."; sleep 3
+done
+[ -n "$TS_IP" ] || { echo "tailscale failed to come up" >&2; ssh $SSHO "$SSH_HOST" "docker logs --tail 30 tailscale"; exit 1; }
+echo "kookaburra tailnet IP: $TS_IP"
+
+# --- 2. Periphery ---
+echo "== ship Periphery compose =="
+retry scp -q $SSHO kookaburra/periphery/compose.yaml "$SSH_HOST:$REMOTE_DIR/compose.yaml"
+
+echo "== render Periphery .env (KOMODO_PASSKEYS from 1P) =="
+KP="$(op read 'op://Homelab/Komodo Passkey/password')"
+{ echo "KOMODO_PASSKEYS=$KP"; echo "TZ=Australia/Perth"; } | \
+  ssh $SSHO "$SSH_HOST" "cat > $REMOTE_DIR/.env && chmod 600 $REMOTE_DIR/.env"
+
+echo "== render periphery.config.toml (GitHub PAT for linked-repo clone) =="
+GH="$(op read 'op://Homelab/Homelab GitHub Personal Access Token/token')"
+{
+  echo '[[git_provider]]'
+  echo 'domain = "github.com"'
+  echo '[[git_provider.accounts]]'
+  echo 'username = "LogicWolfe"'
+  echo "token = \"$GH\""
+} | ssh $SSHO "$SSH_HOST" "cat > $REMOTE_DIR/etc-komodo/periphery.config.toml && chmod 600 $REMOTE_DIR/etc-komodo/periphery.config.toml"
+
+echo "== Periphery up =="
+retry ssh $SSHO "$SSH_HOST" "cd $REMOTE_DIR && docker compose up -d"
+
+# Wait for Periphery health (curl -sk localhost:8120 from inside should return 405)
+echo "== verify Periphery responds on kookaburra:$TS_IP:8120 (from bilby — needs bilby on tailnet too) =="
+for i in $(seq 1 15); do
+  c="$(ssh $SSHO "$SSH_HOST" "curl -sk --max-time 3 -o /dev/null -w '%{http_code}' https://localhost:8120/" 2>/dev/null)"
+  [ "$c" = "405" ] && { echo "Periphery healthy (HTTP 405 on /, as expected)"; break; }
+  echo "  Periphery starting ($i)... http=$c"; sleep 4
+done
+
+# --- 3. final state summary ---
+echo "== kookaburra state =="
+ssh $SSHO "$SSH_HOST" "docker ps --format 'table {{.Names}}\t{{.Status}}'"
+echo
+echo "next: register kookaburra in komodo/sync/servers.toml with"
+echo "  address = \"https://$TS_IP:8120\""
+echo "then commit + push + komodo-sync; Komodo Core will connect via tailnet."

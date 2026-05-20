@@ -1,0 +1,17 @@
+[[stack]]
+name = "tailscale"
+description = "Tailscale management-plane node (tag:podnet) — bilby. Carries Komodo Core→Periphery + log ship-back. NOT on the rathole data path."
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/tailscale/bilby"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]
+
+environment = """
+TZ=[[TZ]]
+TS_AUTHKEY=[[OP__KOMODO__TAILSCALE_AUTH_KEY__CREDENTIAL]]
+TS_HOSTNAME=bilby
+"""

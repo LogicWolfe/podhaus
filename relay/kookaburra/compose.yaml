@@ -1,0 +1,28 @@
+# kookaburra rathole SERVER — public-outward (bilby dials in over the
+# internet to :2333; relayed bytes flow back through that single
+# connection). TLS terminates at bilby Caddy; this box only sees
+# ciphertext.
+services:
+  rathole-server:
+    container_name: rathole-server
+    build:
+      context: ..
+    image: rathole:local
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      RATHOLE_CONFIG_TEMPLATE: /etc/rathole/server.toml.tmpl
+      RATHOLE_TOKEN: ${RATHOLE_TOKEN}
+      RATHOLE_NOISE_LOCAL_PRIVATE_KEY: ${RATHOLE_NOISE_LOCAL_PRIVATE_KEY}
+      # Server template doesn't reference the remote pubkey, but the
+      # entrypoint's envsubst list includes it harmlessly.
+      RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY:-unused}
+    volumes:
+      # Directory bind (never single-file) — the committed template.
+      # Rendered config lives only in the container at /run.
+      - ./:/etc/rathole:ro
+    # Host networking: rathole needs to bind 0.0.0.0:443 + 0.0.0.0:2333
+    # on the droplet's public interface.
+    network_mode: host
+    labels:
+      autoheal: "true"

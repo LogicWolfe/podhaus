@@ -1,0 +1,6 @@
+# bilby tailscale node. The shared definition (../compose.shared.yaml)
+# pulls everything from env; nothing host-specific to override here
+# beyond what stack.toml supplies. Komodo composes both files via
+# file_paths in stack.toml.
+services:
+  tailscale: {}

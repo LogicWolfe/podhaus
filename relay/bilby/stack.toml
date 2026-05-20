@@ -1,0 +1,19 @@
+[[stack]]
+name = "relay"
+description = "rathole CLIENT — bilby dials out to kookaburra:2333 over the public internet, forwards tunneled traffic to caddy:443 over dockernet. TLS still terminates at Caddy; the droplet only ever sees ciphertext."
+tags = ["podhaus"]
+deploy = true
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/relay/bilby"
+run_build = true
+auto_pull = false
+
+environment = """
+TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
+RATHOLE_TOKEN=[[OP__KOMODO__RATHOLE_RELAY__TOKEN]]
+RATHOLE_NOISE_REMOTE_PUBLIC_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PUBLIC_KEY]]
+"""

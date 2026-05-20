@@ -1,0 +1,44 @@
+# Komodo Periphery for kookaburra (DigitalOcean droplet, syd1,
+# Fedora 43 x86_64). Like kangaroo, this is the only stack on
+# kookaburra that is NOT itself Komodo-managed — it has to come up
+# before kookaburra can be a Komodo target. Bootstrapped via
+# ./kookaburra_bootstrap from bilby. Same applies to the tailscale
+# container (tailscale/kookaburra/compose.yaml): bootstrap-only,
+# because Komodo→Periphery connectivity *depends* on tailscale being
+# up, so it can't be torn down by a Komodo redeploy.
+#
+# Off-LAN ⇒ reachable only over the tailnet (DO firewall blocks
+# inbound 8120 publicly; tailscale traffic arrives via tailscale0
+# which the firewall doesn't gate).
+
+services:
+  periphery:
+    container_name: komodo-periphery
+    image: ghcr.io/moghtech/komodo-periphery:${COMPOSE_KOMODO_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    init: true
+    # Host networking so the listener is reachable on the tailscale0
+    # interface (Komodo Core on bilby dials kookaburra's tailnet IP).
+    network_mode: host
+    environment:
+      KOMODO_PASSKEYS: ${KOMODO_PASSKEYS}
+      # Restrict to the Tailscale CGNAT range — every podnet node is in
+      # 100.64.0.0/10, no public IP can hit this even if the DO firewall
+      # ever drifts open on 8120. Defense-in-depth on top of the firewall.
+      PERIPHERY_ALLOWED_IPS: 100.64.0.0/10
+      PERIPHERY_CONFIG_PATHS: /etc/komodo/periphery.config.toml
+      TZ: ${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/proc
+      # Periphery state: keys, cloned linked-repo working dirs,
+      # deployed stack files, action cache. Persisted on the droplet.
+      - /opt/komodo-periphery/etc-komodo:/etc/komodo
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk --max-time 5 -o /dev/null https://localhost:8120/ || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

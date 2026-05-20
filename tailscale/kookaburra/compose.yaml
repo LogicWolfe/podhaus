@@ -1,0 +1,4 @@
+# kookaburra tailscale node. Pulled from ../compose.shared.yaml via
+# stack.toml file_paths.
+services:
+  tailscale: {}
