@@ -9,9 +9,15 @@ server = "kookaburra"
 linked_repo = "podhaus-kookaburra"
 run_directory = "tailscale/kookaburra"
 file_paths = ["compose.yaml", "../compose.shared.yaml"]
+# tailscale-cleanup is a one-shot init that exits 0; without this
+# Komodo would count its terminated state and mark the stack
+# Unhealthy. Same pattern as plex/flood/backup init containers.
+ignore_services = ["tailscale-cleanup"]
 
 environment = """
 TZ=[[TZ]]
 TS_AUTHKEY=[[OP__KOMODO__TAILSCALE_AUTH_KEY__CREDENTIAL]]
 TS_HOSTNAME=kookaburra-podnet
+TS_OAUTH_CLIENT_ID=[[OP__KOMODO__TAILSCALE_OAUTH_CLIENT__CLIENT_ID]]
+TS_OAUTH_CLIENT_SECRET=[[OP__KOMODO__TAILSCALE_OAUTH_CLIENT__CLIENT_SECRET]]
 """

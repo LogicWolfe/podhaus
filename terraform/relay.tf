@@ -16,7 +16,12 @@ resource "digitalocean_droplet" "kookaburra" {
   image      = "fedora-43-x64"
   name       = "kookaburra"
   region     = "syd1"
-  size       = "s-1vcpu-512mb-10gb"
+  # 1GB (not 512MB) — three concurrent Komodo DeployStack ops on
+  # 512MB OOM-thrashed the box (load avg 27, sshd wedged). With four
+  # Komodo-managed stacks now riding here (tailscale, periphery is
+  # bootstrap-managed but still on it, relay, logging) plus headroom
+  # for restic/apt during cattle rebuilds, 1GB is the realistic floor.
+  size       = "s-1vcpu-1gb"
   ssh_keys   = [digitalocean_ssh_key.kookaburra.fingerprint]
   monitoring = true
   ipv6       = false

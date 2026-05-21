@@ -31,13 +31,14 @@ tags = ["kookaburra", "podhaus"]
 # container dns: replaces Docker's embedded DNS — Komodo Core then
 # loses service-name resolution for ferretdb/caddy. Daemon-wide
 # dns config (/etc/docker/daemon.json on bilby host) is the proper
-# fix and is the deferred follow-up. The IP is stable as long as
-# kookaburra-tailscale_tailscale-state volume persists (preserved
-# across redeploys + bootstrap→Komodo handoff because bootstrap
-# and Komodo use the same compose project name).
+# fix and is the deferred follow-up. The IP is stable across stack
+# redeploys on the SAME droplet (volume tailscale-state preserves
+# machine identity); across DROPLET rebuilds the IP changes because
+# the volume is local Docker storage on the droplet. Update this
+# field as part of any droplet rebuild (terraform apply -replace).
 # Periphery is never internet-exposed (DO firewall blocks 8120;
 # reaches only via WireGuard tailnet — tag:podnet ACL gates it).
-address = "https://100.109.22.101:8120"
+address = "https://100.80.205.74:8120"
 enabled = true
 disk_warning = 85.0
 disk_critical = 95.0

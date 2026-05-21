@@ -19,7 +19,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-DROPLET_IP="${DROPLET_IP:-134.199.167.124}"
+DROPLET_IP="${DROPLET_IP:-134.199.165.127}"
 SSH_HOST="root@${DROPLET_IP}"
 REMOTE_DIR=/opt/komodo-periphery
 # Bootstrap-side tailscale dir. Project name matches the eventual
@@ -34,11 +34,22 @@ TS_PROJECT=kookaburra-tailscale
 TS_HOSTNAME=kookaburra-podnet
 
 export OP_SERVICE_ACCOUNT_TOKEN="$(tr -d '\n' < OP_SERVICE_ACCOUNT_TOKEN)"
-SOCK="$(ls /tmp/op-unlock-*.sock 2>/dev/null | head -1)"
-[ -n "$SOCK" ] || { echo "no op-unlock SSH socket; run op-unlock first" >&2; exit 1; }
+# Pick the op-unlock socket that actually has identities loaded (some
+# old sockets may linger empty if op-unlock was re-run in a fresh
+# shell — `ls | head -1` would happily grab a stale empty one).
+SOCK=""
+for s in /tmp/op-unlock-*.sock; do
+  [ -S "$s" ] || continue
+  if SSH_AUTH_SOCK="$s" ssh-add -l >/dev/null 2>&1; then SOCK="$s"; break; fi
+done
+[ -n "$SOCK" ] || { echo "no op-unlock SSH socket with identities; run op-unlock first" >&2; exit 1; }
 export SSH_AUTH_SOCK="$SOCK"
 CP="/tmp/kb-ssh-%r@%h:%p"
-SSHO="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+# IdentityAgent= is set explicitly per the opssh pattern — otherwise
+# any future ~/.ssh/config IdentityAgent override (e.g. pointing to
+# the 1Password GUI agent) would bypass the op-unlock socket and
+# require an interactive prompt the bootstrap can't satisfy.
+SSHO="-o IdentityAgent=$SOCK -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
  -o ServerAliveInterval=15 -o ControlMaster=auto -o ControlPersist=120 -o ControlPath=$CP"
 retry() { local n=0; until "$@"; do n=$((n+1)); [ $n -ge 5 ] && return 1; echo "  retry $n: $*" >&2; sleep 8; done; }
 

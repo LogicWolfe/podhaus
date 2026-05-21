@@ -4,8 +4,100 @@
 # Periphery on kookaburra) reach tailnet IPs through normal host
 # routing — no SOCKS5/sidecar gymnastics needed.
 services:
+  # Active-claim cleanup. Tailscale identifies a device by its
+  # machine key (held in the tailscale-state volume). Anytime that
+  # volume is regenerated — droplet rebuild, accidental `docker
+  # volume rm`, fresh host — the new container registers as a NEW
+  # device, and the Tailscale coord server appends a `-N` suffix to
+  # the bare hostname to avoid collision. The old ghost then sticks
+  # around indefinitely until manually pruned in the admin UI.
+  #
+  # This init deletes any device whose declared `hostname` matches
+  # TS_HOSTNAME (the `name` field carries Tailscale's collision-
+  # resolved `-N` suffix, but `hostname` is what the node reported —
+  # always the bare name) AND has been disconnected for more than
+  # 60s, so the freshly-starting tailscaled can claim the bare name.
+  # Best-effort: any API error becomes a warning + exit 0 (a stale
+  # ghost is worse than a stale ghost AND a wedged bootstrap).
+  #
+  # OAuth client = the existing `Tailscale OAuth Client` 1P item,
+  # scopes `auth_keys:write` (existing) + `devices:core:write` (added
+  # for this cleanup). Long-lived, no 90-day rotation chore.
+  #
+  # The 60s threshold was chosen to be long enough that a normal
+  # container restart (disconnect window typically <30s) doesn't
+  # trip cleanup, but short enough that the DO droplet rebuild path
+  # (destroy → create → cloud-init → bootstrap, ~2min end-to-end)
+  # always finds the prior node past the threshold and prunes it
+  # — otherwise the rebuilt node ends up with a `-N` suffix forever.
+  # The edge case: a preserved-state stack that's been stopped >60s
+  # before being started again will have its device entry deleted;
+  # tailscaled re-registers automatically using TS_AUTHKEY, costing
+  # only a tailnet IP change (not a real failure).
+  tailscale-cleanup:
+    image: alpine:3.20
+    environment:
+      TS_HOSTNAME: ${TS_HOSTNAME}
+      TS_OAUTH_CLIENT_ID: ${TS_OAUTH_CLIENT_ID}
+      TS_OAUTH_CLIENT_SECRET: ${TS_OAUTH_CLIENT_SECRET}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -u
+        # Best-effort: trap any error, warn, exit 0 so a transient
+        # Tailscale API outage never blocks the tailscale service.
+        trap 'echo "[tailscale-cleanup] WARN: cleanup error (rc=$$?). Continuing." >&2; exit 0' EXIT
+        apk add --no-cache --quiet curl jq >/dev/null
+
+        TOKEN=$$(curl -sf -X POST "https://api.tailscale.com/api/v2/oauth/token" \
+          --data-urlencode "client_id=$$TS_OAUTH_CLIENT_ID" \
+          --data-urlencode "client_secret=$$TS_OAUTH_CLIENT_SECRET" \
+          | jq -r .access_token)
+        if [ -z "$$TOKEN" ] || [ "$$TOKEN" = "null" ]; then
+          echo "[tailscale-cleanup] no access_token; check OAuth client + scope"; exit 0
+        fi
+
+        NOW=$$(date -u +%s)
+        # Match on the device-reported `hostname` (always the bare
+        # name we set via TS_HOSTNAME) rather than `name` (which
+        # Tailscale mutates with -N collision suffixes). Disconnect
+        # state is `connectedToControl == false` plus lastSeen > 60s
+        # ago — sufficient buffer for a normal restart, short enough
+        # that the rebuild path finds the prior node already stale.
+        curl -sf -H "Authorization: Bearer $$TOKEN" \
+          "https://api.tailscale.com/api/v2/tailnet/-/devices" \
+          | jq -r --arg h "$$TS_HOSTNAME" --argjson now "$$NOW" '
+              .devices[]
+              | select(
+                  (.hostname == $$h)
+                  and (.connectedToControl == false)
+                  and ((.lastSeen
+                        | sub("\\.[0-9]+Z$$"; "Z")
+                        | fromdateiso8601) < ($$now - 60))
+                )
+              | "\(.id)\t\(.name)"
+            ' \
+          | while IFS=$$(printf '\t') read -r id name; do
+              [ -n "$$id" ] || continue
+              echo "[tailscale-cleanup] deleting stale device $$name ($$id)"
+              if curl -sf -X DELETE -H "Authorization: Bearer $$TOKEN" \
+                   "https://api.tailscale.com/api/v2/device/$$id" >/dev/null; then
+                echo "[tailscale-cleanup]   deleted."
+              else
+                echo "[tailscale-cleanup]   delete failed."
+              fi
+            done
+
+        echo "[tailscale-cleanup] done."
+        trap - EXIT
+    restart: "no"
+
   tailscale:
     image: tailscale/tailscale:latest
+    depends_on:
+      tailscale-cleanup:
+        condition: service_completed_successfully
     # Container name = Tailscale device name = ${TS_HOSTNAME} (set per
     # host in stack.toml: bilby-podnet, kookaburra-podnet, ...). One
     # knob, one source of truth, and `docker ps` on any host shows the
