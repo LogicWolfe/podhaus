@@ -75,14 +75,11 @@ networks:
         Cloudflare's HTTP proxy (rewrites the SigV4-signed
         <code>Accept-Encoding</code>; single-level cert can't cover
         Publii vhost buckets); the rathole tunnel is raw TCP
-        passthrough so SigV4 + Host stay intact. Full rationale +
-        as-built:
-        <a href="/plans/plan-viewer.html?file=storage-public-relay.md">storage public ingress relay</a>.
-        (The earlier <em>UniFi WAN port-forward</em> path was
-        replaced — the UDM Pro SE binds WAN:443 with UniFi OS itself,
-        shadowing the forward; see
-        <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">minio-public-caddy.md</a>
-        for the historical record.)
+        passthrough so SigV4 + Host stay intact. See
+        <a href="/hosts.html#kookaburra">hosts → kookaburra</a> for
+        the relay host details and
+        <a href="/terraform.html">Terraform</a> for the backend
+        configuration.
       </aside>
 
       <aside class="callout note">
@@ -210,8 +207,7 @@ networks:
         wrapper, from any machine — creds from the chezmoi-rendered fish
         env). The S3 state backend is the public
         <code>https://storage.pod.haus</code> (Caddy → MinIO), not
-        Cloudflare-proxied — see
-        <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">MinIO public access via Caddy + UniFi</a>.
+        Cloudflare-proxied — see <a href="/terraform.html">Terraform</a>.
       </p>
       <p>
         DNSControl (the previous DNS tool) was retired 2026-05-12; its <code>dns/</code>

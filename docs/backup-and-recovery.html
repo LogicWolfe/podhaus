@@ -102,7 +102,7 @@ restic repo                restic repo
       <h2 id="kookaburra-no-backup">Kookaburra — intentionally unbacked (conditional)</h2>
       <p>
         <code>kookaburra</code> (the off-LAN DigitalOcean public-ingress relay; see
-        <a href="plans/storage-public-relay.md">storage-public-relay</a>) has <strong>no backup
+        <a href="/hosts.html#kookaburra">hosts → kookaburra</a>) has <strong>no backup
         plan by design</strong>. It is a ciphertext-only rathole passthrough — no MinIO data,
         no certificates, no credentials; all state lives on bilby. Disaster recovery is
         <code>terraform apply</code>, and the DigitalOcean reserved IP keeps DNS stable across a

@@ -57,9 +57,8 @@ flow from 1Password; ingress for most services via Cloudflare Tunnel
 + Access at `*.pod.haus`, and for `storage.pod.haus` specifically via
 the kookaburra rathole relay (the UDM Pro SE binds WAN:443 itself, so
 direct port-forward never worked from genuine external clients — see
-`docs/plans/storage-public-relay.md`). A planned fourth host
-**pinelake** will slot into the kookaburra pattern (linked-repo
-Periphery + tailscale).
+`docs/hosts.html#kookaburra`). A planned fourth host **pinelake** will
+slot into the kookaburra pattern (linked-repo Periphery + tailscale).
 
 **Management plane (tag:podnet on Tailscale):** Komodo Core →
 kookaburra Periphery + log ship-back ride a private tailnet between
@@ -112,6 +111,17 @@ devices (blast-radius containment).
   (no nginx). Ingress rules in `cloudflare-tunnel/conf/config.yml`.
 - A single Cloudflare Access app gates the entire `*.pod.haus` wildcard
   on a Family identity policy — no per-service Access app needed.
+- **bilby's `/etc/docker/daemon.json` sets
+  `"dns": ["100.100.100.100", "1.1.1.1"]`**, so Docker's embedded DNS
+  resolver (`127.0.0.11`) forwards unknown names to Tailscale's MagicDNS
+  first, then 1.1.1.1. This is what lets `komodo/sync/servers.toml`
+  use `https://kookaburra-podnet.tail9ceb.ts.net:8120` instead of
+  the drifting tailnet IP. Service-name resolution (`ferretdb`,
+  `caddy`, etc.) is still handled internally by the embedded resolver
+  before forwarding. **Never reintroduce per-container `dns: [...]`
+  in compose** — that replaces `127.0.0.11` entirely and breaks
+  service-name resolution (this exact mistake bit Komodo Core earlier
+  in 2026-05). Daemon-wide is the only correct knob.
 
 ---
 
@@ -132,13 +142,13 @@ devices (blast-radius containment).
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
-| `kookaburra_bootstrap` | Idempotent kookaburra bring-up (tailscale + Periphery + dockernet bridge — the bootstrap-managed services Komodo can't manage itself) |
+| `kookaburra_bootstrap` | Idempotent kookaburra bring-up: SSH hardening → dockernet bridge → tailscale (Komodo adopts it post-handoff) → Periphery. Defaults `DROPLET_IP` to the reserved IP (`170.64.241.136`) so it stays correct across `terraform apply -replace`. |
 | `cloudflare/` | Terraform sources for all Cloudflare + UniFi + GitHub resources (DNS, Access apps, policies, service tokens, split-horizon, github webhook). State at `s3://terraform-state/cloudflare.tfstate` in MinIO via `https://storage.pod.haus`. Run **stock `terraform`** directly (creds from the chezmoi-rendered `~/.config/fish/conf.d/podhaus-tf.fish`; no wrapper). Reads `terraform_remote_state` from `relay.tfstate` for the kookaburra reserved IP. |
 | `terraform/` | Terraform root for the kookaburra relay infra (DigitalOcean droplet, reserved IP, firewall, project attach). State `s3://terraform-state/relay.tfstate`. Outputs `reserved_ip` consumed by cloudflare/. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (Publii) via `storage.pod.haus`. |
-| `caddy/` | TLS front (own LE wildcard) for `storage.pod.haus` → MinIO; for genuine external clients, traffic arrives via the kookaburra rathole tunnel (the UDM Pro SE binds WAN:443 itself so direct port-forward is a dead path). LAN clients reach Caddy directly via UniFi split-horizon. See `docs/plans/storage-public-relay.md`. |
+| `caddy/` | TLS front (own LE wildcard) for `storage.pod.haus` → MinIO; for genuine external clients, traffic arrives via the kookaburra rathole tunnel (the UDM Pro SE binds WAN:443 itself so direct port-forward is a dead path). LAN clients reach Caddy directly via UniFi split-horizon. See `docs/hosts.html#kookaburra` + `docs/terraform.html`. |
 | `relay/` | rathole stacks — `relay/bilby/` (Komodo-managed client, dials out) + `relay/kookaburra/` (Komodo-managed server, public :443 + :2333). Built from upstream release binary (no arm64 image). |
-| `tailscale/` | Komodo-managed Tailscale node on bilby (`tailscale/bilby/`). kookaburra's tailscale + Periphery are bootstrap-managed (Komodo can't manage its own connectivity dep — see `kookaburra_bootstrap`); `tailscale/kookaburra/compose.yaml` is the source the bootstrap docker-composes. |
+| `tailscale/` | Tailscale management-plane nodes. `tailscale/bilby/` and `tailscale/kookaburra/` are both Komodo-managed (Komodo Core on bilby, `kookaburra-tailscale` linked-repo stack on kookaburra). kookaburra's tailscale is bootstrap-launched (via `kookaburra_bootstrap`) so Periphery can join the tailnet, then Komodo adopts the running container — bootstrap and Komodo use the same compose project name + container name (`kookaburra-podnet`) so the named state volume and tailnet identity survive the handoff. `tailscale/compose.shared.yaml` has a `tailscale-cleanup` init service (alpine + curl + jq inline) that calls the Tailscale API before tailscaled starts to prune offline devices matching `${TS_HOSTNAME}` — claims the bare hostname back when the state volume is regenerated (rebuild, accidental volume nuke). Requires `Tailscale OAuth Client` 1P item scopes `auth_keys:write` + `devices:core:write`. |
 | `kookaburra/periphery/` | kookaburra Komodo Periphery compose. Bootstrap-managed (parallels `kangaroo/periphery/`). Reachable only over tailnet (PERIPHERY_ALLOWED_IPS=100.64.0.0/10). |
 | `logging/kookaburra/` | Alloy on kookaburra — ships container logs cross-tailnet to bilby's ClickStack at `100.122.138.120:4318`. |
 | `docs/` | The published docs (served at `docs.pod.haus`) |
@@ -234,9 +244,7 @@ These have failure modes that you must not introduce:
   dockernet name, or loopback in a TF root — and reject any "this root
   is bilby-only / admin tooling" carve-out (that exact rationalisation
   was caught and removed once). Run `terraform` directly — there is no
-  wrapper script.
-  See [`docs/plans/minio-public-caddy.md`](docs/plans/minio-public-caddy.md)
-  and [`docs/plans/tf-runner-decommission.md`](docs/plans/tf-runner-decommission.md).
+  wrapper script. See [`docs/terraform.html`](docs/terraform.html).
 - **MinIO public access-control model: SigV4, not an edge block.**
   `storage.pod.haus` serves the full MinIO API (S3 *and* admin); the
   sole boundary is MinIO's own per-request SigV4 (root/scoped creds
@@ -309,7 +317,7 @@ These have failure modes that you must not introduce:
 - **The `kookaburra` ingress relay is stateless by design — adding
   state reopens backups.** kookaburra (the off-LAN DigitalOcean
   public-ingress relay; see
-  [`docs/plans/storage-public-relay.md`](docs/plans/storage-public-relay.md))
+  [`docs/hosts.html#kookaburra`](docs/hosts.html#kookaburra))
   is a ciphertext-only rathole passthrough: no MinIO data, certs, or
   creds — all state lives on bilby, and DR is `terraform apply`. It
   is **deliberately excluded from `backup/`**. If *any* meaningful
@@ -375,3 +383,38 @@ headers on HTML / JSON / Markdown / site JS+CSS). Adding a new doc:
 
 Adding a new plan: drop a `.md` or `.html` into `docs/plans/`, or create
 a subdirectory with `index.md` for a multi-page plan.
+
+---
+
+## Docs vs plans — the contract
+
+`docs/` and `docs/plans/` carry distinct contracts. Honour both.
+
+**`docs/` reflects current state.** It is the truth about how the
+system works *right now*. No history, no "we used to do X", no
+"this is how we got here" narrative. A new agent or human reading
+`docs/<topic>.html` should learn what's true today, full stop.
+When you change behaviour, update `docs/` in the same commit.
+
+**`docs/plans/` is work-in-progress only.** A plan exists for two
+reasons: (1) capturing context an agent or user needs while the work
+is in flight, (2) tracking what's left to do for partially-completed
+migrations. **A plan that describes done work has no reason to exist
+— delete it and ensure `docs/` reflects the new current state.**
+
+When a plan finishes:
+- Walk the plan; anything that describes how the *resulting* system
+  works → fold into the appropriate `docs/` page (architecture,
+  networking, runbook, hosts, secrets, etc.) if not already there.
+- Anything describing the migration path itself (steps, why this
+  order, deferred-traps that were closed) → delete with the plan.
+- Anything still pending → trim the plan to just those remaining
+  items, with a short "Done so far:" header if helpful for context.
+
+When deferring work mid-plan, leave the plan with the remaining
+items only; the closed sections come out as their content lands
+in `docs/`.
+
+This means: `docs/plans/` should always be small. If it's growing,
+either work is being deferred (fine, capture it) or done plans
+aren't being cleaned up (not fine).

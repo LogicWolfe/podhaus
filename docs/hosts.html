@@ -76,8 +76,8 @@
           <tr><td><code>op</code></td><td>1Password CLI — secret reads, item edits</td><td><code>dnf</code> (1P upstream repo)</td></tr>
           <tr><td><code>gh</code></td><td>GitHub PR / issue interaction</td><td><code>dnf</code></td></tr>
           <tr><td><code>jq</code></td><td>JSON munging (Komodo API, mc output, etc.)</td><td><code>dnf</code></td></tr>
-          <tr><td><code>mcli</code></td><td>MinIO admin (buckets, users, policies) — see <a href="/plans/plan-viewer.html?file=alligator-bilby-migration/terraform-setup.md">Terraform foundation</a></td><td><code>sudo dnf install https://dl.min.io/client/mc/release/linux-arm64/mc.rpm</code> — RPM-tracked, upstream-signed releases</td></tr>
-          <tr><td><code>terraform</code></td><td>Stock HashiCorp Terraform — run directly in <code>cloudflare/</code> (no wrapper; backend = public <code>storage.pod.haus</code>; creds from the chezmoi fish env). Not bilby-special — any chezmoi-managed machine gets it. See <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">MinIO public access via Caddy + UniFi</a>.</td><td>chezmoi-managed (official HashiCorp dnf repo, Fedora branch of the packages script)</td></tr>
+          <tr><td><code>mcli</code></td><td>MinIO admin (buckets, users, policies)</td><td><code>sudo dnf install https://dl.min.io/client/mc/release/linux-arm64/mc.rpm</code> — RPM-tracked, upstream-signed releases</td></tr>
+          <tr><td><code>terraform</code></td><td>Stock HashiCorp Terraform — run directly in <code>cloudflare/</code> or <code>terraform/</code> (no wrapper; backend = public <code>storage.pod.haus</code>; creds from the chezmoi fish env). Not bilby-special — any chezmoi-managed machine gets it. See <a href="/terraform.html">Terraform</a>.</td><td>chezmoi-managed (official HashiCorp dnf repo, Fedora branch of the packages script)</td></tr>
           <tr><td><code>railway</code></td><td>Railway CLI for the doggos + yiayia migrations</td><td>Upstream installer, lives in <code>~/.local/bin/</code></td></tr>
           <tr><td><code>zellij</code></td><td>Terminal multiplexer (user preference)</td><td>Cargo / upstream</td></tr>
         </tbody>
@@ -136,7 +136,7 @@
 
       <h2 id="kookaburra">kookaburra</h2>
       <p>
-        DigitalOcean droplet, syd1 region, 1 vCPU / 512 MB RAM, 10 GB disk, Fedora 43 x86_64.
+        DigitalOcean droplet, syd1 region, 1 vCPU / 1 GB RAM, 10 GB disk, Fedora 43 x86_64.
         <strong>Off-LAN public-ingress relay host</strong> — its sole job is terminating TCP for
         <code>storage.pod.haus</code> on its public reserved IP <code>170.64.241.136</code> and
         passing the bytes through a rathole reverse tunnel to bilby's Caddy. TLS terminates on
@@ -147,32 +147,46 @@
         Why it exists: the UDM Pro SE binds WAN tcp/443 with UniFi OS itself and shadows any
         direct WAN port-forward, so genuine external clients never reached bilby's Caddy via the
         home WAN IP. The relay sidesteps the UDM entirely: bilby <em>dials out</em> to kookaburra,
-        no home inbound. See <a href="/plans/plan-viewer.html?file=storage-public-relay.md">the
-        relay plan</a>.
+        no home inbound.
       </p>
       <ul>
         <li><strong>Public surface:</strong> :443 (rathole data) and :2333 (rathole control,
-          noise+token). Nothing else inbound from the internet (DO firewall).</li>
+          noise+token). Nothing else inbound from the internet (DO firewall). Public SSH on :22
+          is kept open as a recovery path; the host's nftables ruleset rate-limits non-trusted
+          sources and auto-allowlists any IP that successfully authenticates (no banning — agents
+          fumbling keys aren't punished). All persisted in
+          <code>kookaburra/ssh-hardening/apply.sh</code> so it survives any rebuild.</li>
         <li><strong>Management plane:</strong> Tailscale (<code>tag:podnet</code>); kookaburra
-          appears as <code>kookaburra</code> at <code>100.77.153.10</code>. Komodo Core on bilby
-          reaches kookaburra Periphery (<code>:8120</code>) <em>only</em> over the tailnet —
-          Periphery is never internet-exposed (<code>PERIPHERY_ALLOWED_IPS=100.64.0.0/10</code>).</li>
-        <li><strong>Bootstrap-only services</strong> (not Komodo-managed because Komodo→Periphery
-          depends on them being up):
-          <code>tailscale</code> (joins the tailnet) and <code>komodo-periphery</code>. Brought up
-          by <code>kookaburra_bootstrap</code> via SSH + <code>docker compose</code>; reboot-
-          persistent via <code>restart: unless-stopped</code>.</li>
-        <li><strong>Komodo-managed stacks:</strong> <code>kookaburra-relay</code> (rathole server)
-          and <code>kookaburra-logging</code> (alloy → bilby ClickStack cross-tailnet). Linked-repo
-          clone (<code>podhaus-kookaburra</code>) at
-          <code>/opt/komodo-periphery/etc-komodo/repos/podhaus-kookaburra/</code>.</li>
+          appears as <code>kookaburra-podnet</code>. Komodo Core on bilby reaches kookaburra
+          Periphery at <code>https://kookaburra-podnet.tail9ceb.ts.net:8120</code> — that
+          MagicDNS FQDN resolves to whatever tailnet IP kookaburra-podnet currently holds, so
+          droplet rebuilds don't require editing <code>servers.toml</code>. Periphery is never
+          internet-exposed (<code>PERIPHERY_ALLOWED_IPS=100.64.0.0/10</code>).</li>
+        <li><strong>Bootstrap-launched services</strong> (run before Komodo can manage them
+          because Komodo→Periphery depends on Periphery being reachable):
+          <code>kookaburra-podnet</code> (tailscale) and <code>komodo-periphery</code>. Brought
+          up by <code>kookaburra_bootstrap</code> via SSH + <code>docker compose</code>;
+          reboot-persistent via <code>restart: unless-stopped</code>. The tailscale container is
+          subsequently <em>adopted</em> by the <code>kookaburra-tailscale</code> Komodo stack
+          (same compose project name + container name + state volume) — Komodo manages it
+          steady-state. Periphery stays bootstrap-managed.</li>
+        <li><strong>Komodo-managed stacks:</strong> <code>kookaburra-tailscale</code> (adopts
+          the bootstrap-launched tailscale; ships a <code>tailscale-cleanup</code> init that
+          deletes stale tailnet ghosts so the bare hostname is reclaimable on rebuild),
+          <code>kookaburra-relay</code> (rathole server), and <code>kookaburra-logging</code>
+          (alloy → bilby ClickStack cross-tailnet). Linked-repo clone
+          (<code>podhaus-kookaburra</code>) at
+          <code>/opt/komodo-periphery/etc-komodo/repos/podhaus-kookaburra/</code>; force-deployed
+          on every push via the <code>kookaburra-*</code> pattern in Stage 2 of
+          <code>podhaus-push-deploy</code>.</li>
       </ul>
       <p>
-        Disaster recovery: <code>terraform apply</code> in <code>terraform/</code> rebuilds the
-        droplet (reserved IP survives), <code>./kookaburra_bootstrap</code> reinstalls tailscale +
-        Periphery, push-deploy fans the rest out. The droplet is intentionally excluded from
-        backups; if meaningful state ever lands on it, that hard rule (AGENTS.md) is voided —
-        reopen the backup decision then.
+        Disaster recovery: <code>terraform apply -replace=digitalocean_droplet.kookaburra</code>
+        in <code>terraform/</code> rebuilds the droplet (reserved IP survives the reassignment),
+        <code>./kookaburra_bootstrap</code> reinstalls SSH hardening + dockernet bridge +
+        tailscale + Periphery, push-deploy fans the rest out. The droplet is intentionally
+        excluded from backups; if meaningful state ever lands on it, that hard rule (AGENTS.md)
+        is voided — reopen the backup decision then.
       </p>
 
       <h2 id="pinelake">pinelake (planned)</h2>

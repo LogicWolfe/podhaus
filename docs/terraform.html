@@ -115,15 +115,25 @@ terraform apply</code></pre>
       <p>
         The S3 state backend is the public
         <code>https://storage.pod.haus</code> — MinIO behind its own Caddy
-        + Let's Encrypt wildcard, reached via a UniFi WAN port-forward,
-        <strong>not</strong> Cloudflare-proxied. Cloudflare's HTTP proxy
-        rewrites the SigV4-signed <code>Accept-Encoding</code> header and
-        breaks <code>aws-sdk-go</code> (<code>SignatureDoesNotMatch</code>);
+        + Let's Encrypt wildcard, <strong>not</strong> Cloudflare-proxied.
+        Cloudflare's HTTP proxy rewrites the SigV4-signed
+        <code>Accept-Encoding</code> header and breaks
+        <code>aws-sdk-go</code> (<code>SignatureDoesNotMatch</code>);
         its single-level Universal SSL also can't cover Publii's
-        virtual-host buckets. Full rationale + architecture:
-        <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">MinIO public access via Caddy + UniFi</a>.
-        The UniFi provider talks to <code>https://unifi.pod.haus</code> (not
-        a LAN IP), so nothing here is host- or LAN-pinned.
+        virtual-host buckets. For LAN clients, traffic reaches Caddy
+        directly via the UniFi split-horizon DNS. For genuine
+        external clients (Publii on a laptop, remote
+        <code>terraform</code>), traffic arrives via the
+        <strong>kookaburra DigitalOcean rathole relay</strong>:
+        <code>storage.pod.haus</code> A → <code>170.64.241.136</code>
+        (kookaburra reserved IP) → rathole reverse tunnel (bilby
+        dials out, noise+token) → bilby Caddy → MinIO. The UDM Pro SE
+        binds WAN:443 itself, so direct port-forward is a dead path —
+        see <a href="/hosts.html#kookaburra">kookaburra</a> and
+        <a href="/networking.html">networking</a> for the relay
+        architecture. The UniFi provider talks to
+        <code>https://unifi.pod.haus</code> (not a LAN IP), so
+        nothing here is host- or LAN-pinned.
       </p>
 
       <h2 id="service-module">Per-service module</h2>

@@ -1,8 +1,11 @@
 # Terraform foundation — one root, 1Password provider, codified MinIO/state bootstrap
 
-**Status: PLANNED (prerequisite for `storage-public-relay.md`).
-Nothing applied/pushed. Every `apply` + the state migration are
-gated; `terraform plan` is the safety instrument, not a side effect.**
+**Status: PLANNED.** Nothing applied/pushed. Every `apply` + the state
+migration are gated; `terraform plan` is the safety instrument, not a
+side effect. The relay work that originally listed this as prerequisite
+shipped in its own `terraform/` root instead (the relay infra now lives
+there independently); this consolidation remains the right cleanup but
+no longer blocks anything.
 
 ## Why
 
@@ -173,10 +176,11 @@ completion — replacing the "check the bucket exists" hand-wave.
 6. Update docs (`AGENTS.md` hard rules + key files,
    `cloudflare/README.md`→moved, `disaster-recovery.html`,
    `terraform.html`); retire the old root directories.
-7. **Then** `storage-public-relay.md` proceeds — its resources are
-   added to `terraform/` (DO provider, droplet, etc.), the reserved
-   IP → DNS A record is now a direct intra-root reference (the
-   cross-root literal seam is gone).
+7. **Fold in the relay root** — the relay infra currently lives in
+   its own `terraform/` root with `relay.tfstate`; the reserved IP
+   crosses into `cloudflare/` via a `terraform_remote_state` reference.
+   Folding it into the consolidated root makes that cross-root literal
+   seam an intra-root reference (cleaner; not load-bearing).
 
 ## Rollback
 

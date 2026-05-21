@@ -55,12 +55,15 @@
           <tr>
             <td>Operating model</td>
             <td><code>files_on_host = true</code></td>
-            <td>Linked Repo (<code>linked_repo = "podhaus"</code>)</td>
+            <td>Linked Repo (<code>linked_repo = "podhaus"</code> for kangaroo,
+              <code>linked_repo = "podhaus-kookaburra"</code> for kookaburra —
+              Repo resources are per-Periphery, each host's clone is independent state)</td>
           </tr>
           <tr>
             <td>How the repo gets there</td>
             <td>Cloned manually + bind-mounted into Core and Periphery</td>
-            <td>Komodo clones via HTTPS + a GitHub PAT, stored at <code>/etc/komodo/repos/podhaus/</code></td>
+            <td>Komodo clones via HTTPS + a GitHub PAT, stored at
+              <code>/etc/komodo/repos/&lt;repo-name&gt;/</code> inside the Periphery container</td>
           </tr>
           <tr>
             <td>Deploy workflow</td>
@@ -70,10 +73,13 @@
               only the bilby stacks whose files changed <em>or</em> save +
               <code>./komodo-sync</code> (force-redeploys any stack whose
               <code>deployed_hash</code> diverges from <code>HEAD</code>)</td>
-            <td>Commit + push → same procedure; Stage 2
-              <code>BatchDeployStack&nbsp;"kangaroo-*"</code> runs a full
+            <td>Commit + push → same procedure; Stage 2 runs
+              <code>BatchDeployStack&nbsp;"kangaroo-*"</code> AND
+              <code>BatchDeployStack&nbsp;"kookaburra-*"</code>, each a full
               <code>DeployStack</code> (<code>git pull</code> the clone +
-              compose) unconditionally. No per-stack flag, no UI click.</td>
+              compose) unconditionally. No per-stack flag, no UI click.
+              Adding a new linked-repo host = name its stacks
+              <code>&lt;host&gt;-*</code> and add a matching execution.</td>
           </tr>
           <tr>
             <td>Best for</td>
@@ -83,8 +89,11 @@
         </tbody>
       </table>
       <p>
-        New deploy-target hosts (e.g. pinelake) should use Linked Repo — same shape as
-        kangaroo. Bilby stays on files_on_host because tight save-and-deploy beats the
+        Two linked-repo hosts exist today: <strong>kangaroo</strong> (QNAP NAS,
+        repo <code>podhaus</code>) and <strong>kookaburra</strong> (DigitalOcean
+        relay, repo <code>podhaus-kookaburra</code>). Future deploy targets
+        (e.g. pinelake) should follow the same pattern. Bilby stays on
+        <code>files_on_host</code> because tight save-and-deploy beats the
         commit-roundtrip when the editor is on the same host.
       </p>
       <aside class="callout warn">
@@ -106,13 +115,14 @@
         clone always looks "unchanged." This is resolved
         <strong>structurally by the push procedure, not per-stack</strong>:
         Stage 1 (<code>BatchDeployStackIfChanged&nbsp;"*"</code>) no-ops
-        harmlessly on kangaroo, then Stage 2
-        (<code>BatchDeployStack&nbsp;"kangaroo-*"</code>) runs an
+        harmlessly on kangaroo and kookaburra, then Stage 2 runs
+        <code>BatchDeployStack&nbsp;"kangaroo-*"</code> AND
+        <code>BatchDeployStack&nbsp;"kookaburra-*"</code>, each an
         unconditional full <code>DeployStack</code> (pull + compose). So
         <strong>linked_repo stacks set no
         <code>webhook_force_deploy</code></strong> — there are no
-        per-stack webhooks; the <code>kangaroo-*</code> name pattern is
-        the contract. bilby <code>files_on_host</code> stacks ride
+        per-stack webhooks; the <code>&lt;host&gt;-*</code> name patterns
+        are the contract. bilby <code>files_on_host</code> stacks ride
         Stage 1 and self-skip when genuinely unchanged (free no-churn).
         <br><br>
         Historical compounding bugs (both fixed): the GitHub webhook once
@@ -203,11 +213,13 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <strong>Stage 1</strong>
         <code>BatchDeployStackIfChanged&nbsp;"*"</code> — every stack,
         deploy only if its files changed (bilby diffs the live bind-mount
-        → unchanged stacks self-skip, zero churn; kangaroo no-ops here).
-        <strong>Stage 2</strong>
-        <code>BatchDeployStack&nbsp;"kangaroo-*"</code> — the linked_repo
-        stacks, full <code>DeployStack</code> (pull + compose)
-        unconditionally. The <code>"*"</code> pattern means
+        → unchanged stacks self-skip, zero churn; kangaroo and kookaburra
+        no-op here harmlessly because their stale clones look unchanged).
+        <strong>Stage 2</strong> runs two executions:
+        <code>BatchDeployStack&nbsp;"kangaroo-*"</code> and
+        <code>BatchDeployStack&nbsp;"kookaburra-*"</code> — the
+        linked_repo stacks, each a full <code>DeployStack</code> (pull +
+        compose) unconditionally. The <code>"*"</code> pattern means
         <strong>new stacks auto-deploy on the next push with no
         <code>github.tf</code> edit, no list, no 20-cap, ever</strong>.
         <code>./komodo-sync</code> remains the manual force-redeploy /

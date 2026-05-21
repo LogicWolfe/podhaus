@@ -85,13 +85,15 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
           <code>terraform-state</code> bucket exists with the <code>cloudflare.tfstate</code>
           object via the MinIO console (<a href="https://minio.pod.haus">minio.pod.haus</a>)
           or <code>mcli ls local/terraform-state</code>.</li>
-        <li>Deploy <code>caddy</code> and <code>cloudflare-ddns</code> next: Terraform's
-          backend is the public <code>https://storage.pod.haus</code> (Caddy + LE
-          wildcard behind the UniFi port-forward; <code>cloudflare-ddns</code> keeps
-          the A record on the WAN IP). Until <code>caddy</code> is up + has its cert,
-          <code>terraform</code> cannot reach state. Set <code>MINIO_DOMAIN</code> (in
-          <code>minio/stack.toml</code>) is part of the minio deploy. See
-          <a href="/plans/plan-viewer.html?file=minio-public-caddy.md">MinIO public access via Caddy + UniFi</a>.</li>
+        <li>Deploy <code>caddy</code> next: Terraform's backend is the public
+          <code>https://storage.pod.haus</code> (Caddy + LE wildcard). LAN clients reach
+          Caddy direct via UniFi split-horizon; external clients arrive via the
+          kookaburra DigitalOcean rathole relay (see
+          <a href="/hosts.html#kookaburra">hosts → kookaburra</a>). Until
+          <code>caddy</code> is up + has its cert, <code>terraform</code> cannot reach
+          state. <code>MINIO_DOMAIN</code> (in <code>minio/stack.toml</code>) is part of
+          the minio deploy. See <a href="/terraform.html">Terraform</a> for the full
+          backend setup.</li>
         <li>Deploy every other stack from the Komodo UI in dependency order. The repo's
           ResourceSync has already created the stack definitions.</li>
         <li>Verify DNS (stock <code>terraform</code>, no wrapper, creds from the

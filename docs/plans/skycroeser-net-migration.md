@@ -1,13 +1,14 @@
 # skycroeser.net — WordPress.com → self-hosted Publii
 
-> **Infra note (2026-05-19):** the MinIO/S3 deploy target for Publii is
-> built and proven — public at `https://<bucket>.storage.pod.haus`
-> (MinIO behind Caddy + a UniFi port-forward, own LE wildcard, **not**
-> Cloudflare-proxied; verified with Publii's exact `@aws-sdk/client-s3`
-> v3 client). The earlier sections here that assume a Cloudflare-proxied
-> S3 path are superseded by
-> [MinIO public access via Caddy + UniFi](minio-public-caddy.md). The
-> remaining skycroeser.net-specific work (bucket + scoped key per site,
+> **Infra note:** the MinIO/S3 deploy target for Publii exists and is
+> proven — public at `https://<bucket>.storage.pod.haus` (MinIO behind
+> Caddy + LE wildcard, **not** Cloudflare-proxied; external clients
+> reach Caddy via the kookaburra DigitalOcean rathole relay). See
+> [/terraform.html](../terraform.html) and
+> [/hosts.html#kookaburra](../hosts.html#kookaburra) for the
+> as-built architecture. The earlier sections of this plan that
+> assumed a Cloudflare-proxied S3 path are superseded. Remaining
+> skycroeser.net-specific work (bucket + scoped key per site,
 > Publii config, content migration) is unchanged.
 
 Migrate Sky's academic website from WordPress.com to self-hosted **Publii**
@@ -328,8 +329,8 @@ same gotcha as before, but reset via `mc rm` not filesystem delete.
 > env); unauthenticated calls — including `/minio/admin/` — get MinIO
 > `AccessDenied`. The whole `storage.pod.haus` architecture is also
 > no longer Cloudflare-proxied. **As-built source of truth:**
-> [minio-public-caddy.md](minio-public-caddy.md). Do not re-derive an
-> edge admin block from the text below.
+> [/terraform.html](../terraform.html). Do not re-derive an edge
+> admin block from the text below.
 
 **Decision**: expose the entire MinIO S3 API at the new public
 hostname. The framing that makes this sound rather than reckless:
