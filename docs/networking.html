@@ -89,9 +89,18 @@ networks:
         <span class="callout-title">Management plane: Tailscale (<code>tag:podnet</code>)</span>
         Inter-host management traffic (Komodo Core→Periphery for kookaburra,
         log ship-back from kookaburra to bilby's ClickStack) rides a
-        private Tailscale tailnet — bilby (<code>bilby-1</code>,
-        <code>100.122.138.120</code>) and kookaburra (<code>kookaburra</code>,
-        <code>100.77.153.10</code>). ACL is asymmetric:
+        private Tailscale tailnet — bilby (<code>bilby-podnet</code>) and
+        kookaburra (<code>kookaburra-podnet</code>). Komodo Core dials kookaburra
+        by MagicDNS FQDN (<code>https://kookaburra-podnet.tail9ceb.ts.net:8120</code>
+        in <code>komodo/sync/servers.toml</code>); the IP changes on every droplet
+        rebuild but the FQDN doesn't, so rebuilds don't require editing this
+        config. Resolution works because bilby's
+        <code>/etc/docker/daemon.json</code> sets
+        <code>"dns": ["100.100.100.100", "1.1.1.1"]</code> — Docker's embedded
+        resolver (<code>127.0.0.11</code>) forwards unknown names to Tailscale's
+        MagicDNS first, then 1.1.1.1; service-name resolution
+        (<code>ferretdb</code>, <code>caddy</code>, etc.) is still handled by the
+        embedded resolver before forwarding. ACL is asymmetric:
         <em>your devices → podnet freely; podnet ↛ your devices</em>
         (blast-radius containment — a popped relay can't pivot into
         your laptop). The rathole data tunnel is independent (public,
