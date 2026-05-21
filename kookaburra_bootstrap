@@ -19,7 +19,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-DROPLET_IP="${DROPLET_IP:-134.199.165.127}"
+DROPLET_IP="${DROPLET_IP:-170.64.195.179}"
 SSH_HOST="root@${DROPLET_IP}"
 REMOTE_DIR=/opt/komodo-periphery
 # Bootstrap-side tailscale dir. Project name matches the eventual
@@ -77,9 +77,21 @@ echo "== ship tailscale compose (overlay + shared) =="
 retry scp -q $SSHO tailscale/compose.shared.yaml "$SSH_HOST:$TS_DIR/compose.shared.yaml"
 retry scp -q $SSHO tailscale/kookaburra/compose.yaml "$SSH_HOST:$TS_DIR/compose.yaml"
 
-echo "== render .env (TS_AUTHKEY from 1P) =="
+echo "== render .env (TS_AUTHKEY + OAuth from 1P) =="
+# Bootstrap path mirrors the Komodo stack environment exactly so the
+# tailscale-cleanup init (in compose.shared.yaml) gets the OAuth
+# creds it needs to delete stale tailnet device ghosts. Without these
+# the init runs, fails to obtain an access token, and falls through
+# best-effort — meaning the rebuilt droplet inherits any `-N`
+# collision suffix until Komodo's next redeploy fills them in.
 TS_AUTHKEY="$(op read 'op://Homelab/Tailscale Auth Key/credential')"
-{ echo "TS_AUTHKEY=$TS_AUTHKEY"; echo "TS_HOSTNAME=$TS_HOSTNAME"; echo "TZ=Australia/Perth"; } | \
+TS_OAUTH_CLIENT_ID="$(op read 'op://Homelab/Tailscale OAuth Client/client id')"
+TS_OAUTH_CLIENT_SECRET="$(op read 'op://Homelab/Tailscale OAuth Client/client secret')"
+{ echo "TS_AUTHKEY=$TS_AUTHKEY";
+  echo "TS_HOSTNAME=$TS_HOSTNAME";
+  echo "TS_OAUTH_CLIENT_ID=$TS_OAUTH_CLIENT_ID";
+  echo "TS_OAUTH_CLIENT_SECRET=$TS_OAUTH_CLIENT_SECRET";
+  echo "TZ=Australia/Perth"; } | \
   ssh $SSHO "$SSH_HOST" "cat > $TS_DIR/.env && chmod 600 $TS_DIR/.env"
 
 echo "== tailscale up (project=$TS_PROJECT, container=$TS_HOSTNAME) =="

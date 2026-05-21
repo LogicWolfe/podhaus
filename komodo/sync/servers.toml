@@ -38,7 +38,7 @@ tags = ["kookaburra", "podhaus"]
 # field as part of any droplet rebuild (terraform apply -replace).
 # Periphery is never internet-exposed (DO firewall blocks 8120;
 # reaches only via WireGuard tailnet — tag:podnet ACL gates it).
-address = "https://100.80.205.74:8120"
+address = "https://100.75.34.3:8120"
 enabled = true
 disk_warning = 85.0
 disk_critical = 95.0
