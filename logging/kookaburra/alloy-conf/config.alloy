@@ -1,5 +1,10 @@
 // kookaburra's alloy config — minimal cross-tailnet ship to bilby's
-// ClickStack collector at 100.122.138.120:4318 (bilby's tailnet IP).
+// ClickStack collector at 100.87.76.25:4318 (bilby's tailnet IP).
+// Hardcoded IP is fragile: drifts whenever bilby's tailscale-state
+// volume regenerates. Long-term fix = configure kookaburra docker
+// daemon.json to forward DNS to 100.100.100.100 (parallels bilby; see
+// /docs/networking.html) and switch endpoint to
+// http://bilby-podnet.tail9ceb.ts.net:4318.
 // No per-service parsers yet (kookaburra only runs tailscale +
 // periphery + rathole at this stage); same generic severity-enrich +
 // service.name-from-container as bilby/kangaroo so logs are
@@ -105,7 +110,7 @@ otelcol.processor.batch "clickstack" {
 // authenticated/private channel (WireGuard, not the LAN).
 otelcol.exporter.otlphttp "clickstack" {
   client {
-    endpoint = "http://100.122.138.120:4318"
+    endpoint = "http://100.87.76.25:4318"
     headers  = {
       "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
     }
