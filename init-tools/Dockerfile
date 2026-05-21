@@ -5,6 +5,8 @@
 #   - gettext (envsubst): variable substitution into JSON/XML/YAML templates
 #   - python3:            for stacks whose merge logic is a python script
 #                         (currently just plex's Preferences.xml merge)
+#   - curl + jq:          HTTP + JSON for inits that hit external APIs
+#                         (e.g. tailscale-cleanup's tailnet ghost pruner)
 #
 # Built locally on each Periphery via inline `build:` directives in the
 # consumer stacks' compose files (init-tools doesn't have its own stack —
@@ -15,4 +17,4 @@
 
 FROM alpine:latest
 
-RUN apk add --no-cache gettext python3
+RUN apk add --no-cache gettext python3 curl jq

@@ -9,6 +9,10 @@ server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/tailscale/bilby"
 file_paths = ["compose.yaml", "../compose.shared.yaml"]
+# tailscale-cleanup is an init container built inline from init-tools/.
+# run_build = true tells Komodo to `docker compose build` before `up`
+# so init-tools:local is materialized on this Periphery.
+run_build = true
 # tailscale-cleanup is a one-shot init that exits 0; without this
 # Komodo would count its terminated state and mark the stack
 # Unhealthy. Same pattern as plex/flood/backup init containers.

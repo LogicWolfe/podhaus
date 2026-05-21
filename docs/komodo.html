@@ -79,7 +79,14 @@
               <code>DeployStack</code> (<code>git pull</code> the clone +
               compose) unconditionally. No per-stack flag, no UI click.
               Adding a new linked-repo host = name its stacks
-              <code>&lt;host&gt;-*</code> and add a matching execution.</td>
+              <code>&lt;host&gt;-*</code> and add a matching execution.
+              <strong>Naming convention:</strong> bare stack name (no
+              prefix) = bilby (the primary, <code>files_on_host</code>
+              host); the <code>&lt;host&gt;-</code> prefix is reserved for
+              linked-repo hosts where Stage 2's
+              <code>BatchDeployStack&nbsp;"&lt;host&gt;-*"</code> glob is
+              the contract. So <code>tailscale</code> = bilby,
+              <code>kookaburra-tailscale</code> = kookaburra.</td>
           </tr>
           <tr>
             <td>Best for</td>

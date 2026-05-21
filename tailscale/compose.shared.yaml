@@ -35,7 +35,13 @@ services:
   # tailscaled re-registers automatically using TS_AUTHKEY, costing
   # only a tailnet IP change (not a real failure).
   tailscale-cleanup:
-    image: alpine:3.20
+    image: init-tools:local
+    # See backup/compose.yaml for the rationale on relative vs absolute
+    # build contexts (periphery-side resolution, unlike volume sources).
+    build:
+      context: ../init-tools
+      dockerfile: Dockerfile
+    pull_policy: never
     environment:
       TS_HOSTNAME: ${TS_HOSTNAME}
       TS_OAUTH_CLIENT_ID: ${TS_OAUTH_CLIENT_ID}
@@ -48,7 +54,6 @@ services:
         # Best-effort: trap any error, warn, exit 0 so a transient
         # Tailscale API outage never blocks the tailscale service.
         trap 'echo "[tailscale-cleanup] WARN: cleanup error (rc=$$?). Continuing." >&2; exit 0' EXIT
-        apk add --no-cache --quiet curl jq >/dev/null
 
         TOKEN=$$(curl -sf -X POST "https://api.tailscale.com/api/v2/oauth/token" \
           --data-urlencode "client_id=$$TS_OAUTH_CLIENT_ID" \
@@ -58,6 +63,18 @@ services:
           echo "[tailscale-cleanup] no access_token; check OAuth client + scope"; exit 0
         fi
 
+        DEVICES_JSON=$$(curl -sf -H "Authorization: Bearer $$TOKEN" \
+          "https://api.tailscale.com/api/v2/tailnet/-/devices")
+        if [ -z "$$DEVICES_JSON" ]; then
+          echo "[tailscale-cleanup] device list fetch failed; exiting"; exit 0
+        fi
+
+        # Count all devices matching the declared hostname, regardless of
+        # state. considered=0 + a visible ghost in admin = silent-failure
+        # signal (API didn't actually return our devices).
+        considered=$$(echo "$$DEVICES_JSON" \
+          | jq --arg h "$$TS_HOSTNAME" '[.devices[] | select(.hostname == $$h)] | length')
+
         NOW=$$(date -u +%s)
         # Match on the device-reported `hostname` (always the bare
         # name we set via TS_HOSTNAME) rather than `name` (which
@@ -65,9 +82,8 @@ services:
         # state is `connectedToControl == false` plus lastSeen > 60s
         # ago — sufficient buffer for a normal restart, short enough
         # that the rebuild path finds the prior node already stale.
-        curl -sf -H "Authorization: Bearer $$TOKEN" \
-          "https://api.tailscale.com/api/v2/tailnet/-/devices" \
-          | jq -r --arg h "$$TS_HOSTNAME" --argjson now "$$NOW" '
+        TARGETS=$$(mktemp)
+        echo "$$DEVICES_JSON" | jq -r --arg h "$$TS_HOSTNAME" --argjson now "$$NOW" '
               .devices[]
               | select(
                   (.hostname == $$h)
@@ -77,19 +93,25 @@ services:
                         | fromdateiso8601) < ($$now - 60))
                 )
               | "\(.id)\t\(.name)"
-            ' \
-          | while IFS=$$(printf '\t') read -r id name; do
-              [ -n "$$id" ] || continue
-              echo "[tailscale-cleanup] deleting stale device $$name ($$id)"
-              if curl -sf -X DELETE -H "Authorization: Bearer $$TOKEN" \
-                   "https://api.tailscale.com/api/v2/device/$$id" >/dev/null; then
-                echo "[tailscale-cleanup]   deleted."
-              else
-                echo "[tailscale-cleanup]   delete failed."
-              fi
-            done
+            ' > $$TARGETS
 
-        echo "[tailscale-cleanup] done."
+        # Read from a file (not a pipe) so `deleted` survives the loop —
+        # ash runs the right side of a pipe in a subshell.
+        deleted=0
+        while IFS=$$(printf '\t') read -r id name; do
+          [ -n "$$id" ] || continue
+          echo "[tailscale-cleanup] deleting stale device $$name ($$id)"
+          if curl -sf -X DELETE -H "Authorization: Bearer $$TOKEN" \
+               "https://api.tailscale.com/api/v2/device/$$id" >/dev/null; then
+            deleted=$$(( deleted + 1 ))
+            echo "[tailscale-cleanup]   deleted."
+          else
+            echo "[tailscale-cleanup]   delete failed."
+          fi
+        done < $$TARGETS
+        rm -f $$TARGETS
+
+        echo "[tailscale-cleanup] done — considered=$$considered deleted=$$deleted"
         trap - EXIT
     restart: "no"
 

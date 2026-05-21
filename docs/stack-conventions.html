@@ -102,11 +102,17 @@
       <p>
         <strong>init-tools shared image:</strong> All init containers across the fleet use the
         same locally-built image declared at <code>init-tools/Dockerfile</code>
-        (alpine + gettext + python3). Each consumer stack triggers the build inline via its
-        init service's <code>build:</code> directive (Komodo's <code>run_build = true</code>
+        (alpine + gettext + python3 + curl + jq — covers config templating,
+        python merge scripts, and inits that hit external APIs like
+        <code>tailscale-cleanup</code>'s tailnet ghost pruner). Each consumer
+        stack triggers the build inline via its init service's
+        <code>build:</code> directive (Komodo's <code>run_build = true</code>
         handles this). Init service uses <code>pull_policy: never</code> so Komodo's auto_pull
         doesn't try to fetch the local-only tag. Stack.toml has <code>run_build = true</code>;
         auto_pull stays default-true so the main service still pulls upstream image updates.
+        Add new tools to <code>init-tools/Dockerfile</code> rather than
+        layering <code>apk add</code> at runtime in a consumer's entrypoint —
+        the shared image is the single owner of the convention.
       </p>
       <p>
         <strong>Mandatory with any init container: <code>ignore_services</code>.</strong>
@@ -118,7 +124,9 @@
         <code>[stack.config]</code> so Komodo excludes it from the health
         rollup. Reference: <code>plex/stack.toml</code>,
         <code>backup/{bilby,kangaroo}/stack.toml</code>,
-        <code>flood/stack.toml</code>. (Gatus black-box endpoint checks
+        <code>flood/stack.toml</code>,
+        <code>tailscale/{bilby,kookaburra}/stack.toml</code>.
+        (Gatus black-box endpoint checks
         remain the authoritative health signal regardless — this just keeps
         Komodo's at-a-glance view honest too.)
       </p>
