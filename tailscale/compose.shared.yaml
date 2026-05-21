@@ -36,11 +36,14 @@ services:
   # only a tailnet IP change (not a real failure).
   tailscale-cleanup:
     image: init-tools:local
-    # See backup/compose.yaml for the rationale on relative vs absolute
-    # build contexts (periphery-side resolution, unlike volume sources).
-    build:
-      context: ../init-tools
-      dockerfile: Dockerfile
+    # The build: directive lives in each per-host compose.yaml so the
+    # relative context resolves correctly: docker compose resolves
+    # context relative to the FIRST compose file's directory, not the
+    # file the service was defined in. Per-host compose.yamls live one
+    # level deeper than this shared file, so they need ../../init-tools
+    # while this file would need ../init-tools — different paths, only
+    # one of which compose ever sees. Putting build: here would make
+    # the wrong path get used. Same pattern as backup/.
     pull_policy: never
     environment:
       TS_HOSTNAME: ${TS_HOSTNAME}

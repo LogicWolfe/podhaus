@@ -112,6 +112,30 @@ terraform apply</code></pre>
         each machine self-locks within the <code>~&gt;</code> version
         constraints (no cross-platform hash drift, zero maintenance).
       </p>
+      <aside class="callout note">
+        <span class="callout-title">cloudflare/ also manages the Tailscale auth-key rotation (interim home)</span>
+        <code>cloudflare/tailscale.tf</code> mints the
+        <code>tag:podnet</code> tailnet auth key via the
+        <code>tailscale/tailscale</code> provider, drives an 80-day
+        rotation via a <code>time_rotating</code> resource, and writes
+        the key value back to the existing
+        <code>op://Homelab/Tailscale Auth Key</code> 1P item via a
+        <code>terraform_data</code> + <code>local-exec</code> provisioner
+        invoking <code>op item edit</code>. Provisioner is used here
+        because the 1P item is category <code>API_CREDENTIAL</code>,
+        which the 1Password TF provider's <code>onepassword_item</code>
+        resource does not manage. The key value is passed via env var,
+        not the command line, so it never surfaces in TF's
+        command-echo. Provider creds: the chezmoi-rendered env file
+        also exports <code>TAILSCALE_OAUTH_CLIENT_ID</code> /
+        <code>TAILSCALE_OAUTH_CLIENT_SECRET</code> +
+        <code>OP_SERVICE_ACCOUNT_TOKEN</code> (the latter is the one
+        secret <a href="/secrets.html">allowed raw on disk</a>; sourced
+        from the same repo-root file komodo-start uses). This lives
+        in <code>cloudflare/</code> as an interim — it will move to the
+        consolidated root via <code>terraform state mv</code> when the
+        TF foundation consolidation lands.
+      </aside>
       <p>
         The S3 state backend is the public
         <code>https://storage.pod.haus</code> — MinIO behind its own Caddy

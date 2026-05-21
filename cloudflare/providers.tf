@@ -16,3 +16,11 @@ provider "github" {
   owner = "LogicWolfe"
   # token from GITHUB_TOKEN (chezmoi env file).
 }
+
+provider "tailscale" {
+  # OAuth client credentials from TAILSCALE_OAUTH_CLIENT_ID /
+  # TAILSCALE_OAUTH_CLIENT_SECRET (chezmoi env file). Same OAuth client
+  # the tailscale-cleanup init uses; scope auth_keys:write is what mints
+  # the rotating tailnet key. tailnet arg omitted — defaults to the
+  # tailnet that owns the OAuth client.
+}

@@ -21,6 +21,19 @@ terraform {
       source  = "integrations/github"
       version = "~> 6.0"
     }
+    tailscale = {
+      # Mints the rotating tag:podnet tailnet auth key. Interim home —
+      # will move to the consolidated TF root (see
+      # docs/plans/terraform-foundation.md) via state mv when that lands.
+      # Docs: https://registry.terraform.io/providers/tailscale/tailscale/latest/docs
+      source  = "tailscale/tailscale"
+      version = "~> 0.21"
+    }
+    time = {
+      # Drives the 80-day rotation cadence for the tailnet auth key.
+      source  = "hashicorp/time"
+      version = "~> 0.13"
+    }
   }
 
   backend "s3" {

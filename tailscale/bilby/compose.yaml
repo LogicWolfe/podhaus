@@ -3,4 +3,10 @@
 # beyond what stack.toml supplies. Komodo composes both files via
 # file_paths in stack.toml.
 services:
+  tailscale-cleanup:
+    # build: must live here (not in compose.shared.yaml) — docker
+    # compose resolves context relative to the first file's directory.
+    build:
+      context: ../../init-tools
+      dockerfile: Dockerfile
   tailscale: {}

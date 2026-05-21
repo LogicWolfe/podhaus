@@ -1,4 +1,10 @@
 # kookaburra tailscale node. Pulled from ../compose.shared.yaml via
 # stack.toml file_paths.
 services:
+  tailscale-cleanup:
+    # build: must live here (not in compose.shared.yaml) — docker
+    # compose resolves context relative to the first file's directory.
+    build:
+      context: ../../init-tools
+      dockerfile: Dockerfile
   tailscale: {}
