@@ -8,6 +8,11 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/minio"
+# minio-init is a one-shot bootstrap (creates the terraform-state
+# bucket, idempotent). Without ignore_services Komodo would count
+# its exit-0 toward stack health and flip the stack Unhealthy. Same
+# pattern as plex/backup/flood/tailscale.
+ignore_services = ["minio-init"]
 
 environment = """
 TZ=[[TZ]]

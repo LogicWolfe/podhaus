@@ -52,6 +52,37 @@ services:
       retries: 3
       start_period: 20s
 
+  # Idempotent bootstrap of MinIO's terraform-state bucket. Lives with
+  # the MinIO stack so a fresh deploy is self-sufficient (no manual
+  # `mcli mb` step, no chicken-and-egg with terraform). Uses the MinIO
+  # image's built-in `mc` client (same binary as host-installed `mcli`).
+  # mc options are idempotent: alias set overwrites, --ignore-existing
+  # is a no-op on existing bucket, and version enable is a no-op when
+  # already enabled. Marked ignore_services in stack.toml so the
+  # one-shot exit-0 doesn't flip the stack Unhealthy.
+  minio-init:
+    container_name: minio-init
+    image: quay.io/minio/minio:latest
+    security_opt:
+      - label:disable
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    networks:
+      - dockernet
+    restart: "no"
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/terraform-state
+        mc version enable local/terraform-state
+        echo "terraform-state bucket ready (versioned)"
+
 networks:
   dockernet:
     external: true

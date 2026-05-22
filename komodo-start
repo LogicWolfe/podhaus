@@ -81,23 +81,7 @@ seed_variable "PODHAUS_REPO"  "$PWD"            false
 
 ./komodo-sync
 
-# Ensure the terraform-state MinIO bucket exists with versioning. This
-# is what makes the consolidated terraform/ root work on a cold start —
-# previously the bucket was hand-created via a one-shot `mcli mb`
-# documented only in a migration runbook (alligator-bilby
-# /terraform-setup.md). Now it's a guaranteed step in the canonical
-# bootstrap.
-#
-# Idempotent: alias-set overwrites, --ignore-existing is a no-op on
-# the bucket if it's there, and `version enable` is a no-op when
-# already enabled — so re-running komodo-start never churns.
-echo "Ensuring MinIO terraform-state bucket..."
-until curl -sf -o /dev/null http://localhost:9000/minio/health/live; do
-  sleep 2
-done
-minio_user=$(op read "op://Homelab/MinIO Root/username")
-minio_pass=$(op read "op://Homelab/MinIO Root/credential")
-mcli alias set local http://localhost:9000 "$minio_user" "$minio_pass" >/dev/null
-mcli mb --ignore-existing local/terraform-state >/dev/null
-mcli version enable local/terraform-state >/dev/null
-echo "  terraform-state bucket ready (versioned)"
+# MinIO terraform-state bucket is bootstrapped by the MinIO stack's
+# own `minio-init` init container — see minio/compose.yaml. Removed
+# from komodo-start: the bucket is now a consequence of MinIO being
+# deployed, not a side effect of the Komodo bootstrap script.
