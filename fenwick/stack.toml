@@ -11,12 +11,14 @@ run_directory = "/etc/komodo/repo/fenwick"
 run_build = false
 
 # Non-secret values (repo path, sidecar URL, the bot's own Signal
-# number, the bootstrap admin) are seeded by komodo-start. Identity is
-# SQLite-owned: env only seeds the bootstrap admin (Nathan); everyone
-# else is registered via the admin-only register_account tool. Secrets
-# come from the 1Password Homelab vault via komodo-op: the Claude OAuth
-# token ("Claude" -> OP__KOMODO__CLAUDE__CREDENTIAL), the ClickStack
-# ingestion key, and the Bugsink DSN ("Bugsink Fenwick DSN" ->
+# number, the bootstrap admin) are declared as Komodo Variables in
+# the [[variable]] blocks at the bottom of this file — stack-private
+# config co-located with its stack. Identity is SQLite-owned: env only
+# seeds the bootstrap admin (Nathan); everyone else is registered via
+# the admin-only register_account tool. Secrets come from the 1Password
+# Homelab vault via komodo-op: the Claude OAuth token ("Claude" ->
+# OP__KOMODO__CLAUDE__CREDENTIAL), the ClickStack ingestion key, and
+# the Bugsink DSN ("Bugsink Fenwick DSN" ->
 # OP__KOMODO__BUGSINK_FENWICK_DSN__CREDENTIAL, internal dockernet form;
 # absent = error reporting disabled, not a failure), and the internal
 # HTTP injection-transport producer token ("Fenwick Internal Token" ->
@@ -40,3 +42,39 @@ FENWICK_INTERNAL_HTTP_TOKEN=[[OP__KOMODO__FENWICK_INTERNAL_TOKEN__CREDENTIAL]]
 FENWICK_OP_VAULT=[[OP__KOMODO__FENWICK_1PASSWORD__VAULT_ID]]
 FENWICK_OP_TOKEN=[[OP__KOMODO__FENWICK_1PASSWORD__ACCESS_TOKEN]]
 """
+
+# Fenwick stack-private Komodo Variables. Komodo's ResourceSync
+# applies these when include_variables=true on the sync (set in
+# komodo-start). Co-locating variable declarations with the stack
+# they belong to keeps stack-private config in one place rather
+# than scattered between bootstrap script + stack.toml.
+#
+# Caveat: FENWICK_REPO is host-specific (bilby clone path). If
+# fenwick ever runs on a host other than bilby this declaration
+# becomes wrong and would need per-host splitting (or moving back
+# to host-discovered seeding in komodo-start). Bilby-only today.
+
+[[variable]]
+name = "FENWICK_REPO"
+value = "/home/nathan/repos/fenwick"
+description = "bilby's checkout of the fenwick repo (bind-mounted into the container for deno --watch live-reload)"
+
+[[variable]]
+name = "FENWICK_SIGNAL_CLI_URL"
+value = "http://signal-cli-rest-api:8080"
+description = "Internal dockernet endpoint for the signal-cli-rest-api sidecar"
+
+[[variable]]
+name = "FENWICK_SIGNAL_ACCOUNT"
+value = "+61468292514"
+description = "Fenwick bot's own registered Signal number"
+
+[[variable]]
+name = "FENWICK_ADMIN_SIGNAL"
+value = "+61498734621"
+description = "Bootstrap admin Signal number (Nathan); other accounts registered via the admin-only register_account tool"
+
+[[variable]]
+name = "FENWICK_ADMIN_NAME"
+value = "Nathan"
+description = "Bootstrap admin identity name"

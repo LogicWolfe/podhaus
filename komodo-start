@@ -64,17 +64,11 @@ seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
 echo "Seeding host-discovered variable into Komodo..."
 seed_variable "PODHAUS_REPO"  "$PWD"            false
 
-# Fenwick (dev-mode hot-reload stack). FENWICK_REPO is the fenwick repo
-# checkout on this host — bind-mounted into the container so edits there
-# reload the bot via `deno run --watch`. Identity is SQLite-owned; env
-# only seeds the bootstrap admin (Nathan), who registers everyone else
-# via the admin-only register_account tool. FENWICK_SIGNAL_ACCOUNT is
-# the bot's own registered number.
-seed_variable "FENWICK_REPO"            "/home/nathan/repos/fenwick"        false
-seed_variable "FENWICK_SIGNAL_CLI_URL"  "http://signal-cli-rest-api:8080"   false
-seed_variable "FENWICK_SIGNAL_ACCOUNT"  "+61468292514"                      false
-seed_variable "FENWICK_ADMIN_SIGNAL"    "+61498734621"                      false
-seed_variable "FENWICK_ADMIN_NAME"      "Nathan"                            false
+# Fenwick stack-private vars (FENWICK_REPO, FENWICK_SIGNAL_*,
+# FENWICK_ADMIN_*) live in fenwick/stack.toml as [[variable]] blocks and
+# apply via the ResourceSync. Removed from this script — co-locating
+# stack-private config with the stack rather than scattering it across
+# the bootstrap script.
 
 # rclone.conf rendering moved into the backup stack's init container.
 # Both bilby and kangaroo render their own /rclone/rclone.conf (named
