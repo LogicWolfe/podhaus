@@ -114,6 +114,54 @@ networks:
         noise+token, NOT on the tailnet — clients reaching
         storage.pod.haus never touch any private network).
       </aside>
+
+      <h3>Cross-host container reachability — what works today</h3>
+      <p>
+        Asked plainly: <em>can a container on host A reach a container on
+        host B?</em> The answer depends entirely on whether <strong>both
+        hosts have a podnet sidecar</strong>.
+      </p>
+      <ul>
+        <li><strong>bilby ↔ kookaburra:</strong> ✓ Either side's dockernet
+          containers can reach the other's containers by tailnet FQDN
+          (<code>{bilby,kookaburra}-podnet.tail9ceb.ts.net</code>).
+          Packet flow: container → host bridge → host kernel routes
+          <code>100.64.0.0/10</code> to <code>tailscale0</code> → WireGuard
+          → destination host's <code>tailscale0</code> → destination
+          dockernet bridge. The "podnet sidecar" is a
+          <code>network_mode: host</code> tailscale container — it
+          doesn't proxy, it just installs <code>tailscale0</code> on the
+          host. Host kernel does the routing.</li>
+        <li><strong>bilby ↔ kangaroo:</strong> LAN-direct only. Kangaroo
+          has no podnet sidecar (QTS hosts a podnet container would be
+          awkward), so cross-host traffic uses the 10.0.0.0/24 LAN —
+          e.g. kangaroo alloy ships logs to bilby's ClickStack at
+          <code>10.0.0.119:4318</code> (bilby's LAN IP). Fine as long as
+          both stay on-LAN.</li>
+        <li><strong>kookaburra ↔ kangaroo:</strong> ✗ No path today.
+          Kookaburra is off-LAN; kangaroo isn't on the tailnet.</li>
+      </ul>
+      <aside class="callout note">
+        <span class="callout-title">Subnet routing for non-podnet hosts (not configured — YAGNI)</span>
+        Tailscale supports promoting a podnet member to a subnet router so
+        the rest of the tailnet can reach hosts on its LAN. For us that
+        would mean
+        <code>tailscale up --advertise-routes=10.0.0.0/24</code> on
+        bilby, an ACL rule
+        <code>{"src": ["tag:podnet"], "dst": ["10.0.0.0/24:*"]}</code>,
+        and route approval in the Tailscale admin (or via
+        <code>tailscale_acl</code> when the TF foundation consolidation
+        lands). After that, anything on the tailnet — kookaburra,
+        your off-LAN laptop, future pinelake — could reach kangaroo at
+        <code>10.0.0.119</code>.
+        <br><br>
+        Not enabled because nothing needs it. Kangaroo's outbound traffic
+        (alloy → ClickStack, backrest → bilby) is initiated <em>from</em>
+        kangaroo and uses the LAN directly. If a future requirement
+        flips that — kookaburra needing kangaroo, or remote admin into
+        kangaroo without VPN — turn it on then. Documented here so the
+        option is discoverable.
+      </aside>
       <p>
         A single <code>cloudflared</code> container on bilby holds the tunnel credential. Ingress
         rules live in <code>cloudflare-tunnel/config.yml</code> (bind-mounted into the container)
