@@ -128,7 +128,7 @@
         <code>bugsink</code> — the wildcard matches every stack, so a push
         that changes <code>bugsink/</code> redeploys only Bugsink (other
         unchanged bilby stacks self-skip — no churn). Nothing to register;
-        adding/removing the stack needs no <code>cloudflare/github.tf</code>
+        adding/removing the stack needs no <code>terraform/github.tf</code>
         edit. (Bugsink was in fact the 21st stack that hit GitHub's hard
         20-webhook cap and motivated the per-stack→procedure consolidation —
         see <a href="/komodo.html#operating-models">Komodo → auto-deploy</a>.)

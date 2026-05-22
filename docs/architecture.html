@@ -57,11 +57,12 @@
         <li>Bootstrap scripts (<code>komodo-start</code>, <code>komodo-sync</code>,
           <code>kangaroo_bootstrap</code>, <code>kookaburra_bootstrap</code>) sit at the
           repo root.</li>
-        <li><code>cloudflare/</code> holds the Terraform sources for everything outside
-          Docker — Cloudflare zones + Access apps + tunnel ingress, UniFi LAN DNS, and the
-          GitHub webhook that drives Komodo auto-deploy. <code>terraform/</code> holds
-          the DigitalOcean relay droplet root (kookaburra). State for both lives in MinIO
-          (S3 backend via <code>https://storage.pod.haus</code>). Stock
+        <li><code>terraform/</code> is the ONE consolidated Terraform root for everything
+          outside Docker — Cloudflare zones + Access apps + tunnel ingress, UniFi LAN DNS,
+          the GitHub webhook that drives Komodo auto-deploy, DigitalOcean (the kookaburra
+          relay droplet), Tailscale auth-key rotation, and MinIO IAM/bucket policies for
+          Publii tenants. State at <code>s3://terraform-state/podhaus.tfstate</code> in
+          MinIO (backend via <code>https://storage.pod.haus</code>). Stock
           <code>terraform</code> runs from any machine — no wrapper. See
           <a href="/terraform.html">Terraform</a>.</li>
       </ul>

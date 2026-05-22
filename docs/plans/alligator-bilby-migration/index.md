@@ -65,7 +65,7 @@ Steady-state docs live at [Terraform](/terraform.html). Summary of
 what landed: MinIO state backend, `./tf` runner, full Cloudflare
 migration (11 zones / ~82 DNS records / 15 Access apps / 2 service
 tokens / TF-managed tunnel config), per-service module
-(`cloudflare/modules/pod_haus_service`), UniFi DNS via TF,
+(`terraform/modules/pod_haus_service`), UniFi DNS via TF,
 DNSControl retired in full, GitHub webhook driving Komodo
 push-to-deploy, smart `komodo-sync`, Komodo→Gatus deploy-failure
 alerting. See [Completed work](completed-work.md) for the chronological

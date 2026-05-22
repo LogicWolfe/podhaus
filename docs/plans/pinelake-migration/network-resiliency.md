@@ -111,7 +111,7 @@ Bilby's LAN is `10.0.0.0/24` UniFi. Two implications:
 - **Documentation transfer**: parts of the
   [Networking](/networking.html) doc reference UniFi-specific
   behaviour (split-horizon DNS via the UniFi provider in
-  `cloudflare/unifi.tf`). None of that applies to pinelake until a
+  `terraform/dns_unifi_split_horizon.tf`). None of that applies to pinelake until a
   UniFi gateway lands.
 - **Future option**: replacing the ISP gateway with UniFi gear
   (USG/UDM + an AP) would let pinelake join the same

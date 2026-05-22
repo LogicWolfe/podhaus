@@ -26,7 +26,7 @@ ones that mattered.
 
 ## Service exposure module + push-to-deploy — 2026-05-12
 
-- **`cloudflare/modules/pod_haus_service`** — Terraform module
+- **`terraform/modules/pod_haus_service`** — Terraform module
   encapsulating DNS CNAME + Access Application + default-locked
   policy chain + tunnel ingress rule for one pod.haus hostname.
   Default chain is "Homelab service-token bypass + Family allow";
@@ -36,16 +36,16 @@ ones that mattered.
   state-moved (the 4 existing per-host apps + UniFi) or freshly
   created (9 hostnames previously gated only by the `*.pod.haus`
   wildcard). The wildcard stays as the default-deny safety net.
-- **`cloudflare/tunnel.tf`** — single
+- **`terraform/tunnel.tf`** — single
   `cloudflare_zero_trust_tunnel_cloudflared_config` resource that
   concats every module's `ingress_rule` output plus the
   `http_status:404` catch-all. cloudflared fetches the config from
   CF's API at connect (`source = "cloudflare"`); the bind-mounted
   `cloudflare-tunnel/conf/config.yml` is gone.
-- **UniFi DNS migrated off DNSControl.** `cloudflare/dns_unifi_split_horizon.tf`
+- **UniFi DNS migrated off DNSControl.** `terraform/dns_unifi_split_horizon.tf`
   declares the two A records via the `ubiquiti-community/unifi`
   provider. `dns/`, `dns-preview`, `dns-push` deleted.
-- **GitHub webhook in Terraform.** `cloudflare/github.tf` registers
+- **GitHub webhook in Terraform.** `terraform/github.tf` registers
   the webhook on `LogicWolfe/podhaus` pointing at
   `komodo.pod.haus/auth/github/webhook`. The previously-provisioned
   Cloudflare Access Bypass app makes the POST reachable; Komodo

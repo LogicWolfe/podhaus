@@ -316,9 +316,9 @@ Already in the repo as of this writing:
 
 | File | Resources |
 |---|---|
-| `cloudflare/variables.tf` | `local.tunnels.pinelake = "fec5ca76-...cfargotunnel.com"`, `local.tunnel_ids.pinelake = "fec5ca76-..."` |
-| `cloudflare/dns_pinelake_haus.tf` | DNS CNAMEs for `home`, `sync`, `torrent` → tunnel, proxied |
-| `cloudflare/access.tf` (lines 116–168) | 3 Access apps — `pine_lake_ssh` (ssh-type, Nathan-only), `pine_lake_torrent` (self_hosted, Nathan-only), `pine_lake_syncthing` (self_hosted, Nathan-only) |
+| `terraform/variables.tf` | `local.tunnels.pinelake = "fec5ca76-...cfargotunnel.com"`, `local.tunnel_ids.pinelake = "fec5ca76-..."` |
+| `terraform/dns_pinelake_haus.tf` | DNS CNAMEs for `home`, `sync`, `torrent` → tunnel, proxied |
+| `terraform/access.tf` (lines 116–168) | 3 Access apps — `pine_lake_ssh` (ssh-type, Nathan-only), `pine_lake_torrent` (self_hosted, Nathan-only), `pine_lake_syncthing` (self_hosted, Nathan-only) |
 
 **Not** in the repo: any `cloudflare_zero_trust_tunnel_cloudflared_config`
 for the pinelake tunnel. Ingress rules live only in

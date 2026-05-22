@@ -109,7 +109,7 @@ Low priority but polite — submit a PR upstream.
 ## ~~Webhook auto-deploy~~ — done 2026-05-12
 
 GitHub webhook on `LogicWolfe/podhaus` is now managed by Terraform in
-`cloudflare/github.tf`; it posts to
+`terraform/github.tf`; it posts to
 `komodo.pod.haus/auth/github/webhook` on every push. Cloudflare Access
 bypasses the webhook path; Komodo HMAC-validates with
 `KOMODO_WEBHOOK_SECRET`. Push-to-deploy is live for both bilby and

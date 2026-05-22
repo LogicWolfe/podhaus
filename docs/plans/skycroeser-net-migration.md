@@ -164,7 +164,7 @@ This is where the generic Publii plan meets podhaus conventions.
 The naive read ("public site ⇒ skip the `pod_haus_service` module") is
 wrong here, and the module already supports exactly this case. The
 `*.pod.haus` zone is gated by one wildcard Access app
-(`pod_haus_wildcard`, Family-allow). Per `cloudflare/access.tf`,
+(`pod_haus_wildcard`, Family-allow). Per `terraform/access.tf`,
 **a more-specific Access application overrides the wildcard** for its
 hostname. So a public `sky.pod.haus` is achieved *with* the module, by
 attaching a public **bypass-everyone** policy instead of the default
@@ -174,11 +174,11 @@ locked chain — precedent already in the repo:
 
 Concretely:
 
-- Add a shared reusable policy in `cloudflare/access.tf`, e.g.
+- Add a shared reusable policy in `terraform/access.tf`, e.g.
   `public_bypass` — `decision = "bypass"`, `include = [{ everyone = {} }]`
   (mirrors `unifi_bypass`; reusable so Umami's public host can share
   it).
-- Add a `module "sky"` block in `cloudflare/services_pod_haus.tf`
+- Add a `module "sky"` block in `terraform/services_pod_haus.tf`
   using the **pod.haus defaults** but with
   `access_policy_ids = [cloudflare_zero_trust_access_policy.public_bypass.id]`
   (the module's documented override input). This creates a
@@ -197,7 +197,7 @@ reusable policy.
 
 ### 2. Domain cutover to skycroeser.net (SECONDARY — deferred, not in initial build)
 
-Only `pod.haus` exists in `cloudflare/variables.tf` (`local.zones`).
+Only `pod.haus` exists in `terraform/variables.tf` (`local.zones`).
 Moving the live domain onto this stack is a **separate operation run
 after the `sky.pod.haus` demo is validated** (Phase 6). Likely shape:
 
@@ -322,7 +322,7 @@ same gotcha as before, but reset via `mc rm` not filesystem delete.
 > **edge `/minio/admin/` WAF/Caddy 403 block was never a ratified
 > decision** — it was a defence-in-depth proposal in this draft that
 > conflicts with the enshrined **from-anywhere Terraform hard rule**
-> (an admin 403 breaks the `minio/terraform/` root, and **no TF root is
+> (an admin 403 breaks the consolidated `terraform/` root, and **no TF root is
 > exempt**). It has been removed. The real, sole access-control
 > boundary for the public MinIO endpoint is **MinIO's own SigV4**
 > (root/admin creds, held only in 1Password + the chezmoi Terraform
@@ -404,7 +404,7 @@ not an oversight.
 
 Stand the ingress up, then from off-LAN confirm **all** of:
 
-- [ ] `GET https://<s3-host>/terraform-state/cloudflare.tfstate`
+- [ ] `GET https://<s3-host>/terraform-state/podhaus.tfstate`
       unauthenticated → `AccessDenied` (not 200).
 - [ ] `GET https://<s3-host>/skycroeser-net/` unauthenticated →
       no object listing (ListBucket denied); a known object path → 200.

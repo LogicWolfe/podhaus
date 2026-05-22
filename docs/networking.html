@@ -174,8 +174,8 @@ networks:
       <p>
         Anything not listed returns 404 at the tunnel edge. New service that needs a hostname?
         Add the rule here, add a <code>cloudflare_dns_record</code> to the relevant
-        <code>cloudflare/dns_*.tf</code> file, run <code>terraform apply</code>
-        from <code>cloudflare/</code>, then <code>./komodo-sync</code> to refresh the tunnel container.
+        <code>terraform/dns_*.tf</code> file, run <code>terraform apply</code>
+        from <code>terraform/</code>, then <code>./komodo-sync</code> to refresh the tunnel container.
       </p>
       <aside class="callout warn">
         <span class="callout-title">cloudflared is distroless</span>
@@ -189,7 +189,7 @@ networks:
       <h2 id="access">Cloudflare Access</h2>
       <p>
         All Access applications, policies, groups, and service tokens are codified in
-        <code>cloudflare/access.tf</code> (Terraform). A single
+        <code>terraform/access.tf</code> (Terraform). A single
         <strong>Pod Haus wildcard</strong> Application covers <code>*.pod.haus</code> with a
         Family allow policy — any single-label hostname under <code>pod.haus</code> is gated
         by browser-side Cloudflare Access login automatically.
@@ -202,8 +202,8 @@ networks:
       </p>
       <p>
         Every tunnel-routed pod.haus hostname has its own Access app, created by an
-        instance of the <code>cloudflare/modules/pod_haus_service</code> Terraform module
-        (one block per service in <code>cloudflare/services_pod_haus.tf</code>). The
+        instance of the <code>terraform/modules/pod_haus_service</code> Terraform module
+        (one block per service in <code>terraform/services_pod_haus.tf</code>). The
         default policy chain is "Homelab service-token bypass → Family allow" — locked
         by default, overridable per service.
       </p>
@@ -246,8 +246,8 @@ networks:
 
       <h2 id="dns">DNS</h2>
       <p>
-        All DNS is Terraform-managed under <code>cloudflare/</code>, state in MinIO at
-        <code>s3://terraform-state/cloudflare.tfstate</code>:
+        All DNS is Terraform-managed under <code>terraform/</code>, state in MinIO at
+        <code>s3://terraform-state/podhaus.tfstate</code>:
       </p>
       <ul>
         <li><strong>Cloudflare</strong> public zones — per-zone <code>dns_&lt;zone&gt;.tf</code>
@@ -260,7 +260,7 @@ networks:
       </ul>
       <p>
         Workflow: edit the relevant <code>dns_&lt;zone&gt;.tf</code>, run
-        <code>terraform plan</code> from <code>cloudflare/</code>,
+        <code>terraform plan</code> from <code>terraform/</code>,
         then <code>terraform apply</code> (stock <code>terraform</code>, no
         wrapper, from any machine — creds from the chezmoi-rendered fish
         env). The S3 state backend is the public

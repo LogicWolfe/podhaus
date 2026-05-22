@@ -206,7 +206,7 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         We do <strong>not</strong> use one webhook per stack: GitHub
         hard-caps a repo at <strong>20 <code>push</code> webhooks</strong>
         and the fleet outgrew it (2026-05-17). Instead
-        <code>cloudflare/github.tf</code> creates <strong>one</strong>
+        <code>terraform/github.tf</code> creates <strong>one</strong>
         webhook → <code>komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main</code>
         (resource_type <code>procedure</code>; the trailing
         <code>/main</code> is the branch filter, not a verb — Komodo

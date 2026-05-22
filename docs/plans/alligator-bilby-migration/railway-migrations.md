@@ -2,7 +2,7 @@
 
 Two Railway-hosted services need to come home. The Komodo webhook
 bypass Access Application that previously blocked this work is now in
-place under `cloudflare/access.tf` (path-scoped Bypass on
+place under `terraform/access.tf` (path-scoped Bypass on
 `komodo.pod.haus/auth/github/webhook`), so this can proceed
 independently.
 
@@ -106,14 +106,14 @@ After the source-path decision:
 5. **Add ingress rules** to `cloudflare-tunnel/conf/config.yml`:
    - `yiayia.pod.haus → http://yiayia-board:8000`
    - `doggos.indigo.pod.haus → http://indigo-web-server:80`
-6. **Update DNS** in `cloudflare/dns_pod_haus.tf` — remove the two
+6. **Update DNS** in `terraform/dns_pod_haus.tf` — remove the two
    Railway CNAMEs from `pod_haus_external_cnames` (`doggos.indigo` and
    `yiayia`), let the wildcard tunnel CNAME handle both via the new
    ingress rules. Run `op run --env-file=.env -- ../tf apply` from
    `cloudflare/`.
 7. **Verify** the hostnames now serve from bilby.
 8. ~~Create Access Application for Komodo's webhook path~~ —
-   already done in `cloudflare/access.tf`
+   already done in `terraform/access.tf`
    (`cloudflare_zero_trust_access_application.komodo_webhook`).
 9. **Add Gatus monitors** — Yiayia already has Frontend/Device
    endpoints in `gatus/conf/config.yaml`; just point them at bilby-

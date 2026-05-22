@@ -6,7 +6,7 @@ CF-side config, matching how bilby's tunnel ingress works. Existing
 DNS + Access apps are already in TF; the remaining gap is the
 `cloudflare_zero_trust_tunnel_cloudflared_config` resource and a
 service-module pattern for `*.pinelake.haus` mirroring
-`cloudflare/modules/pod_haus_service/`.
+`terraform/modules/pod_haus_service/`.
 
 Depends on: [Host bootstrap](host-bootstrap.md).
 Coordinates with: [Flood](flood.md), [Syncthing](syncthing.md),
@@ -16,11 +16,11 @@ Coordinates with: [Flood](flood.md), [Syncthing](syncthing.md),
 
 | Layer | Today | Note |
 |---|---|---|
-| Tunnel UUID | `fec5ca76-b634-4185-bdb2-f85c38b1b570` (named `torrent-pinelake`) | In CF; UUID literal in `cloudflare/variables.tf` |
+| Tunnel UUID | `fec5ca76-b634-4185-bdb2-f85c38b1b570` (named `torrent-pinelake`) | In CF; UUID literal in `terraform/variables.tf` |
 | `cloudflared` runtime | macOS LaunchDaemon (`com.cloudflare.cloudflared.plist`), running with `--config /etc/cloudflared/config.yml` | Native, not containerised |
 | Ingress source | `/etc/cloudflared/config.yml` (on-host YAML) | Drift from podhaus convention |
-| TF-managed DNS | `cloudflare/dns_pinelake_haus.tf` — CNAMEs for `home`, `sync`, `torrent` → tunnel | Already correct |
-| TF-managed Access apps | `cloudflare/access.tf` lines 116–168 — 3 apps, Nathan-only | Already correct, policy chain differs from `*.pod.haus` |
+| TF-managed DNS | `terraform/dns_pinelake_haus.tf` — CNAMEs for `home`, `sync`, `torrent` → tunnel | Already correct |
+| TF-managed Access apps | `terraform/access.tf` lines 116–168 — 3 apps, Nathan-only | Already correct, policy chain differs from `*.pod.haus` |
 | TF-managed tunnel ingress | None | Gap to close |
 
 Active ingress today:
@@ -57,11 +57,11 @@ compose stack on pinelake. **Default: stay LaunchDaemon.** Reasons:
 
 ## Module: `pinelake_service`
 
-Mirror `cloudflare/modules/pod_haus_service/` but with the
+Mirror `terraform/modules/pod_haus_service/` but with the
 pinelake-specific defaults: Nathan-only policy chain (no Family group),
 `pinelake.haus` zone, `tunnels.pinelake` tunnel target. Two ways:
 
-1. **New module `cloudflare/modules/pinelake_service/`** — clean copy
+1. **New module `terraform/modules/pinelake_service/`** — clean copy
    with different defaults. Recommended.
 2. **Parameterise `pod_haus_service`** — add `zone_id`, `tunnel_target`,
    `default_*_policy_id` as required inputs (already mostly there)
@@ -84,7 +84,7 @@ unification is its own decision; keep them separate for now.
 
 ### Module body sketch
 
-`cloudflare/modules/pinelake_service/main.tf`:
+`terraform/modules/pinelake_service/main.tf`:
 
 ```hcl
 variable "account_id"              { type = string }
@@ -141,7 +141,7 @@ output "ingress_rule" {
 
 ### Call sites
 
-`cloudflare/services_pinelake_haus.tf` (new file):
+`terraform/services_pinelake_haus.tf` (new file):
 
 ```hcl
 locals {
@@ -189,7 +189,7 @@ module "pinelake_sync" {
 }
 ```
 
-`cloudflare/tunnel.tf` (extend):
+`terraform/tunnel.tf` (extend):
 
 ```hcl
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pinelake" {
@@ -212,10 +212,10 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pinelake" {
 }
 ```
 
-## Migration of existing `cloudflare/access.tf` apps
+## Migration of existing `terraform/access.tf` apps
 
 The three Access apps for pinelake are already declared in
-`cloudflare/access.tf` as `pine_lake_ssh`, `pine_lake_torrent`,
+`terraform/access.tf` as `pine_lake_ssh`, `pine_lake_torrent`,
 `pine_lake_syncthing`. The module above would create new Access apps,
 clashing with the existing ones.
 
