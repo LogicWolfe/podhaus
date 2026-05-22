@@ -1,0 +1,8 @@
+# Provider plugin cache — restored on `terraform init`, not source-controlled.
+.terraform/
+# Lockfile is NOT committed: each machine self-locks within the ~>
+# constraints (no shared file = no cross-platform hash mismatch, zero
+# maintenance). Tradeoff accepted — see /docs/terraform.html.
+.terraform.lock.hcl
+# Crash log from rare terraform crashes — never check in.
+crash.log

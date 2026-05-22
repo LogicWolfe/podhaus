@@ -1,23 +1,71 @@
-# NOTE (overnight build): this is the relay's own root/state for now.
-# The foundation plan (terraform-foundation.md) consolidates
-# cloudflare/ + minio/terraform/ + this into ONE root with the
-# onepassword provider — that migration is the gated, review-first
-# step and is deliberately NOT executed unattended. Keeping relay
-# state separate tonight avoids blind state surgery on live roots.
+# Consolidated podhaus Terraform root. One state, one apply, every
+# provider for the whole fleet — replaces the historical split between
+# cloudflare/, minio/terraform/, and the relay-only terraform/. See
+# /docs/terraform.html for the bootstrap story (komodo-start guarantees
+# the terraform-state bucket; one apply needs only the 1P service-
+# account token + the PWD-scoped MinIO bucket creds).
 terraform {
   required_version = ">= 1.10.0"
 
   required_providers {
+    cloudflare = {
+      # DNS, Access apps + policies, Tunnel config, GitHub webhook
+      # bypass, the whole pod.haus wildcard.
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.0"
+    }
+    unifi = {
+      # Community fork — the upstream paultyng/unifi provider doesn't
+      # expose a dns_record resource. ubiquiti-community has feature
+      # parity plus the UniFi DNS records the controller added more
+      # recently.
+      # Docs: https://registry.terraform.io/providers/ubiquiti-community/unifi/latest/docs
+      source  = "ubiquiti-community/unifi"
+      version = "~> 0.41"
+    }
+    github = {
+      # Used only for the Komodo deploy webhook on LogicWolfe/podhaus.
+      # Docs: https://registry.terraform.io/providers/integrations/github/latest/docs
+      source  = "integrations/github"
+      version = "~> 6.0"
+    }
+    tailscale = {
+      # Mints the rotating tag:podnet tailnet auth key (cloudflare/
+      # was the interim home; now native here).
+      # Docs: https://registry.terraform.io/providers/tailscale/tailscale/latest/docs
+      source  = "tailscale/tailscale"
+      version = "~> 0.21"
+    }
+    time = {
+      # Drives the 80-day rotation cadence for the tailnet auth key.
+      source  = "hashicorp/time"
+      version = "~> 0.13"
+    }
     digitalocean = {
+      # kookaburra relay droplet + reserved IP + firewall + project.
       source  = "digitalocean/digitalocean"
       version = "~> 2.0"
+    }
+    minio = {
+      # MinIO IAM + bucket policies for the public Publii tenants
+      # (nathanbaxter-com, future skycroeser-net …). Server is
+      # storage.pod.haus (Caddy → MinIO; full API including admin).
+      # Docs: https://registry.terraform.io/providers/aminueza/minio/latest/docs
+      source  = "aminueza/minio"
+      version = "~> 3.0"
     }
   }
 
   backend "s3" {
-    endpoints                   = { s3 = "https://storage.pod.haus" }
+    endpoints = {
+      # Public endpoint so Terraform runs from any machine. Path goes
+      # storage.pod.haus → (split-horizon on LAN / kookaburra rathole
+      # off-LAN) → bilby Caddy → MinIO. SigV4 is the boundary; nothing
+      # is host- or LAN-pinned.
+      s3 = "https://storage.pod.haus"
+    }
     bucket                      = "terraform-state"
-    key                         = "relay.tfstate"
+    key                         = "podhaus.tfstate"
     region                      = "us-east-1"
     use_path_style              = true
     skip_credentials_validation = true
