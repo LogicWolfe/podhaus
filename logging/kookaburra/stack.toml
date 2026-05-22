@@ -1,6 +1,6 @@
 [[stack]]
 name = "kookaburra-logging"
-description = "Alloy on kookaburra — ships container logs + self-telemetry to ClickStack (cross-tailnet to bilby at 100.87.76.25:4318)"
+description = "Alloy on kookaburra — ships container logs + self-telemetry to ClickStack (cross-tailnet to bilby-podnet.tail9ceb.ts.net:4318 via MagicDNS)"
 tags = ["kookaburra", "podhaus"]
 deploy = true
 

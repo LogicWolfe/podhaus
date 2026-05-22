@@ -91,13 +91,23 @@ networks:
         by MagicDNS FQDN (<code>https://kookaburra-podnet.tail9ceb.ts.net:8120</code>
         in <code>komodo/sync/servers.toml</code>); the IP changes on every droplet
         rebuild but the FQDN doesn't, so rebuilds don't require editing this
-        config. Resolution works because bilby's
-        <code>/etc/docker/daemon.json</code> sets
+        config. Resolution works because <strong>both</strong> bilby's
+        <em>and</em> kookaburra's <code>/etc/docker/daemon.json</code> set
         <code>"dns": ["100.100.100.100", "1.1.1.1"]</code> — Docker's embedded
         resolver (<code>127.0.0.11</code>) forwards unknown names to Tailscale's
         MagicDNS first, then 1.1.1.1; service-name resolution
         (<code>ferretdb</code>, <code>caddy</code>, etc.) is still handled by the
-        embedded resolver before forwarding. ACL is asymmetric:
+        embedded resolver before forwarding. The same setup on kookaburra
+        lets alloy reach bilby's ClickStack at
+        <code>http://bilby-podnet.tail9ceb.ts.net:4318</code> without
+        hardcoding bilby's drifting tailnet IP. Per-host
+        <code>daemon.json</code> is system-level on each box (not in
+        this repo). bilby's was set up manually once; kookaburra's is
+        materialised by <code>kookaburra_bootstrap</code>'s idempotent
+        docker-daemon.json step, so a
+        <code>terraform apply -replace</code> droplet rebuild
+        re-establishes MagicDNS forwarding automatically.
+        ACL is asymmetric:
         <em>your devices → podnet freely; podnet ↛ your devices</em>
         (blast-radius containment — a popped relay can't pivot into
         your laptop). The rathole data tunnel is independent (public,
