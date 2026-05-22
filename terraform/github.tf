@@ -38,7 +38,7 @@
 # `tf apply` to push the matching secret to GitHub.
 
 variable "komodo_webhook_secret" {
-  description = "HMAC secret shared between GitHub and Komodo. Set via TF_VAR_komodo_webhook_secret env (resolved by op run from op://Homelab/Komodo Webhook Secret/password)."
+  description = "HMAC secret shared between GitHub and Komodo. Set via TF_VAR_komodo_webhook_secret env (resolved at chezmoi-render time from op://Homelab/Komodo Webhook Secret/password)."
   type        = string
   sensitive   = true
 }

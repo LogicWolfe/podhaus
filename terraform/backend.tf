@@ -54,6 +54,16 @@ terraform {
       source  = "aminueza/minio"
       version = "~> 3.0"
     }
+    onepassword = {
+      # Resolves provider credentials from 1Password's Homelab vault at
+      # plan time, so nothing except the SA token itself sits raw on
+      # disk. service_account_token from OP_SERVICE_ACCOUNT_TOKEN env.
+      # 3.x adds section_map (we need it for items with root-level
+      # custom fields like "credential", "client id"/"client secret").
+      # Docs: https://registry.terraform.io/providers/1Password/onepassword/latest/docs
+      source  = "1Password/onepassword"
+      version = "~> 3.0"
+    }
   }
 
   backend "s3" {

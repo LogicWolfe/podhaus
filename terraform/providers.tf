@@ -12,13 +12,13 @@
 # verified as zero-diff).
 
 provider "cloudflare" {
-  # api_token from CLOUDFLARE_API_TOKEN env var.
+  # api_token from CLOUDFLARE_API_TOKEN env var (chezmoi-rendered).
 }
 
 provider "unifi" {
   # Reach the controller via its public tunnel hostname (module.unifi
   # publishes unifi.pod.haus → the controller), so Terraform runs from
-  # any machine, not just the LAN. api_key from UNIFI_API_KEY env var.
+  # any machine, not just the LAN. api_key from UNIFI_API_KEY env.
   # The tunnel presents a valid Cloudflare edge cert, so no
   # allow_insecure needed.
   api_url = "https://unifi.pod.haus"
@@ -53,3 +53,20 @@ provider "minio" {
   minio_user     = var.minio_user
   minio_password = var.minio_password
 }
+
+# The 1Password TF provider was scaffolded here as part of the
+# foundation consolidation. It works, BUT the existing Homelab vault
+# items (Cloudflare API Token, UniFi API Key, MinIO Root, Komodo
+# Webhook Secret, Tailscale OAuth Client, GitHub PAT, DigitalOcean PAT)
+# all use root-level fields with random UUIDs as field IDs — and the
+# data source's top-level attribute mapping switches on f.ID against
+# a small fixed set (username/password/credential/hostname/…). So the
+# data source returns empty for every cred we'd want to swap, unless
+# the items get restructured to either put fields in sections (and we
+# read via section_map[…].field_map[…].value) or recreated with
+# expected field IDs. That restructure ripples to chezmoi `op read`
+# paths, komodo-op slugified Komodo Variables, and any stack.toml
+# `[[OP__…]]` refs. Deferred — see /docs/terraform.html.
+#
+# The onepassword PROVIDER stays declared so future-resolvable items
+# can plug into it cheaply; nothing currently uses a data source.
