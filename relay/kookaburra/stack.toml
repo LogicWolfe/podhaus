@@ -13,7 +13,6 @@ run_build = true
 auto_pull = false
 
 environment = """
-TZ=[[TZ]]
 RATHOLE_TOKEN=[[OP__KOMODO__RATHOLE_RELAY__TOKEN]]
 RATHOLE_NOISE_LOCAL_PRIVATE_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PRIVATE_KEY]]
 """

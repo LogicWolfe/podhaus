@@ -11,7 +11,6 @@ run_directory = "/etc/komodo/repo/logging/bilby"
 file_paths = ["compose.yaml", "../compose.shared.yaml"]
 
 environment = """
-TZ=[[TZ]]
 PODHAUS_REPO=[[PODHAUS_REPO]]
 CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
 """

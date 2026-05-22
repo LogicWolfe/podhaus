@@ -1,0 +1,16 @@
+#!/bin/bash
+# Reference copy of podhaus's pre-commit hook. To install on a fresh
+# clone:
+#
+#   cp tools/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Or symlink (any subsequent change to this file is then live):
+#
+#   ln -sf ../../tools/pre-commit .git/hooks/pre-commit
+#
+# The hook runs tools/lint-stack-env.py to catch the documented
+# two-place env footgun (stack.toml declares a var but no compose
+# service references it, leaving the container with an empty value).
+set -e
+exec python3 "$(git rev-parse --show-toplevel)/tools/lint-stack-env.py"
