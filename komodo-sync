@@ -1,14 +1,20 @@
 #!/bin/bash
-# Re-run Komodo's ResourceSync against this repo, then redeploy any
-# stack whose deployed-hash diverges from current git HEAD.
+# Steady-state RunSync + deploy-stale tool for ad-hoc local iteration.
 #
-# This is the manual "register my stack.toml changes + force-deploy
-# everything stale now" tool, and the only way to apply NEW stack
-# registrations. Steady-state push-to-deploy is handled by the
-# per-stack GitHub webhooks in cloudflare/github.tf
-# (komodo.pod.haus/listener/github/stack/<name>/deploy) — see
-# docs/komodo.html. Use this script when you want an immediate local
-# redeploy without a push, or after adding a stack.
+# Use this when:
+#   - You've edited a stack.toml or variables.toml locally and want it
+#     applied WITHOUT committing+pushing (debug iteration).
+#   - You want to force-redeploy any stack whose container is at a
+#     commit older than `git HEAD` on bilby's working tree.
+#
+# Do NOT use this as a workaround for the push procedure — every
+# `git push` to main fires `podhaus-push-deploy` which runs the
+# Stage 0 RunSync + Stage 1 deploy-if-changed + Stage 2 linked-repo
+# force-deploy automatically. This script is for local debug only.
+#
+# Bootstrap (CreateResourceSync, first sync, komodo-op wait) lives in
+# `komodo-start` — this script assumes Komodo Core is up and the
+# podhaus ResourceSync already exists.
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -26,39 +32,12 @@ komodo_api() {
     -d "$payload"
 }
 
-echo "Creating Resource Sync..."
-komodo_api write '{
-  "type": "CreateResourceSync",
-  "params": {
-    "name": "podhaus",
-    "config": {
-      "files_on_host": true,
-      "resource_path": ["."]
-    }
-  }
-}' > /dev/null 2>&1 || true
-
-echo "Running initial sync..."
+echo "Reconciling stack definitions (RunSync)..."
 komodo_api execute '{
   "type": "RunSync",
   "params": { "sync": "podhaus" }
 }' > /dev/null
-
-echo "Waiting for komodo-op to sync secrets..."
-while true; do
-  count=$(komodo_api read '{"type": "ListVariables", "params": {}}' | jq 'length')
-  if [ "$count" -gt 4 ]; then
-    echo "  ${count} variables found (komodo-op has synced)"
-    break
-  fi
-  sleep 5
-done
-
-echo "Running second sync..."
-komodo_api execute '{
-  "type": "RunSync",
-  "params": { "sync": "podhaus" }
-}' > /dev/null
+sleep 3
 
 # Redeploy any stack whose containers were built from a commit older
 # than current HEAD. Komodo tracks the commit hash that produced the
@@ -74,7 +53,12 @@ stale=()
 for stack in "${stacks[@]}"; do
   deployed=$(komodo_api read "$(jq -n --arg s "$stack" '{type:"GetStack",params:{stack:$s}}')" | jq -r '.info.deployed_hash // empty')
   if [ -z "$deployed" ]; then
-    # Never deployed — leave alone; first deploy is manual via UI.
+    # Never deployed. Komodo's sync deploy step + `deploy = true` in
+    # stack.toml means a fresh deploy gets triggered on next sync run
+    # automatically; we mirror that here by including never-deployed
+    # stacks in the deploy list.
+    stale+=("$stack")
+    echo "  $stack  (never deployed)"
     continue
   fi
   if [ "$deployed" != "$head" ]; then
