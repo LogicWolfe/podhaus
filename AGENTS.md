@@ -261,6 +261,21 @@ These have failure modes that you must not introduce:
   directory. The exception is init containers that read the file once at
   startup and exit — those are fine. See
   [`docs/stack-conventions.html#bind-mounts`](docs/stack-conventions.html).
+- **Config-only commits don't auto-reload running containers.** Even
+  with a directory bind, `docker compose up -d` is a no-op when nothing
+  in the compose config itself changed — so `BatchDeployStack` /
+  `BatchDeployStackIfChanged` pulls the new file but the running process
+  keeps the cached old config. **When a push touches only
+  bind-mounted config files** (anything under
+  `<stack>/conf*/`, `<stack>/*-conf/`, `cloudflare-tunnel/conf/`,
+  `caddy/conf*/`, `alloy-conf/`, etc.), confirm the affected daemon
+  either auto-reloads (cloudflared does) or schedule a follow-up
+  `docker compose up -d --force-recreate <service>` / SIGHUP /
+  daemon-reload-endpoint. Bit kookaburra-logging in 2026-05 — the
+  alloy endpoint flipped on disk but in-process config stayed stale
+  until manual recreate. Full table + escape hatches:
+  [`docs/stack-conventions.html#bind-mounts`](docs/stack-conventions.html)
+  ("Config-only commits don't auto-reload" callout).
 - **Never create Komodo Variables in the UI.** They don't survive a
   fresh Komodo bootstrap. Put the secret in 1Password and reference the
   `OP__KOMODO__*` synced variable name. See

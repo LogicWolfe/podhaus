@@ -176,6 +176,42 @@
         Docker silently creates empty stub directories. Always
         <code>${PODHAUS_REPO}/&lt;stack&gt;/...</code>, never relative paths.
       </aside>
+      <aside class="callout caution">
+        <span class="callout-title">Config-only commits don't auto-reload running containers</span>
+        Directory bind mounts mean a host-side edit is <em>visible on disk</em>
+        inside the container immediately — but the process running inside is
+        already past its config-load step and won't re-read the file. The
+        push-deploy procedure's <code>DeployStack</code> step runs
+        <code>docker compose up -d</code>, which is a <strong>no-op</strong>
+        when nothing in the compose config itself has changed; the container
+        keeps running with the cached (old) config. The new content sits on
+        disk, untouched, until the operator does one of:
+        <ul>
+          <li><code>docker compose up -d --force-recreate &lt;service&gt;</code> — cleanest; new container reads new file.</li>
+          <li>Send the daemon a reload signal it understands (e.g.
+            <code>docker kill -s HUP &lt;container&gt;</code> for nginx,
+            cloudflared, ofelia, alloy with the right command flag, etc.).</li>
+          <li>Hit a daemon-provided reload endpoint (some tools: caddy admin
+            API <code>caddy reload</code>, alloy
+            <code>/-/reload</code>, etc.).</li>
+        </ul>
+        <strong>Auto-reload exceptions known in this fleet:</strong>
+        <code>cloudflare-tunnel</code> re-reads
+        <code>config.yml</code> on each reconnect cycle (see the dns-push
+        section below). Most other config-bind-mount stacks
+        (<code>alloy</code>, <code>caddy</code>, <code>gatus</code>) need an
+        explicit recreate/signal. When in doubt, force-recreate.
+        <br><br>
+        Real incident (2026-05-22): kookaburra's
+        <code>logging/kookaburra/alloy-conf/config.alloy</code> was changed
+        to use the bilby MagicDNS FQDN, committed, push-deployed. The
+        Periphery clone advanced (<code>git pull</code> succeeded), the new
+        file was on disk inside the running alloy container, but alloy kept
+        shipping to the old endpoint until <code>docker compose up -d
+        --force-recreate alloy</code> was run by hand. Same failure class as
+        the file-bind-mount inode trap — silent divergence between disk and
+        running process.
+      </aside>
 
       <h2 id="selinux">SELinux on Fedora Asahi</h2>
       <p>
@@ -274,6 +310,11 @@
         <li>☐ <code>dockernet</code> external network declared (if reachable from other containers)</li>
         <li>☐ Bind mounts use <code>${PODHAUS_REPO}/...</code>, not relative paths</li>
         <li>☐ All bind mounts are <strong>directory</strong> binds, never single files (see above)</li>
+        <li>☐ If the stack reads bind-mounted config at startup, decide
+          how a config-only push reaches the running process: does the
+          daemon auto-reload (cloudflared) or does it need an explicit
+          <code>--force-recreate</code> / SIGHUP after deploy?
+          (see the callout above)</li>
         <li>☐ SELinux flag (<code>:z</code> or <code>label:disable</code>) on bilby-targeted bind mounts</li>
         <li>☐ Healthcheck + <code>autoheal: "true"</code> label (unless distroless image)</li>
         <li>☐ Healthcheck does <strong>no</strong> filesystem I/O on a soft-NFS path (Pouch / Jump) — loopback for the service, <code>/proc/mounts</code> for mount presence</li>
