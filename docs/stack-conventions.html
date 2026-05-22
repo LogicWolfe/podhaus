@@ -30,16 +30,26 @@
         <li>Create <code>&lt;name&gt;/compose.yaml</code>. Join <code>dockernet</code> if the
           stack needs to be reachable from another container or via the Cloudflare Tunnel.</li>
         <li>Create <code>&lt;name&gt;/stack.toml</code> with <code>server = "podhaus"</code>,
-          <code>files_on_host = true</code>, and
+          <code>files_on_host = true</code>, <code>deploy = true</code>, and
           <code>run_directory = "/etc/komodo/repo/&lt;name&gt;"</code>. List any required
-          variables in the <code>environment</code> block.</li>
+          variables in the <code>environment</code> block. If the stack
+          has stack-private non-secret config (e.g. a service URL, a
+          well-known port), declare it as an inline
+          <code>[[variable]]</code> block in the same file — see
+          <a href="#stack-private-variables">Stack-private variables</a>.</li>
         <li>Add any new secrets to the 1Password Homelab vault — komodo-op auto-syncs them
           (see <a href="/secrets.html">Secrets</a>).</li>
         <li>If the stack needs a hostname, add an ingress rule to
           <code>cloudflare-tunnel/config.yml</code> and a CNAME in
           <code>dns/dnsconfig.js</code>. Run <code>./dns-push</code> after.</li>
-        <li>Run <code>./komodo-sync</code>, then open the stack in Komodo UI and click
-          <em>Deploy</em>.</li>
+        <li><strong>Commit and push.</strong> The push fires the
+          <code>podhaus-push-deploy</code> procedure: Stage 0 RunSync
+          registers the new stack + any TOML-declared variables; Stage 1
+          deploys it (because <code>deploy = true</code> +
+          <code>deployed_contents</code> is None means
+          <code>DeployIfChangedAction::FullDeploy</code> per Komodo 1.19.5
+          source). No manual <em>Deploy</em> click. For local debug
+          iteration without pushing, <code>./komodo-sync</code>.</li>
       </ol>
 
       <h2 id="multi-host">Adding a stack to a multi-host shared service</h2>
@@ -60,12 +70,63 @@
           <code>config.json.tmpl</code>), put it at
           <code>&lt;service&gt;/&lt;host&gt;/&lt;template&gt;</code> and reference it via the
           per-host overlay's bind mount.</li>
-        <li><code>./komodo-sync</code> + deploy.</li>
+        <li>Commit + push. The push procedure's Stage 0 syncs the new
+          stack def, Stage 1 deploys it on bilby (if applicable), Stage 2
+          force-deploys linked-repo hosts.</li>
       </ol>
       <p>
         When fixing a bug in a multi-host service, edit <code>compose.shared.yaml</code> (and
         the shared template if present) — the change applies to all hosts uniformly. Per-host
         overlay edits should only touch genuinely host-specific bits.
+      </p>
+
+      <h2 id="stack-private-variables">Stack-private variables</h2>
+      <p>
+        Komodo Variables can be declared anywhere the ResourceSync
+        sees TOML (it walks <code>resource_path</code> recursively).
+        Two homes:
+      </p>
+      <ul>
+        <li><strong>Global, fleet-wide</strong> →
+          <code>komodo/sync/variables.toml</code>. Use for things every
+          stack might reference (<code>TZ</code>, <code>MEDIA_DIR</code>).</li>
+        <li><strong>Stack-private</strong> → inline
+          <code>[[variable]]</code> blocks at the bottom of the stack's
+          own <code>stack.toml</code>. Use for stack-specific
+          non-secret config — repo paths, sidecar URLs, well-known
+          ports. Pattern: <code>fenwick/stack.toml</code> declares
+          <code>FENWICK_REPO</code>, <code>FENWICK_SIGNAL_*</code>,
+          <code>FENWICK_ADMIN_*</code> alongside the
+          <code>[[stack]]</code> block.</li>
+      </ul>
+      <pre><code>[[stack]]
+name = "myservice"
+deploy = true
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/myservice"
+environment = """
+TZ=[[TZ]]
+MYSERVICE_PORT=[[MYSERVICE_PORT]]
+"""
+
+[[variable]]
+name = "MYSERVICE_PORT"
+value = "8080"
+description = "Service port (well-known, not a secret)"</code></pre>
+      <p>
+        Komodo Variables are a single global namespace — collisions
+        across declaration sites = last-applied wins. Prefix-namespace
+        stack-private vars (e.g. <code>FENWICK_*</code>,
+        <code>PLEX_*</code>) so they don't collide with anyone else's
+        declarations.
+      </p>
+      <p>
+        Secrets <strong>do not</strong> go in
+        <code>[[variable]]</code> blocks — they go in 1Password and
+        flow through komodo-op as <code>OP__KOMODO__*</code> vars
+        (see <a href="/secrets.html">Secrets</a>).
       </p>
 
       <h2 id="customization-primitives">Customization primitives</h2>
@@ -304,9 +365,32 @@
         <a href="/backup-and-recovery.html">Backup &amp; recovery</a> for the full pattern.
       </p>
 
+      <h2 id="pre-commit-hook">Pre-commit env-lint hook</h2>
+      <p>
+        <code>tools/lint-stack-env.py</code> walks every
+        <code>stack.toml</code>'s <code>environment</code> block and
+        verifies each declared key is referenced in the corresponding
+        compose file(s) — catches the two-place footgun where a key
+        lands in the project <code>.env</code> but no service
+        references <code>${KEY}</code>, so the container gets nothing.
+      </p>
+      <p>
+        Install once per clone:
+      </p>
+      <pre><code>ln -sf ../../tools/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit</code></pre>
+      <p>
+        (or <code>cp</code> instead of <code>ln -sf</code> if you want
+        a static copy.) Hook runs on every <code>git commit</code>;
+        the lint exits non-zero on mismatch, blocking the commit with
+        a diagnostic. Reference copy at
+        <code>tools/pre-commit</code> with the same setup instructions.
+      </p>
+
       <h2 id="checklist">Quick checklist when adding a stack</h2>
       <ul>
         <li>☐ <code>compose.yaml</code> + <code>stack.toml</code> in <code>&lt;name&gt;/</code></li>
+        <li>☐ <code>stack.toml</code> has <code>deploy = true</code> (else the sync's deploy step skips this stack)</li>
         <li>☐ <code>dockernet</code> external network declared (if reachable from other containers)</li>
         <li>☐ Bind mounts use <code>${PODHAUS_REPO}/...</code>, not relative paths</li>
         <li>☐ All bind mounts are <strong>directory</strong> binds, never single files (see above)</li>
@@ -319,6 +403,8 @@
         <li>☐ Healthcheck + <code>autoheal: "true"</code> label (unless distroless image)</li>
         <li>☐ Healthcheck does <strong>no</strong> filesystem I/O on a soft-NFS path (Pouch / Jump) — loopback for the service, <code>/proc/mounts</code> for mount presence</li>
         <li>☐ Secrets created in 1P, referenced via <code>OP__KOMODO__*</code></li>
+        <li>☐ Stack-private non-secret config declared as <code>[[variable]]</code> blocks at the bottom of <code>stack.toml</code> (rather than seeded in <code>komodo-start</code>)</li>
+        <li>☐ Every key in the stack.toml <code>environment</code> block is referenced as <code>${KEY}</code> in compose (pre-commit hook catches mismatches)</li>
         <li>☐ Cloudflare Tunnel ingress + DNS CNAME (if public hostname)</li>
         <li>☐ Backrest plan added (if there's state to preserve)</li>
         <li>☐ Gatus monitor added (if there's a public hostname or critical internal endpoint)</li>

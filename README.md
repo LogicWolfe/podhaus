@@ -25,12 +25,17 @@ Start with [Architecture](docs/architecture.html), [Hosts](docs/hosts.html),
 ## Quickstart on bilby
 
 ```sh
-./komodo-start    # bootstrap Komodo Core + seed variables + first sync
-./komodo-sync     # re-sync after editing any stack.toml or compose.yaml
+./komodo-start    # bootstrap-only: Komodo Core up, chicken-and-egg vars, sync registered
+./komodo-sync     # debug iterate: single RunSync + redeploy stale (no commit needed)
 ./komodo-status   # show Komodo container status
 ./komodo-stop     # shut down Komodo Core
 ./komodo-upgrade  # pull latest images + restart
 ```
+
+Steady-state deploys: commit + push. The single GitHub webhook
+fires the `podhaus-push-deploy` Komodo Procedure (RunSync →
+deploy-if-changed → force-deploy linked-repo stacks). No manual
+`./komodo-sync` needed.
 
 ## Quickstart on kangaroo
 

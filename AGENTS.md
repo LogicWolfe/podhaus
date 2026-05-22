@@ -86,12 +86,25 @@ devices (blast-radius containment).
   repo itself via Komodo's Linked Repo feature.
 - Secrets flow: **1Password Homelab vault → `komodo-op` → Komodo
   Variables → `[[VARIABLE]]` interpolation in stack environment**.
-- Non-secret variables are seeded by `komodo-start` (TZ, MEDIA_DIR,
-  PODHAUS_REPO). The `komodo/sync/variables.toml` file is descriptive,
-  not authoritative.
+- Non-secret variables live in TOML and apply via the ResourceSync
+  (`include_variables = true` on the `podhaus` sync). Global ones
+  (`TZ`, `MEDIA_DIR`) live in `komodo/sync/variables.toml`;
+  stack-private ones (e.g. `FENWICK_*`) live as inline `[[variable]]`
+  blocks in the relevant `<stack>/stack.toml`.
+  - **Exception:** `PODHAUS_REPO` is host-discovered (`= $PWD` at
+    bootstrap time, varies per host), so it can't live in a TOML.
+    `komodo-start` seeds it directly via the Komodo API.
+  - **Caveat:** the sync runs with `delete: false` (additive only —
+    flipping `delete: true` would nuke komodo-op's continuously-synced
+    `OP__KOMODO__*` vars). Side effect: a variable removed from TOML
+    lingers in Komodo until manually deleted via the API
+    (`DeleteVariable`). See `docs/secrets.html`.
 - Volumes are declared in compose without `external: true` unless they
   exist outside the stack — Docker Compose creates them on first deploy.
-- `komodo-start` bootstraps everything (idempotent).
+- `komodo-start` is bootstrap-only (Komodo Core stack up + 5
+  chicken-and-egg vars + create-resource-sync + bootstrap double-sync).
+  Steady-state debug iteration uses `komodo-sync`; push-to-deploy uses
+  the `podhaus-push-deploy` procedure.
 
 ---
 
@@ -133,11 +146,13 @@ devices (blast-radius containment).
 | `komodo/compose.env` | Komodo config with `op://` secret references |
 | `<name>/compose.yaml` | Docker Compose file for each service stack |
 | `<name>/stack.toml` | Komodo stack metadata (server assignment, environment block) |
-| `komodo/sync/variables.toml` | Non-secret variable declarations (descriptive, see `komodo-start` for authoritative) |
+| `komodo/sync/variables.toml` | Global non-secret variable declarations (TZ, MEDIA_DIR). Authoritative — applied by the podhaus sync (`include_variables = true`). Stack-private vars live as inline `[[variable]]` blocks in `<stack>/stack.toml` instead. |
 | `komodo/sync/servers.toml` | Server definitions (bilby + kangaroo + kookaburra) |
 | `komodo/sync/repos.toml` | Linked Repo definitions for kangaroo (`podhaus`) + kookaburra (`podhaus-kookaburra`) |
-| `komodo-start` | Bootstrap script (Core + variables + ResourceSync). Idempotent. |
-| `komodo-sync` | Trigger ResourceSync without a full Core restart |
+| `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 deploy-if-changed (bilby) → Stage 2 force-deploy linked-repo stacks. |
+| `komodo-start` | Bootstrap-only script: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_REPO`), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync). Idempotent — safe to re-run. |
+| `komodo-sync` | Steady-state debug-iterate tool: single RunSync + redeploy any stack whose `deployed_hash` diverges from `HEAD`. Use when iterating locally without pushing. |
+| `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. Hook at `tools/pre-commit`; install via `ln -sf ../../tools/pre-commit .git/hooks/pre-commit`. |
 | `komodo-stop` | Stop Komodo Core |
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |
@@ -175,21 +190,32 @@ devices (blast-radius containment).
      (`build:`), set `run_build = true` too (see `plex`/`backup`).
 3. Add any new secrets to the 1Password **Homelab** vault — `komodo-op`
    auto-syncs them as `OP__KOMODO__<ITEM>__<FIELD>` Komodo Variables.
-4. If the stack needs a non-secret variable, seed it in `komodo-start`
-   (not in `variables.toml` alone — see `docs/secrets.html`).
-5. Run `./komodo-sync` to register the stack. The smart-deploy pass
-   redeploys any stack whose `info.deployed_hash` diverges from
-   `HEAD`, so the freshly-registered stack deploys immediately.
-   `komodo-sync` is the manual "register + deploy my changes now"
-   tool — not a workaround for broken webhooks (steady-state
-   push-to-deploy works; see the auto-deploy hard rule below).
+4. If the stack needs a non-secret variable, declare it inline in
+   the stack's own `stack.toml` as a `[[variable]]` block (stack-private,
+   co-located). Use `komodo/sync/variables.toml` only for things every
+   stack might reference (currently TZ + MEDIA_DIR). The sync applies
+   both. **Don't** add to `komodo-start` — that script is bootstrap-only
+   and the only seed it still owns is host-discovered `PODHAUS_REPO`.
+5. **Push the commit.** The `podhaus-push-deploy` procedure's Stage 0
+   RunSync registers the new stack + any new variables; Stage 1
+   `BatchDeployStackIfChanged "*"` deploys it (the
+   `(None, _) => DeployIfChangedAction::FullDeploy` path covers brand-new
+   stacks). No manual UI click. For local iteration without pushing,
+   `./komodo-sync` does single RunSync + redeploy-stale.
 6. **Nothing to do for push-to-deploy.** There is ONE GitHub `push`
    webhook for the whole repo; it drives the `podhaus-push-deploy`
-   Komodo Procedure (`komodo/sync/procedures.toml`), whose Stage 1
-   `BatchDeployStackIfChanged "*"` already covers every current and
-   future stack (deploy-only-if-its-files-changed; bilby no-churn),
-   and whose Stage 2 `BatchDeployStack "kangaroo-*" + "kookaburra-*"`
-   force-deploys linked_repo stacks. A new stack auto-deploys on the next push with
+   Komodo Procedure (`komodo/sync/procedures.toml`). Three stages:
+   **Stage 0** `RunSync "podhaus"` reconciles stack defs + TOML-declared
+   variables from disk into Komodo's stored resource state (so a push
+   that adds/changes an `environment` line or a `[[variable]]` block
+   reaches the deploy correctly — without this, the deploy uses the
+   pre-sync stored env and renders `${VAR}` empty). **Stage 1**
+   `BatchDeployStackIfChanged "*"` covers every current and future stack
+   (deploy-only-if-its-files-changed; bilby no-churn; new-stack first
+   deploy works via `deploy = true` + `(None, _) =>
+   DeployIfChangedAction::FullDeploy`). **Stage 2** `BatchDeployStack
+   "kangaroo-*" + "kookaburra-*"` force-deploys linked_repo stacks
+   unconditionally. A new stack auto-deploys on the next push with
    no `terraform/` edit. (This replaced 20 per-stack webhooks: GitHub
    hard-caps a repo at 20 `push` webhooks, and the fleet outgrew it.)
    Do **not** set `webhook_force_deploy` — there are no per-stack
@@ -300,11 +326,12 @@ These have failure modes that you must not introduce:
   the contract (name new linked_repo stacks `<host>-` accordingly
   and add the matching execution to Stage 2 in
   `komodo/sync/procedures.toml`). bilby `files_on_host` stacks ride
-  Stage 1 and self-skip when unchanged (free no-churn). `RunSync`
-  re-imports `stack.toml` config from bilby's bind-mount (no git) but
-  does not pull a linked clone. Always confirm a deploy via a
-  config-level signal (the pulled-to hash / a metric), never "container
-  healthy". See [`docs/komodo.html#operating-models`](docs/komodo.html).
+  Stage 1 and self-skip when unchanged (free no-churn). Stage 0
+  `RunSync` re-imports `stack.toml` config + TOML-declared variables
+  from bilby's bind-mount (no git) but does not pull a linked clone.
+  Always confirm a deploy via a config-level signal (the pulled-to
+  hash / a metric), never "container healthy". See
+  [`docs/komodo.html#operating-models`](docs/komodo.html).
 - **Always use absolute host paths in bind mounts.**
   `${PODHAUS_REPO}/<stack>/...`, never relative paths. Relative paths
   resolve against the periphery container's filesystem, not the host's,
@@ -315,11 +342,13 @@ These have failure modes that you must not introduce:
   green light. `terraform plan` is fine. Note that every `git push` to `main` fires
   the single GitHub webhook (`terraform/github.tf` →
   `komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main`),
-  which runs the procedure: Stage 1 `BatchDeployStackIfChanged "*"`
-  redeploys every bilby stack whose files actually changed (unchanged
-  ones self-skip — no churn), Stage 2 force-deploys `kangaroo-*` AND
-  `kookaburra-*` linked-repo stacks unconditionally. Push is not
-  cheap and not a no-op — treat it as a deploy.
+  which runs the procedure: Stage 0 `RunSync "podhaus"` reconciles
+  stack defs + TOML-declared variables, Stage 1
+  `BatchDeployStackIfChanged "*"` redeploys every bilby stack whose
+  files actually changed (unchanged ones self-skip — no churn), Stage 2
+  force-deploys `kangaroo-*` AND `kookaburra-*` linked-repo stacks
+  unconditionally. Push is not cheap and not a no-op — treat it as a
+  deploy.
 - **Before adding or modifying a Cloudflare / UniFi / GitHub TF
   resource, read the provider's resource doc.** Schemas change
   between minor versions and `terraform apply` errors with "Attribute X

@@ -66,14 +66,30 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
           <ul>
             <li>Brings up Komodo Core (Postgres, FerretDB, Core, Periphery).</li>
             <li>Waits for Core to be healthy.</li>
-            <li>Seeds the seven chicken-and-egg variables (4 1P credentials, TZ, MEDIA_DIR,
-              PODHAUS_REPO).</li>
-            <li>Triggers the first ResourceSync.</li>
+            <li>Seeds the five chicken-and-egg variables (4
+              <code>ONEPASSWORD_*</code> + <code>PODHAUS_REPO</code>).
+              <code>TZ</code> + <code>MEDIA_DIR</code> live in
+              <code>komodo/sync/variables.toml</code> and apply via
+              the sync's <code>include_variables=true</code>.</li>
+            <li>Idempotently creates the podhaus ResourceSync (with
+              <code>include_variables=true</code>; GetResourceSync first
+              so re-runs are clean).</li>
+            <li>Runs the bootstrap double-sync: first sync registers
+              stacks + TOML-declared vars (including
+              <code>komodo-op</code>'s stack def); waits for
+              <code>komodo-op</code> to backfill
+              <code>OP__KOMODO__*</code> secrets; second sync re-renders
+              stack env blocks so they resolve to live secret values.</li>
+            <li>Stops there. <code>komodo-start</code> doesn't deploy
+              stacks — that's a separate concern.</li>
           </ul>
         </li>
         <li>In the Komodo UI: confirm Servers list shows <code>podhaus</code> as healthy.
-          Deploy <code>onepassword</code> stack first — it brings up komodo-op which fills in
-          all the other variables.</li>
+          <code>komodo-op</code> should already be deployed (the sync's
+          deploy step plus <code>deploy = true</code> on its stack.toml
+          handle "deploy on creation"). If somehow it isn't, deploy it
+          manually — it brings up the 1P→Komodo Variable sync that
+          everything else depends on.</li>
         <li>Restore each stack's state from restic before deploying the stack. For each:
           <pre><code>restic -r /mnt/jump/backups restore latest \
   --target / --include /userdata/&lt;stack&gt;</code></pre>
@@ -82,9 +98,9 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
         </li>
         <li>Deploy <code>minio</code> first so the Terraform state backend is available, then
           restore <code>/var/lib/minio</code> from the latest Backrest snapshot.
-          <code>komodo-start</code>'s tail (line ~95 onwards) re-asserts the
+          The stack's own <code>minio-init</code> service re-asserts the
           <code>terraform-state</code> bucket with versioning idempotently
-          (<code>mcli mb --ignore-existing</code> + <code>mcli version enable</code>),
+          (<code>mc mb --ignore-existing</code> + <code>mc version enable</code>),
           so the cold-start path needs no manual <code>mcli</code> step. Verify
           the bucket holds the restored <code>podhaus.tfstate</code> via
           <a href="https://minio.pod.haus">minio.pod.haus</a> or

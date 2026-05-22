@@ -192,9 +192,14 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <li><code>komodo/sync/servers.toml</code> — bilby and kangaroo Server entries.</li>
         <li><code>komodo/sync/repos.toml</code> — the <code>podhaus</code> Linked Repo for
           kangaroo.</li>
-        <li><code>komodo/sync/variables.toml</code> — non-secret variable declarations. Not the
-          authoritative source — see <a href="/secrets.html#non-secret-variables">Secrets →
-          non-secret variables</a>.</li>
+        <li><code>komodo/sync/variables.toml</code> — global non-secret
+          variable declarations (<code>TZ</code>, <code>MEDIA_DIR</code>).
+          Authoritative — the podhaus sync runs with
+          <code>include_variables = true</code>, so a
+          <code>RunSync</code> applies these. Stack-private vars (e.g.
+          <code>FENWICK_*</code>) live as inline
+          <code>[[variable]]</code> blocks in the relevant
+          <code>&lt;stack&gt;/stack.toml</code> instead.</li>
         <li><code>komodo/sync/procedures.toml</code> — the
           <code>podhaus-push-deploy</code> procedure (the single
           push-to-deploy fan-out; see the Auto-deploy note below).</li>
@@ -217,6 +222,16 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         secret applies).
         <br><br>
         The procedure (<code>komodo/sync/procedures.toml</code>) fans out:
+        <strong>Stage 0</strong>
+        <code>RunSync&nbsp;"podhaus"</code> — reconcile stack definitions
+        + TOML-declared variables from disk to Komodo's stored resource
+        state. Without this, a push that adds a new <code>environment</code>
+        line to a <code>stack.toml</code> reached the deploy via the
+        on-disk file but Komodo's <code>DeployStack</code> used the
+        stored (pre-sync) resource def, so the var resolved empty.
+        Stages run sequentially so Stage 0 always completes before
+        Stage 1 fires (deterministic, vs the asynchronous polling of
+        <code>managed: true</code>).
         <strong>Stage 1</strong>
         <code>BatchDeployStackIfChanged&nbsp;"*"</code> — every stack,
         deploy only if its files changed (bilby diffs the live bind-mount
@@ -239,10 +254,10 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
       <table>
         <thead><tr><th>Script</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>komodo-start</code></td><td>First-boot or post-recovery: starts the Komodo Core stack, seeds chicken-and-egg variables from 1Password, creates the ResourceSync resource, triggers the first sync. Idempotent — safe to re-run.</td></tr>
+          <tr><td><code>komodo-start</code></td><td>First-boot or post-recovery: starts the Komodo Core stack; seeds the five chicken-and-egg variables (4 ONEPASSWORD_* + PODHAUS_REPO); idempotently creates the podhaus ResourceSync (with <code>include_variables = true</code>); runs the bootstrap double-sync (first sync registers stacks + TOML-declared vars; wait for komodo-op to backfill OP secrets; second sync re-renders stack env blocks). Stops there — deploys are a separate concern (push or <code>./komodo-sync</code>). Idempotent — safe to re-run.</td></tr>
           <tr><td><code>komodo-stop</code></td><td>Stops the Komodo Core stack (everything else stays running, since Komodo's job is just orchestration; the running containers are managed by Docker directly).</td></tr>
           <tr><td><code>komodo-status</code></td><td>Shows the Komodo Core container status.</td></tr>
-          <tr><td><code>komodo-sync</code></td><td>Triggers the existing ResourceSync without a full restart of Komodo Core. Use after editing any TOML under <code>komodo/sync/</code> or any <code>stack.toml</code>.</td></tr>
+          <tr><td><code>komodo-sync</code></td><td>Steady-state debug-iterate tool: single <code>RunSync</code> on the existing podhaus ResourceSync + redeploy any stack whose <code>deployed_hash</code> diverges from <code>git HEAD</code>. Use when you've edited a <code>stack.toml</code> or <code>variables.toml</code> locally and want it applied <em>without</em> committing+pushing. Steady-state push-to-deploy is handled by the <code>podhaus-push-deploy</code> procedure automatically — this script is the debug-only path.</td></tr>
           <tr><td><code>komodo-upgrade</code></td><td>Pulls latest Komodo images, restarts the Core stack.</td></tr>
           <tr><td><code>kangaroo_bootstrap</code></td><td>One-time bring-up for kangaroo. Renders Periphery .env from 1Password, ships compose + config to the QNAP via SSH, installs an <code>@reboot</code> crontab entry, idempotently appends the kangaroo Server to <code>servers.toml</code>.</td></tr>
         </tbody>
