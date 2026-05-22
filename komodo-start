@@ -53,20 +53,15 @@ seed_variable "ONEPASSWORD_CONNECT_TOKEN" \
 seed_variable "ONEPASSWORD_API_KEY" "$api_key"
 seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
 
-# Non-secret variables from komodo/sync/variables.toml. Komodo ResourceSync
-# reads that file as remote content but does not apply [[variable]] entries,
-# so declarations there never become live variables — which silently breaks
-# [[TZ]] / [[MEDIA_DIR]] interpolation in stack.toml environment blocks on
-# the next redeploy. Seed them here so they're always present post-bootstrap.
-echo "Seeding non-secret variables into Komodo..."
-seed_variable "TZ"            "Australia/Perth" false
-seed_variable "MEDIA_DIR"     "/mnt/pouch"      false
-# Host path to this repo checkout. Stacks that bind-mount files out of
-# the repo (logging configs, cloudflare-tunnel ingress rules, etc.)
-# interpolate [[PODHAUS_REPO]] in their stack.toml environment block so
-# the rendered compose file uses ${PODHAUS_REPO}/<stack>/<file>. This is
-# what keeps the repo portable — bilby has it at /home/nathan/repos/podhaus,
-# the next host could clone it anywhere and the same compose files work.
+# PODHAUS_REPO is host-discovered (= $PWD at bootstrap time), so it can't
+# live in komodo/sync/variables.toml — it'd be wrong on any host that
+# clones the repo elsewhere. Seeded here so stacks that bind-mount via
+# ${PODHAUS_REPO}/<stack>/<file> have a value to interpolate.
+#
+# TZ and MEDIA_DIR (other global non-secret vars) live in
+# komodo/sync/variables.toml and apply via the ResourceSync's
+# include_variables=true config. They're not seeded here.
+echo "Seeding host-discovered variable into Komodo..."
 seed_variable "PODHAUS_REPO"  "$PWD"            false
 
 # Fenwick (dev-mode hot-reload stack). FENWICK_REPO is the fenwick repo
