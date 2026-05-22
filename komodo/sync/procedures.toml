@@ -11,6 +11,17 @@
 # id/name/wildcard/regex pattern; bin/core/src/listener/router.rs:
 # "/procedure/{id}/{branch}").
 #
+# Stage 0 — reconcile stack defs from disk (sync TOML → Komodo). Komodo
+# separates the *stack resource definition* (what the env block, server,
+# run_directory etc. ARE — populated only by RunSync) from the *deploy*
+# (which renders compose using the STORED resource definition). Without
+# this stage, a push that adds a new `environment` line to a stack.toml
+# reached the deploy via the on-disk file but the deploy used the stored
+# (pre-change) resource def, so the var resolved empty. Bit fenwick on
+# 2026-05-17 (~30 min outage; see git history for the fix commits). With
+# Stage 0, sync→deploy is deterministic via stage ordering, not racy via
+# managed:true polling.
+#
 # Stage 1 — every stack, deploy ONLY if its files changed. bilby
 # files_on_host stacks diff the live bind-mount, so unchanged stacks
 # are a no-op (no churn — identical to the old per-stack
@@ -18,22 +29,29 @@
 # here (the documented stale-clone deadlock: the change-check compares
 # the Periphery clone, which only advances during a deploy).
 #
-# Stage 2 — the kangaroo linked_repo stacks, force-deployed
-# unconditionally (full DeployStack = git pull + compose). This is the
-# linked-repo hard rule (see docs/komodo.html), now expressed once
-# here instead of per-stack `webhook_force_deploy = true`.
+# Stage 2 — the linked_repo stacks, force-deployed unconditionally
+# (full DeployStack = git pull + compose). This is the linked-repo
+# hard rule (see docs/komodo.html), now expressed once here instead
+# of per-stack `webhook_force_deploy = true`.
 #
 # Wildcard `*` means new stacks are covered automatically — no repo
 # edit, no list, no 20-cap, ever.
 
 [[procedure]]
 name = "podhaus-push-deploy"
-description = "Push-to-deploy fan-out: deploy-if-changed all stacks, force-deploy kangaroo linked_repo stacks. Triggered by the single GitHub push webhook."
+description = "Push-to-deploy fan-out: reconcile stack defs from disk, deploy-if-changed all stacks, force-deploy linked_repo stacks. Triggered by the single GitHub push webhook."
 tags = ["podhaus"]
 config.webhook_enabled = true
 # Webhook-only — no schedule. (schedule_enabled defaults true in
 # Komodo; pinned false so it's unambiguous this never runs on a timer.)
 config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Reconcile stack definitions (sync TOML → Komodo)"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params = { sync = "podhaus" }, enabled = true }
+]
 
 [[procedure.config.stage]]
 name = "Deploy changed stacks (surgical, no-churn)"
