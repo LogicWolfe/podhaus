@@ -79,7 +79,60 @@ seed_variable "PODHAUS_REPO"  "$PWD"            false
 # is no longer needed; the directory can be cleaned up but is left in
 # place to avoid breaking any uncovered consumers.
 
-./komodo-sync
+# Bootstrap the podhaus ResourceSync resource. The CreateResourceSync
+# API errors on duplicate name (`Resource with name 'X' already exists`,
+# verified against Komodo 1.19.5 source bin/core/src/resource/mod.rs).
+# Check existence first so re-runs of komodo-start are clean idempotent
+# (rather than the older `|| true` swallow which would also hide real
+# errors).
+echo "Ensuring podhaus ResourceSync exists..."
+if komodo_api read '{"type":"GetResourceSync","params":{"sync":"podhaus"}}' > /dev/null 2>&1; then
+  echo "  podhaus ResourceSync already exists"
+else
+  echo "  Creating podhaus ResourceSync (first boot)..."
+  komodo_api write '{
+    "type": "CreateResourceSync",
+    "params": {
+      "name": "podhaus",
+      "config": {
+        "files_on_host": true,
+        "resource_path": ["."],
+        "include_variables": true,
+        "include_resources": true,
+        "webhook_enabled": true
+      }
+    }
+  }' > /dev/null
+fi
+
+# Bootstrap-only double-sync: first pass registers stack defs + all
+# TOML-declared variables (the variables.toml + per-stack [[variable]]
+# blocks); komodo-op then comes up (deployed by the sync's deploy step
+# for stacks with `deploy = true`) and populates OP__KOMODO__* vars;
+# second pass re-renders stack environment blocks so `[[OP__KOMODO__*]]`
+# references resolve to live values. Without the wait + second sync,
+# fresh deploys would crash-loop on empty secrets.
+#
+# Steady-state debug iteration uses ./komodo-sync (single sync + deploy
+# stale) — this double-sync logic lives here because it's only correct
+# during cold-start.
+echo "First sync (registers stack defs + non-secret vars)..."
+komodo_api execute '{"type":"RunSync","params":{"sync":"podhaus"}}' > /dev/null
+
+echo "Waiting for komodo-op to backfill OP secrets..."
+while true; do
+  count=$(komodo_api read '{"type":"ListVariables","params":{}}' | jq '[.[]|select(.name|startswith("OP__KOMODO__"))]|length')
+  if [ "$count" -gt 0 ]; then
+    echo "  ${count} OP__KOMODO__* variables populated"
+    break
+  fi
+  sleep 5
+done
+
+echo "Second sync (env blocks now resolve to live OP vars)..."
+komodo_api execute '{"type":"RunSync","params":{"sync":"podhaus"}}' > /dev/null
+
+echo "Bootstrap complete. Use ./komodo-sync for local iteration; push to deploy."
 
 # MinIO terraform-state bucket is bootstrapped by the MinIO stack's
 # own `minio-init` init container — see minio/compose.yaml. Removed
