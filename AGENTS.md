@@ -143,12 +143,11 @@ devices (blast-radius containment).
 | `komodo-upgrade` | Pull latest images + restart Komodo |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
 | `kookaburra_bootstrap` | Idempotent kookaburra bring-up: SSH hardening → dockernet bridge → tailscale (Komodo adopts it post-handoff) → Periphery. Defaults `DROPLET_IP` to the reserved IP (`170.64.241.136`) so it stays correct across `terraform apply -replace`. |
-| `cloudflare/` | Terraform sources for all Cloudflare + UniFi + GitHub resources (DNS, Access apps, policies, service tokens, split-horizon, github webhook). State at `s3://terraform-state/cloudflare.tfstate` in MinIO via `https://storage.pod.haus`. Run **stock `terraform`** directly (creds from the chezmoi-rendered `~/.config/fish/conf.d/podhaus-tf.fish`; no wrapper). Reads `terraform_remote_state` from `relay.tfstate` for the kookaburra reserved IP. |
-| `terraform/` | Terraform root for the kookaburra relay infra (DigitalOcean droplet, reserved IP, firewall, project attach). State `s3://terraform-state/relay.tfstate`. Outputs `reserved_ip` consumed by cloudflare/. |
+| `terraform/` | The ONE consolidated Terraform root for the whole fleet — Cloudflare (DNS, Access, Tunnel), UniFi DNS, GitHub deploy webhook, Tailscale auth-key rotation, DigitalOcean (kookaburra relay), MinIO IAM/bucket policies (Publii tenants). State `s3://terraform-state/podhaus.tfstate` in MinIO via `https://storage.pod.haus`. Run **stock `terraform`** directly (creds from the chezmoi-rendered, PWD-scoped `~/.config/fish/conf.d/podhaus-tf.fish`; no wrapper). Replaced the split `cloudflare/` + `minio/terraform/` + relay-only `terraform/` roots in 2026-05; see `/docs/terraform.html`. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (Publii) via `storage.pod.haus`. |
 | `caddy/` | TLS front (own LE wildcard) for `storage.pod.haus` → MinIO; for genuine external clients, traffic arrives via the kookaburra rathole tunnel (the UDM Pro SE binds WAN:443 itself so direct port-forward is a dead path). LAN clients reach Caddy directly via UniFi split-horizon. See `docs/hosts.html#kookaburra` + `docs/terraform.html`. |
 | `relay/` | rathole stacks — `relay/bilby/` (Komodo-managed client, dials out) + `relay/kookaburra/` (Komodo-managed server, public :443 + :2333). Built from upstream release binary (no arm64 image). |
-| `tailscale/` | Tailscale management-plane nodes. `tailscale/bilby/` and `tailscale/kookaburra/` are both Komodo-managed (Komodo Core on bilby, `kookaburra-tailscale` linked-repo stack on kookaburra). kookaburra's tailscale is bootstrap-launched (via `kookaburra_bootstrap`) so Periphery can join the tailnet, then Komodo adopts the running container — bootstrap and Komodo use the same compose project name + container name (`kookaburra-podnet`) so the named state volume and tailnet identity survive the handoff. `tailscale/compose.shared.yaml` has a `tailscale-cleanup` init service (built from the shared `init-tools:local` image — `curl + jq` baked in) that calls the Tailscale API before tailscaled starts to prune offline devices matching `${TS_HOSTNAME}` — claims the bare hostname back when the state volume is regenerated (rebuild, accidental volume nuke). The auth key it would re-enrol with is **TF-managed** by `cloudflare/tailscale.tf` (mints a reusable `tag:podnet` key, 80-day rotation via `time_rotating`, writes back to the same 1P item via `op item edit`). Requires `Tailscale OAuth Client` 1P item scopes `auth_keys:write` + `devices:core:write`. |
+| `tailscale/` | Tailscale management-plane nodes. `tailscale/bilby/` and `tailscale/kookaburra/` are both Komodo-managed (Komodo Core on bilby, `kookaburra-tailscale` linked-repo stack on kookaburra). kookaburra's tailscale is bootstrap-launched (via `kookaburra_bootstrap`) so Periphery can join the tailnet, then Komodo adopts the running container — bootstrap and Komodo use the same compose project name + container name (`kookaburra-podnet`) so the named state volume and tailnet identity survive the handoff. `tailscale/compose.shared.yaml` has a `tailscale-cleanup` init service (built from the shared `init-tools:local` image — `curl + jq` baked in) that calls the Tailscale API before tailscaled starts to prune offline devices matching `${TS_HOSTNAME}` — claims the bare hostname back when the state volume is regenerated (rebuild, accidental volume nuke). The auth key it would re-enrol with is **TF-managed** by `terraform/tailscale.tf` (mints a reusable `tag:podnet` key, 80-day rotation via `time_rotating`, writes back to the same 1P item via `op item edit`). Requires `Tailscale OAuth Client` 1P item scopes `auth_keys:write` + `devices:core:write`. |
 | `kookaburra/periphery/` | kookaburra Komodo Periphery compose. Bootstrap-managed (parallels `kangaroo/periphery/`). Reachable only over tailnet (PERIPHERY_ALLOWED_IPS=100.64.0.0/10). |
 | `logging/kookaburra/` | Alloy on kookaburra — ships container logs cross-tailnet to bilby's ClickStack at `bilby-podnet.tail9ceb.ts.net:4318` via MagicDNS. kookaburra's `/etc/docker/daemon.json` forwards container DNS to `100.100.100.100` + `1.1.1.1` (mirrors bilby's setup; daemon.json is system-level on the droplet, not in this repo). |
 | `docs/` | The published docs (served at `docs.pod.haus`) |
@@ -191,16 +190,16 @@ devices (blast-radius containment).
    future stack (deploy-only-if-its-files-changed; bilby no-churn),
    and whose Stage 2 `BatchDeployStack "kangaroo-*" + "kookaburra-*"`
    force-deploys linked_repo stacks. A new stack auto-deploys on the next push with
-   no `cloudflare/` edit. (This replaced 20 per-stack webhooks: GitHub
+   no `terraform/` edit. (This replaced 20 per-stack webhooks: GitHub
    hard-caps a repo at 20 `push` webhooks, and the fleet outgrew it.)
    Do **not** set `webhook_force_deploy` — there are no per-stack
    webhooks for it to affect; the kangaroo force path is Stage 2.
 7. If the service is a single-host pod.haus service, add a
-   `module "<name>"` block in `cloudflare/services_pod_haus.tf` plus
+   `module "<name>"` block in `terraform/services_pod_haus.tf` plus
    one entry in `tunnel.tf`'s `pod_haus_module_ingress`. The module
    owns DNS + Access policy chain + tunnel ingress; default policy
    chain is Homelab service-token bypass + Family allow.
-   `cd cloudflare && terraform apply` to publish (creds are ambient
+   `cd terraform && terraform apply` to publish (creds are ambient
    from the chezmoi-rendered fish env; no wrapper, runs from any
    machine).
 
@@ -232,26 +231,29 @@ only touch genuinely host-specific bits.
 
 These have failure modes that you must not introduce:
 
-- **podhaus Terraform must run from any machine — NO TF root is
-  exempt.** Contract: clone podhaus + have chezmoi-provisioned creds ⇒
-  `terraform` works, for *every* root (`cloudflare/`, `minio/terraform/`,
-  any future one). No host-pinned backend endpoint (the S3 state
-  backend uses the public `https://storage.pod.haus`, never
-  `minio:9000`/loopback), no LAN-only provider `api_url` (UniFi uses
-  `https://unifi.pod.haus`, never `10.0.0.1`; the MinIO provider uses
-  `https://storage.pod.haus`, never `127.0.0.1`), no dockernet
-  assumption anywhere. Reject any change reintroducing a LAN IP,
-  dockernet name, or loopback in a TF root — and reject any "this root
-  is bilby-only / admin tooling" carve-out (that exact rationalisation
-  was caught and removed once). Run `terraform` directly — there is no
-  wrapper script. See [`docs/terraform.html`](docs/terraform.html).
+- **podhaus Terraform must run from any machine — ONE consolidated
+  root, no exceptions.** Contract: clone podhaus + have
+  chezmoi-provisioned creds ⇒ `terraform` works from `terraform/`.
+  No second TF root may be introduced without a load-bearing reason
+  documented in `/docs/terraform.html` — the consolidation (May 2026)
+  collapsed three roots into one specifically to keep the surface
+  small. No host-pinned backend endpoint (the S3 state backend uses
+  the public `https://storage.pod.haus`, never `minio:9000`/loopback),
+  no LAN-only provider `api_url` (UniFi uses `https://unifi.pod.haus`,
+  never `10.0.0.1`; the MinIO provider uses `https://storage.pod.haus`,
+  never `127.0.0.1`), no dockernet assumption anywhere. Reject any
+  change reintroducing a LAN IP, dockernet name, or loopback in
+  `terraform/` — and reject any "this is bilby-only / admin tooling"
+  carve-out (that exact rationalisation was caught and removed once).
+  Run `terraform` directly — there is no wrapper script.
+  See [`docs/terraform.html`](docs/terraform.html).
 - **MinIO public access-control model: SigV4, not an edge block.**
   `storage.pod.haus` serves the full MinIO API (S3 *and* admin); the
   sole boundary is MinIO's own per-request SigV4 (root/scoped creds
   live only in 1Password + the chezmoi Terraform env;
   unauthenticated calls incl. `/minio/admin/` get `AccessDenied`).
   **Do not add an edge `/minio/admin/` 403 / WAF block** — it breaks
-  the from-anywhere `minio/terraform/` root and contradicts the rule above.
+  the from-anywhere `terraform/` root and contradicts the rule above.
   Data-plane isolation is done with per-bucket least-priv keys (e.g.
   per-Publii-site service accounts), not network filtering.
 - **Never use single-file bind mounts** for any config the running
@@ -309,9 +311,9 @@ These have failure modes that you must not introduce:
   and Docker silently creates empty stub directories.
 - **Don't push, deploy, or change DNS / Access policy without explicit
   user authorization.** Treat all `git push`, `./komodo-sync`, and
-  any `terraform apply` against `cloudflare/` as actions that require a
+  any `terraform apply` against `terraform/` as actions that require a
   green light. `terraform plan` is fine. Note that every `git push` to `main` fires
-  the single GitHub webhook (`cloudflare/github.tf` →
+  the single GitHub webhook (`terraform/github.tf` →
   `komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main`),
   which runs the procedure: Stage 1 `BatchDeployStackIfChanged "*"`
   redeploys every bilby stack whose files actually changed (unchanged
@@ -322,7 +324,7 @@ These have failure modes that you must not introduce:
   resource, read the provider's resource doc.** Schemas change
   between minor versions and `terraform apply` errors with "Attribute X
   required" or similar without making it obvious which version you
-  need. Resource docs are linked from `cloudflare/README.md`.
+  need. Provider doc URLs are linked from each provider's required_providers block in `terraform/backend.tf`.
 - **Don't bypass git hooks (`--no-verify`, etc.) without explicit
   permission.** Same for force-push, hard reset, branch deletion.
 - **Plex identity is sacred.** Never let Plex start without an init

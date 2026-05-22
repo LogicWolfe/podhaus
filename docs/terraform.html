@@ -23,7 +23,7 @@
       <p class="lead text-lg text-text-muted">
         Declarative config for everything outside Docker — Cloudflare zones, Access apps,
         tunnel ingress, UniFi LAN DNS, and the GitHub webhook that drives push-to-deploy.
-        Single TF root at <code>cloudflare/</code>, state in MinIO via the public
+        Single TF root at <code>terraform/</code>, state in MinIO via the public
         <code>storage.pod.haus</code>, run with <strong>stock <code>terraform</code></strong>
         from any machine — no wrapper.
       </p>
@@ -33,7 +33,8 @@
         Schemas drift between provider minor versions and our HCL has to match. The
         registry's resource pages are the source of truth — <strong>not</strong> Stack
         Overflow, blog posts, or older copies of this doc. Direct links in
-        <a href="https://github.com/LogicWolfe/podhaus/blob/main/cloudflare/README.md"><code>cloudflare/README.md</code></a>.
+        each provider's <code>required_providers</code> block in
+        <a href="https://github.com/LogicWolfe/podhaus/blob/main/terraform/backend.tf"><code>terraform/backend.tf</code></a>.
       </aside>
 
       <h2 id="surface">What's TF-managed today</h2>
@@ -44,18 +45,18 @@
             <td><a href="https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs"><code>cloudflare/cloudflare</code></a> v5</td>
             <td>Public DNS (11 zones), Zero Trust Access apps + policies + groups + service tokens,
               cloudflared tunnel config + ingress</td>
-            <td><code>cloudflare/dns_*.tf</code>, <code>cloudflare/access.tf</code>,
-              <code>cloudflare/services_pod_haus.tf</code>, <code>cloudflare/tunnel.tf</code></td>
+            <td><code>terraform/dns_*.tf</code>, <code>terraform/access.tf</code>,
+              <code>terraform/services_pod_haus.tf</code>, <code>terraform/tunnel.tf</code></td>
           </tr>
           <tr>
             <td><a href="https://registry.terraform.io/providers/ubiquiti-community/unifi/latest/docs"><code>ubiquiti-community/unifi</code></a> ~> 0.41</td>
             <td>UniFi controller LAN DNS (split-horizon A records)</td>
-            <td><code>cloudflare/dns_unifi_split_horizon.tf</code></td>
+            <td><code>terraform/dns_unifi_split_horizon.tf</code></td>
           </tr>
           <tr>
             <td><a href="https://registry.terraform.io/providers/integrations/github/latest/docs"><code>integrations/github</code></a> ~> 6.0</td>
             <td>Repo webhook driving Komodo auto-deploy</td>
-            <td><code>cloudflare/github.tf</code></td>
+            <td><code>terraform/github.tf</code></td>
           </tr>
         </tbody>
       </table>
@@ -67,7 +68,7 @@
 
       <h2 id="state">State backend — MinIO</h2>
       <p>
-        Terraform state lives in MinIO at <code>s3://terraform-state/cloudflare.tfstate</code>.
+        Terraform state lives in MinIO at <code>s3://terraform-state/podhaus.tfstate</code>.
         The bucket has <strong>versioning enabled</strong>, so an accidental
         <code>terraform destroy</code> leaves the previous state version recoverable from MinIO's
         web console at <a href="https://minio.pod.haus">minio.pod.haus</a>. Terraform
@@ -96,7 +97,7 @@
         docker runner was decommissioned). Run <strong>stock
         <code>terraform</code></strong> directly:
       </p>
-      <pre><code>cd cloudflare
+      <pre><code>cd terraform
 terraform init   # one-time per machine
 terraform plan
 terraform apply</code></pre>
@@ -113,8 +114,8 @@ terraform apply</code></pre>
         constraints (no cross-platform hash drift, zero maintenance).
       </p>
       <aside class="callout note">
-        <span class="callout-title">cloudflare/ also manages the Tailscale auth-key rotation (interim home)</span>
-        <code>cloudflare/tailscale.tf</code> mints the
+        <span class="callout-title">Tailscale auth-key rotation lives in this root</span>
+        <code>terraform/tailscale.tf</code> mints the
         <code>tag:podnet</code> tailnet auth key via the
         <code>tailscale/tailscale</code> provider, drives an 80-day
         rotation via a <code>time_rotating</code> resource, and writes
@@ -126,15 +127,23 @@ terraform apply</code></pre>
         which the 1Password TF provider's <code>onepassword_item</code>
         resource does not manage. The key value is passed via env var,
         not the command line, so it never surfaces in TF's
-        command-echo. Provider creds: the chezmoi-rendered env file
-        also exports <code>TAILSCALE_OAUTH_CLIENT_ID</code> /
-        <code>TAILSCALE_OAUTH_CLIENT_SECRET</code> +
-        <code>OP_SERVICE_ACCOUNT_TOKEN</code> (the latter is the one
-        secret <a href="/secrets.html">allowed raw on disk</a>; sourced
-        from the same repo-root file komodo-start uses). This lives
-        in <code>cloudflare/</code> as an interim — it will move to the
-        consolidated root via <code>terraform state mv</code> when the
-        TF foundation consolidation lands.
+        command-echo.
+      </aside>
+      <aside class="callout note">
+        <span class="callout-title">onepassword TF provider declared, no data sources yet</span>
+        The consolidated root declares the <code>1Password/onepassword</code>
+        provider so future items can plug into data-source-driven
+        credential resolution. None of the current chezmoi-rendered TF
+        provider creds (CLOUDFLARE_API_TOKEN, UNIFI_API_KEY, GITHUB_TOKEN,
+        DIGITALOCEAN_TOKEN, TAILSCALE_OAUTH_*, TF_VAR_minio_user/password,
+        TF_VAR_komodo_webhook_secret) actually use it — the provider's
+        v3.x data source only exposes root-level fields whose <em>field ID</em>
+        matches a fixed switch (username, password, credential, …), and
+        all the relevant Homelab items use random UUIDs as field IDs.
+        Unblocking the swap means restructuring those 1P items (move
+        each secret into a section, or recreate with a known field ID)
+        which ripples to <code>op read</code> paths and komodo-op
+        variable names. Deferred; the PWD-scoped env vars work fine.
       </aside>
       <p>
         The S3 state backend is the public
@@ -164,8 +173,8 @@ terraform apply</code></pre>
       <p>
         Every tunnel-routed pod.haus hostname is exposed via one
         <code>module "&lt;name&gt;"</code> block in
-        <code>cloudflare/services_pod_haus.tf</code>. The module
-        (<code>cloudflare/modules/pod_haus_service/</code>) owns three resources for one
+        <code>terraform/services_pod_haus.tf</code>. The module
+        (<code>terraform/modules/pod_haus_service/</code>) owns three resources for one
         hostname:
       </p>
       <ul>
@@ -174,7 +183,7 @@ terraform apply</code></pre>
         <li>A <code>cloudflare_zero_trust_access_application</code> scoped to that one
           hostname, with the locked-by-default policy chain attached.</li>
         <li>A structured <code>ingress_rule</code> output that
-          <code>cloudflare/tunnel.tf</code> aggregates into the single
+          <code>terraform/tunnel.tf</code> aggregates into the single
           <code>cloudflare_zero_trust_tunnel_cloudflared_config</code> resource.</li>
       </ul>
       <p>
@@ -202,7 +211,7 @@ terraform apply</code></pre>
         Then add <code>module.myservice.ingress_rule</code> to the
         <code>pod_haus_module_ingress</code> list in <code>tunnel.tf</code>,
         <code>terraform apply</code> from
-        <code>cloudflare/</code>, done. cloudflared picks up the new ingress rule from
+        <code>terraform/</code>, done. cloudflared picks up the new ingress rule from
         CF's API automatically on its next reconnect (no container restart).
       </p>
       <aside class="callout note">
@@ -219,8 +228,8 @@ terraform apply</code></pre>
       <ol>
         <li><strong>Read the provider docs</strong> for the resource you're about to
           touch. Schemas vary between minor versions.</li>
-        <li>Edit the relevant <code>cloudflare/*.tf</code> file.</li>
-        <li><code>cd cloudflare && terraform plan</code>. Read the
+        <li>Edit the relevant <code>terraform/*.tf</code> file.</li>
+        <li><code>cd terraform && terraform plan</code>. Read the
           diff line-by-line; provider v5 sometimes wants in-place updates that look
           surprising at first glance (default-value normalisation, deprecated-attribute
           flips, etc.).</li>
@@ -241,7 +250,7 @@ terraform apply</code></pre>
         <li>Bring MinIO up via Komodo (<code>./komodo-sync</code> + deploy).</li>
         <li>Restore <code>/var/lib/minio</code> from the most recent Backrest snapshot
           via the Backrest UI. The bucket + objects come back intact.</li>
-        <li><code>cd cloudflare && terraform init</code> — TF
+        <li><code>cd terraform && terraform init</code> — TF
           finds the restored state.</li>
         <li><code>terraform plan</code> — should show zero drift if the rebuild matched the
           last-applied state.</li>
@@ -253,8 +262,6 @@ terraform apply</code></pre>
 
       <h2 id="see-also">See also</h2>
       <ul>
-        <li><a href="https://github.com/LogicWolfe/podhaus/blob/main/cloudflare/README.md"><code>cloudflare/README.md</code></a>
-          — file-level layout + provider-doc links + adding-a-resource walkthrough.</li>
         <li><a href="/networking.html">Networking</a> — how DNS, Access, and the tunnel
           fit together end-to-end.</li>
         <li><a href="/komodo.html">Komodo</a> — push-to-deploy flow; the GitHub webhook

@@ -1,6 +1,0 @@
-# Lockfile is NOT committed — each machine self-locks within the ~>
-# constraints (no cross-platform hash drift, zero maintenance). Same
-# policy as cloudflare/. See docs/plans/tf-runner-decommission.md.
-.terraform.lock.hcl
-.terraform/
-crash.log
