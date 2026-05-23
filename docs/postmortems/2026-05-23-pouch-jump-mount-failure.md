@@ -82,6 +82,7 @@ The downstream damage chain:
 - [x] **2026-05-23**: `unpackerr/compose.yaml` — first-ever healthcheck added: `test -e /data/.podhaus-share-mounted`. Autoheal label added.
 - [x] **2026-05-23**: `paperless/compose.yaml` — healthcheck replaces `ls /usr/src/paperless/media` with sentinel check.
 - [x] **2026-05-23**: `backup/bilby/compose.yaml` — bilby overlay extends shared healthcheck with `[ -e /repos/podhaus/.podhaus-share-mounted ]`. Future repo-on-wrong-disk regressions go red within a minute.
+- [x] **2026-05-23**: `backup/bilby/stack.toml` — `file_paths` reversed to `["../compose.shared.yaml", "compose.yaml"]` so the bilby overlay actually wins on field conflicts. Docker compose's `-f` precedence is later-wins; the previous order (compose.yaml first) silently lost any field also defined by the shared file. The healthcheck override commit landed but did nothing until the file_paths flip — a half-fix that would have caught the next regression by failing to fail. Worth flagging as a learning.
 
 ### Documentation (in-repo)
 
@@ -98,6 +99,8 @@ The downstream damage chain:
 - **kangaroo backrest sentinel.** kangaroo's restic repo at `/share/CACHEDEV2_DATA/Jump/backups-kangaroo/` is accessed directly (not over NFS), so it has no bare-stub failure mode. The shared backrest healthcheck stays untouched on kangaroo; the bilby overlay's healthcheck override is bilby-only.
 
 ## What we learned
+
+- **Docker compose `-f` precedence is later-wins.** When a service field is defined in both an included `compose.shared.yaml` and a per-host overlay, the LAST `-f` file in `file_paths` wins. The natural reading order ("host file first, then shared") is backwards from what you want for overrides. `backup/bilby/stack.toml`'s file_paths now reads `["../compose.shared.yaml", "compose.yaml"]` so the host overlay can override scalar fields. The original order silently dropped the bilby healthcheck override during this remediation — the fix-of-the-fix exposed the trap. Worth keeping in mind for any other multi-host service that grows host-specific overrides (`autoheal/`, `logging/`).
 
 - **A bind mount's healthcheck must prove the source, not the bind.** `/proc/mounts` presence is satisfied by Docker's own bind entry regardless of the source state. Healthchecks need a positive signal that the source filesystem is the one we expect — a sentinel file on the share itself is the cheapest available primitive.
 
