@@ -123,8 +123,10 @@
       <p>
         No per-stack webhook. The fleet's single GitHub <code>push</code>
         webhook drives the <code>podhaus-push-deploy</code> Komodo Procedure
-        (<code>komodo/sync/procedures.toml</code>); its Stage 1
-        <code>BatchDeployStackIfChanged "*"</code> already covers
+        (<code>komodo/sync/procedures.toml</code>): Stage 0
+        <code>RunSync</code> reconciles stack defs + TOML-declared
+        variables from disk; Stage 1
+        <code>BatchDeployStackIfChanged "*"</code> covers
         <code>bugsink</code> — the wildcard matches every stack, so a push
         that changes <code>bugsink/</code> redeploys only Bugsink (other
         unchanged bilby stacks self-skip — no churn). Nothing to register;
@@ -132,9 +134,11 @@
         edit. (Bugsink was in fact the 21st stack that hit GitHub's hard
         20-webhook cap and motivated the per-stack→procedure consolidation —
         see <a href="/komodo.html#operating-models">Komodo → auto-deploy</a>.)
-        First registration of a brand-new stack is still
-        <code>./komodo-sync</code> (or a manual deploy); steady-state
-        push-to-deploy is automatic thereafter.
+        First push of a brand-new stack registers it via Stage 0 and
+        deploys it via Stage 1 (<code>deploy = true</code> +
+        <code>(None, _) =&gt; FullDeploy</code> path) — no manual
+        registration or UI click. <code>./komodo-sync</code> is the
+        debug-iterate path for applying local edits without pushing.
       </p>
 
       <h2 id="bootstrap">First-run bootstrap</h2>
