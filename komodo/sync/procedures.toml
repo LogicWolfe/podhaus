@@ -6,7 +6,7 @@
 # webhook hits this procedure's listener
 # (komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main,
 # branch-filtered to main), and the procedure fans out internally.
-# Validated against Komodo 1.19.5 source (client/core/rs/src/api/
+# Validated against Komodo v2.2.0 source (client/core/rs/src/api/
 # execute/stack.rs: BatchDeployStackIfChanged/BatchDeployStack take an
 # id/name/wildcard/regex pattern; bin/core/src/listener/router.rs:
 # "/procedure/{id}/{branch}").
