@@ -22,10 +22,13 @@ services:
     ports:
       - "8120:8120"
     environment:
-      # Phase 15a: legacy passkey shared with bilby's Periphery + Core.
-      # Phase 15b will swap this for v2 keypair auth (PERIPHERY_PRIVATE_KEY
-      # + PERIPHERY_CORE_PUBLIC_KEYS) and drop KOMODO_PASSKEYS entirely.
-      KOMODO_PASSKEYS: ${KOMODO_PASSKEYS}
+      # Legacy passkey shared with bilby's Core. The env var on Periphery
+      # is PERIPHERY_PASSKEYS (PERIPHERY_ prefix); previously this read
+      # KOMODO_PASSKEYS, which doesn't exist on Periphery — passkey auth
+      # was silently disabled and PERIPHERY_ALLOWED_IPS was the only gate.
+      # Will be swapped for v2 PKI (private_key + core_public_keys) once
+      # the Komodo upgrade to v2.x lands.
+      PERIPHERY_PASSKEYS: ${PERIPHERY_PASSKEYS}
       # Defense-in-depth: only Komodo Core on bilby (.119) may connect.
       PERIPHERY_ALLOWED_IPS: 10.0.0.119/32
       # Periphery has no default config-file discovery — must point at the

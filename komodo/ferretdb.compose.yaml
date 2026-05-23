@@ -105,7 +105,12 @@ services:
     security_opt:
       - label:disable
     environment:
-      KOMODO_PASSKEYS: ${KOMODO_PASSKEY}
+      # Periphery reads PERIPHERY_PASSKEYS (not KOMODO_PASSKEYS — that was
+      # a long-standing typo that left passkey auth effectively disabled;
+      # PERIPHERY_ALLOWED_IPS was the only gate). Value is the same secret
+      # Core sends with each request (KOMODO_PASSKEY on the Core service);
+      # matches gate access.
+      PERIPHERY_PASSKEYS: ${KOMODO_PASSKEY}
       TZ: ${TZ}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

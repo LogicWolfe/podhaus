@@ -41,11 +41,13 @@ TS_PROJECT=kookaburra-tailscale
 TS_HOSTNAME=kookaburra-podnet
 
 export OP_SERVICE_ACCOUNT_TOKEN="$(tr -d '\n' < OP_SERVICE_ACCOUNT_TOKEN)"
-# Pick the op-unlock socket that actually has identities loaded (some
-# old sockets may linger empty if op-unlock was re-run in a fresh
-# shell — `ls | head -1` would happily grab a stale empty one).
+# Pick an op-unlock socket that actually has identities loaded.
+# Modern op-unlock places the socket under $XDG_RUNTIME_DIR/op-unlock/agent.sock;
+# older versions used /tmp/op-unlock-<pid>.sock. Probe both. Some old
+# sockets may linger empty if op-unlock was re-run in a fresh shell, so
+# ssh-add -l filters those out.
 SOCK=""
-for s in /tmp/op-unlock-*.sock; do
+for s in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/op-unlock/agent.sock" /tmp/op-unlock-*.sock; do
   [ -S "$s" ] || continue
   if SSH_AUTH_SOCK="$s" ssh-add -l >/dev/null 2>&1; then SOCK="$s"; break; fi
 done
@@ -140,9 +142,11 @@ echo "$TS_HOSTNAME tailnet IP: $TS_IP"
 echo "== ship Periphery compose =="
 retry scp -q $SSHO kookaburra/periphery/compose.yaml "$SSH_HOST:$REMOTE_DIR/compose.yaml"
 
-echo "== render Periphery .env (KOMODO_PASSKEYS from 1P) =="
+echo "== render Periphery .env (PERIPHERY_PASSKEYS from 1P) =="
 KP="$(op read 'op://Homelab/Komodo Passkey/password')"
-{ echo "KOMODO_PASSKEYS=$KP"; echo "TZ=Australia/Perth"; } | \
+# Variable is PERIPHERY_PASSKEYS (not KOMODO_PASSKEYS — the upstream
+# Periphery binary reads the PERIPHERY_ prefix).
+{ echo "PERIPHERY_PASSKEYS=$KP"; echo "TZ=Australia/Perth"; } | \
   ssh $SSHO "$SSH_HOST" "cat > $REMOTE_DIR/.env && chmod 600 $REMOTE_DIR/.env"
 
 echo "== render periphery.config.toml (GitHub PAT for linked-repo clone) =="

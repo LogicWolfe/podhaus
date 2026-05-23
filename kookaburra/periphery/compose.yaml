@@ -25,7 +25,11 @@ services:
     # interface (Komodo Core on bilby dials kookaburra's tailnet IP).
     network_mode: host
     environment:
-      KOMODO_PASSKEYS: ${KOMODO_PASSKEYS}
+      # Legacy passkey shared with bilby's Core. Periphery reads
+      # PERIPHERY_PASSKEYS, not KOMODO_PASSKEYS (the prior name here was
+      # a no-op typo — PERIPHERY_ALLOWED_IPS was the only gate). Will be
+      # swapped for v2 PKI once the Komodo upgrade to v2.x lands.
+      PERIPHERY_PASSKEYS: ${PERIPHERY_PASSKEYS}
       # Restrict to the Tailscale CGNAT range — every podnet node is in
       # 100.64.0.0/10, no public IP can hit this even if the DO firewall
       # ever drifts open on 8120. Defense-in-depth on top of the firewall.

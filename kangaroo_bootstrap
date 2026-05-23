@@ -54,13 +54,15 @@ ok "directories ready"
 
 # --- 3. Render and ship .env + compose ---
 log "Rendering .env from 1Password (Komodo Passkey + TZ)"
-KOMODO_PASSKEYS="$(op read 'op://Homelab/Komodo Passkey/password')"
+PERIPHERY_PASSKEYS="$(op read 'op://Homelab/Komodo Passkey/password')"
 TZ_VALUE="Australia/Perth"
 
 # Ship via stdin so the rendered .env never lives on bilby's disk.
+# Variable is PERIPHERY_PASSKEYS (not KOMODO_PASSKEYS — the upstream
+# Periphery binary reads the PERIPHERY_ prefix).
 {
-    printf 'KOMODO_PASSKEYS=%s\n' "$KOMODO_PASSKEYS"
-    printf 'TZ=%s\n'              "$TZ_VALUE"
+    printf 'PERIPHERY_PASSKEYS=%s\n' "$PERIPHERY_PASSKEYS"
+    printf 'TZ=%s\n'                 "$TZ_VALUE"
 } | ssh_kangaroo "cat > '$KANGAROO_DIR/.env' && chmod 600 '$KANGAROO_DIR/.env'"
 ok ".env staged on kangaroo"
 
