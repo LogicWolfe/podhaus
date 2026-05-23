@@ -1,0 +1,2 @@
+# Private keys never belong in the repo. Pubkeys (*.pub) are committed.
+*.key

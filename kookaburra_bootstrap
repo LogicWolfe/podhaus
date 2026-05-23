@@ -29,6 +29,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 DROPLET_IP="${DROPLET_IP:-170.64.241.136}"
 SSH_HOST="root@${DROPLET_IP}"
 REMOTE_DIR=/opt/komodo-periphery
+BILBY_KEYS_DIR="${BILBY_KEYS_DIR:-/opt/komodo/keys}"
 # Bootstrap-side tailscale dir. Project name matches the eventual
 # Komodo-managed stack (kookaburra-tailscale) so the named volume
 # (kookaburra-tailscale_tailscale-state) is identical from day one —
@@ -138,15 +139,26 @@ done
 [ -n "$TS_IP" ] || { echo "tailscale failed to come up" >&2; ssh $SSHO "$SSH_HOST" "docker logs --tail 30 $TS_HOSTNAME"; exit 1; }
 echo "$TS_HOSTNAME tailnet IP: $TS_IP"
 
-# --- 2. Periphery ---
+# --- 4. Periphery ---
+echo "== preflight: v2 keypair material on bilby ($BILBY_KEYS_DIR) =="
+for f in core.pub kookaburra-periphery.key; do
+  [ -f "$BILBY_KEYS_DIR/$f" ] || { echo "Missing $BILBY_KEYS_DIR/$f — regenerate keypairs" >&2; exit 1; }
+done
+
+echo "== prep Periphery keys dir on kookaburra =="
+retry ssh $SSHO "$SSH_HOST" "mkdir -p $REMOTE_DIR/keys && chmod 700 $REMOTE_DIR/keys"
+
+echo "== ship v2 PKI keys to kookaburra (periphery.key + core.pub) =="
+# Stream via stdin so the privkey never lands on bilby's disk except its
+# canonical home in /opt/komodo/keys/.
+ssh $SSHO "$SSH_HOST" "cat > $REMOTE_DIR/keys/periphery.key && chmod 600 $REMOTE_DIR/keys/periphery.key" < "$BILBY_KEYS_DIR/kookaburra-periphery.key"
+ssh $SSHO "$SSH_HOST" "cat > $REMOTE_DIR/keys/core.pub      && chmod 644 $REMOTE_DIR/keys/core.pub"      < "$BILBY_KEYS_DIR/core.pub"
+
 echo "== ship Periphery compose =="
 retry scp -q $SSHO kookaburra/periphery/compose.yaml "$SSH_HOST:$REMOTE_DIR/compose.yaml"
 
-echo "== render Periphery .env (PERIPHERY_PASSKEYS from 1P) =="
-KP="$(op read 'op://Homelab/Komodo Passkey/password')"
-# Variable is PERIPHERY_PASSKEYS (not KOMODO_PASSKEYS — the upstream
-# Periphery binary reads the PERIPHERY_ prefix).
-{ echo "PERIPHERY_PASSKEYS=$KP"; echo "TZ=Australia/Perth"; } | \
+echo "== render Periphery .env (TZ only; outbound auth is keypair-based) =="
+{ echo "TZ=Australia/Perth"; } | \
   ssh $SSHO "$SSH_HOST" "cat > $REMOTE_DIR/.env && chmod 600 $REMOTE_DIR/.env"
 
 echo "== render periphery.config.toml (GitHub PAT for linked-repo clone) =="
@@ -162,19 +174,23 @@ GH="$(op read 'op://Homelab/Homelab GitHub Personal Access Token/token')"
 echo "== Periphery up =="
 retry ssh $SSHO "$SSH_HOST" "cd $REMOTE_DIR && docker compose up -d"
 
-# Wait for Periphery health (curl -sk localhost:8120 from inside should return 405)
-echo "== verify Periphery responds on kookaburra:$TS_IP:8120 (from bilby — needs bilby on tailnet too) =="
-for i in $(seq 1 15); do
-  c="$(ssh $SSHO "$SSH_HOST" "curl -sk --max-time 3 -o /dev/null -w '%{http_code}' https://localhost:8120/" 2>/dev/null)"
-  [ "$c" = "405" ] && { echo "Periphery healthy (HTTP 405 on /, as expected)"; break; }
-  echo "  Periphery starting ($i)... http=$c"; sleep 4
+# In outbound mode there's no inbound listener to probe — health = Core
+# sees the Server as state=Ok via the established WS connection. Probe
+# Komodo Core's API from bilby.
+echo "== wait for kookaburra to dial Core (state=Ok via API) =="
+export OP_SERVICE_ACCOUNT_TOKEN="$(tr -d '\n' < OP_SERVICE_ACCOUNT_TOKEN)"
+api_key=$(op read "op://Homelab/Komodo API OnePassword Sync/username")
+api_secret=$(op read "op://Homelab/Komodo API OnePassword Sync/credential")
+for i in $(seq 1 30); do
+  state=$(curl -sf -X POST http://localhost:9120/read \
+    -H "Content-Type: application/json" \
+    -H "X-Api-Key: $api_key" -H "X-Api-Secret: $api_secret" \
+    -d '{"type":"ListServers","params":{}}' 2>/dev/null \
+    | jq -r '.[] | select(.name=="kookaburra") | .info.state' 2>/dev/null || echo "")
+  [ "$state" = "Ok" ] && { echo "kookaburra state=Ok"; break; }
+  echo "  waiting ($i)... state=$state"; sleep 4
 done
 
 # --- final state summary ---
 echo "== kookaburra state =="
 ssh $SSHO "$SSH_HOST" "docker ps --format 'table {{.Names}}\t{{.Status}}'"
-echo
-echo "next: komodo/sync/servers.toml should have kookaburra registered as"
-echo "  address = \"https://${TS_HOSTNAME}:8120\"  (MagicDNS resolves it)"
-echo "  (or https://$TS_IP:8120 if MagicDNS is unavailable on the resolver chain)"
-echo "then commit + push + komodo-sync; Komodo Core will connect via tailnet."

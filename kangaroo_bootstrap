@@ -5,21 +5,17 @@
 #
 # What it does (in order):
 #   1. Verify SSH + Docker on kangaroo.
-#   2. Create /share/CACHEDEV1_DATA/Container/komodo-periphery/{,etc-komodo}/
-#   3. Render .env locally (passkey from 1P) and SCP it + compose.yaml.
+#   2. Create periphery dir layout under /share/CACHEDEV1_DATA/Container.
+#   3. SCP keys (private + Core's pub) and render config (TZ + GitHub PAT).
 #   4. SSH-execute `docker compose up -d`.
-#   5. Wait for Periphery to answer on :8120.
-#   6. Idempotently install @reboot crontab line (CS upgrade survival layer 1).
+#   5. Wait for Periphery health (outbound dial settles via Core in <30s).
+#   6. Idempotently install @reboot crontab line (CS upgrade survival).
 #   7. Idempotently append [[server]] block for kangaroo to komodo/sync/servers.toml.
 #
-# After running:
-#   - Review the diff to komodo/sync/servers.toml, commit, push.
-#   - Run ./komodo-sync to apply the new Server resource.
-#   - Verify in Komodo Core UI: kangaroo shows healthy.
-#   - Then proceed with Linked Repo declaration + first test stack
-#     (see Phase 15a runbook in alligator-bilby-migration.md).
-#
-# Phase 15b will revisit this script to swap passkey for v2 keypair auth.
+# v2 PKI + outbound: Periphery dials Core at ws://10.0.0.119:9120; auth is
+# X25519 noise handshake. periphery.key (kangaroo-periphery.key on bilby)
+# is SCPed in; core.pub is copied from bilby's keys volume. Pubkey is
+# committed to komodo/keys/kangaroo-periphery.pub for Core's trust list.
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -31,6 +27,7 @@ KANGAROO_DIR="/share/CACHEDEV1_DATA/Container/komodo-periphery"
 # Override via env if your install differs.
 KANGAROO_DOCKER="${KANGAROO_DOCKER:-/share/CACHEDEV1_DATA/.qpkg/container-station/usr/bin/docker}"
 PERIPHERY_HEALTH_TIMEOUT="${PERIPHERY_HEALTH_TIMEOUT:-120}"
+BILBY_KEYS_DIR="${BILBY_KEYS_DIR:-/opt/komodo/keys}"
 
 export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
 
@@ -47,22 +44,30 @@ ssh_kangaroo "echo OK" >/dev/null || fail "SSH to $KANGAROO_SSH failed. Check th
 ssh_kangaroo "$KANGAROO_DOCKER info >/dev/null 2>&1" || fail "Docker not available at $KANGAROO_DOCKER on kangaroo. Container Station running? Override KANGAROO_DOCKER if path differs."
 ok "kangaroo reachable, Docker responsive"
 
+log "Preflight: verifying v2 keypair material on bilby ($BILBY_KEYS_DIR)"
+for f in core.pub kangaroo-periphery.key; do
+    [ -f "$BILBY_KEYS_DIR/$f" ] || fail "Missing $BILBY_KEYS_DIR/$f — regenerate the keypairs (see docs/secrets.html)."
+done
+ok "keypair material present"
+
 # --- 2. Directory layout ---
 log "Ensuring directory layout on kangaroo: $KANGAROO_DIR"
-ssh_kangaroo "mkdir -p '$KANGAROO_DIR/etc-komodo'"
+ssh_kangaroo "mkdir -p '$KANGAROO_DIR/etc-komodo' '$KANGAROO_DIR/keys' && chmod 700 '$KANGAROO_DIR/keys'"
 ok "directories ready"
 
-# --- 3. Render and ship .env + compose ---
-log "Rendering .env from 1Password (Komodo Passkey + TZ)"
-PERIPHERY_PASSKEYS="$(op read 'op://Homelab/Komodo Passkey/password')"
-TZ_VALUE="Australia/Perth"
+# --- 3a. Ship keys (private + Core's pub) ---
+log "Shipping v2 PKI keys to kangaroo"
+# Stream via stdin so the privkey never appears on disk anywhere except
+# bilby's /opt/komodo/keys/ and kangaroo's keys dir.
+ssh_kangaroo "cat > '$KANGAROO_DIR/keys/periphery.key' && chmod 600 '$KANGAROO_DIR/keys/periphery.key'" < "$BILBY_KEYS_DIR/kangaroo-periphery.key"
+ssh_kangaroo "cat > '$KANGAROO_DIR/keys/core.pub'      && chmod 644 '$KANGAROO_DIR/keys/core.pub'"      < "$BILBY_KEYS_DIR/core.pub"
+ok "periphery.key + core.pub staged"
 
-# Ship via stdin so the rendered .env never lives on bilby's disk.
-# Variable is PERIPHERY_PASSKEYS (not KOMODO_PASSKEYS — the upstream
-# Periphery binary reads the PERIPHERY_ prefix).
+# --- 3b. Render and ship .env ---
+log "Rendering .env (TZ only — outbound auth is keypair-based)"
+TZ_VALUE="Australia/Perth"
 {
-    printf 'PERIPHERY_PASSKEYS=%s\n' "$PERIPHERY_PASSKEYS"
-    printf 'TZ=%s\n'                 "$TZ_VALUE"
+    printf 'TZ=%s\n' "$TZ_VALUE"
 } | ssh_kangaroo "cat > '$KANGAROO_DIR/.env' && chmod 600 '$KANGAROO_DIR/.env'"
 ok ".env staged on kangaroo"
 
@@ -70,7 +75,7 @@ log "Shipping compose.yaml to kangaroo"
 scp -q kangaroo/periphery/compose.yaml "$KANGAROO_SSH:$KANGAROO_DIR/compose.yaml"
 ok "compose.yaml staged"
 
-# --- 3b. Render and ship periphery.config.toml ---
+# --- 3c. Render and ship periphery.config.toml ---
 # Periphery config carries the GitHub PAT for Komodo's Linked Repo to clone
 # private repos via HTTPS (Komodo doesn't support SSH cloning). Lives under
 # the bind-mounted /etc/komodo dir so it's persisted across container restarts.
@@ -92,19 +97,28 @@ log "Starting Periphery via docker compose up -d on kangaroo"
 ssh_kangaroo "cd '$KANGAROO_DIR' && $KANGAROO_DOCKER compose up -d"
 ok "compose up issued"
 
-# --- 5. Wait for health ---
-log "Waiting for Periphery to answer on :8120 (timeout ${PERIPHERY_HEALTH_TIMEOUT}s)"
+# --- 5. Wait for Periphery to dial Core successfully ---
+# Outbound mode: no inbound listener to probe. Health = Core sees the
+# Server as state=Ok via the websocket connection. We probe via the
+# Komodo API from bilby.
+log "Waiting for kangaroo Periphery to dial Core (timeout ${PERIPHERY_HEALTH_TIMEOUT}s)"
+api_key=$(op read "op://Homelab/Komodo API OnePassword Sync/username")
+api_secret=$(op read "op://Homelab/Komodo API OnePassword Sync/credential")
 deadline=$((SECONDS + PERIPHERY_HEALTH_TIMEOUT))
 while (( SECONDS < deadline )); do
-    if curl -sk --max-time 3 "https://10.0.0.25:8120/" >/dev/null 2>&1; then
-        ok "Periphery responding on https://10.0.0.25:8120"
+    state=$(curl -sf -X POST http://localhost:9120/read \
+        -H "Content-Type: application/json" \
+        -H "X-Api-Key: $api_key" -H "X-Api-Secret: $api_secret" \
+        -d '{"type":"ListServers","params":{}}' 2>/dev/null \
+        | jq -r '.[] | select(.name=="kangaroo") | .info.state' 2>/dev/null || echo "")
+    if [ "$state" = "Ok" ]; then
+        ok "kangaroo state=Ok (outbound connection live)"
         break
     fi
-    sleep 3
+    sleep 4
 done
-if (( SECONDS >= deadline )); then
-    warn "Periphery didn't respond within ${PERIPHERY_HEALTH_TIMEOUT}s — check 'docker logs komodo-periphery' on kangaroo."
-    warn "Continuing with crontab + servers.toml anyway; you can re-run this script after fixing."
+if [ "$state" != "Ok" ]; then
+    warn "kangaroo didn't reach state=Ok within ${PERIPHERY_HEALTH_TIMEOUT}s — check 'docker logs komodo-periphery' on kangaroo."
 fi
 
 # --- 6. CS-upgrade survival: @reboot crontab line ---
@@ -127,27 +141,16 @@ ssh_kangaroo "
 "
 ok "@reboot recovery armed"
 
-# --- 7. Append kangaroo to komodo/sync/servers.toml (idempotent) ---
-log "Updating komodo/sync/servers.toml"
+# --- 7. Verify kangaroo in komodo/sync/servers.toml ---
+# Outbound mode requires the Server's `address` field to be empty (or unset)
+# so Core knows to expect Periphery -> Core direction. Kept here as a
+# sanity check; the actual TOML edit happens in the repo.
+log "Verifying kangaroo entry in komodo/sync/servers.toml"
 SERVERS_TOML="komodo/sync/servers.toml"
-
 if grep -q '^name = "kangaroo"' "$SERVERS_TOML"; then
-    ok "kangaroo entry already present in $SERVERS_TOML"
+    ok "kangaroo entry present in $SERVERS_TOML"
 else
-    cat >> "$SERVERS_TOML" <<'EOF'
-
-[[server]]
-name = "kangaroo"
-description = "QNAP NAS — second deploy target (Container Station)"
-tags = ["kangaroo"]
-
-[server.config]
-address = "https://10.0.0.25:8120"
-enabled = true
-disk_warning = 85.0
-disk_critical = 95.0
-EOF
-    ok "kangaroo appended to $SERVERS_TOML"
+    warn "kangaroo entry MISSING from $SERVERS_TOML — add it manually"
 fi
 
 # --- Summary ---
@@ -155,9 +158,5 @@ echo
 ok "kangaroo Periphery bootstrap done."
 echo
 echo "Next:"
-echo "  1. git diff komodo/sync/servers.toml — review the kangaroo entry"
-echo "  2. Commit + push if it looks right"
-echo "  3. ./komodo-sync — Komodo Core picks up the new Server resource"
-echo "  4. Verify in https://komodo.pod.haus that kangaroo shows healthy"
-echo "  5. Configure GitHub git_provider in Komodo + declare Linked Repo"
-echo "     (see Phase 15a runbook in alligator-bilby-migration.md)"
+echo "  1. Verify in https://komodo.pod.haus that kangaroo shows state=Ok"
+echo "  2. Push to deploy any kangaroo-* stack changes via the procedure"

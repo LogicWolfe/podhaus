@@ -12,6 +12,14 @@ export COMPOSE_KOMODO_REPO_PATH="$PWD"
 # certs there (the image doesn't mkdir -p the ssl subdir on its own).
 sudo mkdir -p /etc/komodo/ssl
 
+# v2 PKI keys volume. Holds the 4 X25519 keypairs (core, bilby-periphery,
+# kangaroo-periphery, kookaburra-periphery). Pubkeys mirrored in
+# komodo/keys/*.pub for repo reference. Privkeys live ONLY on the host
+# they belong to: bilby's keys here, kangaroo/kookaburra on their own
+# hosts (SCPed by their bootstrap scripts).
+sudo mkdir -p /opt/komodo/keys
+sudo chmod 0700 /opt/komodo/keys
+
 op run --env-file komodo/compose.env -- \
   docker compose -p komodo -f komodo/ferretdb.compose.yaml --env-file komodo/compose.env up -d
 

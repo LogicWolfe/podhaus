@@ -4,6 +4,8 @@ description = "Primary home server (Linux)"
 tags = ["podhaus"]
 
 [server.config]
+# bilby's Periphery is in the same compose as Core (komodo/ferretdb.compose.yaml).
+# Core dials it via docker DNS on the internal `default` network. Inbound mode.
 address = "https://periphery:8120"
 enabled = true
 disk_warning = 85.0
@@ -11,33 +13,33 @@ disk_critical = 95.0
 
 [[server]]
 name = "kangaroo"
-description = "QNAP NAS — second deploy target (Container Station)"
+description = "QNAP NAS — second deploy target (Container Station). v2 outbound: Periphery dials Core."
 tags = ["kangaroo"]
 
 [server.config]
-address = "https://10.0.0.25:8120"
+# Outbound mode (v2 PKI noise handshake). `address = ""` signals to Core
+# that this Server expects Periphery→Core direction — the kangaroo
+# Periphery dials Core at ws://10.0.0.119:9120 (its PERIPHERY_CORE_ADDRESSES).
+# Auth is the X25519 keypair handshake (kangaroo-periphery.pub trusted by
+# Core's KOMODO_PERIPHERY_PUBLIC_KEYS list). No inbound :8120 listener on
+# kangaroo.
+address = ""
 enabled = true
 disk_warning = 85.0
 disk_critical = 95.0
 
 [[server]]
 name = "kookaburra"
-description = "DigitalOcean droplet (syd1, Fedora) — off-LAN public-ingress relay host. Periphery reached only over Tailscale (tag:podnet); the public path is just :443 (rathole data) + :2333 (rathole control)."
+description = "DigitalOcean droplet (syd1, Fedora) — off-LAN public-ingress relay host. v2 outbound: Periphery dials Core over tailnet."
 tags = ["kookaburra", "podhaus"]
 
 [server.config]
-# kookaburra-podnet's MagicDNS FQDN. bilby's /etc/docker/daemon.json
-# sets dns: [100.100.100.100, 1.1.1.1] so the Docker embedded DNS
-# resolver (127.0.0.11) forwards unknown names to Tailscale's
-# MagicDNS first — Komodo Core resolves this FQDN to whatever
-# tailnet IP kookaburra-podnet currently holds, so droplet rebuilds
-# (which mint a fresh tailnet IP) no longer require editing this
-# field. Service-name resolution for ferretdb/caddy etc. still
-# works because the embedded resolver handles those internally,
-# before forwarding. Periphery is never internet-exposed (DO
-# firewall blocks 8120; reaches only via WireGuard tailnet —
-# tag:podnet ACL gates it).
-address = "https://kookaburra-podnet.tail9ceb.ts.net:8120"
+# Outbound mode (v2 PKI noise handshake). kookaburra Periphery dials Core
+# at ws://bilby-podnet:9120 over tailnet (its PERIPHERY_CORE_ADDRESSES).
+# Auth is the X25519 keypair handshake. No inbound :8120 listener on
+# kookaburra — the public surface there is just :443 (rathole data) +
+# :2333 (rathole control); the management plane is tailnet-only.
+address = ""
 enabled = true
 disk_warning = 85.0
 disk_critical = 95.0
