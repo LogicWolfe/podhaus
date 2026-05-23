@@ -303,36 +303,77 @@ description = "Service port (well-known, not a secret)"</code></pre>
         downstream service's logs surfacing the dependency failure, plus external Gatus
         monitoring of the public hostname.
       </p>
+      <h3 id="nfs-bind-healthcheck">NFS-bind healthcheck pattern</h3>
       <p>
-        <strong>A healthcheck must never do filesystem I/O against a soft-NFS path.</strong>
-        In this fleet that means Pouch (<code>/mnt/pouch</code>) and Jump
-        (<code>/mnt/jump</code>), both mounted
-        <code>nfs4 ... soft,timeo=600,retrans=5</code>. <code>ls</code>, <code>stat</code>,
-        <code>cat</code>, <code>test -e</code> against such a path block until the soft
-        timeout when the export stalls — QNAP busy on nightly backups, or a network blip —
-        and Docker then marks the container <code>unhealthy</code> even though the service is
-        fine. That feeds an autoheal restart loop and a false Komodo <code>Unhealthy</code>:
-        a red that erodes trust in the signal, same failure class as the bind-mount and
-        <code>ignore_services</code> rules.
+        Two failure modes can hit a container that binds an NFS path (Pouch
+        <code>/mnt/pouch</code> or Jump <code>/mnt/jump</code>), and the healthcheck must
+        distinguish them — neither <code>ls</code> nor <code>grep /proc/mounts</code> alone
+        gets it right:
+      </p>
+      <ol>
+        <li><strong>NFS is mounted but stalled.</strong> Soft NFS (<code>soft,timeo=600,retrans=5</code>)
+          returns <code>EIO</code> after the timeout — but during the stall, any filesystem
+          probe (<code>ls</code>, <code>stat</code>, <code>test -e</code>) blocks until then.
+          The healthcheck times out, Docker marks the container <code>unhealthy</code>, and
+          autoheal restarts a container whose service was perfectly fine.</li>
+        <li><strong>NFS is unmounted and a bare-stub directory is shadowing the bind.</strong>
+          Docker still creates a bind entry in <code>/proc/mounts</code> regardless of source
+          state, and a bind-source dir that's "empty but exists" looks legitimate to anything
+          that just checks for presence. The container serves traffic but reads return wrong
+          (empty) data, writes land on local disk. This is the failure that bit the
+          2026-05-23 incident — see
+          <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">postmortem</a>.</li>
+      </ol>
+      <p>
+        The defence is a positive sentinel — a file you dropped on the QNAP share itself —
+        plus a <code>timeout</code> envelope to bound the stall case:
+      </p>
+      <pre><code>test: ["CMD-SHELL", "timeout 10 sh -c 'wget -q -O- http://localhost:3000/ &gt;/dev/null && [ -e /data/.podhaus-share-mounted ]'"]</code></pre>
+      <p>
+        <code>[ -e ]</code> is a <code>stat</code> — cheap, no directory listing, returns
+        boolean. On a stub-shadowed bind it returns false (no sentinel) → red. On a stalled
+        NFS it blocks → the outer <code>timeout 10</code> kills the probe → red. The sentinel
+        is invariant to permissions, locale, and subdirectory contents.
       </p>
       <p>
-        Prove the <em>service</em> over loopback, and prove <em>mount presence</em> via the
-        kernel mount table — never by reading the mount itself.
-        <code>grep -q " /path " /proc/mounts</code> is a local read that never blocks on
-        NFS. Optionally wrap the whole test in <code>timeout N</code> for an explicit bound.
-        This still catches the real failures (service down ⇒ wget exits non-zero; a mount
-        genuinely vanished ⇒ grep exits non-zero) without flapping on transient NFS latency.
+        The marker file lives at <code>.podhaus-share-mounted</code> in <em>every</em> NFS
+        bind-source path used by any container:
       </p>
-      <pre><code>test: ["CMD-SHELL", "timeout 10 sh -c 'wget -q -O- http://localhost:3000/ &gt;/dev/null && grep -q \" /mnt/pouch \" /proc/mounts'"]</code></pre>
-      <aside class="callout caution">
-        <span class="callout-title">No filesystem probe on a soft-NFS mount</span>
-        Real incident: <code>flood/compose.yaml</code> healthchecked by
-        <code>ls /data</code>, which is backed by the soft-NFS Pouch mount. Every NFS stall
-        false-flapped the container into <code>unhealthy</code> and an autoheal restart while
-        Flood itself was healthy. The fix was the pattern above — loopback wget for the
-        service plus <code>grep -q " /mnt/pouch " /proc/mounts</code> for mount presence.
-        Reference implementation: <code>flood/compose.yaml</code>.
+      <ul>
+        <li><code>/mnt/pouch/.podhaus-share-mounted</code> — for any bind at the Pouch root
+          (flood, unpackerr, plex media).</li>
+        <li><code>/mnt/pouch/plex-video-thumbnails/.podhaus-share-mounted</code> — plex BIF
+          subdir bind.</li>
+        <li><code>/mnt/jump/.podhaus-share-mounted</code>, <code>/mnt/jump/paperless/.podhaus-share-mounted</code>,
+          <code>/mnt/jump/backups/.podhaus-share-mounted</code>,
+          <code>/mnt/jump/paperless/documents/.podhaus-share-mounted</code> — Jump consumers.</li>
+      </ul>
+      <p>
+        When adding a stack that binds a new sub-path under Pouch or Jump, drop a marker
+        in that path first: <code>sudo touch /mnt/pouch/&lt;subpath&gt;/.podhaus-share-mounted</code>.
+        The marker is written to the QNAP share, so it persists across reboots and is visible
+        to every container that binds that path.
+      </p>
+      <aside class="callout note">
+        <span class="callout-title">Companion: the chattr +i tripwire</span>
+        The healthcheck is the last line of defence — the first is the host-level tripwire.
+        Bare <code>/mnt/pouch</code> and <code>/mnt/jump</code> have <code>chattr +i</code>
+        set on their underlying btrfs dirs. If NFS isn't mounted, Docker can't auto-create
+        bind-source subdirs at container start (the immutable bit blocks the mkdir) — so
+        affected stacks fail loudly at deploy rather than silently running on bare-stub binds.
+        With NFS mounted, the bit is irrelevant (NFS supersedes the btrfs dir). See
+        <a href="/storage.html#nas-quirks">storage → NFS recovery + bare-stub defence</a>.
       </aside>
+
+      <h3 id="local-bind-healthcheck">Local-bind healthcheck pattern</h3>
+      <p>
+        For local NVMe binds (<code>/var/lib/&lt;stack&gt;</code>), the failure modes are
+        much narrower — no soft-stall, no possibility of a different filesystem silently
+        shadowing the bind. Either prove service liveness via loopback wget/curl alone, or
+        check the mount with <code>grep -q " /path " /proc/mounts</code> if the volume has
+        ever been observed to silently detach.
+      </p>
+      <pre><code>test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/ &gt;/dev/null"]</code></pre>
 
       <h2 id="ingress">Cloudflare Tunnel ingress</h2>
       <p>

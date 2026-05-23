@@ -20,12 +20,21 @@ services:
     # bind-mounted config; same workaround used by logging/, grafana, etc.
     security_opt:
       - label:disable
-    # No healthcheck: upstream image doesn't ship a probe binary, and the
-    # process has no HTTP endpoint. Silent-failure protection is layered:
-    # (1) rtorrent-cleanup.sh refuses to delete RARs when no extracted
-    # content is present in the folder; (2) restart: unless-stopped
-    # recovers from outright crashes; (3) log-based monitoring is a
-    # follow-up (see alligator-bilby-migration.md Phase 6.5 patterns).
+    labels:
+      autoheal: "true"
+    # The upstream image has no HTTP probe — but it does ship `test` (busybox
+    # `[`), which is all we need: prove /data is the real Pouch NFS via the
+    # sentinel file dropped on the QNAP share. A bare-stub /mnt/pouch lacks
+    # the sentinel and goes red. Caught by the 2026-05-23 post-reboot
+    # incident, where unpackerr silently spammed `stat /data/Movies: no such
+    # file` every iteration with no health signal upstream. See
+    # docs/postmortems/2026-05-23-pouch-jump-mount-failure.md.
+    healthcheck:
+      test: ["CMD", "test", "-e", "/data/.podhaus-share-mounted"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       - dockernet
 

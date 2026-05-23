@@ -57,9 +57,11 @@
         local NVMe at <code>/var/lib/clickstack/</code> because the NFS all-squash on Jump blocks
         their startup <code>chown</code>. See the NAS-squash quirk below.</p>
       <p>
-        Bilby mounts Jump over NFS at <code>/mnt/jump</code>; kangaroo accesses it directly.
-        Either-direction off-site sync to OneDrive runs out of bilby's Backrest container via
-        the existing rclone hook.
+        Bilby mounts Jump over NFS at <code>/mnt/jump</code> via <code>x-systemd.automount</code>
+        in <code>/etc/fstab</code> (added 2026-05-23 after a post-reboot incident — see
+        <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>);
+        kangaroo accesses it directly. Either-direction off-site sync to OneDrive runs out
+        of bilby's Backrest container via the existing rclone hook.
       </p>
 
       <h3 id="pouch">Pouch (NAS HDD)</h3>
@@ -100,13 +102,30 @@
         The carve-out is permanent now: any state that would have lived on Jump moved to local
         NVMe instead.
       </aside>
-      <aside class="callout warn">
-        <span class="callout-title">Mount-recovery gap</span>
-        <code>/mnt/jump</code> is mounted but not in <code>/etc/fstab</code> — survives until
-        first reboot. <code>/mnt/pouch</code> uses <code>_netdev,nofail</code>, so boot continues
-        if the NAS is unreachable and container bind mounts silently resolve to empty host dirs.
-        Investigation is tracked as a follow-up; affects plex, paperless, flood, logging,
-        backup.
+      <aside class="callout note">
+        <span class="callout-title">NFS recovery + bare-stub defence</span>
+        <p>Both NAS mounts use <code>x-systemd.automount,_netdev,nofail</code> in
+        <code>/etc/fstab</code>. The kernel autofs mounts on first access and silently retries
+        on the next access if a prior mount failed — survives network races at boot, QNAP
+        restarts, and transient NFS hiccups. Replaces the pre-2026-05-23 setup where Pouch
+        was permanently <code>failed</code> after a boot-time race and Jump wasn't in fstab
+        at all.</p>
+        <p>Two layered defences keep container bind mounts from ever silently landing on
+        local disk when NFS is down:</p>
+        <ul>
+          <li><strong>Tripwire:</strong> the bare <code>/mnt/pouch</code> and
+            <code>/mnt/jump</code> dirs have <code>chattr +i</code> set. With NFS unmounted,
+            Docker's auto-create of bind-source subdirs fails loudly at container start;
+            with NFS mounted, the immutable bit is irrelevant (NFS overlays the bare dir).</li>
+          <li><strong>Sentinel-marker healthchecks:</strong> every NFS-bind-source path has
+            a <code>.podhaus-share-mounted</code> file on the QNAP side. Container
+            healthchecks check for the marker via <code>[ -e ... ]</code>; absence means
+            the bind landed on a bare stub and the container goes red. See
+            <a href="/stack-conventions.html#nfs-bind-healthcheck">stack conventions →
+            NFS-bind healthcheck pattern</a>.</li>
+        </ul>
+        <p>Full incident record:
+        <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>.</p>
       </aside>
 
       <h2 id="mounts">Mount summary</h2>

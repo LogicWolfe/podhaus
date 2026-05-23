@@ -67,14 +67,17 @@ services:
       ofelia.job-exec.pinelake-stignore.schedule: "*/5 * * * *"
       ofelia.job-exec.pinelake-stignore.command: "/scripts/pinelake-stignore.sh"
     healthcheck:
-      # Stall-proof: prove the service via loopback wget, and verify the
-      # mounts via the kernel mount table (/proc/mounts is a local read —
-      # never blocks) instead of `ls`-ing them. The old `ls /data` hit
-      # the *soft* NFS Pouch mount, so a transient QNAP/NFS stall (e.g.
-      # nightly backup load) made the check time out → Docker unhealthy
-      # → Komodo latched a false red even after NFS recovered. Now red
-      # only means: flood not serving, or a mount genuinely vanished.
-      test: ["CMD-SHELL", "timeout 10 sh -c 'wget -q -O- http://localhost:3000/ >/dev/null && grep -q \" /flood-db \" /proc/mounts && grep -q \" /data \" /proc/mounts'"]
+      # Stall-proof + stub-proof: prove the service via loopback wget,
+      # verify the local flood-db bind via /proc/mounts (cheap local read,
+      # never blocks), and prove /data is the real Pouch NFS via the
+      # .podhaus-share-mounted sentinel dropped on every NFS bind-source
+      # path. A bare-stub /mnt/pouch (NFS unmounted, host btrfs directory
+      # showing through the bind) lacks the sentinel and goes red —
+      # caught the 2026-05-23 post-reboot regression where /proc/mounts
+      # presence alone false-greened. The `timeout 10` envelope still
+      # guards against any soft-NFS stall. See
+      # docs/postmortems/2026-05-23-pouch-jump-mount-failure.md.
+      test: ["CMD-SHELL", "timeout 10 sh -c 'wget -q -O- http://localhost:3000/ >/dev/null && grep -q \" /flood-db \" /proc/mounts && [ -e /data/.podhaus-share-mounted ]'"]
       interval: 60s
       timeout: 15s
       retries: 3

@@ -28,6 +28,19 @@ services:
     # label:disable lifts SELinux confinement for that.
     security_opt:
       - label:disable
+    # Overrides the shared compose's healthcheck — adds a sentinel check
+    # proving /repos/podhaus is the real Jump NFS share (not a bare-stub
+    # local-disk dir from a missed mount). The 2026-05-23 incident saw
+    # backrest silently restic-init a fresh empty repo on the bare stub
+    # when Jump didn't auto-mount post-reboot; without this check the
+    # next scheduled backup would have written real data to local disk.
+    # See docs/postmortems/2026-05-23-pouch-jump-mount-failure.md.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9898/ > /dev/null && [ -e /repos/podhaus/.podhaus-share-mounted ]"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     volumes:
       # Restic repository target on Jump (NAS SSD). Per the storage tier
       # rule, the backup repo lives on Jump — durable storage we'd hate

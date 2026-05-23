@@ -107,7 +107,16 @@ services:
     labels:
       autoheal: "true"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/ > /dev/null && ls /usr/src/paperless/data > /dev/null && ls /usr/src/paperless/media > /dev/null"]
+      # Sentinel-marker check for /usr/src/paperless/media — proves the
+      # bind source /mnt/jump/paperless is the real Jump NFS share via
+      # /mnt/jump/.podhaus-jump-mounted. A bare-stub /mnt/jump lacks the
+      # marker and goes red. /usr/src/paperless/data is local NVMe (no
+      # remote-failure mode) so a cheap `ls` is fine. The 2026-05-23
+      # post-reboot incident bit this — bare-stub Jump caused init to
+      # fail with `mkdir: cannot create directory ... Permission denied`,
+      # which surfaced via restart-loop rather than healthcheck red. See
+      # docs/postmortems/2026-05-23-pouch-jump-mount-failure.md.
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/ > /dev/null && ls /usr/src/paperless/data > /dev/null && [ -e /usr/src/paperless/media/.podhaus-share-mounted ]"]
       interval: 60s
       timeout: 15s
       retries: 3

@@ -64,6 +64,48 @@
         A directory bind sidesteps that.
       </aside>
 
+      <h2 id="healthcheck-recovery">Healthcheck + recovery from NFS loss</h2>
+      <p>
+        The flood healthcheck has three parts, each defending a specific failure mode:
+      </p>
+      <ol>
+        <li><code>wget -q -O- http://localhost:3000/</code> — Flood's Node web server is up
+          (proves rtorrent's parent process is alive and serving).</li>
+        <li><code>grep -q " /flood-db " /proc/mounts</code> — the local NVMe bind is present
+          (catches an unmounted volume after a docker volume rebuild).</li>
+        <li><code>[ -e /data/.podhaus-share-mounted ]</code> — the sentinel proves
+          <code>/data</code> is bound to the real Pouch NFS share, not a bare local-disk stub.
+          Without this check, a missed NFS mount would false-green via the
+          <code>/proc/mounts</code> presence check (Docker creates a bind entry regardless of
+          source state). Caught by the 2026-05-23 incident; see
+          <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">postmortem</a>.</li>
+      </ol>
+      <p>
+        The whole probe is wrapped in <code>timeout 10</code> so a soft-NFS stall returns red
+        rather than hanging the healthcheck process forever.
+      </p>
+      <p>
+        <strong>Recovery from NFS loss</strong> is a host-then-container chain — the container
+        can't fix the host:
+      </p>
+      <ol>
+        <li>Host re-mounts NFS. The fstab entries use <code>x-systemd.automount</code>, so the
+          kernel re-mounts on next access. If the QNAP was unreachable when boot tried,
+          the next access (a healthcheck, a container restart, a manual <code>ls</code>) triggers
+          a retry. No manual intervention required for the common case.</li>
+        <li>Flood's healthcheck is still red because Docker's bind captured the source at
+          container-start (default <code>rprivate</code> mount propagation — the container
+          doesn't see new submounts on the host path).</li>
+        <li>Autoheal sees red and restarts the container. The new container's bind picks up
+          the NFS-backed source → sentinel visible → green. Same chain works for plex,
+          unpackerr, paperless, backrest.</li>
+      </ol>
+      <p>
+        Worst-case manual recovery (QNAP is up, NFS is up, but containers stayed red):
+        <code>docker restart flood unpackerr plex paperless backrest</code>. This is the
+        bilby-side incident-response one-liner — covers every Pouch/Jump consumer.
+      </p>
+
       <h2 id="rar-pipeline">The RAR auto-extract pipeline</h2>
       <p>
         Three parts working in concert. The whole point is "extract RAR multi-volume torrents
@@ -92,14 +134,19 @@
 
       <h2 id="safety-layering">Safety layering</h2>
       <p>
-        unpackerr ships no healthcheck (image has no probe binary, no HTTP endpoint). The
-        safety net is layered:
+        unpackerr has no HTTP endpoint, so its healthcheck is just the sentinel-marker check
+        on the Pouch bind (<code>test -e /data/.podhaus-share-mounted</code>) — proves the
+        bind landed on real NFS rather than a bare stub. That's all the in-container probe
+        can do for a process with no API. Crash-loop / silent-extract-failure protection is
+        layered around it:
       </p>
       <ul>
         <li><strong>Extraction-presence guard in <code>rtorrent-cleanup.sh</code></strong> —
           if unpackerr died silently, the keeper count is zero and the cleanup aborts rather
           than deleting the only copy.</li>
-        <li><strong><code>restart: unless-stopped</code></strong> on the unpackerr container.</li>
+        <li><strong><code>restart: unless-stopped</code></strong> + <code>autoheal: "true"</code>
+          on the unpackerr container — outright crashes self-recover; NFS-bind-on-stub goes
+          red and autoheal restarts to pick up the fixed bind.</li>
         <li><strong>Daily Gatus heartbeat</strong> — if no successful ping arrives within 25
           hours, the dead-man's-switch fires.</li>
         <li><strong>Failure ping with context</strong> — if the proactive scan finds a stuck

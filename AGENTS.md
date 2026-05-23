@@ -336,6 +336,26 @@ These have failure modes that you must not introduce:
   `${PODHAUS_REPO}/<stack>/...`, never relative paths. Relative paths
   resolve against the periphery container's filesystem, not the host's,
   and Docker silently creates empty stub directories.
+- **NFS-bind containers need a sentinel healthcheck; bare mount points
+  need the `chattr +i` tripwire.** Any container that binds Pouch
+  (`/mnt/pouch`) or Jump (`/mnt/jump`) — flood, unpackerr, plex,
+  paperless, backrest today — must healthcheck via
+  `[ -e <bind>/.podhaus-share-mounted ]` (the sentinel exists on the
+  QNAP share; absent if the bind landed on a bare local-disk stub).
+  Wrapping in `timeout N` bounds the soft-NFS-stall case. Do not
+  healthcheck via `grep " /path " /proc/mounts` alone — Docker creates
+  a bind entry regardless of source state, so `/proc/mounts` presence
+  false-greens on stub-shadowed binds. The host complement is
+  `chattr +i` on bare `/mnt/pouch` and `/mnt/jump` — if NFS isn't
+  mounted, Docker's auto-create of bind-source subdirs fails loudly at
+  container start. With NFS mounted, the bit is irrelevant (NFS
+  supersedes the btrfs dir). When you add a stack that binds a new
+  sub-path under Pouch/Jump, drop a marker first
+  (`sudo touch /mnt/<share>/<subpath>/.podhaus-share-mounted`). Bit
+  flood/plex/paperless/backrest in 2026-05; see
+  [`docs/postmortems/2026-05-23-pouch-jump-mount-failure.md`](docs/postmortems/2026-05-23-pouch-jump-mount-failure.md)
+  +
+  [`docs/stack-conventions.html#nfs-bind-healthcheck`](docs/stack-conventions.html).
 - **Don't push, deploy, or change DNS / Access policy without explicit
   user authorization.** Treat all `git push`, `./komodo-sync`, and
   any `terraform apply` against `terraform/` as actions that require a
@@ -423,6 +443,24 @@ The full set of pages on `docs.pod.haus`:
   `index.md` plus sub-pages (for big multi-phase plans). See the
   [Sample Nested Plan](docs/plans/sample-nested-plan/) for the
   convention.
+
+**Postmortems**
+- [All postmortems](docs/postmortems/index.html)
+- [How we write postmortems](docs/postmortems/conventions.md) — when to
+  open one, structure, action-item discipline.
+
+---
+
+## Postmortems
+
+Incident records — one file per incident, written when something
+user-visible broke or a near-miss surfaced a latent defect. Action
+items live in each postmortem's Resolution section as dated checkboxes
+that get flipped to done in-place as they land, rather than spawning
+follow-up postmortems. Conventions:
+[`docs/postmortems/conventions.md`](docs/postmortems/conventions.md).
+
+- **2026-05-23 — pouch-jump-mount-failure** — Post-OOM-reboot, both QNAP NFS mounts came up silently broken (Pouch race-lost network at boot; Jump had never been in fstab) and flood/plex/paperless/backrest silently degraded for ~1 hour, with backrest about to write the next scheduled backup to local disk. Fixed via `x-systemd.automount` for both mounts, per-share `.podhaus-share-mounted` sentinel files, hardened healthchecks across every NFS-bind consumer, and `chattr +i` tripwires on bare `/mnt/{pouch,jump}`. [`docs/postmortems/2026-05-23-pouch-jump-mount-failure.md`](docs/postmortems/2026-05-23-pouch-jump-mount-failure.md)
 
 ---
 
