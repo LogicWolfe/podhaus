@@ -163,7 +163,7 @@ devices (blast-radius containment).
 | `caddy/` | TLS front (own LE wildcard) for `storage.pod.haus` → MinIO; for genuine external clients, traffic arrives via the kookaburra rathole tunnel (the UDM Pro SE binds WAN:443 itself so direct port-forward is a dead path). LAN clients reach Caddy directly via UniFi split-horizon. See `docs/hosts.html#kookaburra` + `docs/terraform.html`. |
 | `relay/` | rathole stacks — `relay/bilby/` (Komodo-managed client, dials out) + `relay/kookaburra/` (Komodo-managed server, public :443 + :2333). Built from upstream release binary (no arm64 image). |
 | `tailscale/` | Tailscale management-plane nodes. `tailscale/bilby/` and `tailscale/kookaburra/` are both Komodo-managed (Komodo Core on bilby, `kookaburra-tailscale` linked-repo stack on kookaburra). kookaburra's tailscale is bootstrap-launched (via `kookaburra_bootstrap`) so Periphery can join the tailnet, then Komodo adopts the running container — bootstrap and Komodo use the same compose project name + container name (`kookaburra-podnet`) so the named state volume and tailnet identity survive the handoff. `tailscale/compose.shared.yaml` has a `tailscale-cleanup` init service (built from the shared `init-tools:local` image — `curl + jq` baked in) that calls the Tailscale API before tailscaled starts to prune offline devices matching `${TS_HOSTNAME}` — claims the bare hostname back when the state volume is regenerated (rebuild, accidental volume nuke). The auth key it would re-enrol with is **TF-managed** by `terraform/tailscale.tf` (mints a reusable `tag:podnet` key, 80-day rotation via `time_rotating`, writes back to the same 1P item via `op item edit`). Requires `Tailscale OAuth Client` 1P item scopes `auth_keys:write` + `devices:core:write`. |
-| `kookaburra/periphery/` | kookaburra Komodo Periphery compose. Bootstrap-managed (parallels `kangaroo/periphery/`). Reachable only over tailnet (PERIPHERY_ALLOWED_IPS=100.64.0.0/10). |
+| `kookaburra/periphery/` | kookaburra Komodo Periphery compose. Bootstrap-managed (parallels `kangaroo/periphery/`). v2 outbound mode — Periphery dials Core at `ws://bilby-podnet.tail9ceb.ts.net:9120` over tailnet via dockernet+MagicDNS. No inbound :8120 listener; auth is the noise handshake. |
 | `logging/kookaburra/` | Alloy on kookaburra — ships container logs cross-tailnet to bilby's ClickStack at `bilby-podnet.tail9ceb.ts.net:4318` via MagicDNS. kookaburra's `/etc/docker/daemon.json` forwards container DNS to `100.100.100.100` + `1.1.1.1` (mirrors bilby's setup; daemon.json is system-level on the droplet, not in this repo). |
 | `docs/` | The published docs (served at `docs.pod.haus`) |
 | `docs-server/` | nginx stack serving `docs/` |
@@ -310,7 +310,7 @@ These have failure modes that you must not introduce:
   [`docs/secrets.html`](docs/secrets.html).
 - **Linked Repo hosts (kangaroo, kookaburra, future pinelake) must be force-deployed
   on push — handled centrally by `podhaus-push-deploy` Stage 2, not
-  per-stack.** Verified against Komodo 1.19.5 source: `DeployStack`
+  per-stack.** Verified against Komodo v2.2.0 source: `DeployStack`
   *does* `git pull` the linked clone before composing — it is
   **`RestartStack`** that does not pull (it only `docker compose
   restart`s). The linked-repo trap: `DeployStackIfChanged`'s change-check
@@ -356,6 +356,17 @@ These have failure modes that you must not introduce:
   need. Provider doc URLs are linked from each provider's required_providers block in `terraform/backend.tf`.
 - **Don't bypass git hooks (`--no-verify`, etc.) without explicit
   permission.** Same for force-push, hard reset, branch deletion.
+- **Komodo Core ↔ Periphery uses v2 X25519 noise-handshake PKI auth
+  (no shared passkey).** Private keys live in `/opt/komodo/keys/` on
+  bilby (Core's + bilby Periphery's) and on each Periphery host's keys
+  dir (kangaroo/kookaburra). Pubkeys are checked in at
+  `komodo/keys/*.pub`. Never commit a `*.key` file; the
+  `komodo/keys/.gitignore` defends against it. To add a new Periphery
+  host: generate its keypair on bilby (openssl in alpine container, see
+  `docs/komodo.html#auth`), SCP the privkey to the new host's keys dir,
+  drop its pubkey in `/opt/komodo/keys/` + `komodo/keys/<host>.pub`,
+  and append `file:/config/keys/<host>.pub` to
+  `KOMODO_PERIPHERY_PUBLIC_KEYS` in `komodo/compose.env`.
 - **Plex identity is sacred.** Never let Plex start without an init
   container that confirms `Preferences.xml` has the expected
   `MachineIdentifier`. See

@@ -33,28 +33,31 @@ documentation overhaul.
 
 ## Remaining work
 
-Four streams, all independent.
+Three streams, all independent.
 
-1. [**Periphery v2 keypair auth**](periphery-v2-auth.md) — migrate
-   bilby's + kangaroo's Periphery agents off the legacy
-   `KOMODO_PASSKEY` shared-secret model onto v2 noise-handshake keypair
-   auth. Single-purpose change, single revert path.
-2. [**Paperless email ingest**](paperless-email-ingest.md) — set up
+1. [**Paperless email ingest**](paperless-email-ingest.md) — set up
    Fastmail alias + IMAP-polling Paperless mail account so anything
    forwarded to `paperless@<domain>` lands in the archive
    automatically. The compose-level `PAPERLESS_EMAIL_TASK_CRON` is
    already wired; just needs the alias + folder + app password +
    Paperless mail rule.
-3. [**Railway migrations**](railway-migrations.md) — bring doggos
+2. [**Railway migrations**](railway-migrations.md) — bring doggos
    (kid's static site) and yiayia (board app) home from Railway. The
    Komodo webhook bypass Access app is already in place (TF-managed)
    and the auto-deploy webhook + GitHub-side hook are live too.
-4. [**Deferred follow-ups**](deferred-followups.md) — non-blocking
+3. [**Deferred follow-ups**](deferred-followups.md) — non-blocking
    items surfaced during the migration: NFS bind-mount auto-recovery,
    ofelia self-restart workaround removal pending upstream PR,
    host-package runbook, orphan-container behaviour documentation,
    komodo-start first-boot API-key automation, the upstream komodo-op
    PR.
+
+Periphery v2 keypair auth landed 2026-05-23 as part of the Komodo
+v1.19.5 → v2.2.0 upgrade — X25519 noise handshake replaces the legacy
+`KOMODO_PASSKEY` shared secret, kangaroo + kookaburra flipped to
+outbound mode (no inbound :8120 listener). Current state lives in
+[Komodo → Core ↔ Periphery auth](/komodo.html#auth) and
+[Komodo → Connection direction](/komodo.html#direction).
 
 [Paperless stabilization](paperless-stabilization.md) is **done**
 (2026-05-12). See [Completed work](completed-work.md) for the recap.

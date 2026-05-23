@@ -157,11 +157,12 @@
           fumbling keys aren't punished). All persisted in
           <code>kookaburra/ssh-hardening/apply.sh</code> so it survives any rebuild.</li>
         <li><strong>Management plane:</strong> Tailscale (<code>tag:podnet</code>); kookaburra
-          appears as <code>kookaburra-podnet</code>. Komodo Core on bilby reaches kookaburra
-          Periphery at <code>https://kookaburra-podnet.tail9ceb.ts.net:8120</code> — that
-          MagicDNS FQDN resolves to whatever tailnet IP kookaburra-podnet currently holds, so
-          droplet rebuilds don't require editing <code>servers.toml</code>. Periphery is never
-          internet-exposed (<code>PERIPHERY_ALLOWED_IPS=100.64.0.0/10</code>).</li>
+          appears as <code>kookaburra-podnet</code>. Komodo Periphery dials Core <em>outbound</em>
+          at <code>ws://bilby-podnet.tail9ceb.ts.net:9120</code> (Komodo v2 PKI, X25519 noise
+          handshake — no inbound :8120 listener on kookaburra). The MagicDNS FQDN resolves
+          to whatever tailnet IP <code>bilby-podnet</code> currently holds; both the Periphery
+          (dockernet) and dockernet itself forward DNS through MagicDNS via the host
+          <code>/etc/docker/daemon.json</code>.</li>
         <li><strong>Bootstrap-launched services</strong> (run before Komodo can manage them
           because Komodo→Periphery depends on Periphery being reachable):
           <code>kookaburra-podnet</code> (tailscale) and <code>komodo-periphery</code>. Brought

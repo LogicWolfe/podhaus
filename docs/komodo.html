@@ -45,6 +45,58 @@
         Server resources in Komodo via <code>komodo/sync/servers.toml</code>.
       </p>
 
+      <h2 id="auth">Core ↔ Periphery auth (v2 PKI noise handshake)</h2>
+      <p>
+        Komodo v2 dropped the v1 <code>KOMODO_PASSKEY</code> shared secret for
+        X25519 noise-handshake mutual auth. Each endpoint holds its own
+        private key; the trust list lives as a set of public-key files.
+      </p>
+      <ul>
+        <li><strong>bilby</strong>: Core and bilby Periphery share a host
+          bind (<code>/opt/komodo/keys</code> → <code>/config/keys</code>),
+          so each picks up the other's <code>.pub</code> from the same
+          directory. Bilby is also where the master copies of all four
+          keypairs live; the pubkeys are committed to
+          <code>komodo/keys/*.pub</code> in the repo for reference + rebuild.</li>
+        <li><strong>kangaroo, kookaburra</strong>: Each host has its own
+          keys directory (bootstrap-managed bind, separate from
+          <code>etc-komodo</code>). The bootstrap script SCPs that host's
+          <code>periphery.key</code> + Core's <code>core.pub</code> from
+          bilby's <code>/opt/komodo/keys/</code> into the remote keys dir.
+          Privkeys never live outside the host they belong to.</li>
+        <li><strong>Trust list on Core</strong>: <code>KOMODO_PERIPHERY_PUBLIC_KEYS</code>
+          (in <code>komodo/compose.env</code>) is a comma-separated list of
+          <code>file:</code> paths under <code>/config/keys/</code> — one
+          <code>.pub</code> per known Periphery. Adding a new host =
+          drop its <code>.pub</code> into the keys volume + extend that
+          env list + restart Core.</li>
+      </ul>
+
+      <h2 id="direction">Connection direction</h2>
+      <p>
+        v2 supports both Core → Periphery (inbound, like v1) and
+        Periphery → Core (outbound). The choice is per-Server, set by the
+        <code>address</code> field in <code>servers.toml</code>: a
+        populated address = Core dials; empty = Periphery dials.
+      </p>
+      <ul>
+        <li><strong>bilby</strong>: inbound. Core dials
+          <code>https://periphery:8120</code> via dockernet (same compose).</li>
+        <li><strong>kangaroo</strong>: outbound. Periphery dials
+          <code>ws://10.0.0.119:9120</code> (bilby LAN). No inbound
+          <code>:8120</code> listener exposed on kangaroo.</li>
+        <li><strong>kookaburra</strong>: outbound. Periphery dials
+          <code>ws://bilby-podnet.tail9ceb.ts.net:9120</code> over the
+          tailnet (kookaburra Periphery on dockernet; daemon.json forwards
+          MagicDNS via <code>100.100.100.100</code>). No inbound listener.</li>
+      </ul>
+      <p>
+        Outbound was picked for the off-host Peripheries on attack-surface
+        grounds: the Periphery REST/WS surface is no longer reachable from
+        anywhere on those hosts — there's nothing inbound to gate at all.
+        The noise handshake is the sole auth on the dial.
+      </p>
+
       <h2 id="operating-models">Two operating models</h2>
       <p>
         Each Periphery host picks one of two ways to read the repo. The current setup uses both:
@@ -104,7 +156,7 @@
         commit-roundtrip when the editor is on the same host.
       </p>
       <aside class="callout warn">
-        <span class="callout-title">Linked Repo deploys: what actually pulls (verified, Komodo 1.19.5 source)</span>
+        <span class="callout-title">Linked Repo deploys: what actually pulls (verified, Komodo v2 source)</span>
         Long-standing field belief was "manual <code>DeployStack</code> on a
         Linked Repo host doesn't pull." The Komodo source disproves it:
         <code>DeployStack</code> (manual <em>or</em> webhook-triggered)
@@ -215,7 +267,7 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         webhook → <code>komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main</code>
         (resource_type <code>procedure</code>; the trailing
         <code>/main</code> is the branch filter, not a verb — Komodo
-        1.19.5 <code>router.rs</code> <code>"/procedure/{id}/{branch}"</code>).
+        <code>router.rs</code> <code>"/procedure/{id}/{branch}"</code>).
         Access bypass is path-scoped to <code>/listener/github</code>;
         Komodo HMAC-validates with <code>KOMODO_WEBHOOK_SECRET</code>
         (the procedure's <code>webhook_secret</code> is empty → the global
