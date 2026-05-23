@@ -8,7 +8,13 @@ deploy = true
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/backup/bilby"
-file_paths = ["compose.yaml", "../compose.shared.yaml"]
+# Order matters: later file wins on field conflicts (docker compose -f
+# semantics). The shared file goes first so this bilby overlay's
+# field-level overrides (currently the healthcheck — adds a sentinel
+# check for Jump-NFS-shadow defence) actually take effect. Other
+# overlay fields (build:, volumes:) merge or append regardless of
+# order, so this is safe for them too.
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
 # init-tools image is built inline by the backrest-init service via the
 # `build:` directive. run_build = true tells Komodo to run `docker compose
 # build` before `up`.
