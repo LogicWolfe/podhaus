@@ -7,3 +7,9 @@ dbase_and_logs/
 OP_SERVICE_ACCOUNT_TOKEN
 dns/.env
 .claude/
+# Rendered-at-startup Komodo Core extra config files (currently a
+# core.config.toml carrying [[git_providers]] with the GitHub PAT
+# resolved from 1Password). The template is checked in
+# (komodo/core.config.toml.tmpl); the rendered file is bilby-host
+# state and must never be committed.
+komodo/.runtime/

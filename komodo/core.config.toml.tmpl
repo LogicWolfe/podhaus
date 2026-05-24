@@ -1,0 +1,36 @@
+# Komodo Core extra config — rendered from 1Password into
+# komodo/.runtime/core.config.toml by `komodo-start` and bind-mounted
+# into Core at /config/runtime/core.config.toml. Komodo merges nested
+# configs and extends arrays across all files matched by
+# KOMODO_CONFIG_PATHS, so this file *adds* to the env-derived config
+# the compose passes in via KOMODO_*-prefixed vars — it doesn't
+# replace anything.
+#
+# Why a render step rather than [[OP__KOMODO__*]] interpolation:
+# Komodo Variables live in MongoDB and aren't readable until *after*
+# Core has booted and the first sync has populated them. core.config
+# is read at boot, before any variable resolution. Rendering at host-
+# side `op run` time mirrors the kangaroo periphery.config pattern.
+#
+# WHY THIS EXISTS: bilby's Periphery has no per-host
+# periphery.config.toml (its other stacks all run files_on_host
+# against the podhaus working clone — no clones needed). When the
+# fenwick repo joined as bilby's first linked-repo source, Periphery
+# needed a credential to clone LogicWolfe/fenwick over HTTPS. Komodo
+# v2 git_provider accounts can be declared centrally here in Core's
+# config and Core proxies the credential to whichever Periphery
+# needs it for a given Repo / linked_repo Stack — no per-Periphery
+# bind needed.
+#
+# v2.2.0 ResourceSync does NOT support a [[git_provider_account]]
+# TOML block (verified in client/core/rs/src/entities/toml.rs:
+# ResourcesToml has no field for it). core.config.toml is the
+# config-as-code seam; see docs/decisions or the v0.3
+# credential-redactor ship notes for the research.
+
+[[git_providers]]
+domain = "github.com"
+https = true
+[[git_providers.accounts]]
+username = "LogicWolfe"
+token = "__GITHUB_PAT__"

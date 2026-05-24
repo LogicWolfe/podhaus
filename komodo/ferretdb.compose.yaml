@@ -83,6 +83,13 @@ services:
       KOMODO_DISABLE_USER_REGISTRATION: ${KOMODO_DISABLE_USER_REGISTRATION}
       KOMODO_INIT_ADMIN_USERNAME: ${KOMODO_INIT_ADMIN_USERNAME}
       KOMODO_INIT_ADMIN_PASSWORD: ${KOMODO_INIT_ADMIN_PASSWORD}
+      # Tell Core to also scan /config/runtime/ for extra config
+      # files. Komodo merges nested configs and extends arrays across
+      # every path here, so files under /config/runtime add to (do
+      # not replace) the env-derived config above. Used to ship the
+      # central [[git_providers]] block — see komodo-start's render
+      # step + komodo/core.config.toml.tmpl.
+      KOMODO_CONFIG_PATHS: /config,/config/runtime
       TZ: ${TZ}
     volumes:
       - ${COMPOSE_KOMODO_BACKUPS_PATH}:/backups
@@ -95,6 +102,11 @@ services:
       # respective hosts; their pubkeys live alongside in this dir so Core
       # trusts them too.
       - ${COMPOSE_KOMODO_KEYS_PATH}:/config/keys
+      # Rendered-at-startup extra config files (currently the central
+      # [[git_providers]] block). Lives in komodo/.runtime/ on the
+      # host (gitignored — contains a rendered PAT). Rendered fresh
+      # every komodo-start invocation; never hand-edited.
+      - ${COMPOSE_KOMODO_REPO_PATH}/komodo/.runtime:/config/runtime
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9120/ > /dev/null"]
       interval: 30s

@@ -20,6 +20,22 @@ sudo mkdir -p /etc/komodo/ssl
 sudo mkdir -p /opt/komodo/keys
 sudo chmod 0700 /opt/komodo/keys
 
+# Render Komodo Core's extra config from 1Password into the gitignored
+# komodo/.runtime/ directory (bind-mounted into Core at
+# /config/runtime/). Currently holds the central [[git_providers]] block
+# Core proxies to Peripheries that need an HTTPS clone credential —
+# bilby's linked-repo deploy of the fenwick monorepo needs this, and
+# the cleanest config-as-code shape for it is core.config.toml rather
+# than per-Periphery periphery.config.toml (no bilby-specific render+
+# bind, and the next Periphery added gets the credential free). See
+# komodo/core.config.toml.tmpl for the rendering note.
+mkdir -p komodo/.runtime
+GITHUB_PAT="$(op read 'op://Homelab/Homelab GitHub Personal Access Token/token')"
+sed "s|__GITHUB_PAT__|${GITHUB_PAT}|" komodo/core.config.toml.tmpl \
+  > komodo/.runtime/core.config.toml
+chmod 0600 komodo/.runtime/core.config.toml
+unset GITHUB_PAT
+
 op run --env-file komodo/compose.env -- \
   docker compose -p komodo -f komodo/ferretdb.compose.yaml --env-file komodo/compose.env up -d
 
