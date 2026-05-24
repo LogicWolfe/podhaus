@@ -24,6 +24,25 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"
 branch = "main"
 
+# Bilby clone of the fenwick monorepo. The fenwick repo now carries
+# its own stack defs (both the bot and the credential-redactor
+# service) — see fenwick-push-deploy in procedures.toml. This is
+# bilby's first linked-repo (its other stacks use files_on_host
+# against the podhaus working clone); the design generalises to any
+# fenwick-sourced stack ("fenwick-*") via the dedicated webhook +
+# procedure.
+[[repo]]
+name = "fenwick"
+description = "Komodo-managed clone of the fenwick monorepo on bilby's Periphery"
+tags = ["podhaus", "bilby", "fenwick"]
+
+[repo.config]
+server = "podhaus"             # = bilby
+git_provider = "github.com"
+git_account = "LogicWolfe"     # PAT covers the org, includes fenwick
+repo = "LogicWolfe/fenwick"
+branch = "main"
+
 # kookaburra clone — separate Komodo Repo resource because Repo
 # resources are per-Periphery (each host's clone is independent
 # state). kookaburra stacks reference linked_repo = "podhaus-kookaburra".

@@ -1,0 +1,27 @@
+# Komodo ResourceSync resources.
+#
+# The podhaus sync is *bootstrap-created* by `komodo-start` — it
+# exists before this file is read, so it's not declared here.
+# Subsequent syncs live as [[sync]] blocks the podhaus sync picks
+# up via its resource_path=["."] scan.
+#
+# The fenwick sync (below) walks the fenwick repo for [[stack]] /
+# [[variable]] blocks. The bot's `fenwick/stack.toml` lives at the
+# fenwick repo root; the credential-redactor's lives at
+# `fenwick/credential-redactor/stack.toml`. include_variables=true
+# picks up FENWICK_SIGNAL_CLI_URL et al that moved out of
+# podhaus/fenwick/stack.toml in the v0.3 cutover.
+
+[[sync]]
+name = "fenwick"
+description = "ResourceSync for stack defs that live in the fenwick repo (the bot + the credential-redactor service)."
+tags = ["fenwick", "podhaus"]
+
+[sync.config]
+linked_repo = "fenwick"             # same Komodo Repo as repos.toml
+# Walk the whole fenwick repo for stack.toml / variable.toml.
+resource_path = ["./"]
+include_variables = true
+include_resources = true
+delete = false                      # additive (mirrors podhaus sync)
+managed = false                     # Stage 0 of fenwick-push-deploy runs this explicitly

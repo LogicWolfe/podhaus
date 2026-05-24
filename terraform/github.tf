@@ -55,3 +55,24 @@ resource "github_repository_webhook" "komodo_deploy" {
     secret       = var.komodo_webhook_secret
   }
 }
+
+# Sibling webhook for the fenwick repo. Same global secret, same
+# Access bypass (the path-scoped /listener/github application covers
+# both — see access.tf). Fires the fenwick-push-deploy procedure
+# (komodo/sync/procedures.toml) which staged-deploys the bot
+# (files_on_host, BatchDeployStackIfChanged) + the credential-
+# redactor (linked_repo, unconditional BatchDeployStack). The /main
+# segment is the Komodo branch filter — feature branches are
+# ignored.
+resource "github_repository_webhook" "fenwick_deploy" {
+  repository = "fenwick"
+  events     = ["push"]
+  active     = true
+
+  configuration {
+    url          = "https://komodo.pod.haus/listener/github/procedure/fenwick-push-deploy/main"
+    content_type = "json"
+    insecure_ssl = false
+    secret       = var.komodo_webhook_secret
+  }
+}

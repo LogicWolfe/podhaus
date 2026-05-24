@@ -67,3 +67,55 @@ executions = [
   { execution.type = "BatchDeployStack", execution.params = { pattern = "kangaroo-*" }, enabled = true },
   { execution.type = "BatchDeployStack", execution.params = { pattern = "kookaburra-*" }, enabled = true },
 ]
+
+
+# fenwick-push-deploy — push-to-deploy for stacks sourced from the
+# fenwick repo (the bot + the credential-redactor service).
+#
+# Bound to its own GitHub webhook
+# (komodo.pod.haus/listener/github/procedure/fenwick-push-deploy/main,
+# branch-filtered to main; see ../../terraform/github.tf). Mirrors
+# the staged shape of podhaus-push-deploy:
+#   - Stage 0 reconciles the fenwick sync into Komodo (without it,
+#     a push that adds a new [[variable]] reaches the deploy via the
+#     on-disk file but the deploy uses the stored pre-change resource
+#     def — same trap that bit fenwick on 2026-05-17).
+#   - Stage 1 BatchDeployStackIfChanged "fenwick" no-ops when the bot
+#     compose hasn't changed (deno --watch reloads the bot in-process;
+#     a save shouldn't drag the container through a restart).
+#   - Stage 2 BatchDeployStack "fenwick-*" force-deploys the linked-
+#     repo stacks (the stale-clone deadlock means
+#     BatchDeployStackIfChanged would no-op forever — the change-
+#     check compares the Periphery clone which only advances during
+#     a deploy).
+#
+# The "fenwick-*" wildcard does NOT match the bare "fenwick" stack;
+# that's why Stage 1 and Stage 2 are split.
+
+[[procedure]]
+name = "fenwick-push-deploy"
+description = "Push-to-deploy for stacks sourced from the fenwick repo (the bot + the credential-redactor service)."
+tags = ["fenwick", "podhaus"]
+config.webhook_enabled = true
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Reconcile fenwick stack definitions (sync TOML -> Komodo)"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params = { sync = "fenwick" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy bot if compose changed (no churn during --watch iteration)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStackIfChanged", execution.params = { pattern = "fenwick" }, enabled = true },
+]
+
+[[procedure.config.stage]]
+name = "Force-deploy linked-repo fenwick-* stacks (pull + compose)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "fenwick-*" }, enabled = true },
+]
