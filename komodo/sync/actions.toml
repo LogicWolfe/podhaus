@@ -200,16 +200,15 @@ async function stackContentHash(stackDir, excludeRel) {
 
 // --- main ---
 
-const stacksSummary = await komodo.read({ type: 'ListStacks', params: {} });
+const stacksSummary = await komodo.read('ListStacks', {});
 
 let processed = 0;
 let updated = 0;
 let skipped = 0;
 
 for (const s of stacksSummary) {
-  const stack = await komodo.read({
-    type: 'GetStack',
-    params: { stack: s.id ?? s.name },
+  const stack = await komodo.read('GetStack', {
+    stack: s.id ?? s.name,
   });
 
   const runDir = stack.config?.run_directory ?? '';
@@ -264,12 +263,9 @@ for (const s of stacksSummary) {
     continue;
   }
 
-  await komodo.write({
-    type: 'UpdateStack',
-    params: {
-      id: stack._id?.$oid ?? stack.id ?? stack.name,
-      config: { environment: newEnv },
-    },
+  await komodo.write('UpdateStack', {
+    id: stack._id?.$oid ?? stack.id ?? stack.name,
+    config: { environment: newEnv },
   });
   updated++;
   console.log(`${stack.name}: ${hash}`);
