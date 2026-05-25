@@ -10,13 +10,15 @@
 
 services:
   backrest-init:
-    # Build context: ../../init-tools resolves to <repo-root>/init-tools
-    # since this file is FIRST in file_paths (compose.yaml before
-    # compose.shared.yaml in stack.toml), making the project directory
-    # backup/bilby/. Periphery's internal docker client packages the
-    # context tarball from there.
+    # Build context is resolved relative to the FIRST compose file's
+    # directory, not the file the service is defined in. stack.toml has
+    # file_paths = ["../compose.shared.yaml", "compose.yaml"] (shared
+    # first so this overlay's healthcheck override wins per the
+    # 2026-05-23 file_paths flip), so context is resolved from
+    # backup/ → ../init-tools = <repo-root>/init-tools. Periphery's
+    # internal docker client packages the context tarball from there.
     build:
-      context: ../../init-tools
+      context: ../init-tools
       dockerfile: Dockerfile
       args:
         STACK_CONTENT_HASH: ${BUILD_HASH_BACKREST_INIT:-unset}
