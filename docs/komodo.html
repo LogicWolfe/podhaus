@@ -91,10 +91,10 @@
           MagicDNS via <code>100.100.100.100</code>). No inbound listener.</li>
       </ul>
       <p>
-        Outbound was picked for the off-host Peripheries on attack-surface
-        grounds: the Periphery REST/WS surface is no longer reachable from
-        anywhere on those hosts — there's nothing inbound to gate at all.
-        The noise handshake is the sole auth on the dial.
+        Off-host Peripheries use outbound on attack-surface grounds:
+        their Periphery REST/WS surface isn't reachable from anywhere
+        — nothing inbound to gate at all. The noise handshake is the
+        sole auth on the outbound dial.
       </p>
 
       <h2 id="operating-models">Two operating models</h2>
@@ -120,25 +120,27 @@
           <tr>
             <td>Deploy workflow</td>
             <td>Commit + push → the single webhook runs the
-              <code>podhaus-push-deploy</code> procedure; Stage 1
+              <code>podhaus-push-deploy</code> procedure. Stage 1's
+              <code>RunAction&nbsp;"podhaus-inject-content-hashes"</code>
+              stamps a per-stack content hash into stored env; Stage 2's
               <code>BatchDeployStackIfChanged&nbsp;"*"</code> redeploys
-              only the bilby stacks whose files changed <em>or</em> save +
-              <code>./komodo-sync</code> (force-redeploys any stack whose
-              <code>deployed_hash</code> diverges from <code>HEAD</code>)</td>
-            <td>Commit + push → same procedure; Stage 2 runs
-              <code>BatchDeployStack&nbsp;"kangaroo-*"</code> AND
-              <code>BatchDeployStack&nbsp;"kookaburra-*"</code>, each a full
-              <code>DeployStack</code> (<code>git pull</code> the clone +
-              compose) unconditionally. No per-stack flag, no UI click.
-              Adding a new linked-repo host = name its stacks
-              <code>&lt;host&gt;-*</code> and add a matching execution.
-              <strong>Naming convention:</strong> bare stack name (no
-              prefix) = bilby (the primary, <code>files_on_host</code>
-              host); the <code>&lt;host&gt;-</code> prefix is reserved for
-              linked-repo hosts where Stage 2's
-              <code>BatchDeployStack&nbsp;"&lt;host&gt;-*"</code> glob is
-              the contract. So <code>tailscale</code> = bilby,
-              <code>kookaburra-tailscale</code> = kookaburra.</td>
+              stacks whose env diff reflects an actual content change.
+              For local iteration: save +
+              <code>./komodo-sync</code> invokes the same procedure
+              (out-of-procedure pre-sync first, then RunProcedure).</td>
+            <td>Same workflow — same Stage 1 / Stage 2. The hash is
+              computed from bilby's view of the repo, so it works
+              uniformly for linked_repo stacks too (routing around
+              the stale-clone deadlock that broke Komodo's native
+              IfChanged here). New linked-repo hosts inherit the
+              behaviour automatically; no Stage 2 entries to maintain,
+              no <code>&lt;host&gt;-</code> name prefix required.
+              <strong>Convention still useful:</strong> the
+              <code>&lt;host&gt;-</code> prefix on a stack name signals
+              "lives on this remote host" at a glance
+              (<code>kookaburra-tailscale</code>,
+              <code>kangaroo-backup</code>), but it's a readability
+              convention now, not a deploy-routing contract.</td>
           </tr>
           <tr>
             <td>Best for</td>
@@ -156,41 +158,36 @@
         commit-roundtrip when the editor is on the same host.
       </p>
       <aside class="callout warn">
-        <span class="callout-title">Linked Repo deploys: what actually pulls (verified, Komodo v2 source)</span>
-        Long-standing field belief was "manual <code>DeployStack</code> on a
-        Linked Repo host doesn't pull." The Komodo source disproves it:
+        <span class="callout-title">Linked Repo deploys: what actually pulls</span>
+        <strong><code>DeployStack</code> = pulls;
+        <code>RestartStack</code> = no pull.</strong>
         <code>DeployStack</code> (manual <em>or</em> webhook-triggered)
         runs <code>git pull --rebase --force origin &lt;branch&gt;</code>
-        on the Periphery clone before composing. It is
-        <strong><code>RestartStack</code></strong> that does not pull —
-        it only <code>docker compose restart</code>s. So the corrected
-        rule is: <strong><code>RestartStack</code> = no pull;
-        <code>DeployStack</code> = pulls</strong>.
+        on the Periphery clone before composing.
+        <code>RestartStack</code> only <code>docker compose restart</code>s.
         <br><br>
-        The real trap is subtler. <code>DeployStackIfChanged</code>'s
-        change-check compares against the Periphery clone — which only
-        advances <em>during</em> a deploy. On a <code>linked_repo</code>
-        stack that is a deadlock: it no-ops forever because the stale
-        clone always looks "unchanged." This is resolved
-        <strong>structurally by the push procedure, not per-stack</strong>:
-        Stage 1 (<code>BatchDeployStackIfChanged&nbsp;"*"</code>) no-ops
-        harmlessly on kangaroo and kookaburra, then Stage 2 runs
-        <code>BatchDeployStack&nbsp;"kangaroo-*"</code> AND
-        <code>BatchDeployStack&nbsp;"kookaburra-*"</code>, each an
-        unconditional full <code>DeployStack</code> (pull + compose). So
-        <strong>linked_repo stacks set no
-        <code>webhook_force_deploy</code></strong> — there are no
-        per-stack webhooks; the <code>&lt;host&gt;-*</code> name patterns
-        are the contract. bilby <code>files_on_host</code> stacks ride
-        Stage 1 and self-skip when genuinely unchanged (free no-churn).
+        Komodo's native <code>DeployStackIfChanged</code> change-check
+        compares against the Periphery clone — which only advances
+        <em>during</em> a deploy. On a <code>linked_repo</code> stack
+        that is a deadlock: native IfChanged sees the clone as
+        "unchanged" forever and no-ops. The push procedure routes
+        around this via Stage 1's
+        <code>RunAction&nbsp;"podhaus-inject-content-hashes"</code>:
+        the Action computes a content hash of each stack directory
+        from bilby's view of the repo and stamps
+        <code>STACK_CONTENT_HASH=&lt;hash&gt;</code> into the stack's
+        stored env. Stage 2's
+        <code>BatchDeployStackIfChanged&nbsp;"*"</code> then sees an
+        env diff for any stack whose tracked files actually changed,
+        independent of Periphery-clone state, and deploys only those.
+        linked_repo stacks deploy when (and only when) their files
+        change, same path as files_on_host.
+        <code>RunSync</code> re-imports <code>stack.toml</code> config
+        from bilby's bind-mount (no git); Stage 1's Action does the
+        bilby-side hash; Stage 2's <code>DeployStack</code> does the
+        <code>git pull</code> on the linked-repo Periphery as part of
+        its normal flow.
         <br><br>
-        Historical compounding bugs (both fixed): the GitHub webhook once
-        pointed at a non-existent path (every delivery 405, fixed
-        2026-05-16); and per-stack webhooks hit GitHub's hard 20-hook
-        ceiling, replaced 2026-05-17 by the single procedure webhook (see
-        the Auto-deploy note below). <code>RunSync</code> re-imports
-        <code>stack.toml</code> config from bilby's bind-mount (no git)
-        but does not pull a linked clone.
         Always confirm a deploy via a config-level signal — the
         pulled-to commit hash or a metric — never "container healthy."
       </aside>
@@ -255,14 +252,24 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <li><code>komodo/sync/procedures.toml</code> — the
           <code>podhaus-push-deploy</code> procedure (the single
           push-to-deploy fan-out; see the Auto-deploy note below).</li>
+        <li><code>komodo/sync/actions.toml</code> — Komodo Actions
+          referenced by procedures. Today: just
+          <code>podhaus-inject-content-hashes</code> (Stage 1 of the
+          push procedure). Walks every stack at Komodo Core's
+          <code>/syncs/podhaus</code> mount, hashes each stack
+          directory minus runtime-bind paths, and stamps
+          <code>STACK_CONTENT_HASH</code> into the stored env so
+          Stage 2's IfChanged sees full stack-directory change
+          detection (not just compose-file changes).</li>
       </ul>
       <aside class="callout note">
         <span class="callout-title">Auto-deploy on push (one webhook → one procedure)</span>
         Komodo's webhook contract is per-resource:
         <code>https://&lt;host&gt;/listener/&lt;auth&gt;/&lt;resource_type&gt;/&lt;id&gt;/&lt;seg&gt;</code>.
-        We do <strong>not</strong> use one webhook per stack: GitHub
-        hard-caps a repo at <strong>20 <code>push</code> webhooks</strong>
-        and the fleet outgrew it (2026-05-17). Instead
+        podhaus uses one webhook per <em>repo</em>, not per stack:
+        GitHub hard-caps a repo at <strong>20 <code>push</code>
+        webhooks</strong>, and the procedure-level fan-out scales past
+        that ceiling.
         <code>terraform/github.tf</code> creates <strong>one</strong>
         webhook → <code>komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main</code>
         (resource_type <code>procedure</code>; the trailing
@@ -273,7 +280,8 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         (the procedure's <code>webhook_secret</code> is empty → the global
         secret applies).
         <br><br>
-        The procedure (<code>komodo/sync/procedures.toml</code>) fans out:
+        The procedure (<code>komodo/sync/procedures.toml</code>) fans out
+        across four stages:
         <strong>Stage 0</strong>
         <code>RunSync&nbsp;"podhaus"</code> — reconcile stack definitions
         + TOML-declared variables from disk to Komodo's stored resource
@@ -281,25 +289,36 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         line to a <code>stack.toml</code> reached the deploy via the
         on-disk file but Komodo's <code>DeployStack</code> used the
         stored (pre-sync) resource def, so the var resolved empty.
-        Stages run sequentially so Stage 0 always completes before
-        Stage 1 fires (deterministic, vs the asynchronous polling of
-        <code>managed: true</code>).
         <strong>Stage 1</strong>
+        <code>RunAction&nbsp;"podhaus-inject-content-hashes"</code> —
+        walks every stack visible at Core's
+        <code>/syncs/podhaus</code> mount, computes a deterministic
+        content hash of each stack directory minus runtime-bind paths,
+        and stamps <code>STACK_CONTENT_HASH=&lt;hash&gt;</code> into
+        the stored env. The hash is computed from bilby's view, so
+        Stage 2 below works uniformly for files_on_host
+        <em>and</em> linked_repo stacks.
+        <strong>Stage 2</strong>
         <code>BatchDeployStackIfChanged&nbsp;"*"</code> — every stack,
-        deploy only if its files changed (bilby diffs the live bind-mount
-        → unchanged stacks self-skip, zero churn; kangaroo and kookaburra
-        no-op here harmlessly because their stale clones look unchanged).
-        <strong>Stage 2</strong> runs two executions:
-        <code>BatchDeployStack&nbsp;"kangaroo-*"</code> and
-        <code>BatchDeployStack&nbsp;"kookaburra-*"</code> — the
-        linked_repo stacks, each a full <code>DeployStack</code> (pull +
-        compose) unconditionally. The <code>"*"</code> pattern means
+        deploy only if its rendered env diffs from what's deployed.
+        Stage 1's hash appears in that diff for any stack whose
+        tracked files actually changed; unchanged stacks no-op.
+        <strong>Stage 3</strong>
+        <code>RestartStack&nbsp;"ofelia"</code> — re-read container
+        labels so cron schedule / command edits propagate (the released
+        ofelia image reads labels only at startup; see
+        <a href="/scheduling.html">Scheduling</a>).
+        The <code>"*"</code> pattern means
         <strong>new stacks auto-deploy on the next push with no
-        <code>github.tf</code> edit, no list, no 20-cap, ever</strong>.
-        <code>./komodo-sync</code> remains the manual force-redeploy /
-        new-stack-registration equivalent. Single point of failure: a
-        broken procedure breaks all push-deploys (vs. one stack's hook) —
-        it is trivial config-as-code and komodo-sync is the fallback.
+        <code>github.tf</code> edit and no per-stack registration</strong>.
+        Stages run sequentially so each completes before the next
+        fires (deterministic, vs the asynchronous polling of
+        <code>managed: true</code>).
+        <code>./komodo-sync</code> invokes the same procedure (after a
+        pre-sync round-trip to handle procedure-stage edits — see the
+        komodo-sync row in the scripts table below).
+        Single point of failure: a broken procedure breaks all
+        push-deploys — komodo-sync is the fallback.
       </aside>
 
       <h2 id="scripts">komodo-* scripts at the repo root</h2>
@@ -309,7 +328,7 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           <tr><td><code>komodo-start</code></td><td>First-boot or post-recovery: starts the Komodo Core stack; seeds the five chicken-and-egg variables (4 ONEPASSWORD_* + PODHAUS_REPO); idempotently creates the podhaus ResourceSync (with <code>include_variables = true</code>); runs the bootstrap double-sync (first sync registers stacks + TOML-declared vars; wait for komodo-op to backfill OP secrets; second sync re-renders stack env blocks). Stops there — deploys are a separate concern (push or <code>./komodo-sync</code>). Idempotent — safe to re-run.</td></tr>
           <tr><td><code>komodo-stop</code></td><td>Stops the Komodo Core stack (everything else stays running, since Komodo's job is just orchestration; the running containers are managed by Docker directly).</td></tr>
           <tr><td><code>komodo-status</code></td><td>Shows the Komodo Core container status.</td></tr>
-          <tr><td><code>komodo-sync</code></td><td>Steady-state debug-iterate tool: single <code>RunSync</code> on the existing podhaus ResourceSync + redeploy any stack whose <code>deployed_hash</code> diverges from <code>git HEAD</code>. Use when you've edited a <code>stack.toml</code> or <code>variables.toml</code> locally and want it applied <em>without</em> committing+pushing. Steady-state push-to-deploy is handled by the <code>podhaus-push-deploy</code> procedure automatically — this script is the debug-only path.</td></tr>
+          <tr><td><code>komodo-sync</code></td><td>Steady-state debug-iterate tool, <strong>and</strong> the recovery path for <code>komodo/sync/procedures.toml</code> edits. Step 1 calls <code>RunSync(podhaus)</code> directly via the API (out-of-procedure, so Komodo's <code>resource::update::&lt;Procedure&gt;</code> busy guard doesn't fire — procedure-stage changes land here cleanly, surgically). Step 2 invokes <code>podhaus-push-deploy</code>; Step 3 invokes <code>fenwick-push-deploy</code>. Use when iterating locally without pushing, or after a push that touches procedures.toml (whose in-procedure RunSync can't update its own running procedure).</td></tr>
           <tr><td><code>komodo-upgrade</code></td><td>Pulls latest Komodo images, restarts the Core stack.</td></tr>
           <tr><td><code>kangaroo_bootstrap</code></td><td>One-time bring-up for kangaroo. Renders Periphery .env from 1Password, ships compose + config to the QNAP via SSH, installs an <code>@reboot</code> crontab entry, idempotently appends the kangaroo Server to <code>servers.toml</code>.</td></tr>
         </tbody>

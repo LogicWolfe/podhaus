@@ -22,11 +22,23 @@ services:
 
   flood:
     container_name: flood
-    # Local build adds p7zip to the upstream image so the
+    # Local build adds libarchive-tools to the upstream image so the
     # event.download.finished hook (scripts/rtorrent-extract.sh) can
     # extract RARs in place. Pinning `pull_policy: build` keeps Komodo's
     # deploy from trying to pull from Docker Hub.
-    build: .
+    #
+    # STACK_CONTENT_HASH is the build-arg side of the podhaus content-
+    # hash mechanism (see AGENTS.md "Content-hash change detection"):
+    # the Stage 1 Action of podhaus-push-deploy injects this var into
+    # the stack's env on every push; feeding it into build args means
+    # any Dockerfile / build-context change invalidates docker's layer
+    # cache so the image actually rebuilds. Without this build arg the
+    # env change alone would recreate the container without rebuilding
+    # the image — fine for non-build stacks, wrong for this one.
+    build:
+      context: .
+      args:
+        STACK_CONTENT_HASH: ${STACK_CONTENT_HASH:-unset}
     image: flood:local
     pull_policy: build
     restart: unless-stopped

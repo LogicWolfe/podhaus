@@ -1,0 +1,277 @@
+# Komodo Actions for podhaus.
+#
+# Actions are Deno scripts Komodo Core spawns with `deno run
+# --allow-all`. Core prepends a preamble providing:
+#   - `komodo`   : KomodoClient pre-authenticated with a per-execution
+#                  API key (auto-rotated; never persisted)
+#   - `YAML`     : @std/yaml parser/stringifier
+#   - `TOML`     : @std/toml parser/stringifier
+#   - `ARGS`     : invocation args (from `RunAction.args` / RunAction
+#                  execution params), parsed per `arguments_format`
+# User script lives inside an implicit `async function main()`.
+#
+# Filesystem: scripts run inside the Komodo Core container, which
+# bind-mounts the podhaus repo at `/syncs/podhaus`. The full repo tree
+# is readable from there — same content the Periphery on bilby sees
+# at `/etc/komodo/repo/`, just a different mount point.
+
+[[action]]
+name = "podhaus-inject-content-hashes"
+description = """
+Compute per-stack content hashes from the bilby-side repo and inject \
+`STACK_CONTENT_HASH=<hash>` into each podhaus stack's stored environment. \
+Run as Stage 1 of `podhaus-push-deploy` so the hash is in place before \
+`BatchDeployStackIfChanged` runs — that turns Komodo's existing \
+compose-file-only change detection into full stack-directory \
+change detection, uniform across files_on_host and linked_repo stacks. \
+See AGENTS.md "Content-hash change detection" for the architectural rationale.\
+"""
+tags = ["podhaus"]
+
+[action.config]
+# Triggered only as a stage of `podhaus-push-deploy` (and the parallel
+# komodo-sync path that invokes the same procedure). Never on schedule,
+# never at Komodo Core startup (the latter being a chicken-and-egg
+# window where stacks may not yet be loaded).
+run_at_startup = false
+schedule_enabled = false
+schedule = ""
+failure_alert = true
+webhook_enabled = false
+# Don't pull deno deps on every run — first run primes the cache,
+# subsequent runs reuse it. Flip to true if the @std versions
+# referenced below ever go stale.
+reload_deno_deps = false
+
+file_contents = """
+// podhaus-inject-content-hashes
+//
+// For every Komodo Stack whose run_directory resolves to a path
+// inside the podhaus repo bind-mount at /syncs/podhaus, compute a
+// deterministic content hash of the stack directory (excluding any
+// subpath that the stack's own compose.yaml bind-mounts at runtime),
+// and inject STACK_CONTENT_HASH=<hash> into the stack's stored env.
+//
+// Stage 0 (RunSync) just rendered each stack's env from stack.toml
+// — without our STACK_CONTENT_HASH. We append it here. Stage 2
+// (BatchDeployStackIfChanged) compares the resulting stored env vs
+// the deployed env and deploys any stack whose env diff includes the
+// hash change. Because the hash is derived from bilby's view of the
+// repo, this works uniformly for files_on_host (bilby) AND
+// linked_repo (kangaroo / kookaburra) stacks — routing around the
+// stale-clone deadlock that broke Komodo's native IfChanged for the
+// linked_repo case.
+//
+// Bind-mount exclusion: anything compose mounts as a runtime bind
+// (scripts/, conf/, etc.) is live-reloaded by docker, not part of
+// the image, and shouldn't churn the fleet. We parse the stack's
+// compose.yaml volumes, find bind sources templated as
+// `\\${PODHAUS_REPO}/<repo-rel-path>` that fall under this stack's
+// own directory, and skip them in the hash walk.
+
+const REPO_ROOT = '/syncs/podhaus';
+const STACK_TOML_NAME = 'compose.yaml';
+
+// Convert run_directory into a path relative to the repo root.
+// files_on_host stacks have absolute /etc/komodo/repo/<rel> paths;
+// linked_repo stacks have relative paths. Stacks whose run_directory
+// points elsewhere (e.g. /etc/komodo/fenwick-working) are not in
+// this repo's footprint and get skipped via the stat below.
+function stackRelToRepo(runDir) {
+  if (!runDir) return null;
+  if (runDir.startsWith('/etc/komodo/repo/')) {
+    return runDir.substring('/etc/komodo/repo/'.length);
+  }
+  if (runDir.startsWith('/')) return null; // absolute, outside our mount
+  return runDir;
+}
+
+// Read a compose file, find bind-mount sources that target paths
+// inside this stack's own directory, return them as paths relative
+// to the stack dir.
+async function bindMountExcludes(composePath, stackRel) {
+  let text;
+  try {
+    text = await Deno.readTextFile(composePath);
+  } catch {
+    return [];
+  }
+  let compose;
+  try {
+    compose = YAML.parse(text);
+  } catch {
+    return [];
+  }
+  const services = compose?.services ?? {};
+  const out = new Set();
+  for (const svc of Object.values(services)) {
+    if (!svc || typeof svc !== 'object') continue;
+    const vols = svc.volumes ?? [];
+    for (const v of vols) {
+      let src = '';
+      if (typeof v === 'string') {
+        // Short form: 'src:dest[:flags]'. Source can itself contain ':' on
+        // Windows paths, but we only deal with POSIX in podhaus.
+        src = v.split(':')[0];
+      } else if (v && typeof v === 'object') {
+        // Long form. Treat any bind / unspecified-type with a source as bind.
+        if (v.type && v.type !== 'bind') continue;
+        src = v.source ?? '';
+      }
+      if (!src) continue;
+      // Only ${PODHAUS_REPO}-rooted paths can possibly be inside this stack.
+      const m = src.match(/^\\$\\{PODHAUS_REPO\\}\\/(.+?)\\/?$/);
+      if (!m) continue;
+      const fromRepoRoot = m[1];
+      if (fromRepoRoot === stackRel) continue; // whole-stack bind — shouldn't happen
+      if (fromRepoRoot.startsWith(stackRel + '/')) {
+        out.add(fromRepoRoot.substring(stackRel.length + 1));
+      }
+    }
+  }
+  return Array.from(out);
+}
+
+// Walk stackDir, hash sorted (relpath, content) pairs into a sha256.
+async function stackContentHash(stackDir, excludeRel) {
+  const excludeSet = new Set(excludeRel);
+  const isExcluded = (rel) => {
+    for (const ex of excludeSet) {
+      if (rel === ex || rel.startsWith(ex + '/')) return true;
+    }
+    return false;
+  };
+
+  const files = [];
+  async function recurse(absDir, relDir) {
+    let entries;
+    try {
+      entries = Deno.readDir(absDir);
+    } catch {
+      return;
+    }
+    for await (const entry of entries) {
+      const absChild = `${absDir}/${entry.name}`;
+      const relChild = relDir ? `${relDir}/${entry.name}` : entry.name;
+      if (isExcluded(relChild)) continue;
+      if (entry.isDirectory) {
+        await recurse(absChild, relChild);
+      } else if (entry.isFile) {
+        let data;
+        try {
+          data = await Deno.readFile(absChild);
+        } catch {
+          continue;
+        }
+        files.push({ rel: relChild, data });
+      }
+    }
+  }
+  await recurse(stackDir, '');
+
+  files.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+
+  // Concatenate: for each file, NUL-terminated relpath + NUL-terminated content.
+  const enc = new TextEncoder();
+  const parts = [];
+  for (const f of files) {
+    parts.push(enc.encode(f.rel));
+    parts.push(new Uint8Array([0]));
+    parts.push(f.data);
+    parts.push(new Uint8Array([0]));
+  }
+  const totalLen = parts.reduce((s, p) => s + p.length, 0);
+  const buf = new Uint8Array(totalLen);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  const digestBuf = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digestBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16);
+}
+
+// --- main ---
+
+const stacksSummary = await komodo.read({ type: 'ListStacks', params: {} });
+
+let processed = 0;
+let updated = 0;
+let skipped = 0;
+
+for (const s of stacksSummary) {
+  const stack = await komodo.read({
+    type: 'GetStack',
+    params: { stack: s.id ?? s.name },
+  });
+
+  const runDir = stack.config?.run_directory ?? '';
+  const stackRel = stackRelToRepo(runDir);
+  if (!stackRel) {
+    skipped++;
+    continue;
+  }
+
+  const stackDir = `${REPO_ROOT}/${stackRel}`;
+  try {
+    const st = await Deno.stat(stackDir);
+    if (!st.isDirectory) {
+      skipped++;
+      continue;
+    }
+  } catch {
+    // Not in this repo (e.g. fenwick stacks live elsewhere on bilby
+    // but Core only sees /syncs/podhaus). Skip.
+    skipped++;
+    continue;
+  }
+
+  // Determine bind-mount exclusions from each tracked compose file.
+  const filePaths =
+    stack.config?.file_paths && stack.config.file_paths.length > 0
+      ? stack.config.file_paths
+      : [STACK_TOML_NAME];
+  const excludeRel = new Set();
+  for (const fp of filePaths) {
+    let composePath;
+    if (fp.startsWith('/')) {
+      composePath = fp;
+    } else {
+      composePath = `${stackDir}/${fp}`;
+    }
+    const more = await bindMountExcludes(composePath, stackRel);
+    for (const p of more) excludeRel.add(p);
+  }
+
+  const hash = await stackContentHash(stackDir, Array.from(excludeRel));
+
+  // Idempotent inject: strip any prior STACK_CONTENT_HASH line, append fresh.
+  const curEnv = stack.config?.environment ?? '';
+  const stripped = curEnv.replace(/^STACK_CONTENT_HASH=.*\\r?\\n?/gm, '');
+  const trimmed = stripped.replace(/\\n+$/, '');
+  const newEnv =
+    (trimmed ? trimmed + '\\n' : '') + `STACK_CONTENT_HASH=${hash}\\n`;
+
+  processed++;
+  if (newEnv === curEnv) {
+    continue;
+  }
+
+  await komodo.write({
+    type: 'UpdateStack',
+    params: {
+      id: stack._id?.$oid ?? stack.id ?? stack.name,
+      config: { environment: newEnv },
+    },
+  });
+  updated++;
+  console.log(`${stack.name}: ${hash}`);
+}
+
+console.log(
+  `[podhaus-inject-content-hashes] processed=${processed} env-updated=${updated} skipped=${skipped}`
+);
+"""

@@ -23,23 +23,40 @@
       <p class="lead text-lg text-text-muted">
         Flood (rtorrent + Flood web UI) is bilby-resident. The auto-extract pipeline is
         rtorrent-native: an <code>event.download.finished</code> hook fires
-        <code>rtorrent-extract.sh</code> with the torrent's exact <code>base_path</code>, the
-        script walks that subtree at any depth and 7za-extracts in place. The previous
-        unpackerr stack was removed in May 2026 once we found its non-recursive watcher couldn't
-        see nested release layouts (e.g. <code>/data/Kids/Movies/&lt;release&gt;</code> or
-        <code>/data/TV/&lt;Show&gt;/Season N/&lt;release&gt;</code>). Every config file lives in
-        the repo and bind-mounts into the container.
+        <code>rtorrent-extract.sh</code> with the torrent's exact <code>base_path</code>,
+        the script walks that subtree at any depth and extracts in place via
+        <code>bsdtar</code>. Depth-agnostic by design — rtorrent passes the exact
+        path, so layouts like <code>/data/Kids/Movies/&lt;release&gt;</code> or
+        <code>/data/TV/&lt;Show&gt;/Season N/&lt;release&gt;</code> work without any
+        watcher configuration. Every config file lives in the repo and bind-mounts
+        into the container.
       </p>
 
       <h2 id="flood">Flood</h2>
       <p>
         <code>jesec/rtorrent-flood</code> upstream, locally extended via
-        <code>flood/Dockerfile</code> to add <code>p7zip</code> (provides <code>7za</code> for
-        the extract hook). Built on each deploy via Compose <code>build: .</code>; Periphery's
-        compose build is fast (single <code>apk add</code> layer over the cached upstream).
-        Runs as <code>1000:1001</code> so files created end up owned the same as rtorrent's
-        RAR files. UI on port 3000, reachable at <code>torrent.pod.haus</code>.
+        <code>flood/Dockerfile</code> to add <code>libarchive-tools</code> (provides
+        <code>bsdtar</code> with permissive RAR-read + multi-volume support — the
+        right primitive for alpine, where standalone <code>unrar</code> isn't
+        packaged and the <code>p7zip</code> package doesn't ship the RAR codec).
+        Built on each deploy via Compose <code>build:</code>; Periphery's compose
+        build is fast (single <code>apk add</code> layer over the cached upstream).
+        Runs as <code>1000:1001</code> so files created end up owned the same as
+        rtorrent's RAR files. UI on port 3000, reachable at
+        <code>torrent.pod.haus</code>.
       </p>
+      <aside class="callout note">
+        <span class="callout-title">Build-stack content-hash convention</span>
+        flood uses a <code>build:</code> directive, which means changes to the
+        Dockerfile (and any future COPY-source files) need to invalidate docker's
+        image-layer cache. The convention is documented in AGENTS.md
+        "Content-hash change detection": compose passes
+        <code>STACK_CONTENT_HASH</code> through to docker build as an arg, and
+        the Dockerfile declares <code>ARG STACK_CONTENT_HASH</code> +
+        ENV-from-ARG so a new value busts the cache. The value is injected by
+        the push procedure's Stage 1 Action; the running container ignores it.
+        flood is the only stack on this pattern today.
+      </aside>
       <p>
         Storage:
       </p>
@@ -57,8 +74,9 @@
       </p>
       <ul>
         <li><code>${PODHAUS_REPO}/flood/rtorrent.rc</code> overlaid onto
-          <code>/flood-db/.rtorrent.rc</code> — the live rtorrent config that used to be
-          container-volume-only.</li>
+          <code>/flood-db/.rtorrent.rc</code> via the <code>flood-init</code>
+          one-shot init container — rtorrent reads the file once at startup
+          and the bind keeps it diff-able alongside the rest of the repo.</li>
         <li><code>${PODHAUS_REPO}/flood/scripts</code> overlaid onto <code>/scripts</code>
           (directory bind, so host edits propagate without restart). Contains
           <code>rtorrent-extract.sh</code> (event.download.finished hook; in-place extraction),
@@ -86,8 +104,8 @@
           <code>/data</code> is bound to the real Pouch NFS share, not a bare local-disk stub.
           Without this check, a missed NFS mount would false-green via the
           <code>/proc/mounts</code> presence check (Docker creates a bind entry regardless of
-          source state). Caught by the 2026-05-23 incident; see
-          <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">postmortem</a>.</li>
+          source state). Background:
+          <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">2026-05-23 pouch/jump mount-failure postmortem</a>.</li>
       </ol>
       <p>
         The whole probe is wrapped in <code>timeout 10</code> so a soft-NFS stall returns red
@@ -126,11 +144,17 @@
           rtorrent's <code>event.download.finished</code> hook with the torrent's exact
           <code>base_path</code>. Walks the subtree at any depth for the archive entry-point
           (modern <code>.rar</code> &gt; <code>.partNN.rar</code> &gt; <code>.r00</code> with
-          .rar absence), runs <code>7za x</code> in place, drops
-          <code>_unpackerred.&lt;dir&gt;.txt</code> on success so rar-backlog won't re-flag.
-          Idempotent on the marker. Fails loud: extraction errors leave no marker, so the
-          daily safety-net catches it. Path-guarded to <code>/data/{Movies,TV,Kids}</code>.
-          Log at <code>/flood-db/rtorrent-extract.log</code>.</li>
+          .rar absence), runs <code>bsdtar -xf</code> in place, drops
+          <code>_unpackerred.&lt;dir&gt;.txt</code> as the
+          "this folder has been extracted" marker so rar-backlog won't re-flag.
+          Idempotent on the marker. Verifies success by comparing the
+          non-archive-keeper count before vs after — libarchive emits "Truncated
+          RAR file data" at the last-volume boundary and exits non-zero on legacy
+          multi-volume sets even when extraction completed, so the exit code is
+          unreliable on its own. Fails loud: if no new keepers appeared the
+          marker isn't written, leaving the folder for the daily safety-net to
+          catch. Path-guarded to <code>/data/{Movies,TV,Kids}</code>. Log at
+          <code>/flood-db/rtorrent-extract.log</code>.</li>
         <li><strong><code>flood/scripts/rtorrent-cleanup.sh</code></strong> — invoked by
           rtorrent's <code>event.download.erased</code> hook. Deletes RAR pieces and scene
           detritus (<code>.rar</code>, <code>.r[0-9][0-9]</code>, <code>.partN.rar</code>,
@@ -145,7 +169,7 @@
           <code>success=false&amp;error=&lt;count+sample&gt;</code> to Gatus's
           <code>heartbeat_rar-extraction</code> external endpoint with the bearer token. Catches
           anything the rtorrent-extract hook missed — rtorrent crash mid-finished, files added
-          manually outside rtorrent, 7za extraction failures.</li>
+          manually outside rtorrent, bsdtar extraction failures.</li>
       </ol>
 
       <h2 id="safety-layering">Safety layering</h2>
@@ -154,30 +178,18 @@
       </p>
       <ul>
         <li><strong>Extraction-presence guard in <code>rtorrent-cleanup.sh</code></strong> —
-          if the extract hook hadn't run (or failed) for a folder, the keeper count is zero
+          if the extract hook hasn't run (or failed) for a folder, the keeper count is zero
           and the erase-cleanup aborts rather than deleting the only copy of the content.</li>
-        <li><strong>Fail-loud extract</strong> — <code>rtorrent-extract.sh</code> only writes
-          the <code>_unpackerred.&lt;dir&gt;.txt</code> marker on 7za success. A failure
-          leaves no marker, so the daily scanner picks it up.</li>
+        <li><strong>Keeper-count verification in <code>rtorrent-extract.sh</code></strong> —
+          the <code>_unpackerred.&lt;dir&gt;.txt</code> marker is only written when extraction
+          actually produced new non-archive files. A failure leaves no marker, so the daily
+          scanner picks it up.</li>
         <li><strong>Daily Gatus heartbeat</strong> — if no successful ping arrives within 25
           hours, the dead-man's-switch fires (catches ofelia broken, flood dead, NFS unmounted).</li>
         <li><strong>Failure ping with context</strong> — if the proactive scan finds a stuck
           folder, it pushes <code>success=false</code> with the count and a sample folder name
           — Gatus alerts within minutes instead of waiting for the missing heartbeat.</li>
       </ul>
-
-      <aside class="callout note">
-        <span class="callout-title">Why not unpackerr</span>
-        Until May 2026 this pipeline ran <code>ghcr.io/unpackerr/unpackerr</code> as a separate
-        stack. It worked for one-level layouts like <code>/data/Movies/&lt;release&gt;</code>,
-        but its watcher (fsnotify + radovskyb/watcher) is non-recursive: nested subdirs are
-        invisible. Releases at <code>/data/Kids/Movies/&lt;release&gt;</code> (depth 2 under a
-        watched root) or <code>/data/TV/&lt;Show&gt;/Season N/&lt;release&gt;</code> (depth 3+)
-        slipped through, silently piled up RAR backlog, and only the rar-backlog cron found
-        them. Listing every possible subdir in unpackerr.conf wasn't sustainable. The rtorrent
-        hook gets the exact path from rtorrent itself — depth-agnostic by design — and
-        replaces the whole stack with one ~70-line script + a one-line apk add in a Dockerfile.
-      </aside>
 
       <h2 id="pinelake-stignore">Pinelake .stignore auto-sync</h2>
       <p>
@@ -219,15 +231,16 @@
           one timestamped line per inserted entry. Quiet on no-op runs.</li>
       </ul>
 
-      <h2 id="legacy-cleanup">One-shot RAR-backlog cleanup tooling</h2>
+      <h2 id="bulk-cleanup">Bulk RAR-backlog cleanup tooling</h2>
       <p>
-        Before the live pipeline went on, the existing 139-folder legacy RAR backlog was
-        remediated with a disposable <code>rar-cleanup:local</code> image (Dockerfile at
-        <code>rar-cleanup-scripts/Dockerfile</code> — debian:trixie-slim with unrar + python3
-        + sqlite3). All 136 cleanup actions are recorded in
-        <code>~/repos/podhaus-migration-state/rar-backlog-remediation.sqlite</code> (off-repo
-        sidecar). The tooling stays in the repo for reuse if the pattern recurs; not deployed
-        as a stack.
+        <code>rar-cleanup-scripts/</code> (Dockerfile +
+        <code>audit.py</code> + <code>find-unhealthy.sh</code>) is a
+        disposable <code>rar-cleanup:local</code> image
+        (debian:trixie-slim with <code>unrar</code> + python3 + sqlite3) for
+        one-off bulk cleanup runs against the media tree. Not deployed as a
+        stack — the day-to-day pipeline above is the steady state. Kept in
+        the repo for the rare case of a large backlog that's easier to
+        chew through in bulk than file by file.
       </p>
 
       <h2 id="see-also">See also</h2>

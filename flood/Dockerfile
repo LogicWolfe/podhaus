@@ -23,4 +23,16 @@ FROM jesec/rtorrent-flood:latest
 
 USER root
 RUN apk add --no-cache libarchive-tools
+
+# Content-hash build arg from the podhaus mechanism (see AGENTS.md
+# "Content-hash change detection"). Declared here purely for cache
+# busting: setting it as an ENV from the ARG means a different
+# STACK_CONTENT_HASH value produces a different layer hash, so any
+# change to a tracked file in this stack's build context invalidates
+# everything from this layer down and forces a real rebuild. The value
+# is never read by the running container — its sole purpose is layer
+# fingerprinting.
+ARG STACK_CONTENT_HASH=unset
+ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
+
 USER 1000

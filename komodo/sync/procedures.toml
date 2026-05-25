@@ -6,10 +6,6 @@
 # webhook hits this procedure's listener
 # (komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main,
 # branch-filtered to main), and the procedure fans out internally.
-# Validated against Komodo v2.2.0 source (client/core/rs/src/api/
-# execute/stack.rs: BatchDeployStackIfChanged/BatchDeployStack take an
-# id/name/wildcard/regex pattern; bin/core/src/listener/router.rs:
-# "/procedure/{id}/{branch}").
 #
 # Stage 0 — reconcile stack defs from disk (sync TOML → Komodo). Komodo
 # separates the *stack resource definition* (what the env block, server,
@@ -22,20 +18,28 @@
 # Stage 0, sync→deploy is deterministic via stage ordering, not racy via
 # managed:true polling.
 #
-# Stage 1 — every stack, deploy ONLY if its files changed. bilby
-# files_on_host stacks diff the live bind-mount, so unchanged stacks
-# are a no-op (no churn — identical to the old per-stack
-# DeployStackIfChanged webhook). kangaroo linked_repo stacks no-op
-# here (the documented stale-clone deadlock: the change-check compares
-# the Periphery clone, which only advances during a deploy).
+# Stage 1 — content-hash injection. The Action
+# `podhaus-inject-content-hashes` (komodo/sync/actions.toml) walks every
+# stack visible in /syncs/podhaus from Komodo Core, computes a hash of
+# the stack directory excluding runtime-bind paths, and appends
+# `STACK_CONTENT_HASH=<hash>` to each stack's stored environment.
+# That turns Komodo's existing compose-file-only change detection into
+# full stack-directory change detection — Dockerfile, build-context
+# sources, bind-mounted config files, all get tracked uniformly.
+# Crucially this is the SAME mechanism for files_on_host and linked_repo
+# stacks: the hash is computed from bilby's view of the repo, so it
+# routes around the stale-clone deadlock that breaks Komodo's native
+# IfChanged on linked_repo (where the change-check compares against the
+# Periphery's clone, which only advances during a deploy).
 #
-# Stage 2 — the linked_repo stacks, force-deployed unconditionally
-# (full DeployStack = git pull + compose). This is the linked-repo
-# hard rule (see docs/komodo.html), now expressed once here instead
-# of per-stack `webhook_force_deploy = true`.
+# Stage 2 — every stack, deploy ONLY if its rendered env diffs from
+# what's deployed. Stage 1's hash appears in the env diff for any stack
+# whose tracked files changed; unchanged stacks no-op (no churn).
+# Works uniformly across bilby files_on_host AND linked_repo because
+# the hash injection makes IfChanged correct for both.
 #
 # Stage 3 — restart ofelia so it picks up label changes on whichever
-# containers Stage 1/2 just recreated. ofelia v0.3.22
+# containers Stage 2 just recreated. ofelia v0.3.22
 # (mcuadros/ofelia:latest, built from the 0.3.x branch) reads labels
 # ONCE at startup and has no live refresh: the dynamic-labels polling
 # (upstream PR #319) and the event-listen replacement (PR #368) are
@@ -45,16 +49,16 @@
 # reasons (image bump, host reboot, manual). RestartStack on ofelia
 # is ~0.5s, ofelia has no persistent state to lose, and the cost is
 # paid on every push regardless of whether anything ofelia-relevant
-# changed — cheaper than a 6th place to track "did this push touch
-# any ofelia labels?". Drop this stage when an ofelia release lands
-# that includes #319 or #368.
+# changed — cheaper than tracking "did this push touch any ofelia
+# labels?". Drop this stage when an ofelia release lands that includes
+# #319 or #368.
 #
 # Wildcard `*` means new stacks are covered automatically — no repo
 # edit, no list, no 20-cap, ever.
 
 [[procedure]]
 name = "podhaus-push-deploy"
-description = "Push-to-deploy fan-out: reconcile stack defs from disk, deploy-if-changed all stacks, force-deploy linked_repo stacks. Triggered by the single GitHub push webhook."
+description = "Push-to-deploy fan-out: reconcile stack defs from disk, inject per-stack content hashes, deploy-if-changed all stacks, restart ofelia. Triggered by the single GitHub push webhook (and by ./komodo-sync for the equivalent local path)."
 tags = ["podhaus"]
 config.webhook_enabled = true
 # Webhook-only — no schedule. (schedule_enabled defaults true in
@@ -69,39 +73,17 @@ executions = [
 ]
 
 [[procedure.config.stage]]
-name = "Deploy changed stacks (surgical, no-churn)"
+name = "Inject per-stack content hashes into stored env"
+enabled = true
+executions = [
+  { execution.type = "RunAction", execution.params = { action = "podhaus-inject-content-hashes" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy changed stacks (surgical, content-hash-aware)"
 enabled = true
 executions = [
   { execution.type = "BatchDeployStackIfChanged", execution.params = { pattern = "*" }, enabled = true }
-]
-
-[[procedure.config.stage]]
-name = "Force-deploy linked_repo stacks (kangaroo + kookaburra)"
-enabled = true
-executions = [
-  { execution.type = "BatchDeployStack", execution.params = { pattern = "kangaroo-*" }, enabled = true },
-  { execution.type = "BatchDeployStack", execution.params = { pattern = "kookaburra-*" }, enabled = true },
-]
-
-# Stage 2.5 — force-deploy stacks that use `build:` in compose. Komodo's
-# files_on_host change-detection compares the listed compose files
-# (default: compose.yaml) and is BLIND to Dockerfile / build-context
-# edits. Without this stage, a Dockerfile-only change on flood would
-# leave the deployed image stale forever — exactly what bit us on
-# 2026-05-25 when the libarchive-tools swap landed in a Dockerfile-only
-# commit and didn't deploy until a manual DeployStack. Docker layer
-# caching means the cost when Dockerfile is unchanged is "rebuild
-# checks cached layers → image hash unchanged → container not
-# recreated", so the per-push cost is negligible.
-#
-# Add stacks here when they grow a `build:` directive. Drop them when
-# they don't. There's no general "force-deploy any build: stack"
-# matcher in Komodo, so it's an explicit list.
-[[procedure.config.stage]]
-name = "Force-deploy build-mode stacks (Dockerfile change-detection workaround)"
-enabled = true
-executions = [
-  { execution.type = "BatchDeployStack", execution.params = { pattern = "flood" }, enabled = true },
 ]
 
 [[procedure.config.stage]]
@@ -117,8 +99,7 @@ executions = [
 #
 # Bound to its own GitHub webhook
 # (komodo.pod.haus/listener/github/procedure/fenwick-push-deploy/main,
-# branch-filtered to main; see ../../terraform/github.tf). Mirrors
-# the staged shape of podhaus-push-deploy:
+# branch-filtered to main; see ../../terraform/github.tf). Stage shape:
 #   - Stage 0 reconciles the fenwick sync into Komodo (without it,
 #     a push that adds a new [[variable]] reaches the deploy via the
 #     on-disk file but the deploy uses the stored pre-change resource
@@ -130,7 +111,12 @@ executions = [
 #     repo stacks (the stale-clone deadlock means
 #     BatchDeployStackIfChanged would no-op forever — the change-
 #     check compares the Periphery clone which only advances during
-#     a deploy).
+#     a deploy). This is the SAME deadlock the podhaus procedure
+#     solves via Stage 1's content-hash injection above; fenwick
+#     hasn't been extended to that mechanism yet because its stack
+#     surface is small and the force-deploy cost is tolerable.
+#     If fenwick grows more linked-repo stacks, consider porting the
+#     content-hash Action over.
 #
 # The "fenwick-*" wildcard does NOT match the bare "fenwick" stack;
 # that's why Stage 1 and Stage 2 are split.
