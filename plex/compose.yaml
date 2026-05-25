@@ -84,7 +84,7 @@ services:
       # grows at ~30 rows/day so even a missed month means ~900 extra
       # rows of headroom, not gigabytes.
       ofelia.enabled: "true"
-      ofelia.job-exec.plex-stats-cleanup.schedule: "30 5 1 * *"
+      ofelia.job-exec.plex-stats-cleanup.schedule: "0 30 5 1 * *"
       ofelia.job-exec.plex-stats-cleanup.command: "/scripts/stats-cleanup.sh"
     healthcheck:
       test: ["CMD", "/scripts/healthcheck.sh"]

@@ -86,7 +86,7 @@ services:
       # restic run captures a fresh archive. Keeps the latest ~14.
       # mongodump ships in the mongo image; no extra container.
       ofelia.enabled: "true"
-      ofelia.job-exec.clickstack-mongo-dump.schedule: "50 3 * * *"
+      ofelia.job-exec.clickstack-mongo-dump.schedule: "0 50 3 * * *"
       ofelia.job-exec.clickstack-mongo-dump.command: >-
         bash -c "mongodump --uri='mongodb://localhost:27017/hyperdx' --gzip
         --archive=/dump/hyperdx-$(date +%F).archive &&

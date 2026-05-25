@@ -47,7 +47,7 @@ services:
       # As of 2026-04-16 it's been open since July 2025 and not yet
       # merged. Periodically check the PR + the latest image's behaviour.
       ofelia.enabled: "true"
-      ofelia.job-exec.daily-self-restart.schedule: "0 4 * * *"
+      ofelia.job-exec.daily-self-restart.schedule: "0 0 4 * * *"
       ofelia.job-exec.daily-self-restart.command: "kill 1"
     # No healthcheck: ofelia is a long-running daemon with no endpoint to
     # probe and no PID-1 process name pgrep can pin against. Same shape as
