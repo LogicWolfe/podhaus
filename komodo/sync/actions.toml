@@ -253,10 +253,16 @@ for (const s of stacksSummary) {
 
   // Idempotent inject: strip any prior STACK_CONTENT_HASH line, append fresh.
   const curEnv = stack.config?.environment ?? '';
-  const stripped = curEnv.replace(/^STACK_CONTENT_HASH=.*\\r?\\n?/gm, '');
-  const trimmed = stripped.replace(/\\n+$/, '');
-  const newEnv =
-    (trimmed ? trimmed + '\\n' : '') + `STACK_CONTENT_HASH=${hash}\\n`;
+  // Use String.fromCharCode(10) for newlines so we avoid every layer of
+  // backslash-escape ambiguity (TOML triple-quote → Komodo interpolation
+  // → deno TS parse). LF is LF, full stop.
+  const NL = String.fromCharCode(10);
+  // Strip any existing STACK_CONTENT_HASH line, then any trailing newlines.
+  const lines = curEnv.split(NL).filter((ln) => !ln.startsWith('STACK_CONTENT_HASH='));
+  while (lines.length && lines[lines.length - 1] === '') lines.pop();
+  lines.push('STACK_CONTENT_HASH=' + hash);
+  lines.push('');  // trailing newline
+  const newEnv = lines.join(NL);
 
   processed++;
   if (newEnv === curEnv) {
