@@ -8,9 +8,10 @@
 #   2. RAR detection    — non-RAR torrents are a no-op
 #   3. Extraction guard — refuses to delete if no non-RAR/non-detritus
 #                         content exists in the folder, because that
-#                         implies extraction never happened (unpackerr
-#                         died, permission error, etc.) and deleting
-#                         the RARs would be destructive.
+#                         implies extraction never happened (the
+#                         rtorrent-extract.sh hook failed, permission
+#                         error, etc.) and deleting the RARs would be
+#                         destructive.
 #
 # Exits 0 on every path to keep the rtorrent hook clean.
 
@@ -54,8 +55,9 @@ fi
 
 # --- Extraction guard ------------------------------------------------
 # Count files that are NOT RAR pieces, NOT scene metadata, and NOT
-# sample artifacts. If the result is zero, unpackerr hasn't extracted
-# anything — bail out rather than delete the only copy of the content.
+# sample artifacts. If the result is zero, the rtorrent-extract.sh
+# hook hasn't completed for this folder — bail out rather than delete
+# the only copy of the content.
 KEEP_COUNT=$(find "$BASE" -type f \
     ! -iname '*.rar' \
     ! -iname '*.r[0-9][0-9]' \
@@ -70,7 +72,7 @@ KEEP_COUNT=$(find "$BASE" -type f \
     | wc -l)
 
 if [ "$KEEP_COUNT" -eq 0 ]; then
-    log "ABORT: RAR torrent has no extracted content in $BASE (unpackerr may have failed) — leaving files in place"
+    log "ABORT: RAR torrent has no extracted content in $BASE (rtorrent-extract.sh hook may have failed) — leaving files in place"
     exit 0
 fi
 

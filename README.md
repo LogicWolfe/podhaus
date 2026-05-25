@@ -67,8 +67,7 @@ on bilby.
 | `plex/` | Plex Media Server |
 | `paperless/` | Paperless-ngx + Postgres + Redis + Tika + Gotenberg |
 | `home-assistant/` | Home Assistant |
-| `flood/` | rtorrent + Flood UI + auto-extract pipeline |
-| `unpackerr/` | RAR extraction |
+| `flood/` | rtorrent + Flood UI + in-place RAR auto-extract via rtorrent hook |
 | `syncthing/` | Syncthing (deployed on kangaroo) |
 | `gatus/` | Endpoint monitoring + alerting |
 | `ofelia/` | Docker label-driven cron |

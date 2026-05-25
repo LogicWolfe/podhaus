@@ -22,7 +22,13 @@ services:
 
   flood:
     container_name: flood
-    image: jesec/rtorrent-flood
+    # Local build adds p7zip to the upstream image so the
+    # event.download.finished hook (scripts/rtorrent-extract.sh) can
+    # extract RARs in place. Pinning `pull_policy: build` keeps Komodo's
+    # deploy from trying to pull from Docker Hub.
+    build: .
+    image: flood:local
+    pull_policy: build
     restart: unless-stopped
     depends_on:
       flood-init:
@@ -48,8 +54,13 @@ services:
       # without restart. File-level binds pin the inode at mount time, so
       # any tool that saves via atomic rename (vim, $EDITOR, Claude Code)
       # leaves the container looking at the original inode forever.
-      # Contents: rtorrent-cleanup.sh (event.download.erased hook),
-      # rar-backlog.sh (daily health-check pushed via ofelia label).
+      # Contents:
+      #   - rtorrent-extract.sh   (event.download.finished hook; real-time
+      #                            in-place RAR extraction)
+      #   - rtorrent-cleanup.sh   (event.download.erased hook; deletes
+      #                            rar pieces after seed-out)
+      #   - rar-backlog.sh        (daily ofelia health-check + safety-net)
+      #   - pinelake-stignore.sh  (event hook + 5min ofelia tick)
       - ${PODHAUS_REPO}/flood/scripts:/scripts:ro,z
     labels:
       autoheal: "true"

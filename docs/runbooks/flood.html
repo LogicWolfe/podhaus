@@ -21,17 +21,24 @@
 
       <h1>Flood + RAR pipeline</h1>
       <p class="lead text-lg text-text-muted">
-        Flood (rtorrent + Flood web UI) is bilby-resident. The auto-extract pipeline around it
-        — unpackerr + rtorrent-cleanup.sh + rar-backlog.sh + Gatus heartbeat — is the
-        config-as-code answer to RAR-multi-volume torrents. Every config file involved lives in
+        Flood (rtorrent + Flood web UI) is bilby-resident. The auto-extract pipeline is
+        rtorrent-native: an <code>event.download.finished</code> hook fires
+        <code>rtorrent-extract.sh</code> with the torrent's exact <code>base_path</code>, the
+        script walks that subtree at any depth and 7za-extracts in place. The previous
+        unpackerr stack was removed in May 2026 once we found its non-recursive watcher couldn't
+        see nested release layouts (e.g. <code>/data/Kids/Movies/&lt;release&gt;</code> or
+        <code>/data/TV/&lt;Show&gt;/Season N/&lt;release&gt;</code>). Every config file lives in
         the repo and bind-mounts into the container.
       </p>
 
       <h2 id="flood">Flood</h2>
       <p>
-        <code>jesec/rtorrent-flood</code> image; runs as <code>1000:1001</code> so files
-        created end up owned the same as rtorrent's RAR files. UI on port 3000, reachable at
-        <code>torrent.pod.haus</code>.
+        <code>jesec/rtorrent-flood</code> upstream, locally extended via
+        <code>flood/Dockerfile</code> to add <code>p7zip</code> (provides <code>7za</code> for
+        the extract hook). Built on each deploy via Compose <code>build: .</code>; Periphery's
+        compose build is fast (single <code>apk add</code> layer over the cached upstream).
+        Runs as <code>1000:1001</code> so files created end up owned the same as rtorrent's
+        RAR files. UI on port 3000, reachable at <code>torrent.pod.haus</code>.
       </p>
       <p>
         Storage:
@@ -54,8 +61,10 @@
           container-volume-only.</li>
         <li><code>${PODHAUS_REPO}/flood/scripts</code> overlaid onto <code>/scripts</code>
           (directory bind, so host edits propagate without restart). Contains
-          <code>rtorrent-cleanup.sh</code>, <code>rar-backlog.sh</code>, and
-          <code>pinelake-stignore.sh</code>.</li>
+          <code>rtorrent-extract.sh</code> (event.download.finished hook; in-place extraction),
+          <code>rtorrent-cleanup.sh</code> (event.download.erased hook; rar piece deletion),
+          <code>rar-backlog.sh</code> (daily ofelia safety-net + Gatus heartbeat),
+          and <code>pinelake-stignore.sh</code>.</li>
       </ul>
       <aside class="callout note">
         <span class="callout-title">Directory bind, not file bind, for the scripts dir</span>
@@ -98,11 +107,11 @@
           doesn't see new submounts on the host path).</li>
         <li>Autoheal sees red and restarts the container. The new container's bind picks up
           the NFS-backed source → sentinel visible → green. Same chain works for plex,
-          unpackerr, paperless, backrest.</li>
+          paperless, backrest.</li>
       </ol>
       <p>
         Worst-case manual recovery (QNAP is up, NFS is up, but containers stayed red):
-        <code>docker restart flood unpackerr plex paperless backrest</code>. This is the
+        <code>docker restart flood plex paperless backrest</code>. This is the
         bilby-side incident-response one-liner — covers every Pouch/Jump consumer.
       </p>
 
@@ -113,10 +122,15 @@
         of the content if extraction silently failed."
       </p>
       <ol>
-        <li><strong>unpackerr stack</strong> (<code>unpackerr/compose.yaml</code>) —
-          <code>ghcr.io/unpackerr/unpackerr:latest</code>, runs as <code>1000:1001</code> like
-          flood. Watches the rtorrent download dir and extracts RAR multi-volume sets to the
-          containing directory.</li>
+        <li><strong><code>flood/scripts/rtorrent-extract.sh</code></strong> — invoked by
+          rtorrent's <code>event.download.finished</code> hook with the torrent's exact
+          <code>base_path</code>. Walks the subtree at any depth for the archive entry-point
+          (modern <code>.rar</code> &gt; <code>.partNN.rar</code> &gt; <code>.r00</code> with
+          .rar absence), runs <code>7za x</code> in place, drops
+          <code>_unpackerred.&lt;dir&gt;.txt</code> on success so rar-backlog won't re-flag.
+          Idempotent on the marker. Fails loud: extraction errors leave no marker, so the
+          daily safety-net catches it. Path-guarded to <code>/data/{Movies,TV,Kids}</code>.
+          Log at <code>/flood-db/rtorrent-extract.log</code>.</li>
         <li><strong><code>flood/scripts/rtorrent-cleanup.sh</code></strong> — invoked by
           rtorrent's <code>event.download.erased</code> hook. Deletes RAR pieces and scene
           detritus (<code>.rar</code>, <code>.r[0-9][0-9]</code>, <code>.partN.rar</code>,
@@ -125,34 +139,45 @@
           keeper file exists in the folder. Path-restricted to
           <code>/data/{Movies,TV,Kids}</code>.</li>
         <li><strong><code>flood/scripts/rar-backlog.sh</code></strong> — daily ofelia job at
-          04:50 AWST. Scans for folders containing RAR pieces ≥2h old with no extracted
-          keepers (same detection as the cleanup script's abort guard, run proactively).
-          Pushes <code>success=true</code> or <code>success=false&amp;error=&lt;count+sample&gt;</code>
-          to Gatus's <code>heartbeat_rar-extraction</code> external endpoint with the bearer
-          token.</li>
+          04:50 AWST, cron-driven safety-net. Scans for folders containing RAR pieces ≥2h
+          old with no extracted keepers (same detection as the cleanup script's abort guard,
+          run proactively). Pushes <code>success=true</code> or
+          <code>success=false&amp;error=&lt;count+sample&gt;</code> to Gatus's
+          <code>heartbeat_rar-extraction</code> external endpoint with the bearer token. Catches
+          anything the rtorrent-extract hook missed — rtorrent crash mid-finished, files added
+          manually outside rtorrent, 7za extraction failures.</li>
       </ol>
 
       <h2 id="safety-layering">Safety layering</h2>
       <p>
-        unpackerr has no HTTP endpoint, so its healthcheck is just the sentinel-marker check
-        on the Pouch bind (<code>test -e /data/.podhaus-share-mounted</code>) — proves the
-        bind landed on real NFS rather than a bare stub. That's all the in-container probe
-        can do for a process with no API. Crash-loop / silent-extract-failure protection is
-        layered around it:
+        Extraction is real-time via the rtorrent event hook, defended by these layers:
       </p>
       <ul>
         <li><strong>Extraction-presence guard in <code>rtorrent-cleanup.sh</code></strong> —
-          if unpackerr died silently, the keeper count is zero and the cleanup aborts rather
-          than deleting the only copy.</li>
-        <li><strong><code>restart: unless-stopped</code></strong> + <code>autoheal: "true"</code>
-          on the unpackerr container — outright crashes self-recover; NFS-bind-on-stub goes
-          red and autoheal restarts to pick up the fixed bind.</li>
+          if the extract hook hadn't run (or failed) for a folder, the keeper count is zero
+          and the erase-cleanup aborts rather than deleting the only copy of the content.</li>
+        <li><strong>Fail-loud extract</strong> — <code>rtorrent-extract.sh</code> only writes
+          the <code>_unpackerred.&lt;dir&gt;.txt</code> marker on 7za success. A failure
+          leaves no marker, so the daily scanner picks it up.</li>
         <li><strong>Daily Gatus heartbeat</strong> — if no successful ping arrives within 25
-          hours, the dead-man's-switch fires.</li>
+          hours, the dead-man's-switch fires (catches ofelia broken, flood dead, NFS unmounted).</li>
         <li><strong>Failure ping with context</strong> — if the proactive scan finds a stuck
           folder, it pushes <code>success=false</code> with the count and a sample folder name
           — Gatus alerts within minutes instead of waiting for the missing heartbeat.</li>
       </ul>
+
+      <aside class="callout note">
+        <span class="callout-title">Why not unpackerr</span>
+        Until May 2026 this pipeline ran <code>ghcr.io/unpackerr/unpackerr</code> as a separate
+        stack. It worked for one-level layouts like <code>/data/Movies/&lt;release&gt;</code>,
+        but its watcher (fsnotify + radovskyb/watcher) is non-recursive: nested subdirs are
+        invisible. Releases at <code>/data/Kids/Movies/&lt;release&gt;</code> (depth 2 under a
+        watched root) or <code>/data/TV/&lt;Show&gt;/Season N/&lt;release&gt;</code> (depth 3+)
+        slipped through, silently piled up RAR backlog, and only the rar-backlog cron found
+        them. Listing every possible subdir in unpackerr.conf wasn't sustainable. The rtorrent
+        hook gets the exact path from rtorrent itself — depth-agnostic by design — and
+        replaces the whole stack with one ~70-line script + a one-line apk add in a Dockerfile.
+      </aside>
 
       <h2 id="pinelake-stignore">Pinelake .stignore auto-sync</h2>
       <p>

@@ -305,11 +305,14 @@ external-endpoints:
         success-threshold: 2
         send-on-resolved: true
 
-  # Hourly health check from flood/rar-backlog.sh (ofelia-driven). Scans
-  # for RAR folders older than 2h with no extracted content alongside —
-  # i.e., unpackerr failed silently. Missing heartbeat OR success=false
-  # both trigger Postmark alerts via the shared default-alert config.
-  # 25h staleness threshold tolerates one missed firing.
+  # Daily safety-net check from flood/rar-backlog.sh (ofelia-driven at
+  # 04:50 AWST). Real-time extraction is handled by the rtorrent
+  # event.download.finished hook (flood/scripts/rtorrent-extract.sh);
+  # this is the cron backstop that scans for RAR folders older than 2h
+  # with no extracted content alongside — i.e., the hook didn't fire
+  # or failed silently. Missing heartbeat OR success=false both trigger
+  # Postmark alerts via the shared default-alert config. 25h staleness
+  # threshold tolerates one missed firing.
   - name: RAR Extraction
     group: heartbeat
     token: ${GATUS_UNPACKERR_PUSH_TOKEN}
@@ -317,7 +320,7 @@ external-endpoints:
       interval: 25h
     alerts:
       - type: custom
-        description: "RAR extraction pipeline is unhealthy. Either unpackerr is not processing new torrents (check `docker logs unpackerr`), the cron job itself is broken (check ofelia + `docker logs flood | grep rar-backlog`), or the scanner found folders with RAR files >2h old and no extracted content alongside. Manual scan: `docker exec flood /scripts/rar-backlog.sh`. Full backlog paths land in the flood container logs."
+        description: "RAR extraction pipeline is unhealthy. Either the rtorrent event.download.finished hook (rtorrent-extract.sh) didn't fire or failed (check `/flood-db/rtorrent-extract.log` inside the flood container), the cron job itself is broken (check ofelia + `docker logs flood | grep rar-backlog`), or the scanner found folders with RAR files >2h old and no extracted content alongside. Manual scan: `docker exec flood /scripts/rar-backlog.sh`. Full backlog paths land in the flood container logs."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true

@@ -364,7 +364,7 @@ These have failure modes that you must not introduce:
   and Docker silently creates empty stub directories.
 - **NFS-bind containers need a sentinel healthcheck; bare mount points
   need the `chattr +i` tripwire.** Any container that binds Pouch
-  (`/mnt/pouch`) or Jump (`/mnt/jump`) — flood, unpackerr, plex,
+  (`/mnt/pouch`) or Jump (`/mnt/jump`) — flood, plex,
   paperless, backrest today — must healthcheck via
   `[ -e <bind>/.podhaus-share-mounted ]` (the sentinel exists on the
   QNAP share; absent if the bind landed on a bare local-disk stub).

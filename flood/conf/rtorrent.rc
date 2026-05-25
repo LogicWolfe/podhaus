@@ -50,4 +50,13 @@ method.set_key=event.download.erased,rar_cleanup,"execute.nothrow.bg={/scripts/r
 # tag-applied-after-completion case. See flood/scripts/pinelake-stignore.sh.
 method.set_key=event.download.finished,pinelake_stignore,"execute.nothrow.bg={/scripts/pinelake-stignore.sh}"
 
+# Real-time in-place RAR extraction. Replaces the previous unpackerr
+# stack: rtorrent passes $d.base_path= (the exact directory the torrent
+# landed under), and the script walks it at any depth for the archive
+# entry-point, then runs 7za in place. Drops the _unpackerred.<dir>.txt
+# marker so rar-backlog.sh's daily safety-net scan won't re-flag it.
+# Idempotent on the marker; failure-loud (leaves no marker) so the
+# safety-net catches stuck folders. See flood/scripts/rtorrent-extract.sh.
+method.set_key=event.download.finished,rar_extract,"execute.nothrow.bg={/scripts/rtorrent-extract.sh,$d.base_path=}"
+
 method.set_key=event.download.inserted_new,loaded_time,"d.custom.set=addtime,$cat=$system.time=;d.save_full_session="

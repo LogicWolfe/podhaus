@@ -1,11 +1,14 @@
 #!/bin/sh
-# Daily health check for the unpackerr RAR-extraction pipeline.
+# Daily safety-net check for the rtorrent RAR-extraction pipeline.
 #
-# Scans /data/Movies, /data/TV, /data/Kids for folders containing RAR
-# pieces >= AGE_THRESHOLD old where no non-RAR/non-detritus content
-# exists alongside them — i.e., RARs present but no extracted content.
-# That's the exact failure shape the rtorrent-cleanup.sh ABORT guard is
-# also protecting against, caught proactively.
+# Primary extraction happens in real time via the rtorrent-extract.sh
+# event.download.finished hook (in flood/conf/rtorrent.rc). This script
+# is the cron-driven backstop: it scans /data/Movies, /data/TV, /data/Kids
+# for folders containing RAR pieces >= AGE_THRESHOLD old where no
+# non-RAR/non-detritus content exists alongside them — i.e., RARs present
+# but no extracted content. That's the exact failure shape the
+# rtorrent-cleanup.sh ABORT guard is also protecting against, caught
+# proactively.
 #
 # Pushes result to Gatus heartbeat endpoint:
 #   0 unhealthy → success=true
