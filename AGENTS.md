@@ -446,7 +446,8 @@ These have failure modes that you must not introduce:
   "podhaus-inject-content-hashes"` stamps a per-stack content hash
   into each stack's stored env; Stage 2 `BatchDeployStackIfChanged
   "*"` redeploys every stack whose tracked files actually changed
-  (any file in the stack dir except runtime-bind paths) — same path
+  (any file in the stack dir, including bind-mounted config paths,
+  plus any service's build context) — same path
   for files_on_host and linked_repo; Stage 3 restarts ofelia for
   label re-read. Push is not cheap and not a no-op — treat it as a
   deploy.

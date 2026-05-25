@@ -27,11 +27,11 @@ Three checks per compose:
    is reused.
 
 3. Every service that `depends_on` a service with `build:` has a
-   `podhaus.depends-on-<dep>` label referencing the dependent's
+   `podhaus.depends-on-<dep>` label referencing the dependency's
    `${BUILD_HASH_<DEP>...}`. Otherwise the depender won't recreate
-   when the dependent's build context changes (its own
+   when the dependency's build context changes (its own
    `podhaus.stack-content-hash` only tracks the depender's stack dir,
-   which may not include the dependent's build context — e.g. shared
+   which may not include the dependency's build context — e.g. shared
    build images like init-tools/).
 
 Run from repo root. Exits 1 on missing wiring (diagnostic on stderr);
@@ -154,7 +154,7 @@ def dockerfile_has_arg_propagation(dockerfile: Path) -> bool:
 
 
 def depends_on_services(service: dict) -> list[str]:
-    """Extract dependent service names from a service's depends_on field.
+    """Extract dependency service names from a service's depends_on field.
     depends_on can be a list (short form) or a map (long form)."""
     dep = service.get("depends_on")
     if dep is None:

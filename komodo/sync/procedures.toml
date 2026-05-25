@@ -20,12 +20,16 @@
 #
 # Stage 1 — content-hash injection. The Action
 # `podhaus-inject-content-hashes` (komodo/sync/actions.toml) walks every
-# stack visible in /syncs/podhaus from Komodo Core, computes a hash of
-# the stack directory excluding runtime-bind paths, and appends
-# `STACK_CONTENT_HASH=<hash>` to each stack's stored environment.
-# That turns Komodo's existing compose-file-only change detection into
-# full stack-directory change detection — Dockerfile, build-context
-# sources, bind-mounted config files, all get tracked uniformly.
+# stack visible in /syncs/podhaus from Komodo Core and appends two kinds
+# of env entries to each stack's stored environment:
+# `STACK_CONTENT_HASH=<hash>` (hash of the entire stack directory,
+# including bind-mounted config paths) and one
+# `BUILD_HASH_<UPPER_SERVICE>=<hash>` per service with a `build:`
+# directive (hash of the resolved build context — may live outside the
+# stack dir, e.g. shared init-tools/ or relay/). That turns Komodo's
+# existing compose-file-only change detection into full stack-directory
+# change detection — Dockerfile, build-context sources, bind-mounted
+# config files, all get tracked uniformly.
 # Crucially this is the SAME mechanism for files_on_host and linked_repo
 # stacks: the hash is computed from bilby's view of the repo, so it
 # routes around the stale-clone deadlock that breaks Komodo's native
