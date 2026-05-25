@@ -43,6 +43,7 @@ services:
     mem_limit: 4g
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # Probe 127.0.0.1, NOT localhost: our listen_host drop-in binds
       # 0.0.0.0 (IPv4 only), but `localhost` resolves to IPv6 ::1 in
@@ -91,6 +92,7 @@ services:
         bash -c "mongodump --uri='mongodb://localhost:27017/hyperdx' --gzip
         --archive=/dump/hyperdx-$(date +%F).archive &&
         ls -1t /dump/hyperdx-*.archive | tail -n +15 | xargs -r rm -f"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # mongo:5.0 image ships the legacy `mongo` shell (not mongosh).
       test: ["CMD-SHELL", "mongo --quiet --eval 'db.adminCommand(\"ping\").ok' localhost:27017/hyperdx | grep -q 1 || exit 1"]
@@ -139,6 +141,8 @@ services:
       hyperdx:
         condition: service_healthy
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   hyperdx:
     container_name: hyperdx
     image: docker.hyperdx.io/hyperdx/hyperdx:2
@@ -196,6 +200,7 @@ services:
     # guaranteed to have wget/curl; a wrong probe + autoheal would
     # crash-loop the UI. Liveness is validated end-to-end via the
     # tunnel during cutover, and a dead app is immediately visible.
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     depends_on:
       clickstack-clickhouse:
         condition: service_healthy

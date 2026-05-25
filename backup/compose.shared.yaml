@@ -63,6 +63,8 @@ services:
         echo "rendered /config/config.json"
     restart: "no"
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   backrest:
     container_name: backrest
     image: garethgeorge/backrest:latest
@@ -114,6 +116,13 @@ services:
       - dockernet
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      # Recreate when the backrest-init image rebuilds (init-tools/
+      # changes). backrest-init renders rclone.conf + config.json from
+      # templates into named volumes at startup; without this label, an
+      # init-tools change rebuilds the init image but backrest keeps
+      # using whatever config it last started against.
+      podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://localhost:9898/ > /dev/null"]
       interval: 60s

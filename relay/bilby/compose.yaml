@@ -8,6 +8,8 @@ services:
     container_name: rathole-client
     build:
       context: ..
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_RATHOLE_CLIENT:-unset}
     image: rathole:local
     pull_policy: never
     restart: unless-stopped
@@ -30,6 +32,7 @@ services:
     labels:
       autoheal: "true"
 
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 networks:
   dockernet:
     external: true

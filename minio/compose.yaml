@@ -43,6 +43,7 @@ services:
       - 127.0.0.1:9000:9000
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # MinIO ships curl in the official image; the /minio/health/live
       # endpoint returns 200 once the server is accepting requests.
@@ -83,6 +84,8 @@ services:
         mc version enable local/terraform-state
         echo "terraform-state bucket ready (versioned)"
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 networks:
   dockernet:
     external: true

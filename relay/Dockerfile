@@ -24,4 +24,13 @@ RUN apt-get update \
 # env (komodo-op) into the runtime config; nothing secret is committed.
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Content-hash build arg from the podhaus mechanism (see AGENTS.md
+# "Content-hash change detection"). Declared purely for cache busting:
+# bilby's rathole-client and kookaburra's rathole-server each pass their
+# own BUILD_HASH_<service> as this ARG, so each rebuilds independently
+# when relay/ contents change. The value is never read at runtime.
+ARG STACK_CONTENT_HASH=unset
+ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

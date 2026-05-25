@@ -14,6 +14,7 @@ services:
       - /var/lib/paperless-pgdata:/var/lib/postgresql/data:Z
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U paperless && ls /var/lib/postgresql/data > /dev/null"]
       interval: 30s
@@ -29,6 +30,7 @@ services:
     restart: unless-stopped
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -49,6 +51,8 @@ services:
     networks:
       - dockernet
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   paperless-gotenberg:
     container_name: paperless-gotenberg
     image: gotenberg/gotenberg:8
@@ -56,6 +60,7 @@ services:
     command: gotenberg --chromium-disable-javascript=true --chromium-allow-list=file:///tmp/.*
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3000/health > /dev/null"]
       interval: 60s
@@ -106,6 +111,7 @@ services:
       - /mnt/jump/paperless:/usr/src/paperless/media
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # Sentinel-marker check for /usr/src/paperless/media — proves the
       # bind source /mnt/jump/paperless is the real Jump NFS share via

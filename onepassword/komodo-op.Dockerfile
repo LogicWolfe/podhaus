@@ -20,5 +20,11 @@ FROM alpine:latest
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 COPY --from=builder /komodo-op /app/komodo-op
 RUN chmod +x /app/komodo-op && chown appuser:appgroup /app/komodo-op
+
+# Content-hash build arg from the podhaus mechanism (see AGENTS.md
+# "Content-hash change detection"). Declared purely for cache busting.
+ARG STACK_CONTENT_HASH=unset
+ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
+
 USER appuser
 ENTRYPOINT ["/app/komodo-op", "-daemon"]

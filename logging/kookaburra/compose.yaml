@@ -16,3 +16,5 @@ services:
       # (not file bind) — alloy reloads on file change; file-binding
       # would pin the inode.
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-kookaburra/logging/kookaburra/alloy-conf:/etc/alloy:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

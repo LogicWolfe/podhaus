@@ -31,6 +31,7 @@ services:
       - dockernet
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # 127.0.0.1 (not localhost) so the probe lands on IPv4 directly —
       # nginx isn't listening on IPv6 in this stack, and wget's localhost

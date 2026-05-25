@@ -47,6 +47,7 @@ services:
       - dockernet
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       test: ["CMD", "/gatus", "healthcheck"]
       interval: 60s

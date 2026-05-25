@@ -32,6 +32,7 @@ services:
       # kangaroo's autoheal stack restarts this container if the
       # healthcheck below fails repeatedly.
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8384/rest/noauth/health > /dev/null"]
       interval: 60s

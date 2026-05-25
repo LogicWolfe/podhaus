@@ -173,10 +173,12 @@
         "unchanged" forever and no-ops. The push procedure routes
         around this via Stage 1's
         <code>RunAction&nbsp;"podhaus-inject-content-hashes"</code>:
-        the Action computes a content hash of each stack directory
-        from bilby's view of the repo and stamps
-        <code>STACK_CONTENT_HASH=&lt;hash&gt;</code> into the stack's
-        stored env. Stage 2's
+        the Action computes (a) a content hash of each stack directory
+        and (b) per-service hashes for every <code>build:</code>
+        context, both from bilby's view of the repo, and stamps
+        <code>STACK_CONTENT_HASH=&lt;hash&gt;</code> +
+        <code>BUILD_HASH_&lt;UPPER_SERVICE&gt;=&lt;hash&gt;</code>
+        into the stack's stored env. Stage 2's
         <code>BatchDeployStackIfChanged&nbsp;"*"</code> then sees an
         env diff for any stack whose tracked files actually changed,
         independent of Periphery-clone state, and deploys only those.

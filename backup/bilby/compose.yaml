@@ -18,10 +18,14 @@ services:
     build:
       context: ../../init-tools
       dockerfile: Dockerfile
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_BACKREST_INIT:-unset}
     volumes:
       - ${PODHAUS_REPO}/backup/rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro,z
       - ${PODHAUS_REPO}/backup/bilby/config.json.tmpl:/tmpl/config.json.tmpl:ro,z
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   backrest:
     # Backrest shell hooks need docker socket access to exec into other
     # containers for live DB dumps (plex library, paperless pg, komodo pg).
@@ -81,6 +85,14 @@ services:
       # Bugsink SQLite db + event storage live under /data.
       - bugsink_bugsink-data:/userdata/bugsink:ro
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      # Recreate when the backrest-init image rebuilds (init-tools/
+      # changes). backrest reads the rendered config + rclone.conf that
+      # backrest-init drops into its named volumes at startup; without
+      # this label, an init-tools change rebuilds the init image but
+      # backrest keeps using whatever config it had when it last started.
+      podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}
 volumes:
   # External volumes owned by other stacks — Backrest mounts them
   # read-only as backup sources. `external: true` tells compose to

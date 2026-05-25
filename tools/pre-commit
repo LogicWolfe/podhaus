@@ -9,8 +9,15 @@
 #
 #   ln -sf ../../tools/pre-commit .git/hooks/pre-commit
 #
-# The hook runs tools/lint-stack-env.py to catch the documented
-# two-place env footgun (stack.toml declares a var but no compose
-# service references it, leaving the container with an empty value).
+# Checks run:
+#   - lint-stack-env.py:           catches stack.toml env declarations
+#                                   that no compose service references
+#                                   (silent empty-var footgun).
+#   - lint-stack-content-hash.py:  catches services that don't depend on
+#                                   STACK_CONTENT_HASH (label + build-arg
+#                                   pattern), so content changes wouldn't
+#                                   actually recreate the container.
 set -e
-exec python3 "$(git rev-parse --show-toplevel)/tools/lint-stack-env.py"
+root="$(git rev-parse --show-toplevel)"
+python3 "$root/tools/lint-stack-env.py"
+python3 "$root/tools/lint-stack-content-hash.py"

@@ -40,6 +40,8 @@ services:
       # to confirm a server-side fix actually closes it.
       WIREGUARD_MTU: ${WIREGUARD_MTU:-1320}
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   toolbox:
     image: nicolaka/netshoot:latest
     container_name: vpn-diagnostics-toolbox
@@ -55,3 +57,5 @@ services:
     restart: "no"
     # Stay up so diagnostics run via `docker exec`, not a fixed script.
     command: ["sleep", "infinity"]
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

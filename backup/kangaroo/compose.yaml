@@ -28,6 +28,8 @@ services:
     build:
       context: ../../init-tools
       dockerfile: Dockerfile
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_BACKREST_INIT:-unset}
     volumes:
       # Absolute host paths — Periphery's container-side relative-path
       # resolution doesn't match the QNAP host's view of the cloned repo,
@@ -35,6 +37,8 @@ services:
       - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro
       - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/kangaroo/config.json.tmpl:/tmpl/config.json.tmpl:ro
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   backrest:
     # No security_opt — QTS doesn't run SELinux.
     volumes:
@@ -46,3 +50,8 @@ services:
       # stack's state dir.
       - /share/CACHEDEV1_DATA/Container/syncthing-config:/userdata/syncthing:ro
       - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo:/userdata/komodo-periphery:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      # Recreate when the backrest-init image rebuilds (init-tools/
+      # changes). Same rationale as backup/bilby; see that file.
+      podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}

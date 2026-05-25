@@ -18,3 +18,5 @@ services:
     # No healthcheck — willfarrell/autoheal runs as a shell script with
     # no persistent process name to probe. restart: unless-stopped
     # handles crashes; autoheal can't heal itself anyway.
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

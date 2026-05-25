@@ -150,7 +150,8 @@ devices (blast-radius containment).
 | `komodo/sync/servers.toml` | Server definitions (bilby + kangaroo + kookaburra) |
 | `komodo/sync/repos.toml` | Linked Repo definitions for kangaroo (`podhaus`) + kookaburra (`podhaus-kookaburra`) |
 | `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 RunAction `podhaus-inject-content-hashes` (stamp per-stack content hash into stored env) → Stage 2 BatchDeployStackIfChanged "*" (now content-hash-aware, uniform across files_on_host + linked_repo) → Stage 3 RestartStack ofelia (label re-read; the released ofelia image has no live label refresh). |
-| `komodo/sync/actions.toml` | Komodo Actions invoked by procedures. Currently one: `podhaus-inject-content-hashes` — Stage 1 of the push procedure. Walks every stack visible at `/syncs/podhaus`, hashes the stack directory excluding runtime-bind paths (parsed from each stack's compose volumes), and appends `STACK_CONTENT_HASH=<hash>` to the stack's stored env. The hash is the load-bearing piece of podhaus's "any file in the stack dir changed → redeploy" mechanism. |
+| `komodo/sync/actions.toml` | Komodo Actions invoked by procedures. Currently one: `podhaus-inject-content-hashes` — Stage 1 of the push procedure. For every stack visible at `/syncs/podhaus`, hashes (a) the stack directory itself → `STACK_CONTENT_HASH`, and (b) each service's resolved build context → `BUILD_HASH_<UPPER_SERVICE>`. UpdateStack injects all into stored env. The load-bearing piece of podhaus's "any in-stack file change → recreate; any build-context change → image rebuild + recreate" property. |
+| `tools/lint-stack-content-hash.py` | Pre-commit consumer-wiring lint for the content-hash mechanism: every service has the `podhaus.stack-content-hash` label; every build service has `build.args.STACK_CONTENT_HASH` referencing its own `BUILD_HASH_<self>` + the matching `ARG`/`ENV` pair in its Dockerfile; every service that `depends_on` a build service has the `podhaus.depends-on-<dep>` label. Run via `tools/pre-commit` alongside `lint-stack-env.py`. |
 | `komodo-start` | Bootstrap-only script: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_REPO`), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync). Idempotent — safe to re-run. |
 | `komodo-sync` | Steady-state debug-iterate tool, **and** the recovery path for procedure-stage edits the push webhook can't apply by itself. Step 1: unfiltered `RunSync(podhaus)` directly via the API (out-of-procedure, so Komodo's `resource::update::<Procedure>` busy guard doesn't fire — procedure-definition changes land cleanly here, surgically — only stacks whose files actually changed get redeployed). Step 2–3: invokes `podhaus-push-deploy` + `fenwick-push-deploy` procedures (whose own Stage 0 RunSync is now a no-op because step 1 already reconciled state). Use when iterating locally without pushing, or after a push that touches `komodo/sync/procedures.toml`. |
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. Hook at `tools/pre-commit`; install via `ln -sf ../../tools/pre-commit .git/hooks/pre-commit`. |
@@ -213,20 +214,21 @@ devices (blast-radius containment).
    reaches the deploy correctly — without this, the deploy uses the
    pre-sync stored env and renders `${VAR}` empty). **Stage 1**
    `RunAction "podhaus-inject-content-hashes"` walks every stack
-   visible at Komodo Core's `/syncs/podhaus` mount, computes a content
-   hash of the stack directory (excluding paths that the stack's own
-   compose `volumes:` bind-mount at runtime — those are live-reload,
-   not in the image), and appends `STACK_CONTENT_HASH=<hash>` to each
-   stack's stored environment. That turns the default compose-only
-   change detection into full stack-directory change detection, and
-   it works uniformly for files_on_host (bilby) AND linked_repo
-   (kangaroo / kookaburra) stacks because the hash is derived from
-   bilby's view of the repo — routing around Komodo's broken native
-   IfChanged on linked_repo (the stale-clone deadlock). **Stage 2**
-   `BatchDeployStackIfChanged "*"` deploys any stack whose rendered
-   env differs from what's deployed — Stage 1's hash appears in that
-   diff for any stack whose tracked files actually changed; unchanged
-   stacks no-op. New stacks first-deploy via `deploy = true` + the
+   visible at Komodo Core's `/syncs/podhaus` mount and appends two
+   kinds of env entries to each stack's stored environment:
+   `STACK_CONTENT_HASH=<hash>` (hash of the stack's own directory),
+   and one `BUILD_HASH_<UPPER_SERVICE>=<hash>` per service that has a
+   `build:` directive (hash of the resolved build context — may live
+   outside the stack dir, e.g. shared `init-tools/` or `relay/`). The
+   hashes are derived from bilby's view of the repo and propagate
+   through Komodo's normal env-rendering machinery, working
+   uniformly for files_on_host (bilby) AND linked_repo (kangaroo /
+   kookaburra) stacks — routing around Komodo's stale-Periphery-clone
+   IfChanged on linked_repo. **Stage 2** `BatchDeployStackIfChanged "*"`
+   deploys any stack whose rendered env differs from what's deployed —
+   Stage 1's hashes appear in that diff for any stack whose tracked
+   content actually changed; unchanged stacks no-op. New stacks
+   first-deploy via `deploy = true` + the
    `(None, _) => DeployIfChangedAction::FullDeploy` path. **Stage 3**
    `RestartStack "ofelia"` forces ofelia to re-read every container's
    `ofelia.*` labels — required because the released ofelia image
@@ -240,37 +242,39 @@ devices (blast-radius containment).
    through the same Stage 2 IfChanged path as everything else.
 
    **Content-hash change detection — what counts and what doesn't.**
-   The hash includes every file in the stack directory *except*
-   anything compose binds at runtime (paths like
-   `${PODHAUS_REPO}/<stack>/scripts` or `<stack>/conf` that get
-   mounted as read-only volumes into the running container). So:
-   - Dockerfile / build-context file changes → image rebuild +
-     container recreate (for stacks with `build:`; see the build-
-     stack convention below).
-   - Compose changes → container recreate as before.
-   - Bind-mounted script / conf file changes → no redeploy, live-
-     reload via the directory bind continues to work as designed.
+   `STACK_CONTENT_HASH` covers every file in the stack directory
+   (including bind-mounted runtime paths like `<stack>/scripts/` or
+   `<stack>/conf/`). The trade-off is that a script edit triggers a
+   container recreate even where the script is also live-mounted; we
+   chose this for the "make a change → see the change" invariant
+   over more precise but per-stack-configured exclusions. Per-service
+   `BUILD_HASH_<svc>` additionally covers the resolved build context
+   for any service with `build:` — including contexts outside the
+   stack dir (shared `init-tools/`, `relay/`). The two hashes are
+   consumed via different conventions:
 
-   **Build-stack convention.** Stacks with a `build:` directive in
-   compose need three extra lines so that a Dockerfile / build-
-   context change actually invalidates docker's layer cache:
-   ```yaml
-   # compose.yaml
-   build:
-     context: .
-     args:
-       STACK_CONTENT_HASH: ${STACK_CONTENT_HASH:-unset}
-   ```
-   ```dockerfile
-   # Dockerfile
-   ARG STACK_CONTENT_HASH=unset
-   ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
-   ```
-   The ENV-from-ARG is the cache-busting lever: a different ARG
-   value produces a different layer fingerprint from that point
-   down. The value is never read at runtime — its sole purpose is
-   to invalidate docker's build cache. flood is currently the only
-   stack on this pattern.
+   - **Every service** has a `podhaus.stack-content-hash` label that
+     references `${STACK_CONTENT_HASH:-unset}`. Docker compose tracks
+     labels in its per-service config-hash, so any stack-dir change
+     forces a recreate.
+   - **Build-mode services** additionally have
+     `build.args.STACK_CONTENT_HASH: ${BUILD_HASH_<SELF>:-unset}` in
+     compose, and an `ARG STACK_CONTENT_HASH=unset` + `ENV
+     STACK_CONTENT_HASH=${STACK_CONTENT_HASH}` pair in their Dockerfile.
+     A different ARG value produces a different layer fingerprint from
+     that point down — docker's build-layer cache busts on
+     build-context change.
+   - **Services that depend on a build service** have a
+     `podhaus.depends-on-<dep>: ${BUILD_HASH_<DEP>:-unset}` label per
+     dependent. Without this, an init image rebuild wouldn't recreate
+     the long-running service that depends on it, so the new init
+     output (rendered configs, etc.) wouldn't be picked up.
+
+   The producer side is the Action; the consumer side is what
+   `tools/lint-stack-content-hash.py` enforces at commit time. Service
+   names with non-alphanumerics get translated for the variable name:
+   uppercased, non-alnum → underscore. So `plex-preferences-init` →
+   `BUILD_HASH_PLEX_PREFERENCES_INIT`.
 
    **Caveat — edits to `komodo/sync/procedures.toml` need a follow-up
    `./komodo-sync` to land.** Komodo's `resource::update::<Procedure>`
@@ -390,8 +394,9 @@ These have failure modes that you must not introduce:
   `podhaus-push-deploy` procedure routes around this via Stage 1's
   `RunAction "podhaus-inject-content-hashes"`: the Action computes
   hashes from bilby's view of the repo and stamps
-  `STACK_CONTENT_HASH=<hash>` into each stack's stored env *before*
-  Stage 2's `BatchDeployStackIfChanged` runs. The env diff becomes
+  `STACK_CONTENT_HASH=<hash>` + per-service `BUILD_HASH_<svc>=<hash>`
+  into each stack's stored env *before* Stage 2's
+  `BatchDeployStackIfChanged` runs. The env diff becomes
   the load-bearing change signal — sourced from a place IfChanged
   doesn't have a stale view of — so IfChanged is correct for
   linked_repo stacks too. New linked_repo stacks are picked up

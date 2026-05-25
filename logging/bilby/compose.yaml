@@ -29,3 +29,5 @@ services:
       # never reaches docker stdout. Tailing the file directly is the
       # only way to get cleanup-hook events into ClickStack.
       - /var/lib/flood-db:/var/log/flood:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

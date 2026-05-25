@@ -15,6 +15,8 @@ services:
     networks:
       - dockernet
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   op-connect-sync:
     container_name: op-connect-sync
     image: 1password/connect-sync:latest
@@ -27,6 +29,8 @@ services:
     networks:
       - dockernet
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   komodo-op:
     container_name: komodo-op
     # Upstream ghcr.io/0dragosh/komodo-op ships a mislabelled arm64 tag —
@@ -41,6 +45,8 @@ services:
     build:
       context: .
       dockerfile: komodo-op.Dockerfile
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_KOMODO_OP:-unset}
     restart: unless-stopped
     depends_on:
       - op-connect-api
@@ -56,6 +62,7 @@ services:
       SYNC_INTERVAL: 1m
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       test: ["CMD-SHELL", "pgrep -x komodo-op > /dev/null || pgrep komodo-op > /dev/null"]
       interval: 60s

@@ -29,6 +29,8 @@ services:
     # is implicit (if it dies, restarts; if it's silently broken, jobs
     # stop firing and we'll notice in the per-target container logs).
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 networks:
   dockernet:
     external: true

@@ -118,6 +118,8 @@ services:
         trap - EXIT
     restart: "no"
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   tailscale:
     image: tailscale/tailscale:latest
     depends_on:
@@ -154,6 +156,12 @@ services:
     restart: unless-stopped
     labels:
       autoheal: "true"
-
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      # Recreate when the tailscale-cleanup image rebuilds (init-tools/
+      # changes). The cleanup init runs against the Tailscale API at
+      # startup; without this label, an init-tools change rebuilds the
+      # init image but tailscale itself doesn't restart and keeps
+      # whatever state it had from the previous boot.
+      podhaus.depends-on-tailscale-cleanup: ${BUILD_HASH_TAILSCALE_CLEANUP:-unset}
 volumes:
   tailscale-state:

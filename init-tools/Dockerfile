@@ -18,3 +18,12 @@
 FROM alpine:latest
 
 RUN apk add --no-cache gettext python3 curl jq
+
+# Content-hash build arg from the podhaus mechanism (see AGENTS.md
+# "Content-hash change detection"). Declared purely for cache busting:
+# multiple consumer stacks (backrest-init, plex-preferences-init,
+# tailscale-cleanup) each pass their own BUILD_HASH_<service> as this
+# ARG, so each consumer rebuilds its image independently when init-
+# tools/ contents change. The value is never read at runtime.
+ARG STACK_CONTENT_HASH=unset
+ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}

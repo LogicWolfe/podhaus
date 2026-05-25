@@ -16,6 +16,7 @@ services:
       - /run/dbus:/run/dbus:ro
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://localhost:8123/ > /dev/null && ls /config > /dev/null"]
       interval: 60s

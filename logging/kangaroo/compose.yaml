@@ -19,3 +19,5 @@ services:
       # shared compose's `command:` line. See
       # docs/stack-conventions.html#bind-mounts.
       - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/logging/kangaroo/alloy-conf:/etc/alloy:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

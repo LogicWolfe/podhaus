@@ -36,6 +36,8 @@ services:
     networks:
       - dockernet
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 networks:
   dockernet:
     external: true

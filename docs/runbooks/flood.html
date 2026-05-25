@@ -49,13 +49,17 @@
         <span class="callout-title">Build-stack content-hash convention</span>
         flood uses a <code>build:</code> directive, which means changes to the
         Dockerfile (and any future COPY-source files) need to invalidate docker's
-        image-layer cache. The convention is documented in AGENTS.md
-        "Content-hash change detection": compose passes
-        <code>STACK_CONTENT_HASH</code> through to docker build as an arg, and
-        the Dockerfile declares <code>ARG STACK_CONTENT_HASH</code> +
-        ENV-from-ARG so a new value busts the cache. The value is injected by
-        the push procedure's Stage 1 Action; the running container ignores it.
-        flood is the only stack on this pattern today.
+        image-layer cache. Per AGENTS.md "Content-hash change detection":
+        <code>flood/compose.yaml</code> passes
+        <code>build.args.STACK_CONTENT_HASH: ${BUILD_HASH_FLOOD:-unset}</code>
+        and the Dockerfile declares
+        <code>ARG STACK_CONTENT_HASH=unset</code> + ENV-from-ARG so a new value
+        busts the cache. <code>BUILD_HASH_FLOOD</code> is injected per-deploy
+        by Stage 1 of the push procedure (the per-service variant of the
+        content-hash injector — every <code>build:</code> service gets a
+        <code>BUILD_HASH_&lt;UPPER_SERVICE&gt;</code> covering its resolved
+        build context). The running container never reads the value; it's
+        purely a layer-cache invalidation lever.
       </aside>
       <p>
         Storage:

@@ -7,4 +7,13 @@ services:
     build:
       context: ../../init-tools
       dockerfile: Dockerfile
-  tailscale: {}
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_TAILSCALE_CLEANUP:-unset}
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+  tailscale:
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      # Recreate when the tailscale-cleanup image rebuilds (init-tools/
+      # changes). Same rationale as tailscale/bilby; see that file.
+      podhaus.depends-on-tailscale-cleanup: ${BUILD_HASH_TAILSCALE_CLEANUP:-unset}

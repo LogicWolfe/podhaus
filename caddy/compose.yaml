@@ -3,6 +3,8 @@ services:
     container_name: caddy
     build:
       context: .
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_CADDY:-unset}
     image: caddy-cloudflare:local
     pull_policy: never
     restart: unless-stopped
@@ -36,6 +38,7 @@ services:
       - dockernet
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # Caddy's localhost admin API answers when the server is up
       # (busybox wget is present in the alpine-based caddy image).

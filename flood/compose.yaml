@@ -20,6 +20,8 @@ services:
         install -o 1000 -g 1001 -m 0644 /conf/rtorrent.rc /flood-db/.rtorrent.rc
         echo "rtorrent.rc installed at /flood-db/.rtorrent.rc"
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   flood:
     container_name: flood
     # Local build adds libarchive-tools to the upstream image so the
@@ -28,17 +30,18 @@ services:
     # deploy from trying to pull from Docker Hub.
     #
     # STACK_CONTENT_HASH is the build-arg side of the podhaus content-
-    # hash mechanism (see AGENTS.md "Content-hash change detection"):
-    # the Stage 1 Action of podhaus-push-deploy injects this var into
-    # the stack's env on every push; feeding it into build args means
-    # any Dockerfile / build-context change invalidates docker's layer
-    # cache so the image actually rebuilds. Without this build arg the
-    # env change alone would recreate the container without rebuilding
-    # the image — fine for non-build stacks, wrong for this one.
+    # hash mechanism (see AGENTS.md "Content-hash change detection").
+    # The Stage 1 Action of podhaus-push-deploy injects per-service
+    # BUILD_HASH_<service> into the stack's env; feeding it into build
+    # args means any Dockerfile / build-context change invalidates
+    # docker's layer cache so the image actually rebuilds. The ARG
+    # inside the Dockerfile is named STACK_CONTENT_HASH for uniformity
+    # across stacks — the per-service variable is just how it reaches
+    # the build.
     build:
       context: .
       args:
-        STACK_CONTENT_HASH: ${STACK_CONTENT_HASH:-unset}
+        STACK_CONTENT_HASH: ${BUILD_HASH_FLOOD:-unset}
     image: flood:local
     pull_policy: build
     restart: unless-stopped
@@ -89,6 +92,7 @@ services:
       # grep -Fxq dedupe), so collisions with the event hook are harmless.
       ofelia.job-exec.pinelake-stignore.schedule: "0 */5 * * * *"
       ofelia.job-exec.pinelake-stignore.command: "/scripts/pinelake-stignore.sh"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # Stall-proof + stub-proof: prove the service via loopback wget,
       # verify the local flood-db bind via /proc/mounts (cheap local read,

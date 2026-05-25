@@ -16,6 +16,8 @@ services:
     networks:
       - dockernet
 
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   bugsink:
     container_name: bugsink
     # Bugsink ships no granular semver tags; `2` is the upstream stable
@@ -51,6 +53,7 @@ services:
       - dockernet
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()"]
       interval: 30s
