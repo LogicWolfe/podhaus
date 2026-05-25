@@ -1,11 +1,6 @@
 #!/bin/bash
-# Reference copy of podhaus's pre-commit hook. To install on a fresh
-# clone:
-#
-#   cp tools/pre-commit .git/hooks/pre-commit
-#   chmod +x .git/hooks/pre-commit
-#
-# Or symlink (any subsequent change to this file is then live):
+# Reference copy of podhaus's pre-commit hook. Install via symlink so
+# future edits to this file are picked up automatically:
 #
 #   ln -sf ../../tools/pre-commit .git/hooks/pre-commit
 #

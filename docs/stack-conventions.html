@@ -42,42 +42,137 @@
         <li>If the stack needs a hostname, add an ingress rule to
           <code>cloudflare-tunnel/config.yml</code> and a CNAME in
           <code>dns/dnsconfig.js</code>. Run <code>./dns-push</code> after.</li>
+        <li>If the stack has services with <code>build:</code> directives or
+          <code>depends_on</code> a build service, wire the content-hash
+          consumer pattern — see <a href="#content-hash-wiring">Content-hash
+          wiring</a>. The pre-commit lint will block the commit if anything
+          is missing.</li>
         <li><strong>Commit and push.</strong> The push fires the
           <code>podhaus-push-deploy</code> procedure: Stage 0 RunSync
           registers the new stack + any TOML-declared variables; Stage 1
-          deploys it (because <code>deploy = true</code> +
-          <code>deployed_contents</code> is None means
-          <code>DeployIfChangedAction::FullDeploy</code> per Komodo v2.2.0
-          source). No manual <em>Deploy</em> click. For local debug
-          iteration without pushing, <code>./komodo-sync</code>.</li>
+          (<code>RunAction "podhaus-inject-content-hashes"</code>) stamps
+          per-stack content hashes; Stage 2
+          <code>BatchDeployStackIfChanged "*"</code> first-deploys it
+          (because <code>deploy = true</code> + <code>deployed_contents</code>
+          is None means <code>DeployIfChangedAction::FullDeploy</code> per
+          Komodo v2.2.0 source); Stage 3 restarts ofelia so any new schedule
+          labels take effect. No manual <em>Deploy</em> click. For local
+          debug iteration without pushing, <code>./komodo-sync</code>.</li>
       </ol>
 
       <h2 id="multi-host">Adding a stack to a multi-host shared service</h2>
       <p>
         Services in this layout today: <code>backup/</code>, <code>autoheal/</code>,
-        <code>logging/</code>. Each has a <code>compose.shared.yaml</code> defining the
-        cross-host contract and per-host subdirectories overlaying the host-specific bits.
+        <code>logging/</code>, <code>tailscale/</code>, <code>relay/</code>. Each has a
+        <code>compose.shared.yaml</code> defining the cross-host contract and per-host
+        subdirectories overlaying the host-specific bits.
       </p>
       <ol>
-        <li>Create <code>&lt;service&gt;/&lt;host&gt;/compose.yaml</code> with
-          <code>include: [../compose.shared.yaml]</code> and the host-specific overlay
-          (volumes, security_opt, additional services).</li>
+        <li>Create <code>&lt;service&gt;/&lt;host&gt;/compose.yaml</code> with the
+          host-specific overlay (volumes, security_opt, additional services). The shared
+          file is composed in via <code>file_paths</code> in <code>stack.toml</code>;
+          compose's <code>include:</code> directive isn't used here.</li>
         <li>Create <code>&lt;service&gt;/&lt;host&gt;/stack.toml</code> setting
-          <code>server = "&lt;host&gt;"</code> and the per-host
-          <code>environment</code> block. Variable <em>names</em> must match the shared
-          compose's contract; <em>values</em> come from host-specific 1P items.</li>
+          <code>server = "&lt;host&gt;"</code>, the per-host <code>environment</code> block,
+          and <code>file_paths</code> listing both compose files. See
+          <a href="#file-paths-ordering">file_paths ordering</a> below — the order matters.
+          Variable <em>names</em> must match the shared compose's contract; <em>values</em>
+          come from host-specific 1P items.</li>
         <li>If the host needs a config template (e.g. Backrest's
           <code>config.json.tmpl</code>), put it at
           <code>&lt;service&gt;/&lt;host&gt;/&lt;template&gt;</code> and reference it via the
           per-host overlay's bind mount.</li>
-        <li>Commit + push. The push procedure's Stage 0 syncs the new
-          stack def, Stage 1 deploys it on bilby (if applicable), Stage 2
-          force-deploys linked-repo hosts.</li>
+        <li>Commit + push. The push procedure (<code>podhaus-push-deploy</code>) reconciles
+          the new stack via Stage&nbsp;0 (RunSync), stamps content hashes via Stage&nbsp;1
+          (RunAction), and deploys via Stage&nbsp;2 (BatchDeployStackIfChanged) — same path
+          for files_on_host and linked_repo hosts. New stacks first-deploy via
+          <code>deploy = true</code> + Komodo's
+          <code>DeployIfChangedAction::FullDeploy</code> path. See
+          <a href="/komodo.html#operating-models">Komodo procedures</a>.</li>
       </ol>
       <p>
         When fixing a bug in a multi-host service, edit <code>compose.shared.yaml</code> (and
         the shared template if present) — the change applies to all hosts uniformly. Per-host
         overlay edits should only touch genuinely host-specific bits.
+      </p>
+
+      <h3 id="file-paths-ordering"><code>file_paths</code> ordering</h3>
+      <p>
+        <code>docker compose -f A -f B</code> gives precedence to the LAST file on
+        scalar-field conflicts (override semantics), and resolves relative
+        <code>build.context</code> paths against the FIRST file's directory. Two
+        consequences:
+      </p>
+      <ul>
+        <li><strong>Host-first</strong>
+          (<code>file_paths = ["compose.yaml", "../compose.shared.yaml"]</code>) — the
+          default. Use when the overlay only adds fields (extra volumes, security_opt,
+          additional services). Relative <code>build.context</code> in the overlay resolves
+          against <code>&lt;service&gt;/&lt;host&gt;/</code>. Current users: autoheal,
+          logging, backup/kangaroo, tailscale, relay/kookaburra.</li>
+        <li><strong>Shared-first</strong>
+          (<code>file_paths = ["../compose.shared.yaml", "compose.yaml"]</code>) — use when
+          the overlay needs to <em>override</em> a scalar field in the shared definition
+          (e.g. <code>backup/bilby/compose.yaml</code> overrides the shared healthcheck
+          with a Jump-NFS sentinel check). Relative <code>build.context</code> in the
+          overlay then resolves against <code>&lt;service&gt;/</code>, not the host dir —
+          adjust paths accordingly. Current users: backup/bilby (only).</li>
+      </ul>
+      <p>
+        Whichever ordering you choose, the comment in the local <code>stack.toml</code>
+        should record why. The 2026-05-23 <code>backup/bilby</code> flip and its silent
+        build-context breakage (re-surfaced months later when content-hash injection
+        triggered a rebuild) is the cautionary case.
+      </p>
+
+      <h2 id="content-hash-wiring">Content-hash wiring</h2>
+      <p>
+        Every podhaus stack participates in the content-hash change-detection
+        mechanism. Stage&nbsp;1 of <code>podhaus-push-deploy</code> computes per-stack and
+        per-service hashes from bilby's view of the repo and injects them as env vars on
+        each stack; compose services consume them via labels and build args so a file
+        change actually recreates the right containers. The pre-commit lint
+        (<code>tools/lint-stack-content-hash.py</code>) enforces three rules on every
+        commit — if you're matching an existing stack's shape it'll just work, but
+        here's the contract:
+      </p>
+      <ul>
+        <li><strong>Every service</strong> carries a
+          <code>podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}</code> label.
+          Compose tracks labels in its per-service config hash, so any file change in
+          the stack directory recreates the container.</li>
+        <li><strong>Build-mode services</strong> (those with a <code>build:</code>
+          directive) additionally pass their own build-context hash as a build arg:
+          <code>build.args.STACK_CONTENT_HASH: ${BUILD_HASH_&lt;SELF&gt;:-unset}</code>,
+          where <code>&lt;SELF&gt;</code> is the service name uppercased with non-alnum
+          characters replaced by <code>_</code> (so <code>plex-preferences-init</code>
+          → <code>BUILD_HASH_PLEX_PREFERENCES_INIT</code>). The matching Dockerfile
+          declares <code>ARG STACK_CONTENT_HASH=unset</code> +
+          <code>ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}</code> so the value busts
+          docker's layer cache when the resolved build context changes.</li>
+        <li><strong>Services that <code>depends_on</code> a build service</strong> carry a
+          <code>podhaus.depends-on-&lt;dep&gt;: ${BUILD_HASH_&lt;DEP&gt;:-unset}</code>
+          label per dependency. Without this, an init-image rebuild wouldn't recreate the
+          long-running service that consumes the init's output (the depender's own
+          <code>stack-content-hash</code> only tracks its stack dir, which may not include
+          the dependency's build context — shared <code>init-tools/</code> being the
+          obvious case).</li>
+      </ul>
+      <p>
+        The <code>:-unset</code> fallback is deliberate. If the Action hasn't run yet
+        (first deploy of a new stack, or a Stage 1 failure that didn't make it to
+        Stage 2 — though by design Stage 1 fails the procedure so Stage 2 doesn't run
+        at all), compose substitutes the literal string <code>"unset"</code> and the
+        deploy proceeds with that as the baseline. The next push that runs Stage 1
+        injects real hashes; the env diff triggers a recreate. Refusing to deploy on
+        missing hash (<code>:?</code>) would break bootstrap; deploying with whatever
+        the variable resolves to keeps first-deploy paths working.
+      </p>
+      <p>
+        See <a href="/komodo.html">Komodo</a> for the Action / procedure machinery, and
+        the <code>AGENTS.md</code> "Content-hash change detection" section for the
+        rationale around why the hash includes bind-mounted runtime paths (the
+        "make a change → see the change" invariant beats per-stack exclusion lists).
       </p>
 
       <h2 id="stack-private-variables">Stack-private variables</h2>
