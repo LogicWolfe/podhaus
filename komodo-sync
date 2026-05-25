@@ -1,18 +1,37 @@
 #!/bin/bash
 # Apply current podhaus + fenwick config to running Komodo state —
-# the local-iteration counterpart to a git push.
+# the local-iteration counterpart to a git push, plus the recovery
+# path for procedure-definition changes that the GitHub push can't
+# self-apply.
 #
 # Use this when:
 #   - You've edited a stack.toml or compose.yaml locally and want it
 #     applied WITHOUT committing+pushing (debug iteration).
+#   - You've pushed an edit to komodo/sync/procedures.toml. The push
+#     path can't apply procedure-stage changes by itself: Komodo's
+#     resource::update::<Procedure> refuses to modify a procedure
+#     that's currently running (explicit busy-guard in resource/mod.rs)
+#     and the in-procedure RunSync's iterative sync loop bails after
+#     10 retries. Run this from outside the procedure to apply the
+#     procedure change.
 #
-# Thin wrapper around the same Komodo procedures the GitHub push
-# webhooks fire (`podhaus-push-deploy` + `fenwick-push-deploy`), so
-# behavior is identical to a push without the commit. The single
-# source of truth for "what 'apply config' means" — stage ordering,
-# linked-repo force-deploys, future cross-cutting steps like an
-# ofelia label-refresh restart — lives in komodo/sync/procedures.toml.
-# This script just triggers them and polls until done.
+# Flow:
+#   1. RunSync(podhaus) DIRECTLY via the API — not wrapped in a
+#      procedure. Out of any procedure context, so Komodo's busy guard
+#      on update::<Procedure> doesn't fire and procedure-definition
+#      changes land cleanly. Surgical: only redeploys stacks whose
+#      files actually changed (deploy reason "File contents for
+#      compose.yaml have changed"); a clean tree triggers "No Changes"
+#      and zero deploys. Do NOT add a `resource_type` filter here —
+#      doing so scopes the sync's stack_map to the filtered type, and
+#      the deploy sub-stage then treats every on-disk stack as
+#      uncreated, triggering a fleet-wide "deploy on creation" cascade.
+#   2. RunProcedure(podhaus-push-deploy) — its Stage 0 RunSync now sees
+#      no diffs (pre-sync did them) so the in-procedure update::<Procedure>
+#      is never invoked. Stages 1–3 handle linked-repo force-deploy +
+#      ofelia restart.
+#   3. RunProcedure(fenwick-push-deploy) — same shape for the fenwick
+#      stack defs.
 #
 # Bootstrap (CreateResourceSync, first sync, komodo-op wait) lives in
 # `komodo-start` — this script assumes Komodo Core is up and the
@@ -34,15 +53,9 @@ komodo_api() {
     -d "$payload"
 }
 
-run_procedure() {
-  local procedure="$1"
-  echo "→ ${procedure}"
-
-  local resp update_id update status success
-  resp=$(komodo_api execute "$(jq -n --arg p "$procedure" \
-    '{type:"RunProcedure",params:{procedure:$p}}')")
-  update_id=$(echo "$resp" | jq -r '._id."$oid"')
-
+poll_until_complete() {
+  local update_id="$1" label="$2"
+  local update status success
   while :; do
     update=$(komodo_api read "$(jq -n --arg u "$update_id" \
       '{type:"GetUpdate",params:{id:$u}}')")
@@ -50,11 +63,31 @@ run_procedure() {
     [ "$status" = "Complete" ] && break
     sleep 2
   done
-
   success=$(echo "$update" | jq -r '.success')
-  echo "  ${procedure}: success=${success}"
+  echo "  ${label}: success=${success}"
   [ "$success" = "true" ]
 }
 
+run_sync() {
+  local sync="$1"
+  echo "→ pre-sync ${sync} (out-of-procedure)"
+  local resp update_id
+  resp=$(komodo_api execute "$(jq -n --arg s "$sync" \
+    '{type:"RunSync",params:{sync:$s}}')")
+  update_id=$(echo "$resp" | jq -r '._id."$oid"')
+  poll_until_complete "$update_id" "${sync} sync"
+}
+
+run_procedure() {
+  local procedure="$1"
+  echo "→ ${procedure}"
+  local resp update_id
+  resp=$(komodo_api execute "$(jq -n --arg p "$procedure" \
+    '{type:"RunProcedure",params:{procedure:$p}}')")
+  update_id=$(echo "$resp" | jq -r '._id."$oid"')
+  poll_until_complete "$update_id" "$procedure"
+}
+
+run_sync podhaus
 run_procedure podhaus-push-deploy
 run_procedure fenwick-push-deploy

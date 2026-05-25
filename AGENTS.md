@@ -151,7 +151,7 @@ devices (blast-radius containment).
 | `komodo/sync/repos.toml` | Linked Repo definitions for kangaroo (`podhaus`) + kookaburra (`podhaus-kookaburra`) |
 | `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 deploy-if-changed (bilby) → Stage 2 force-deploy linked-repo stacks → Stage 3 restart ofelia (label re-read; the released ofelia image has no live label refresh). |
 | `komodo-start` | Bootstrap-only script: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_REPO`), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync). Idempotent — safe to re-run. |
-| `komodo-sync` | Steady-state debug-iterate tool. Thin wrapper that invokes the `podhaus-push-deploy` + `fenwick-push-deploy` procedures locally and polls until they complete — same behaviour as a `git push`, without the commit. Single source of truth for "what 'apply config' means" lives in `komodo/sync/procedures.toml`; this script just triggers it. Use when iterating locally without pushing. |
+| `komodo-sync` | Steady-state debug-iterate tool, **and** the recovery path for procedure-stage edits the push webhook can't apply by itself. Step 1: unfiltered `RunSync(podhaus)` directly via the API (out-of-procedure, so Komodo's `resource::update::<Procedure>` busy guard doesn't fire — procedure-definition changes land cleanly here, surgically — only stacks whose files actually changed get redeployed). Step 2–3: invokes `podhaus-push-deploy` + `fenwick-push-deploy` procedures (whose own Stage 0 RunSync is now a no-op because step 1 already reconciled state). Use when iterating locally without pushing, or after a push that touches `komodo/sync/procedures.toml`. |
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. Hook at `tools/pre-commit`; install via `ln -sf ../../tools/pre-commit .git/hooks/pre-commit`. |
 | `komodo-stop` | Stop Komodo Core |
 | `komodo-status` | Show Komodo Core container status |
@@ -229,6 +229,23 @@ devices (blast-radius containment).
    either patch ships. Do **not** set `webhook_force_deploy` — there
    are no per-stack webhooks for it to affect; the kangaroo force
    path is Stage 2.
+
+   **Caveat — edits to `komodo/sync/procedures.toml` need a follow-up
+   `./komodo-sync` to land.** Komodo's `resource::update::<Procedure>`
+   has an explicit busy guard: a procedure can't be modified while
+   it's running. So when a push includes a procedure-stage edit,
+   `podhaus-push-deploy`'s in-procedure Stage 0 RunSync tries to
+   update its own definition, hits the busy guard, the sync loop
+   bails after 10 retries with a generic "max iterations" error, and
+   the procedure aborts (the per-iteration error is silently discarded
+   by Komodo's sync loop, so the failure is opaque). Stack/variable
+   updates inside Stage 0 still succeed via the sync's deploy
+   sub-stage, but Stages 1–3 don't run. The recovery is a single
+   `./komodo-sync` invocation: its step 1 calls `RunSync(podhaus)`
+   directly via the API — out-of-procedure, so the busy guard doesn't
+   fire — applies the procedure change, then triggers the procedures
+   normally. Pushes that DON'T touch procedures.toml apply fully via
+   the webhook with no manual step.
 7. If the service is a single-host pod.haus service, add a
    `module "<name>"` block in `terraform/services_pod_haus.tf` plus
    one entry in `tunnel.tf`'s `pod_haus_module_ingress`. The module
