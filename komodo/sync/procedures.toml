@@ -34,6 +34,21 @@
 # hard rule (see docs/komodo.html), now expressed once here instead
 # of per-stack `webhook_force_deploy = true`.
 #
+# Stage 3 — restart ofelia so it picks up label changes on whichever
+# containers Stage 1/2 just recreated. ofelia v0.3.22
+# (mcuadros/ofelia:latest, built from the 0.3.x branch) reads labels
+# ONCE at startup and has no live refresh: the dynamic-labels polling
+# (upstream PR #319) and the event-listen replacement (PR #368) are
+# both master-only and unreleased. Without this stage, a push that
+# changes an ofelia.* schedule/command label on any stack silently
+# wouldn't take effect until ofelia next restarts for unrelated
+# reasons (image bump, host reboot, manual). RestartStack on ofelia
+# is ~0.5s, ofelia has no persistent state to lose, and the cost is
+# paid on every push regardless of whether anything ofelia-relevant
+# changed — cheaper than a 6th place to track "did this push touch
+# any ofelia labels?". Drop this stage when an ofelia release lands
+# that includes #319 or #368.
+#
 # Wildcard `*` means new stacks are covered automatically — no repo
 # edit, no list, no 20-cap, ever.
 
@@ -66,6 +81,13 @@ enabled = true
 executions = [
   { execution.type = "BatchDeployStack", execution.params = { pattern = "kangaroo-*" }, enabled = true },
   { execution.type = "BatchDeployStack", execution.params = { pattern = "kookaburra-*" }, enabled = true },
+]
+
+[[procedure.config.stage]]
+name = "Restart ofelia so it re-reads container labels"
+enabled = true
+executions = [
+  { execution.type = "RestartStack", execution.params = { stack = "ofelia" }, enabled = true }
 ]
 
 

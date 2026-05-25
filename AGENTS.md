@@ -149,7 +149,7 @@ devices (blast-radius containment).
 | `komodo/sync/variables.toml` | Global non-secret variable declarations (TZ, MEDIA_DIR). Authoritative — applied by the podhaus sync (`include_variables = true`). Stack-private vars live as inline `[[variable]]` blocks in `<stack>/stack.toml` instead. |
 | `komodo/sync/servers.toml` | Server definitions (bilby + kangaroo + kookaburra) |
 | `komodo/sync/repos.toml` | Linked Repo definitions for kangaroo (`podhaus`) + kookaburra (`podhaus-kookaburra`) |
-| `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 deploy-if-changed (bilby) → Stage 2 force-deploy linked-repo stacks. |
+| `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 deploy-if-changed (bilby) → Stage 2 force-deploy linked-repo stacks → Stage 3 restart ofelia (label re-read; the released ofelia image has no live label refresh). |
 | `komodo-start` | Bootstrap-only script: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_REPO`), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync). Idempotent — safe to re-run. |
 | `komodo-sync` | Steady-state debug-iterate tool. Thin wrapper that invokes the `podhaus-push-deploy` + `fenwick-push-deploy` procedures locally and polls until they complete — same behaviour as a `git push`, without the commit. Single source of truth for "what 'apply config' means" lives in `komodo/sync/procedures.toml`; this script just triggers it. Use when iterating locally without pushing. |
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. Hook at `tools/pre-commit`; install via `ln -sf ../../tools/pre-commit .git/hooks/pre-commit`. |
@@ -205,7 +205,7 @@ devices (blast-radius containment).
    behaviour, no commit/push round-trip.
 6. **Nothing to do for push-to-deploy.** There is ONE GitHub `push`
    webhook for the whole repo; it drives the `podhaus-push-deploy`
-   Komodo Procedure (`komodo/sync/procedures.toml`). Three stages:
+   Komodo Procedure (`komodo/sync/procedures.toml`). Four stages:
    **Stage 0** `RunSync "podhaus"` reconciles stack defs + TOML-declared
    variables from disk into Komodo's stored resource state (so a push
    that adds/changes an `environment` line or a `[[variable]]` block
@@ -219,8 +219,16 @@ devices (blast-radius containment).
    unconditionally. A new stack auto-deploys on the next push with
    no `terraform/` edit. (This replaced 20 per-stack webhooks: GitHub
    hard-caps a repo at 20 `push` webhooks, and the fleet outgrew it.)
-   Do **not** set `webhook_force_deploy` — there are no per-stack
-   webhooks for it to affect; the kangaroo force path is Stage 2.
+   **Stage 3** `RestartStack "ofelia"` forces ofelia to re-read every
+   container's `ofelia.*` labels — required because the released
+   ofelia image (v0.3.22, 0.3.x branch) reads labels only at startup
+   and the live-refresh patches (upstream PR #319 polling + PR #368
+   events) are both master-only and unreleased. Without Stage 3, a
+   push that changes an ofelia schedule/command label silently
+   doesn't take effect. Drop Stage 3 when an ofelia release with
+   either patch ships. Do **not** set `webhook_force_deploy` — there
+   are no per-stack webhooks for it to affect; the kangaroo force
+   path is Stage 2.
 7. If the service is a single-host pod.haus service, add a
    `module "<name>"` block in `terraform/services_pod_haus.tf` plus
    one entry in `tunnel.tf`'s `pod_haus_module_ingress`. The module
