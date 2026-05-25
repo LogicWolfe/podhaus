@@ -120,9 +120,13 @@ async function bindMountExcludes(composePath, stackRel) {
       }
       if (!src) continue;
       // Only ${PODHAUS_REPO}-rooted paths can possibly be inside this stack.
-      const m = src.match(/^\\$\\{PODHAUS_REPO\\}\\/(.+?)\\/?$/);
-      if (!m) continue;
-      const fromRepoRoot = m[1];
+      const PREFIX = '\\${PODHAUS_REPO}/';
+      if (!src.startsWith(PREFIX)) continue;
+      let fromRepoRoot = src.substring(PREFIX.length);
+      // Trim a trailing slash if present.
+      if (fromRepoRoot.endsWith('/')) {
+        fromRepoRoot = fromRepoRoot.slice(0, -1);
+      }
       if (fromRepoRoot === stackRel) continue; // whole-stack bind — shouldn't happen
       if (fromRepoRoot.startsWith(stackRel + '/')) {
         out.add(fromRepoRoot.substring(stackRel.length + 1));
