@@ -167,7 +167,17 @@ async function resolveComposeFiles(stackDir, filePaths) {
 
 // Parse compose files for services that have `build:`. Returns a map of
 // service-name -> resolved absolute build-context directory.
+//
+// docker compose resolves a relative `build.context` against the directory
+// of the FIRST -f compose file, regardless of which file the service is
+// defined in. Match that convention so multi-file stacks where the build
+// directive lives in a non-first file (e.g. backup/bilby's
+// file_paths = ["../compose.shared.yaml", "compose.yaml"] with build: in
+// compose.yaml) resolve the same path docker does.
 async function buildContexts(composeFiles) {
+  if (composeFiles.length === 0) return {};
+  const firstFile = composeFiles[0];
+  const firstDir = normalize(firstFile.substring(0, firstFile.lastIndexOf('/')));
   // Walk in order; later files' service entries can override earlier ones'.
   const merged = {};
   for (const cf of composeFiles) {
@@ -177,7 +187,6 @@ async function buildContexts(composeFiles) {
     try { doc = YAML.parse(text); } catch { continue; }
     const services = doc?.services;
     if (!services || typeof services !== 'object') continue;
-    const composeDir = cf.substring(0, cf.lastIndexOf('/'));
     for (const [svc, def] of Object.entries(services)) {
       if (!def || typeof def !== 'object') continue;
       const build = def.build;
@@ -190,7 +199,7 @@ async function buildContexts(composeFiles) {
       } else {
         continue;
       }
-      const absCtx = ctx.startsWith('/') ? ctx : normalize(`${composeDir}/${ctx}`);
+      const absCtx = ctx.startsWith('/') ? ctx : normalize(`${firstDir}/${ctx}`);
       merged[svc] = absCtx;
     }
   }
