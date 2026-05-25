@@ -83,6 +83,27 @@ executions = [
   { execution.type = "BatchDeployStack", execution.params = { pattern = "kookaburra-*" }, enabled = true },
 ]
 
+# Stage 2.5 — force-deploy stacks that use `build:` in compose. Komodo's
+# files_on_host change-detection compares the listed compose files
+# (default: compose.yaml) and is BLIND to Dockerfile / build-context
+# edits. Without this stage, a Dockerfile-only change on flood would
+# leave the deployed image stale forever — exactly what bit us on
+# 2026-05-25 when the libarchive-tools swap landed in a Dockerfile-only
+# commit and didn't deploy until a manual DeployStack. Docker layer
+# caching means the cost when Dockerfile is unchanged is "rebuild
+# checks cached layers → image hash unchanged → container not
+# recreated", so the per-push cost is negligible.
+#
+# Add stacks here when they grow a `build:` directive. Drop them when
+# they don't. There's no general "force-deploy any build: stack"
+# matcher in Komodo, so it's an explicit list.
+[[procedure.config.stage]]
+name = "Force-deploy build-mode stacks (Dockerfile change-detection workaround)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "flood" }, enabled = true },
+]
+
 [[procedure.config.stage]]
 name = "Restart ofelia so it re-reads container labels"
 enabled = true

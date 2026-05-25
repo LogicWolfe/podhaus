@@ -149,7 +149,7 @@ devices (blast-radius containment).
 | `komodo/sync/variables.toml` | Global non-secret variable declarations (TZ, MEDIA_DIR). Authoritative — applied by the podhaus sync (`include_variables = true`). Stack-private vars live as inline `[[variable]]` blocks in `<stack>/stack.toml` instead. |
 | `komodo/sync/servers.toml` | Server definitions (bilby + kangaroo + kookaburra) |
 | `komodo/sync/repos.toml` | Linked Repo definitions for kangaroo (`podhaus`) + kookaburra (`podhaus-kookaburra`) |
-| `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 deploy-if-changed (bilby) → Stage 2 force-deploy linked-repo stacks → Stage 3 restart ofelia (label re-read; the released ofelia image has no live label refresh). |
+| `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 deploy-if-changed (bilby) → Stage 2 force-deploy linked-repo stacks → Stage 2.5 force-deploy build-mode stacks (Dockerfile change-detection workaround) → Stage 3 restart ofelia (label re-read; the released ofelia image has no live label refresh). |
 | `komodo-start` | Bootstrap-only script: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_REPO`), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync). Idempotent — safe to re-run. |
 | `komodo-sync` | Steady-state debug-iterate tool, **and** the recovery path for procedure-stage edits the push webhook can't apply by itself. Step 1: unfiltered `RunSync(podhaus)` directly via the API (out-of-procedure, so Komodo's `resource::update::<Procedure>` busy guard doesn't fire — procedure-definition changes land cleanly here, surgically — only stacks whose files actually changed get redeployed). Step 2–3: invokes `podhaus-push-deploy` + `fenwick-push-deploy` procedures (whose own Stage 0 RunSync is now a no-op because step 1 already reconciled state). Use when iterating locally without pushing, or after a push that touches `komodo/sync/procedures.toml`. |
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. Hook at `tools/pre-commit`; install via `ln -sf ../../tools/pre-commit .git/hooks/pre-commit`. |
@@ -219,7 +219,15 @@ devices (blast-radius containment).
    unconditionally. A new stack auto-deploys on the next push with
    no `terraform/` edit. (This replaced 20 per-stack webhooks: GitHub
    hard-caps a repo at 20 `push` webhooks, and the fleet outgrew it.)
-   **Stage 3** `RestartStack "ofelia"` forces ofelia to re-read every
+   **Stage 2.5** `BatchDeployStack "flood"` force-deploys stacks that
+   use `build:` in compose. Komodo's files_on_host change-detection
+   compares the listed compose files (default: just compose.yaml) and
+   is BLIND to Dockerfile / build-context edits — a Dockerfile-only
+   change leaves the deployed image stale forever without this stage.
+   Docker layer caching makes the unchanged-Dockerfile cost negligible
+   (rebuild → cache-hit → unchanged image hash → no recreate). Add
+   stacks here when they grow a `build:` directive; remove them when
+   they don't. **Stage 3** `RestartStack "ofelia"` forces ofelia to re-read every
    container's `ofelia.*` labels — required because the released
    ofelia image (v0.3.22, 0.3.x branch) reads labels only at startup
    and the live-refresh patches (upstream PR #319 polling + PR #368
