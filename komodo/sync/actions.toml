@@ -216,16 +216,22 @@ for (const s of stacksSummary) {
 
   const runDir = stack.config?.run_directory ?? '';
   const stackRel = stackRelToRepo(runDir);
-  if (!stackRel) { skipped++; continue; }
+  if (!stackRel) {
+    // Stack lives outside our /syncs/podhaus mount (run_directory is
+    // empty or points elsewhere — e.g. fenwick stacks at
+    // /etc/komodo/fenwick-working). Logged by name so the skip set is
+    // visible per run; an unexpected entry here means a misrouted stack.
+    console.log(`skipped: ${stack.name} (run_directory=${runDir || '<empty>'})`);
+    skipped++; continue;
+  }
 
   const stackDir = `${REPO_ROOT}/${stackRel}`;
-  try {
-    const st = await Deno.stat(stackDir);
-    if (!st.isDirectory) { skipped++; continue; }
-  } catch {
-    // Stack lives outside our mount (e.g. fenwick on bilby is at
-    // /etc/komodo/fenwick-working, not visible to Core's /syncs/podhaus).
-    skipped++; continue;
+  // Deno.stat throws on missing path — let it propagate. A podhaus stack
+  // whose run_directory resolves under /etc/komodo/repo/ but whose dir is
+  // absent is a misconfiguration, not a legitimate skip.
+  const st = await Deno.stat(stackDir);
+  if (!st.isDirectory) {
+    throw new Error(`${stack.name}: ${stackDir} is not a directory`);
   }
 
   // Hash 1: the stack dir itself. Drives every service's
