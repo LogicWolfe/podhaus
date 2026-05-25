@@ -30,8 +30,14 @@
         <li>Create <code>&lt;name&gt;/compose.yaml</code>. Join <code>dockernet</code> if the
           stack needs to be reachable from another container or via the Cloudflare Tunnel.</li>
         <li>Create <code>&lt;name&gt;/stack.toml</code> with <code>server = "podhaus"</code>,
-          <code>files_on_host = true</code>, <code>deploy = true</code>, and
-          <code>run_directory = "/etc/komodo/repo/&lt;name&gt;"</code>. List any required
+          <code>files_on_host = true</code>, and
+          <code>run_directory = "/etc/komodo/repo/&lt;name&gt;"</code>.
+          <strong>Do not set <code>deploy = true</code></strong> — Komodo's
+          RunSync would then auto-deploy the stack during Stage 0, which
+          duplicates Stage 2 and breaks on transient linked-repo
+          Periphery timeouts. Stage 2 is the sole deploy authority; the
+          pre-commit lint <code>tools/lint-stack-toml.py</code> rejects
+          <code>deploy = true</code> on podhaus stacks. List any required
           variables in the <code>environment</code> block. If the stack
           has stack-private non-secret config (e.g. a service URL, a
           well-known port), declare it as an inline
@@ -49,15 +55,19 @@
           is missing.</li>
         <li><strong>Commit and push.</strong> The push fires the
           <code>podhaus-push-deploy</code> procedure: Stage 0 RunSync
-          registers the new stack + any TOML-declared variables; Stage 1
+          registers the new stack + any TOML-declared variables (config
+          reconcile only — Sync Deploy no-ops because every podhaus stack
+          omits <code>deploy = true</code>); Stage 1
           (<code>RunAction "podhaus-inject-content-hashes"</code>) stamps
           per-stack content hashes; Stage 2
-          <code>BatchDeployStackIfChanged "*"</code> first-deploys it
-          (because <code>deploy = true</code> + <code>deployed_contents</code>
-          is None means <code>DeployIfChangedAction::FullDeploy</code> per
-          Komodo v2.2.0 source); Stage 3 restarts ofelia so any new schedule
-          labels take effect. No manual <em>Deploy</em> click. For local
-          debug iteration without pushing, <code>./komodo-sync</code>.</li>
+          <code>BatchDeployStackIfChanged "*"</code> first-deploys the new
+          stack via the <code>(None, _) =&gt; FullDeploy</code> arm in
+          <code>DeployStackIfChanged</code>, which never reads
+          <code>stack.config.deploy</code> (Komodo source
+          <code>bin/core/src/api/execute/stack.rs:368-447</code>);
+          Stage 3 restarts ofelia so any new schedule labels take effect.
+          No manual <em>Deploy</em> click. For local debug iteration
+          without pushing, <code>./komodo-sync</code>.</li>
       </ol>
 
       <h2 id="multi-host">Adding a stack to a multi-host shared service</h2>
@@ -86,8 +96,9 @@
           the new stack via Stage&nbsp;0 (RunSync), stamps content hashes via Stage&nbsp;1
           (RunAction), and deploys via Stage&nbsp;2 (BatchDeployStackIfChanged) — same path
           for files_on_host and linked_repo hosts. New stacks first-deploy via
-          <code>deploy = true</code> + Komodo's
-          <code>DeployIfChangedAction::FullDeploy</code> path. See
+          the <code>(None, _) =&gt; FullDeploy</code> arm in
+          <code>DeployStackIfChanged</code>, which ignores
+          <code>stack.config.deploy</code> entirely. See
           <a href="/komodo.html#operating-models">Komodo procedures</a>.</li>
       </ol>
       <p>
@@ -196,7 +207,6 @@
       </ul>
       <pre><code>[[stack]]
 name = "myservice"
-deploy = true
 [stack.config]
 server = "podhaus"
 files_on_host = true
@@ -526,7 +536,7 @@ chmod +x .git/hooks/pre-commit</code></pre>
       <h2 id="checklist">Quick checklist when adding a stack</h2>
       <ul>
         <li>☐ <code>compose.yaml</code> + <code>stack.toml</code> in <code>&lt;name&gt;/</code></li>
-        <li>☐ <code>stack.toml</code> has <code>deploy = true</code> (else the sync's deploy step skips this stack)</li>
+        <li>☐ <code>stack.toml</code> <strong>omits</strong> <code>deploy = true</code> (Komodo's Sync Deploy auto-deploys are not used; Stage 2 of <code>podhaus-push-deploy</code> is the deploy authority — the pre-commit lint enforces this)</li>
         <li>☐ <code>dockernet</code> external network declared (if reachable from other containers)</li>
         <li>☐ Bind mounts use <code>${PODHAUS_REPO}/...</code>, not relative paths</li>
         <li>☐ All bind mounts are <strong>directory</strong> binds, never single files (see above)</li>

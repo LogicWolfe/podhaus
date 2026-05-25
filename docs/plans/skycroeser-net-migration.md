@@ -257,8 +257,9 @@ Why it's strictly better here:
 - `skycroeser/stack.toml` — `server = "podhaus"` (bilby),
   `files_on_host = true`,
   `run_directory = "/etc/komodo/repo/skycroeser"`. **No init container
-  → no `ignore_services`.** Rides **Stage 1** of `podhaus-push-deploy`
-  automatically; Cloudflare module is a separate `tf apply`.
+  → no `ignore_services`.** Rides **Stage 2** of `podhaus-push-deploy`
+  automatically (`BatchDeployStackIfChanged "*"`); Cloudflare module is
+  a separate `tf apply`.
 
 > Caddy (not nginx) here: with a MinIO backend the stack is a
 > *reverse-proxy with rewrites*, not a file-server, so the
@@ -481,7 +482,7 @@ Stack shape (`umami/compose.yaml` + `umami/stack.toml`):
 - `umami-postgres` — as above.
 - `stack.toml`: `server = "podhaus"` (bilby), `files_on_host = true`,
   `run_directory = "/etc/komodo/repo/umami"`. **No init container → no
-  `ignore_services`.** Rides Stage 1 of `podhaus-push-deploy`.
+  `ignore_services`.** Rides Stage 2 of `podhaus-push-deploy`.
 
 ### Secrets (1Password → komodo-op contract)
 

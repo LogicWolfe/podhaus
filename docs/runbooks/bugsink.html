@@ -125,18 +125,23 @@
         webhook drives the <code>podhaus-push-deploy</code> Komodo Procedure
         (<code>komodo/sync/procedures.toml</code>): Stage 0
         <code>RunSync</code> reconciles stack defs + TOML-declared
-        variables from disk; Stage 1
+        variables from disk (config reconcile only); Stage 1 stamps
+        per-stack content hashes; Stage 2
         <code>BatchDeployStackIfChanged "*"</code> covers
         <code>bugsink</code> — the wildcard matches every stack, so a push
         that changes <code>bugsink/</code> redeploys only Bugsink (other
-        unchanged bilby stacks self-skip — no churn). Nothing to register;
-        adding/removing the stack needs no <code>terraform/github.tf</code>
-        edit. (Bugsink was in fact the 21st stack that hit GitHub's hard
-        20-webhook cap and motivated the per-stack→procedure consolidation —
-        see <a href="/komodo.html#operating-models">Komodo → auto-deploy</a>.)
+        unchanged bilby stacks self-skip — no churn); Stage 3 restarts
+        ofelia. Nothing to register; adding/removing the stack needs no
+        <code>terraform/github.tf</code> edit. (Bugsink was in fact the
+        21st stack that hit GitHub's hard 20-webhook cap and motivated
+        the per-stack→procedure consolidation — see
+        <a href="/komodo.html#operating-models">Komodo → auto-deploy</a>.)
         First push of a brand-new stack registers it via Stage 0 and
-        deploys it via Stage 1 (<code>deploy = true</code> +
-        <code>(None, _) =&gt; FullDeploy</code> path) — no manual
+        deploys it via Stage 2 through the
+        <code>(None, _) =&gt; FullDeploy</code> arm in
+        <code>DeployStackIfChanged</code> (which doesn't read
+        <code>stack.config.deploy</code>, so the stack omits
+        <code>deploy = true</code> like every podhaus stack) — no manual
         registration or UI click. <code>./komodo-sync</code> is the
         debug-iterate path for applying local edits without pushing.
       </p>

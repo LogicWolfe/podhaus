@@ -85,11 +85,13 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
           </ul>
         </li>
         <li>In the Komodo UI: confirm Servers list shows <code>podhaus</code> as healthy.
-          <code>komodo-op</code> should already be deployed (the sync's
-          deploy step plus <code>deploy = true</code> on its stack.toml
-          handle "deploy on creation"). If somehow it isn't, deploy it
-          manually — it brings up the 1P→Komodo Variable sync that
-          everything else depends on.</li>
+          <code>komodo-op</code> should already be deployed. After the
+          bootstrap sync registers the stack, run
+          <code>./komodo-sync</code> (or push) — Stage 2's
+          <code>BatchDeployStackIfChanged "*"</code> first-deploys the
+          stack via its <code>(None, _) =&gt; FullDeploy</code> arm. If
+          somehow it isn't running, deploy it manually — it brings up
+          the 1P→Komodo Variable sync that everything else depends on.</li>
         <li>Restore each stack's state from restic before deploying the stack. For each:
           <pre><code>restic -r /mnt/jump/backups restore latest \
   --target / --include /userdata/&lt;stack&gt;</code></pre>

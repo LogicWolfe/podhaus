@@ -117,7 +117,6 @@ Mirror `logging/kangaroo/stack.toml`:
 name = "pinelake-logging"
 description = "Alloy on pinelake — ships container logs to bilby's ClickStack collector (cross-LAN OTLP)"
 tags = ["pinelake", "podhaus"]
-deploy = true
 
 [stack.config]
 server = "pinelake"
