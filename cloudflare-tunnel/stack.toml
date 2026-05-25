@@ -8,7 +8,6 @@ tags = ["podhaus"]
 # load balancing and breaks routing for hostnames whose backends only
 # exist on one host. If alligator is revived, `docker stop cloudflare-tunnel`
 # there before it rejoins the LAN.
-deploy = true
 
 [stack.config]
 server = "podhaus"

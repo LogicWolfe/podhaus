@@ -2,7 +2,6 @@
 name = "onepassword"
 description = "1Password Connect + komodo-op secret sync"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

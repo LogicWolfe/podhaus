@@ -155,7 +155,8 @@ devices (blast-radius containment).
 | `komodo-start` | Bootstrap-only script: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_REPO`), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync). Idempotent — safe to re-run. |
 | `komodo-sync` | Steady-state debug-iterate tool, **and** the recovery path for procedure-stage edits the push webhook can't apply by itself. Step 1: unfiltered `RunSync(podhaus)` directly via the API (out-of-procedure, so Komodo's `resource::update::<Procedure>` busy guard doesn't fire — procedure-definition changes land cleanly here, surgically — only stacks whose files actually changed get redeployed). Step 2–3: invokes `podhaus-push-deploy` + `fenwick-push-deploy` procedures (whose own Stage 0 RunSync is now a no-op because step 1 already reconciled state). Use when iterating locally without pushing, or after a push that touches `komodo/sync/procedures.toml`. |
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. |
-| `tools/pre-commit` | The pre-commit hook runner. Invokes `lint-stack-env.py` + `lint-stack-content-hash.py`. Install with `ln -sf ../../tools/pre-commit .git/hooks/pre-commit` so future edits to the hook are live. |
+| `tools/lint-stack-toml.py` | Pre-commit lint: rejects `deploy = true` on any podhaus-tagged stack. See "Hard rules" for why — Komodo's `Sync Deploy` sub-stage in `RunSync` would auto-deploy on Stage 0 and break on transient linked-repo timeouts. |
+| `tools/pre-commit` | The pre-commit hook runner. Invokes `lint-stack-env.py` + `lint-stack-content-hash.py` + `lint-stack-toml.py`. Install with `ln -sf ../../tools/pre-commit .git/hooks/pre-commit` so future edits to the hook are live. |
 | `komodo-stop` | Stop Komodo Core |
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |
@@ -200,12 +201,13 @@ devices (blast-radius containment).
    both. **Don't** add to `komodo-start` — that script is bootstrap-only
    and the only seed it still owns is host-discovered `PODHAUS_REPO`.
 5. **Push the commit.** The `podhaus-push-deploy` procedure's Stage 0
-   RunSync registers the new stack + any new variables; Stage 1
+   RunSync registers the new stack + any new variables; Stage 2
    `BatchDeployStackIfChanged "*"` deploys it (the
    `(None, _) => DeployIfChangedAction::FullDeploy` path covers brand-new
-   stacks). No manual UI click. For local iteration without pushing,
-   `./komodo-sync` invokes the same procedure(s) locally — identical
-   behaviour, no commit/push round-trip.
+   stacks regardless of the `deploy` flag). No manual UI click. For local
+   iteration without pushing, `./komodo-sync` invokes the same procedure(s)
+   locally — identical behaviour, no commit/push round-trip. **Do not set
+   `deploy = true`** in the new `stack.toml` — see Hard Rules.
 6. **Nothing to do for push-to-deploy.** There is ONE GitHub `push`
    webhook for the whole repo; it drives the `podhaus-push-deploy`
    Komodo Procedure (`komodo/sync/procedures.toml`). Four stages:
@@ -213,7 +215,15 @@ devices (blast-radius containment).
    variables from disk into Komodo's stored resource state (so a push
    that adds/changes an `environment` line or a `[[variable]]` block
    reaches the deploy correctly — without this, the deploy uses the
-   pre-sync stored env and renders `${VAR}` empty). **Stage 1**
+   pre-sync stored env and renders `${VAR}` empty). Stage 0 is
+   **config-reconcile-only**: every podhaus `stack.toml` omits the
+   `deploy` flag (defaults to `false`), so Komodo's `Sync Deploy`
+   sub-stage inside RunSync — which auto-deploys any stack whose
+   config differs from deployed — no-ops on podhaus stacks. Stage 2
+   is the sole deploy authority. Without this, a single linked-repo
+   Periphery timeout inside `Sync Deploy` would fail Stage 0 and abort
+   Stages 1–3 entirely; bit kookaburra-relay/kookaburra-tailscale on
+   2026-05-25 (~24 h stale until investigation). **Stage 1**
    `RunAction "podhaus-inject-content-hashes"` walks every stack
    visible at Komodo Core's `/syncs/podhaus` mount and appends two
    kinds of env entries to each stack's stored environment:
@@ -229,8 +239,10 @@ devices (blast-radius containment).
    deploys any stack whose rendered env differs from what's deployed —
    Stage 1's hashes appear in that diff for any stack whose tracked
    content actually changed; unchanged stacks no-op. New stacks
-   first-deploy via `deploy = true` + the
-   `(None, _) => DeployIfChangedAction::FullDeploy` path. **Stage 3**
+   first-deploy via the `(None, _) => DeployIfChangedAction::FullDeploy`
+   path in `DeployStackIfChanged` (which never reads `stack.config.deploy`
+   — verified against `bin/core/src/api/execute/stack.rs:368-447`).
+   **Stage 3**
    `RestartStack "ofelia"` forces ofelia to re-read every container's
    `ofelia.*` labels — required because the released ofelia image
    (v0.3.22, 0.3.x branch) reads labels only at startup and the
@@ -382,6 +394,23 @@ These have failure modes that you must not introduce:
   fresh Komodo bootstrap. Put the secret in 1Password and reference the
   `OP__KOMODO__*` synced variable name. See
   [`docs/secrets.html`](docs/secrets.html).
+- **Never set `deploy = true` on a podhaus `stack.toml`.** Komodo's
+  `RunSync` has a built-in `Sync Deploy` sub-stage that auto-deploys
+  any stack whose stored config differs from deployed — `deploy = true`
+  is the opt-in. That sub-stage (a) duplicates Stage 2's
+  `BatchDeployStackIfChanged` work and (b) runs serially with no
+  per-stack failure tolerance, so a transient kookaburra-Periphery
+  timeout fails the whole RunSync and aborts Stages 1–3. With `deploy`
+  omitted (defaults to `false`, per Komodo source
+  `client/core/rs/src/entities/toml.rs`), the Sync Deploy sub-stage
+  no-ops on the stack. First-deploys still work via Stage 2's
+  `(None, _) => FullDeploy` path in `DeployStackIfChanged`, which
+  ignores the flag entirely (verified against
+  `bin/core/src/api/execute/stack.rs:368-447`). The lint
+  `tools/lint-stack-toml.py` rejects `deploy = true` on podhaus stacks
+  at commit time. (`vpn-diagnostics` is the only stack that
+  intentionally carries `deploy = false`; for podhaus stacks just
+  omit the field.)
 - **Linked Repo hosts (kangaroo, kookaburra, future pinelake) deploy
   via the same content-hash IfChanged path as bilby — not via
   unconditional force-deploy.** Komodo v2 semantics:

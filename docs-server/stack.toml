@@ -2,7 +2,6 @@
 name = "docs-server"
 description = "Static nginx serving the docs/ tree at docs.pod.haus"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

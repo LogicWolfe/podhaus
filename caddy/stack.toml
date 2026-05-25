@@ -2,7 +2,6 @@
 name = "caddy"
 description = "Public TLS front for MinIO S3 (own LE wildcard; not Cloudflare-proxied) — see docs/plans/minio-public-caddy.md"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

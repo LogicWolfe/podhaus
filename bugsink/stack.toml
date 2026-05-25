@@ -2,7 +2,6 @@
 name = "bugsink"
 description = "Bugsink — self-hosted Sentry-protocol error tracker (fenwick is the intended client)"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

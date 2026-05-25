@@ -2,7 +2,6 @@
 name = "clickstack"
 description = "ClickStack — ClickHouse + HyperDX + OTel collector + Mongo (observability backend, replaces Victoria Logs)"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

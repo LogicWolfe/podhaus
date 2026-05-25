@@ -2,7 +2,6 @@
 name = "kangaroo-autoheal"
 description = "Restart unhealthy autoheal-labeled containers on kangaroo"
 tags = ["kangaroo", "podhaus"]
-deploy = true
 
 [stack.config]
 server = "kangaroo"

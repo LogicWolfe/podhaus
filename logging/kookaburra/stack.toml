@@ -2,7 +2,6 @@
 name = "kookaburra-logging"
 description = "Alloy on kookaburra — ships container logs + self-telemetry to ClickStack (cross-tailnet to bilby-podnet.tail9ceb.ts.net:4318 via MagicDNS)"
 tags = ["kookaburra", "podhaus"]
-deploy = true
 
 [stack.config]
 server = "kookaburra"

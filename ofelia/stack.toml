@@ -2,7 +2,6 @@
 name = "ofelia"
 description = "Label-based docker job scheduler — runs `docker exec` jobs declared as labels on target containers"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

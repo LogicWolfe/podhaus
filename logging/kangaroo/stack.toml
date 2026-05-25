@@ -2,7 +2,6 @@
 name = "kangaroo-logging"
 description = "Alloy on kangaroo — ships container logs + self-telemetry to ClickStack (cross-LAN to bilby)"
 tags = ["kangaroo", "podhaus"]
-deploy = true
 
 [stack.config]
 server = "kangaroo"

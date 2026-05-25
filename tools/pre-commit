@@ -12,7 +12,12 @@
 #                                   STACK_CONTENT_HASH (label + build-arg
 #                                   pattern), so content changes wouldn't
 #                                   actually recreate the container.
+#   - lint-stack-toml.py:          rejects `deploy = true` on podhaus
+#                                   stacks — Komodo's Sync Deploy sub-
+#                                   stage duplicates Stage 2 and breaks
+#                                   on transient linked-repo timeouts.
 set -e
 root="$(git rev-parse --show-toplevel)"
 python3 "$root/tools/lint-stack-env.py"
 python3 "$root/tools/lint-stack-content-hash.py"
+python3 "$root/tools/lint-stack-toml.py"

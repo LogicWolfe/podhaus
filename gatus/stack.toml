@@ -2,7 +2,6 @@
 name = "gatus"
 description = "Gatus — config-as-code endpoint monitoring + status page"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

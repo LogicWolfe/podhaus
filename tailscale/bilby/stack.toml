@@ -2,7 +2,6 @@
 name = "tailscale"
 description = "Tailscale management-plane node (tag:podnet) — bilby. Carries Komodo Core→Periphery + log ship-back. NOT on the rathole data path."
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

@@ -2,7 +2,6 @@
 name = "kookaburra-relay"
 description = "rathole SERVER on kookaburra — public :443 (data) + :2333 (control, noise+token). bilby's rathole client dials in over the internet. TLS terminates at bilby Caddy; the droplet only ever sees ciphertext."
 tags = ["kookaburra", "podhaus"]
-deploy = true
 
 [stack.config]
 server = "kookaburra"

@@ -2,7 +2,6 @@
 name = "paperless"
 description = "Paperless-ngx document management system"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

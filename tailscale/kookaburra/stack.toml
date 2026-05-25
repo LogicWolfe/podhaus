@@ -2,7 +2,6 @@
 name = "kookaburra-tailscale"
 description = "Tailscale management-plane node on kookaburra (tag:podnet). Komodo-managed; if a redeploy ever cuts off Core→Periphery connectivity, SSH from bilby is the recovery path (same posture as Periphery itself, which is also bootstrap-managed)."
 tags = ["kookaburra", "podhaus"]
-deploy = true
 
 [stack.config]
 server = "kookaburra"

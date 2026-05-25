@@ -2,7 +2,6 @@
 name = "logging"
 description = "Victoria Logs + Alloy + Grafana — centralised logs (bilby)"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"

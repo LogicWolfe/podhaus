@@ -2,7 +2,6 @@
 name = "plex"
 description = "Plex Media Server — local NVMe state, Pouch media + BIFs"
 tags = ["podhaus"]
-deploy = true
 
 [stack.config]
 server = "podhaus"
