@@ -151,7 +151,7 @@ devices (blast-radius containment).
 | `komodo/sync/repos.toml` | Linked Repo definitions for kangaroo (`podhaus`) + kookaburra (`podhaus-kookaburra`) |
 | `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 deploy-if-changed (bilby) → Stage 2 force-deploy linked-repo stacks. |
 | `komodo-start` | Bootstrap-only script: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_REPO`), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync). Idempotent — safe to re-run. |
-| `komodo-sync` | Steady-state debug-iterate tool: single RunSync + redeploy any stack whose `deployed_hash` diverges from `HEAD`. Use when iterating locally without pushing. |
+| `komodo-sync` | Steady-state debug-iterate tool. Thin wrapper that invokes the `podhaus-push-deploy` + `fenwick-push-deploy` procedures locally and polls until they complete — same behaviour as a `git push`, without the commit. Single source of truth for "what 'apply config' means" lives in `komodo/sync/procedures.toml`; this script just triggers it. Use when iterating locally without pushing. |
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. Hook at `tools/pre-commit`; install via `ln -sf ../../tools/pre-commit .git/hooks/pre-commit`. |
 | `komodo-stop` | Stop Komodo Core |
 | `komodo-status` | Show Komodo Core container status |
@@ -201,7 +201,8 @@ devices (blast-radius containment).
    `BatchDeployStackIfChanged "*"` deploys it (the
    `(None, _) => DeployIfChangedAction::FullDeploy` path covers brand-new
    stacks). No manual UI click. For local iteration without pushing,
-   `./komodo-sync` does single RunSync + redeploy-stale.
+   `./komodo-sync` invokes the same procedure(s) locally — identical
+   behaviour, no commit/push round-trip.
 6. **Nothing to do for push-to-deploy.** There is ONE GitHub `push`
    webhook for the whole repo; it drives the `podhaus-push-deploy`
    Komodo Procedure (`komodo/sync/procedures.toml`). Three stages:
