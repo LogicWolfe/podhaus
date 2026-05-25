@@ -110,21 +110,18 @@ function normalize(p) {
 
 // Walk a directory and hash sorted (relpath, content) tuples into a sha256.
 // Returns 16-hex truncated digest (deterministic, plenty of entropy for
-// cache-busting).
+// cache-busting). Filesystem errors propagate — partial hashes would
+// silently poison Stage 2's IfChanged baseline.
 async function hashDir(absDir) {
   const files = [];
   async function recurse(d, rel) {
-    let entries;
-    try { entries = Deno.readDir(d); } catch { return; }
-    for await (const entry of entries) {
+    for await (const entry of Deno.readDir(d)) {
       const child = `${d}/${entry.name}`;
       const childRel = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory) {
         await recurse(child, childRel);
       } else if (entry.isFile) {
-        try {
-          files.push({ rel: childRel, data: await Deno.readFile(child) });
-        } catch { /* unreadable; skip */ }
+        files.push({ rel: childRel, data: await Deno.readFile(child) });
       }
     }
   }
