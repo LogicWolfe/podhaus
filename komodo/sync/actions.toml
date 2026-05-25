@@ -205,6 +205,16 @@ async function buildContexts(composeFiles) {
 
 // --- main ---
 
+// Build the linked-repo allowlist by name. Stacks tied to a linked_repo
+// outside this set point at a different working tree (fenwick lives in
+// its own repo) and would resolve run_directory against the wrong root.
+const repos = await komodo.read('ListRepos', {});
+const podhausRepoIds = new Set(
+  repos
+    .filter((r) => r.name === 'podhaus' || r.name.startsWith('podhaus-'))
+    .map((r) => r.id),
+);
+
 const stacksSummary = await komodo.read('ListStacks', {});
 
 let processed = 0;
@@ -214,11 +224,19 @@ let skipped = 0;
 for (const s of stacksSummary) {
   const stack = await komodo.read('GetStack', { stack: s.id ?? s.name });
 
+  const linkedRepo = stack.config?.linked_repo ?? '';
+  if (linkedRepo && !podhausRepoIds.has(linkedRepo)) {
+    // Foreign linked-repo (e.g. fenwick-credential-redactor → fenwick
+    // repo). run_directory is relative to that repo, not podhaus.
+    console.log(`skipped: ${stack.name} (linked_repo=${linkedRepo}, not a podhaus repo)`);
+    skipped++; continue;
+  }
+
   const runDir = stack.config?.run_directory ?? '';
   const stackRel = stackRelToRepo(runDir);
   if (!stackRel) {
     // Stack lives outside our /syncs/podhaus mount (run_directory is
-    // empty or points elsewhere — e.g. fenwick stacks at
+    // empty or absolute path elsewhere — e.g. fenwick at
     // /etc/komodo/fenwick-working). Logged by name so the skip set is
     // visible per run; an unexpected entry here means a misrouted stack.
     console.log(`skipped: ${stack.name} (run_directory=${runDir || '<empty>'})`);
