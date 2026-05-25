@@ -123,7 +123,9 @@ def build_args_value(build, arg_name: str) -> str | None:
     return None
 
 
-def resolve_dockerfile(compose_path: Path, service: dict) -> Path | None:
+def resolve_dockerfile(first_compose: Path, service: dict) -> Path | None:
+    """Resolve build.context relative to the FIRST compose file's directory,
+    matching docker compose's behavior (the Action mirrors the same rule)."""
     build = service.get("build")
     if isinstance(build, str):
         context = Path(build)
@@ -133,7 +135,7 @@ def resolve_dockerfile(compose_path: Path, service: dict) -> Path | None:
         dockerfile_name = build.get("dockerfile", "Dockerfile")
     else:
         return None
-    base = compose_path.parent / context
+    base = first_compose.parent / context
     return (base / dockerfile_name).resolve()
 
 
