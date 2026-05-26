@@ -36,11 +36,15 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 	@www host www.nathanbaxter.com
 	redir @www https://nathanbaxter.com{uri} permanent
 
-	# When the route's reverse_proxy detects a missing-object 404 from
-	# MinIO it raises `error 404`. handle_errors catches it, fetches
-	# the site's 404.html as the body, and Caddy preserves the original
-	# 404 status code through the error chain — so crawlers and
-	# monitors get a real 404 instead of MinIO's 200-on-fetched-404.html.
+	# Missing-object handling — known limitation, status stays 200.
+	# The route's reverse_proxy detects MinIO's NoSuchKey 404, raises
+	# `error 404`, handle_errors here fetches the styled 404.html and
+	# serves it as the body. We CANNOT yet pin the final status back
+	# to 404: Caddy 2.11.3's `replace_status` directive is rejected
+	# inside both `handle_response` and `handle_errors` subhandler
+	# contexts, and the inner reverse_proxy here overwrites the
+	# original 404 with the 200 it gets from fetching 404.html. See
+	# docs/plans/caddy-404-status-and-komodo-ifchanged.md.
 	handle_errors 404 {
 		rewrite * /nathanbaxter-com/404.html
 		reverse_proxy minio:9000
