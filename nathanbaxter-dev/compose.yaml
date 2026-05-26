@@ -1,0 +1,53 @@
+# dev.nathanbaxter.com — Astro dev server, file-watch + HMR, pointed
+# at bilby's host clone of the nathanbaxter repo. Edit a file in the
+# host repo, browser HMR picks it up. No build, no deploy step.
+#
+# Public path: Cloudflare Tunnel → this container → astro dev. Access-
+# gated to Nathan only via terraform/access.tf — never expose an Astro
+# dev server raw on the internet (no auth, no rate limiting, source
+# maps + dev metadata).
+#
+# Pattern is fenwick's "edits-are-live" model (deno --watch + host
+# bind-mount); see fenwick/compose.yaml in the fenwick repo.
+
+services:
+  nathanbaxter-dev:
+    container_name: nathanbaxter-dev
+    image: node:lts
+    working_dir: /app
+    # On (re)start: idempotent install (fast no-op if package-lock is
+    # unchanged and the node_modules named volume already populated),
+    # then exec astro dev on dockernet-reachable 0.0.0.0:4321.
+    # DEV_PUBLIC_HOST tells astro.config.mjs to flip Vite's HMR client
+    # to wss://dev.nathanbaxter.com:443 (otherwise it would tell the
+    # browser to dial ws://...:4321, which isn't published).
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        npm install --no-audit --no-fund
+        exec npm run dev -- --host 0.0.0.0 --port 4321
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      DEV_PUBLIC_HOST: dev.nathanbaxter.com
+    volumes:
+      # Live host clone — Vite's watcher fires on save in /home/nathan/repos/nathanbaxter.
+      - ${NATHANBAXTER_REPO}:/app
+      # Container-local node_modules so the install can write its own
+      # native modules and isn't shadowed by the source bind.
+      - nathanbaxter_dev_node_modules:/app/node_modules
+    networks:
+      - dockernet
+    expose:
+      - "4321"
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+volumes:
+  nathanbaxter_dev_node_modules:
+
+networks:
+  dockernet:
+    external: true

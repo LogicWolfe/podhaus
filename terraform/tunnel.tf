@@ -57,9 +57,12 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pod_haus" {
       # nathanbaxter.com public static site → Caddy (NOT a pod.haus
       # module / NOT Access-gated; cloudflared serves any zone). Caddy
       # maps it to the nathanbaxter-com bucket.
+      # dev.nathanbaxter.com → nathanbaxter-dev Astro dev container
+      # (Access-gated to Nathan; see access.tf + nathanbaxter-dev/).
       [
         { hostname = "nathanbaxter.com", service = "http://caddy:80", path = null, origin_request = null },
         { hostname = "www.nathanbaxter.com", service = "http://caddy:80", path = null, origin_request = null },
+        { hostname = "dev.nathanbaxter.com", service = "http://nathanbaxter-dev:4321", path = null, origin_request = null },
       ],
       [
         { service = "http_status:404" },

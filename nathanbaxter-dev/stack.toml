@@ -1,0 +1,34 @@
+# Komodo Stack — nathanbaxter-dev (live preview of nathanbaxter.com).
+#
+# Mirrors fenwick's "edit-on-bilby = deploy" model: the stack's
+# compose bind-mounts the host clone of the nathanbaxter site repo
+# into the dev container; Vite/Astro live-reload picks up edits with
+# no rebuild, no commit, no deploy. The container itself is podhaus
+# infra (Cloudflare-Access-gated dev preview), so the stack def lives
+# in podhaus rather than in the nathanbaxter repo.
+
+[[stack]]
+name = "nathanbaxter-dev"
+description = "Astro dev server for dev.nathanbaxter.com — bilby host clone bind-mounted with Vite HMR live-reload. Cloudflare-Access-gated to Nathan only."
+tags = ["bilby", "podhaus", "nathanbaxter"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/nathanbaxter-dev"
+file_paths = ["compose.yaml"]
+run_build = false
+
+# TZ is global; NATHANBAXTER_REPO is bilby's host path to the site
+# repo (declared inline as a stack-private variable, per the
+# stack-private-vars-in-stack.toml convention in AGENTS.md). Another
+# host would re-point it via the same mechanism.
+environment = """
+TZ=[[TZ]]
+NATHANBAXTER_REPO=[[NATHANBAXTER_REPO]]
+"""
+
+[[variable]]
+name = "NATHANBAXTER_REPO"
+value = "/home/nathan/repos/nathanbaxter"
+description = "bilby's clone of the nathanbaxter site repo, bind-mounted into the dev container at /app for Astro dev-server live reload"

@@ -149,6 +149,28 @@ resource "cloudflare_zero_trust_access_application" "pine_lake_torrent" {
   ]
 }
 
+# dev.nathanbaxter.com — Astro dev server, Access-gated to Nathan
+# only. Not in the pod_haus_service module because the hostname is on
+# the nathanbaxter.com zone, not pod.haus. Inline, same shape as the
+# Pine Lake apps below.
+resource "cloudflare_zero_trust_access_application" "nathanbaxter_dev" {
+  account_id           = var.account_id
+  name                 = "nathanbaxter dev"
+  type                 = "self_hosted"
+  domain               = "dev.nathanbaxter.com"
+  self_hosted_domains  = ["dev.nathanbaxter.com"]
+  session_duration     = "730h"
+
+  auto_redirect_to_identity = false
+  enable_binding_cookie     = false
+  options_preflight_bypass  = false
+  app_launcher_visible      = true
+  http_only_cookie_attribute= false
+  policies = [
+    { precedence = 1, id = cloudflare_zero_trust_access_policy.nathan.id },
+  ]
+}
+
 resource "cloudflare_zero_trust_access_application" "pine_lake_syncthing" {
   account_id           = var.account_id
   name                 = "Pine Lake Syncthing"
