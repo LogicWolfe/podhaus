@@ -36,6 +36,16 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 	@www host www.nathanbaxter.com
 	redir @www https://nathanbaxter.com{uri} permanent
 
+	# When the route's reverse_proxy detects a missing-object 404 from
+	# MinIO it raises `error 404`. handle_errors catches it, fetches
+	# the site's 404.html as the body, and Caddy preserves the original
+	# 404 status code through the error chain — so crawlers and
+	# monitors get a real 404 instead of MinIO's 200-on-fetched-404.html.
+	handle_errors 404 {
+		rewrite * /nathanbaxter-com/404.html
+		reverse_proxy minio:9000
+	}
+
 	# Mutually-exclusive handle blocks, each mapping one URL class to
 	# the COMPLETE bucket key in a single rewrite (no rewrite chaining
 	# — Caddy doesn't reliably chain sequential rewrites here). The
@@ -58,12 +68,12 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 		}
 
 		reverse_proxy minio:9000 {
-			# Missing object → MinIO 404 (NoSuchKey). Serve the site's
-			# 404 page instead of MinIO's XML.
+			# MinIO 404 (NoSuchKey) → raise error 404 so handle_errors
+			# above can serve the styled 404 page while keeping the
+			# real status code.
 			@missing status 404
 			handle_response @missing {
-				rewrite * /nathanbaxter-com/404.html
-				reverse_proxy minio:9000
+				error 404
 			}
 		}
 	}
