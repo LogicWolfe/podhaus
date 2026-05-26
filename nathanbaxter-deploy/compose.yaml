@@ -22,6 +22,10 @@ services:
       dockerfile: Dockerfile
       args:
         STACK_CONTENT_HASH: ${BUILD_HASH_BUILDER:-unset}
+    # Locally-built image — Komodo's pre-up `docker compose pull` would
+    # otherwise try Docker Hub and fail with "pull access denied".
+    # Same fix every other build-mode service in podhaus uses.
+    pull_policy: never
     # One-shot. ignore_services=["builder"] in stack.toml stops Komodo
     # from marking the stack Unhealthy when the deliberate exit-0
     # happens.
