@@ -1,6 +1,6 @@
-# nathanbaxter.com Publii site — bucket + per-site scoped key.
-# Pattern is reusable per future Publii tenant (skycroeser.net, …):
-# copy this file, swap the name. See docs/plans/nathanbaxter-com-publii.md.
+# nathanbaxter.com — bucket + per-site scoped deploy key.
+# Pattern is reusable per future static-site tenant (skycroeser.net, …):
+# copy this file, swap the name.
 
 resource "minio_s3_bucket" "nathanbaxter_com" {
   bucket = "nathanbaxter-com"
@@ -31,10 +31,10 @@ resource "minio_s3_bucket_policy" "nathanbaxter_com" {
   })
 }
 
-# Least-privilege Publii deploy key: read/write that one bucket only
-# (ListBucket is required for Publii's files.publii.json deploy delta).
-resource "minio_iam_policy" "publii_nathanbaxter_com" {
-  name = "publii-nathanbaxter-com"
+# Least-privilege deploy key: read/write that one bucket only
+# (ListBucket is required for clients that compute a deploy delta).
+resource "minio_iam_policy" "nathanbaxter_com_deploy" {
+  name = "nathanbaxter-com-deploy"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -52,26 +52,26 @@ resource "minio_iam_policy" "publii_nathanbaxter_com" {
   })
 }
 
-resource "minio_iam_user" "publii_nathanbaxter_com" {
-  name = "publii-nathanbaxter-com"
+resource "minio_iam_user" "nathanbaxter_com_deploy" {
+  name = "nathanbaxter-com-deploy"
 }
 
-resource "minio_iam_user_policy_attachment" "publii_nathanbaxter_com" {
-  user_name   = minio_iam_user.publii_nathanbaxter_com.name
-  policy_name = minio_iam_policy.publii_nathanbaxter_com.name
+resource "minio_iam_user_policy_attachment" "nathanbaxter_com_deploy" {
+  user_name   = minio_iam_user.nathanbaxter_com_deploy.name
+  policy_name = minio_iam_policy.nathanbaxter_com_deploy.name
 }
 
-# Revocable app credential Publii actually uses.
-resource "minio_iam_service_account" "publii_nathanbaxter_com" {
-  target_user = minio_iam_user.publii_nathanbaxter_com.name
+# Revocable app credential the deploy actually uses.
+resource "minio_iam_service_account" "nathanbaxter_com_deploy" {
+  target_user = minio_iam_user.nathanbaxter_com_deploy.name
 }
 
-output "publii_access_key" {
-  value     = minio_iam_service_account.publii_nathanbaxter_com.access_key
+output "nathanbaxter_com_deploy_access_key" {
+  value     = minio_iam_service_account.nathanbaxter_com_deploy.access_key
   sensitive = true
 }
 
-output "publii_secret_key" {
-  value     = minio_iam_service_account.publii_nathanbaxter_com.secret_key
+output "nathanbaxter_com_deploy_secret_key" {
+  value     = minio_iam_service_account.nathanbaxter_com_deploy.secret_key
   sensitive = true
 }

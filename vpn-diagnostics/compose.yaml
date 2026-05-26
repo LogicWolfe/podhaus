@@ -1,8 +1,9 @@
 # On-demand VPN-egress diagnostic harness. Purpose: reproduce and
 # verify fixes for failures that only manifest for off-LAN clients
 # behind a VPN/constrained path (first case: the storage.pod.haus
-# oversized-PQ-handshake vs low-MTU/blackholed-PMTUD issue —
-# docs/plans/nathanbaxter-com-publii.md OPEN ISSUE).
+# oversized-PQ-handshake vs low-MTU/blackholed-PMTUD issue, which
+# turned out to be the UDM Pro SE binding WAN:443 itself and
+# shadowing the port-forward — fixed via the kookaburra relay).
 #
 # gluetun provides a NordVPN egress netns with a built-in kill switch;
 # the netshoot toolbox shares that netns so every curl/openssl/tcpdump

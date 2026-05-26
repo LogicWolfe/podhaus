@@ -1,4 +1,4 @@
-# nathanbaxter.com PUBLIC WEBSITE records — Publii site served from
+# nathanbaxter.com PUBLIC WEBSITE records — static site served from
 # the nathanbaxter-com MinIO bucket via the pod_haus Cloudflare Tunnel
 # → Caddy. Separate file from dns_nathanbaxter_com.tf so the mail
 # records (Fastmail MX/DKIM/SRV, Postmark) are never touched.
@@ -7,7 +7,6 @@
 # (storage.pod.haus, grey-cloud), the rendered website is plain static
 # HTTP with no SigV4 — Cloudflare's proxy (TLS, cache, DDoS) is
 # correct and desirable here. No Access app: it's a public site.
-# See docs/plans/nathanbaxter-com-publii.md.
 
 resource "cloudflare_dns_record" "nathanbaxter_com_apex_web" {
   zone_id = local.zones["nathanbaxter.com"]

@@ -136,10 +136,9 @@ endpoints:
     url: https://kookaburra-probe.storage.pod.haus/minio/health/live
     <<: *defaults
 
-  # Publii site: Cloudflare-proxied → pod_haus tunnel → Caddy →
+  # nathanbaxter.com: Cloudflare-proxied → pod_haus tunnel → Caddy →
   # nathanbaxter-com bucket. Catches a tunnel/Caddy/bucket break.
-  # See docs/plans/nathanbaxter-com-publii.md.
-  - name: nathanbaxter.com (Publii)
+  - name: nathanbaxter.com
     url: https://nathanbaxter.com/
     <<: *defaults
 
