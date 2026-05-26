@@ -29,6 +29,13 @@ services:
         npm install --no-audit --no-fund
         exec npm run dev -- --host 0.0.0.0 --port 4321
     restart: unless-stopped
+    # SELinux is enforcing on bilby; without label:disable the bind
+    # of /home/nathan/repos/nathanbaxter into the container returns
+    # EACCES on every read (npm surfaces it as a confusing
+    # ERR_INVALID_ARG_TYPE / "path is null"). Matches fenwick's bind
+    # of ${FENWICK_REPO} → /app for the same reason.
+    security_opt:
+      - label:disable
     environment:
       TZ: ${TZ}
       DEV_PUBLIC_HOST: dev.nathanbaxter.com
