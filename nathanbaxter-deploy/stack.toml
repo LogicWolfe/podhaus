@@ -1,0 +1,46 @@
+# Komodo stack — nathanbaxter-deploy.
+#
+# Replaces .github/workflows/deploy.yml in the nathanbaxter repo with
+# a Komodo-managed build + mirror pipeline. One-shot builder image
+# (node:lts + mcli) clones nathanbaxter@main, npm ci + npm run build,
+# mcli mirrors dist/ to the nathanbaxter-com bucket on bilby's MinIO,
+# exits 0.
+#
+# Why Komodo-managed instead of GHA:
+#   - No external CI runner dependency. The 2026-05-26 GitHub Actions
+#     outage held a prod deploy hostage with no visible recovery ETA.
+#   - Credentials never leave 1Password → komodo-op → Komodo Variables.
+#     GHA needed MINIO_* GitHub secrets duplicated outside 1P.
+#   - Build logs land in ClickStack via Periphery's container logging,
+#     alongside every other deploy on the homelab.
+#
+# Trigger: nathanbaxter GitHub push webhook → nathanbaxter-deploy
+# procedure (komodo/sync/procedures.toml) → DeployStack here. Always
+# force-deploy (the procedure uses DeployStack, not IfChanged), so
+# every push to main produces a fresh build regardless of whether the
+# stack definition itself changed.
+#
+# Init-only: `builder` runs once and exits. `ignore_services` stops
+# Komodo from marking the stack Unhealthy on the deliberate exit-0.
+# `run_build = true` so Komodo rebuilds the image when the Dockerfile
+# or build.sh content changes.
+
+[[stack]]
+name = "nathanbaxter-deploy"
+description = "Build + mirror nathanbaxter.com to MinIO. Komodo-managed replacement for the previous GitHub Actions deploy."
+tags = ["bilby", "podhaus", "nathanbaxter"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/nathanbaxter-deploy"
+file_paths = ["compose.yaml"]
+run_build = true
+ignore_services = ["builder"]
+
+environment = """
+TZ=[[TZ]]
+NATHANBAXTER_MINIO_ACCESS_KEY=[[OP__KOMODO__MINIO_NATHANBAXTER_COM__ACCESS_KEY_ID]]
+NATHANBAXTER_MINIO_SECRET_KEY=[[OP__KOMODO__MINIO_NATHANBAXTER_COM__SECRET_ACCESS_KEY]]
+NATHANBAXTER_GITHUB_TOKEN=[[OP__KOMODO__HOMELAB_GITHUB_PERSONAL_ACCESS_TOKEN__TOKEN]]
+"""

@@ -166,3 +166,34 @@ enabled = true
 executions = [
   { execution.type = "BatchDeployStack", execution.params = { pattern = "fenwick-*" }, enabled = true },
 ]
+
+
+# nathanbaxter-deploy — push-to-deploy for nathanbaxter.com.
+#
+# Replaces the previous .github/workflows/deploy.yml. Bound to the
+# nathanbaxter GitHub push webhook
+# (komodo.pod.haus/listener/github/procedure/nathanbaxter-deploy/main,
+# branch-filtered to main; see terraform/github.tf). Single stage:
+# force-redeploy the nathanbaxter-deploy stack, whose one-shot builder
+# container clones the repo, runs npm ci + npm run build, mcli mirrors
+# dist/ to the nathanbaxter-com MinIO bucket, exits.
+#
+# Always force-deploy (DeployStack, not IfChanged) — every push to
+# main should produce a fresh build, regardless of whether the stack
+# definition itself changed. Source freshness comes from the build
+# container's own `git clone --depth 1 -b main`, not from any
+# Komodo-managed working tree.
+
+[[procedure]]
+name = "nathanbaxter-deploy"
+description = "Push-to-deploy for nathanbaxter.com. Force-deploys the nathanbaxter-deploy stack, whose one-shot builder clones, builds, and mirrors dist/ to the nathanbaxter-com bucket."
+tags = ["nathanbaxter", "podhaus"]
+config.webhook_enabled = true
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Build and mirror nathanbaxter.com"
+enabled = true
+executions = [
+  { execution.type = "DeployStack", execution.params = { stack = "nathanbaxter-deploy" }, enabled = true }
+]

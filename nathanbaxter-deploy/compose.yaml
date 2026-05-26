@@ -1,0 +1,45 @@
+# nathanbaxter-deploy — build + mirror nathanbaxter.com to MinIO.
+#
+# One-shot builder container: clones LogicWolfe/nathanbaxter@main into
+# the container's temp filesystem, runs npm ci + npm run build, mcli
+# mirrors dist/ to the nathanbaxter-com bucket, exits 0. Triggered by
+# the nathanbaxter GitHub push webhook via the nathanbaxter-deploy
+# Komodo procedure (komodo/sync/procedures.toml).
+#
+# Why fresh clone instead of bind-mounting bilby's working tree: the
+# user's working tree at /home/nathan/repos/nathanbaxter is shared with
+# the nathanbaxter-dev preview container (HMR live-reload). A build
+# that did `git fetch + reset --hard` on that tree would clobber any
+# uncommitted iteration. Cloning fresh into the container's own
+# filesystem keeps the two flows fully independent.
+
+services:
+  builder:
+    container_name: nathanbaxter-deploy
+    image: nathanbaxter-deploy:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_BUILDER:-unset}
+    # One-shot. ignore_services=["builder"] in stack.toml stops Komodo
+    # from marking the stack Unhealthy when the deliberate exit-0
+    # happens.
+    restart: "no"
+    # SELinux enforcing on bilby — without label:disable the build
+    # context bind hits EACCES (same fix as fenwick / nathanbaxter-dev).
+    security_opt:
+      - label:disable
+    environment:
+      TZ: ${TZ}
+      MINIO_ACCESS_KEY: ${NATHANBAXTER_MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${NATHANBAXTER_MINIO_SECRET_KEY}
+      GITHUB_TOKEN: ${NATHANBAXTER_GITHUB_TOKEN}
+    networks:
+      - dockernet
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+networks:
+  dockernet:
+    external: true

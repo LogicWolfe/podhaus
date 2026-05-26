@@ -76,3 +76,23 @@ resource "github_repository_webhook" "fenwick_deploy" {
     secret       = var.komodo_webhook_secret
   }
 }
+
+# Sibling webhook for the nathanbaxter repo. Replaces the repo's
+# previous .github/workflows/deploy.yml. Same global webhook secret,
+# same Access bypass (the path-scoped /listener/github application
+# covers it). Fires the nathanbaxter-deploy procedure
+# (komodo/sync/procedures.toml) → DeployStack nathanbaxter-deploy →
+# the one-shot builder container clones, builds, and mcli mirrors
+# dist/ to the nathanbaxter-com bucket.
+resource "github_repository_webhook" "nathanbaxter_deploy" {
+  repository = "nathanbaxter"
+  events     = ["push"]
+  active     = true
+
+  configuration {
+    url          = "https://komodo.pod.haus/listener/github/procedure/nathanbaxter-deploy/main"
+    content_type = "json"
+    insecure_ssl = false
+    secret       = var.komodo_webhook_secret
+  }
+}
