@@ -37,10 +37,12 @@ services:
       autoheal: "true"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
-      # The control channel comes up on tcp/64738 once Murmur is
-      # listening. /dev/tcp is bash-only; mumble-server's image has
-      # bash, but use a portable shell probe anyway.
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/64738 && echo ok >&3"]
+      # Murmur control channel on tcp/64738. The image ships ubuntu
+      # base with no nc/curl/wget/python, so /dev/tcp is the only
+      # probe path — and it's a bash builtin, so we have to invoke
+      # bash explicitly (`CMD-SHELL` runs /bin/sh = dash on ubuntu,
+      # which doesn't recognise /dev/tcp).
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/64738"]
       interval: 60s
       timeout: 5s
       retries: 3
