@@ -1,0 +1,42 @@
+# Cloudflare Dynamic DNS — keeps the voice.pod.haus A record on the
+# current WAN IP. Mumble (the first non-HTTP public ingress since the
+# kookaburra relay took over storage.pod.haus) goes direct via a UDM
+# WAN forward, so its DNS needs to track the home WAN IP. Terraform
+# owns the record's existence (dns_voice_pod_haus.tf,
+# `lifecycle.ignore_changes = [content]`); this owns its value.
+#
+# Add additional names to DOMAINS here for any future non-HTTP service
+# that lands a UDM forward (still grey-cloud, still pod.haus zone). See
+# docs/plans/mumble-voice-pod-haus.md.
+#
+# storage.pod.haus is deliberately NOT here — it points at a static
+# DigitalOcean reserved IP for the kookaburra relay (TF-owned content,
+# no DDNS).
+services:
+  cloudflare-ddns:
+    container_name: cloudflare-ddns
+    image: favonia/cloudflare-ddns:latest
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [all]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TZ: ${TZ}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      DOMAINS: voice.pod.haus
+      # Grey-cloud — matches dns_voice_pod_haus.tf (`proxied = false`).
+      PROXIED: "false"
+      # IPv4 only; do not manage AAAA.
+      IP6_PROVIDER: none
+      UPDATE_CRON: "@every 5m"
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+networks:
+  dockernet:
+    external: true

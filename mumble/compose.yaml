@@ -1,0 +1,54 @@
+# Mumble (Murmur) voice server — voice.pod.haus.
+#
+# Public ingress is direct: UDM Pro SE port-forwards WAN tcp/udp 64738
+# to bilby (terraform/unifi.tf), DNS via cloudflare_dns_record.voice_a
+# in terraform/dns_voice_pod_haus.tf, content kept current by the
+# cloudflare-ddns stack. Mumble is not HTTP, so it does not use the
+# Cloudflare Tunnel + Access path the rest of pod.haus relies on; UDP
+# is load-bearing for voice quality and Tunnel can't carry it. See
+# docs/plans/mumble-voice-pod-haus.md.
+#
+# TLS: Murmur generates its own self-signed cert in /data on first
+# start. Clients prompt-to-trust once. Do NOT terminate at Caddy —
+# TLS is part of the Mumble wire protocol, not an HTTP edge concern.
+
+services:
+  mumble:
+    container_name: mumble
+    image: mumblevoice/mumble-server:latest
+    restart: unless-stopped
+    ports:
+      - "64738:64738/tcp"
+      - "64738:64738/udp"
+    environment:
+      TZ: ${TZ}
+      MUMBLE_SUPERUSER_PASSWORD: ${MUMBLE_SUPERUSER_PASSWORD}
+      # MUMBLE_CONFIG_<key> entries map directly into murmur.ini.
+      MUMBLE_CONFIG_serverpassword: ${MUMBLE_SERVER_PASSWORD}
+      MUMBLE_CONFIG_welcometext: "Welcome to pod.haus voice."
+      MUMBLE_CONFIG_registerName: "pod.haus voice"
+      MUMBLE_CONFIG_users: "20"
+      MUMBLE_CONFIG_bandwidth: "72000"
+    volumes:
+      - mumble-data:/data
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      # The control channel comes up on tcp/64738 once Murmur is
+      # listening. /dev/tcp is bash-only; mumble-server's image has
+      # bash, but use a portable shell probe anyway.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/64738 && echo ok >&3"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  mumble-data:
+
+networks:
+  dockernet:
+    external: true

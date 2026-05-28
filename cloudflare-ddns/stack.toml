@@ -1,0 +1,14 @@
+[[stack]]
+name = "cloudflare-ddns"
+description = "Keeps voice.pod.haus A record on the current WAN IP — see docs/plans/mumble-voice-pod-haus.md"
+tags = ["podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/cloudflare-ddns"
+
+environment = """
+TZ=[[TZ]]
+CLOUDFLARE_API_TOKEN=[[OP__KOMODO__CLOUDFLARE_API_TOKEN__CREDENTIAL]]
+"""

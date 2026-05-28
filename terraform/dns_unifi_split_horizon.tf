@@ -51,6 +51,18 @@ resource "unifi_dns_record" "nathanbaxter_com_storage" {
   enabled     = true
 }
 
+# voice.pod.haus → bilby directly on LAN, so the Mumble client skips
+# the UDM hairpin (and the latency that adds, on a service where
+# latency is exactly what we're optimising for). Off-LAN family hits
+# the public A record → WAN-forward path (terraform/unifi.tf).
+resource "unifi_dns_record" "voice_pod_haus" {
+  name        = "voice.pod.haus"
+  record_type = "A"
+  value       = "10.0.0.119"
+  ttl         = 300
+  enabled     = true
+}
+
 # Gatus external-path probe — UniFi returns the kookaburra relay
 # reserved IP for this *.storage.pod.haus subdomain so the on-bilby
 # gatus container (which uses host DNS via UniFi) reaches the relay

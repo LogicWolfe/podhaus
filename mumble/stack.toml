@@ -1,0 +1,15 @@
+[[stack]]
+name = "mumble"
+description = "Mumble (Murmur) voice server at voice.pod.haus — direct WAN forward, see docs/plans/mumble-voice-pod-haus.md"
+tags = ["podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/mumble"
+
+environment = """
+TZ=[[TZ]]
+MUMBLE_SUPERUSER_PASSWORD=[[OP__KOMODO__MUMBLE__SUPERUSER_PASSWORD]]
+MUMBLE_SERVER_PASSWORD=[[OP__KOMODO__MUMBLE__SERVER_PASSWORD]]
+"""

@@ -86,6 +86,11 @@ services:
       - gatus_gatus-data:/userdata/gatus:ro
       # Bugsink SQLite db + event storage live under /data.
       - bugsink_bugsink-data:/userdata/bugsink:ro
+      # Mumble (Murmur): SQLite registered-users + channel ACLs and
+      # the auto-generated server TLS cert/key. Tiny; restoring the
+      # cert preserves the server fingerprint so already-trusted
+      # clients don't re-prompt after a rebuild.
+      - mumble_mumble-data:/userdata/mumble:ro
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -111,4 +116,6 @@ volumes:
   gatus_gatus-data:
     external: true
   bugsink_bugsink-data:
+    external: true
+  mumble_mumble-data:
     external: true

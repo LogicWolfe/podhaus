@@ -87,6 +87,18 @@ endpoints:
     url: https://komodo.pod.haus/
     <<: *defaults
 
+  # Mumble is non-HTTP — tcp:// proves DNS (DDNS-updated A) +
+  # UDM forward (terraform/unifi.tf) + Murmur control channel are
+  # all healthy. UDP/voice quality is not synthetically probed; ear-
+  # test on first call after any networking change. See
+  # docs/plans/mumble-voice-pod-haus.md.
+  - name: Mumble (Voice)
+    url: "tcp://voice.pod.haus:64738"
+    group: services
+    interval: 2m
+    conditions:
+      - "[CONNECTED] == true"
+
   - name: Paperless
     url: https://paperless.pod.haus/
     <<: *defaults

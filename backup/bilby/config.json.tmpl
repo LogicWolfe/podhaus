@@ -148,6 +148,24 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "mumble",
+      "repo": "podhaus",
+      "paths": ["/userdata/mumble"],
+      "schedule": {
+        "cron": "55 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "logging",
       "repo": "podhaus",
       "paths": ["/userdata/logging"],
