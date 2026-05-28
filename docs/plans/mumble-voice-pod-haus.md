@@ -27,7 +27,7 @@ stack, additive, doesn't replace this).
 ### `mumble/` stack on bilby
 
 - `mumble/compose.yaml` — single service.
-  - Image: `mumblevoice/mumble-server:latest` (the official maintained
+  - Image: `mumblevoip/mumble-server:latest` (the official maintained
     image; env-based murmur.ini, sqlite at `/data`, drop-in friendly).
   - Ports: `64738:64738/tcp` + `64738:64738/udp` published on the
     host. Not `network_mode: host` — Murmur doesn't need device or
