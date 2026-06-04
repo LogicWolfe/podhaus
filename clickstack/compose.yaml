@@ -45,11 +45,25 @@ services:
       autoheal: "true"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
-      # Probe 127.0.0.1, NOT localhost: our listen_host drop-in binds
-      # 0.0.0.0 (IPv4 only), but `localhost` resolves to IPv6 ::1 in
-      # this image → connection refused → never healthy → autoheal
-      # restart loop. ClickHouse itself was always fine on IPv4/dockernet.
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1"]
+      # Two predicates:
+      #   1. HTTP /ping responds. Probe 127.0.0.1, NOT localhost: our
+      #      listen_host drop-in binds 0.0.0.0 (IPv4 only), but `localhost`
+      #      resolves to IPv6 ::1 in this image → connection refused →
+      #      never healthy → autoheal restart loop. ClickHouse itself
+      #      was always fine on IPv4/dockernet.
+      #   2. clickhouse-server.log mtime is within 120s. /ping alone is
+      #      pure liveness — it stayed green when ClickHouse's
+      #      OwnAsyncSplitChannel wedged at trace level and every log
+      #      message fell through to docker stderr (≈9.4k errors/sec
+      #      → alloy 278% CPU → bilby load 11+). The HTTP listener was
+      #      fine; the log writer thread was not. Trace-level logging
+      #      means the .log file gets writes constantly, so a 120s
+      #      staleness window is far inside normal operation.
+      test:
+        - CMD-SHELL
+        - >
+          wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping &&
+          [ $(($(date +%s) - $(stat -c %Y /var/log/clickhouse-server/clickhouse-server.log 2>/dev/null || echo 0))) -lt 120 ]
       interval: 60s
       timeout: 10s
       # Generous: cold-start grows with accumulated MergeTree parts —
