@@ -107,12 +107,28 @@
         <p>Both NAS mounts use <code>x-systemd.automount,_netdev,nofail</code> in
         <code>/etc/fstab</code>. The kernel autofs mounts on first access and silently retries
         on the next access if a prior mount failed — survives network races at boot, QNAP
-        restarts, and transient NFS hiccups. Replaces the pre-2026-05-23 setup where Pouch
-        was permanently <code>failed</code> after a boot-time race and Jump wasn't in fstab
-        at all.</p>
-        <p>Two layered defences keep container bind mounts from ever silently landing on
-        local disk when NFS is down:</p>
+        restarts, and transient NFS hiccups.</p>
+        <p>Four layered defences keep boot races visible, recoverable, and incapable of
+        silently writing container data to local disk:</p>
         <ul>
+          <li><strong>Pre-dockerd reachability gate:</strong>
+            <code>bilby/host-systemd/wait-for-qnap-nfs.service</code> is a oneshot ordered
+            <code>After=network-online.target</code> and before <code>docker.service</code>.
+            It polls TCP/2049 on the QNAP for up to 180 s before declaring success. The
+            matching <code>docker.service.d/</code> drop-in <code>Wants=</code>+<code>After=</code>
+            this unit, so dockerd's container fanout — which is what tripped the boot-time
+            automount burst on 2026-05-30 — only starts once the QNAP is actually reachable.
+            Best-effort: if the QNAP stays unreachable past the timeout, the gate exits 0
+            and dockerd starts anyway (individual NFS-bind containers fail loudly via the
+            sentinel healthcheck below).</li>
+          <li><strong>Rate-limit removed on the automount units:</strong>
+            <code>StartLimitIntervalSec=0</code> + <code>StartLimitBurst=0</code> drop-ins
+            on both <code>mnt-pouch.automount</code> and <code>mnt-jump.automount</code>
+            disable systemd's default 5-attempt-per-10-s cap. Without this, a future burst
+            pattern can put the automount unit in <code>mount-start-limit-hit</code> /
+            <code>failed</code> state, where systemd will never retry it automatically
+            (the 2026-05-30 mode: <code>/mnt/jump</code> stayed failed for ~14 h, manual
+            <code>reset-failed</code> required).</li>
           <li><strong>Tripwire:</strong> the bare <code>/mnt/pouch</code> and
             <code>/mnt/jump</code> dirs have <code>chattr +i</code> set. With NFS unmounted,
             Docker's auto-create of bind-source subdirs fails loudly at container start;
@@ -124,8 +140,12 @@
             <a href="/stack-conventions.html#nfs-bind-healthcheck">stack conventions →
             NFS-bind healthcheck pattern</a>.</li>
         </ul>
-        <p>Full incident record:
-        <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>.</p>
+        <p>Install / reinstall the host-systemd defences idempotently with
+        <code>sudo ./bilby/host-systemd/install.sh</code>. Full incident records:
+        <a href="/postmortems/postmortem-viewer.html?file=2026-05-30-power-outage-nfs-recovery.md">2026-05-30 postmortem</a>
+        (the pre-dockerd gate + rate-limit removal),
+        <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>
+        (the automount + sentinel + chattr +i defences).</p>
       </aside>
 
       <h2 id="mounts">Mount summary</h2>

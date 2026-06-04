@@ -1,11 +1,19 @@
 # Gatus monitoring config — config-as-code, checked into the repo.
 # Edit, commit, redeploy. No UI state to drift.
 #
-# All HTTP monitors hit the public tunnel-routed URL, proving the full
-# DNS → Cloudflare → tunnel → container path. If a service is down
-# internally the tunnel monitor catches it; if the tunnel itself breaks
-# every monitor drops at once (obvious signal). No need for redundant
-# internal-only checks.
+# Service liveness checks probe each service's INTERNAL endpoint
+# (dockernet container name + port, or the dockernet bridge gateway
+# 172.18.0.1:<port> for host-network services on bilby, or
+# `InspectDockerContainer` via Komodo Core for kangaroo-resident
+# containers). A previous design probed public *.pod.haus URLs to
+# cover the full DNS → Cloudflare → tunnel → container path, but
+# Cloudflare Access intercepts unauthenticated requests with a 302
+# to its login page — the existing `[STATUS] < 400` condition
+# accepted that 302 as healthy, so backend death was invisible.
+# See docs/postmortems/2026-05-30-power-outage-nfs-recovery.md.
+# Full-path checks remain only where the path is genuinely external
+# (storage.pod.haus, kookaburra-probe.storage.pod.haus,
+# nathanbaxter.com, voice.pod.haus) — those bypass Access by design.
 
 # Expose Prometheus metrics at :8080/metrics (same port as the UI +
 # external-endpoint hooks — no new port, no new ingress). Alloy on bilby
@@ -61,30 +69,50 @@ alerting:
 
 # --- Reusable defaults ---
 
+# Single alert wired into the default endpoint shape so every service
+# check emails on failure. `alerting.custom.default-alert` above sets
+# threshold + send-on-resolved; the per-alert block only needs `type:
+# custom` to pick those up. Endpoints that need a custom description
+# declare their own `alerts:` list (this anchor's value is replaced,
+# not merged, when an endpoint declares its own).
+_alerts: &alerts
+  - type: custom
+
 _defaults: &defaults
   group: services
   interval: 2m
   conditions:
     - "[STATUS] >= 200"
     - "[STATUS] < 400"
+  alerts: *alerts
 
-# --- Tunnel-routed *.pod.haus services ---
+# --- Service liveness (internal probes) ---
 
 endpoints:
   - name: HyperDX (ClickStack)
-    url: https://watch.pod.haus/
+    url: http://hyperdx:8080/
     <<: *defaults
 
+  # home-assistant runs in network_mode: host, so it's reachable from
+  # dockernet via the bridge gateway (same address Cloudflare Tunnel uses).
+  # `/manifest.json` is unauthenticated and returns 200 when HA is up.
   - name: Home Assistant
-    url: https://home.pod.haus/
+    url: http://172.18.0.1:8123/manifest.json
     <<: *defaults
 
+  # Probe the QNAP web UI directly on the LAN — gatus is on dockernet,
+  # which NATs out to the LAN gateway. Self-signed cert, hence insecure.
   - name: Kangaroo (NAS)
-    url: https://kangaroo.pod.haus/
+    url: https://10.0.0.232/
     <<: *defaults
+    client:
+      insecure: true
 
+  # Komodo Core's HTTP API is on dockernet. `/version` is auth-free and
+  # returns 200 when Core is up. The Periphery/Alerts checks below
+  # exercise the API more deeply.
   - name: Komodo
-    url: https://komodo.pod.haus/
+    url: http://komodo-core:9120/version
     <<: *defaults
 
   # Mumble is non-HTTP — tcp:// proves DNS (DDNS-updated A) +
@@ -96,23 +124,45 @@ endpoints:
     url: "tcp://voice.pod.haus:64738"
     group: services
     interval: 2m
+    alerts: *alerts
     conditions:
       - "[CONNECTED] == true"
 
+  # Django's ALLOWED_HOSTS rejects requests whose Host header isn't the
+  # configured public hostname with a 400, so the gatus probe spoofs it.
+  # paperless redirects to /accounts/login/ (302) when the app is healthy.
   - name: Paperless
-    url: https://paperless.pod.haus/
+    url: http://paperless:8000/
     <<: *defaults
+    headers:
+      Host: paperless.pod.haus
 
+  # plex runs in network_mode: host. `/identity` is unauthenticated and
+  # returns 200 XML when Plex Media Server is up.
   - name: Plex
-    url: https://plex.pod.haus/
+    url: http://172.18.0.1:32400/identity
     <<: *defaults
 
-  - name: Syncthing
-    url: https://sync.pod.haus/
-    <<: *defaults
+  # Syncthing lives on kangaroo (network_mode: host). gatus can't reach
+  # it directly, so we use the same Komodo InspectDockerContainer pattern
+  # as Backrest (kangaroo) below — asserts the container is `running`.
+  - name: Syncthing (kangaroo, via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: services
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"kangaroo","container":"syncthing"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
 
   - name: Flood (Torrent)
-    url: https://torrent.pod.haus/
+    url: http://flood:3000/
     <<: *defaults
 
   - name: UniFi
@@ -165,6 +215,7 @@ endpoints:
     method: POST
     group: services
     interval: 60s
+    alerts: *alerts
     headers:
       X-Api-Key: ${KOMODO_API_KEY}
       X-Api-Secret: ${KOMODO_API_SECRET}
@@ -179,6 +230,7 @@ endpoints:
     method: POST
     group: services
     interval: 60s
+    alerts: *alerts
     headers:
       X-Api-Key: ${KOMODO_API_KEY}
       X-Api-Secret: ${KOMODO_API_SECRET}
@@ -233,7 +285,14 @@ endpoints:
     headers:
       X-ClickHouse-User: default
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    body: "SELECT toUInt8(max(Timestamp) > now() - INTERVAL 20 MINUTE) FROM default.otel_logs WHERE LogAttributes['host']='kangaroo'"
+    # `count() > 0` over a Timestamp-windowed scan, NOT `max(Timestamp)
+    # > now() - X` over an unbounded scan. The Map predicate
+    # (`LogAttributes['host']=…`) defeats primary-key pruning, so
+    # without an explicit Timestamp filter the query scans every
+    # active part (489M rows / 112 parts at the time of writing) and
+    # times out at gatus's 10 s budget. count() also matches the
+    # check criterion directly — one threshold, not two.
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 20 MINUTE AND LogAttributes['host']='kangaroo'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
@@ -252,7 +311,9 @@ endpoints:
     headers:
       X-ClickHouse-User: default
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    body: "SELECT toUInt8(max(Timestamp) > now() - INTERVAL 10 MINUTE) FROM default.otel_logs WHERE LogAttributes['host']='bilby'"
+    # See Kangaroo check above for why this is count() over a windowed
+    # scan rather than max(Timestamp) over the whole table.
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 10 MINUTE AND LogAttributes['host']='bilby'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
@@ -272,6 +333,9 @@ endpoints:
     url: http://backrest:9898/
     group: services
     interval: 60s
+    alerts:
+      - type: custom
+        description: "Backrest's HTTP UI on bilby isn't responding. The container is crash-looping or its NFS bind to /mnt/pouch/backups has lost its source. Recovery chain: confirm /mnt/pouch is mounted (`ls /mnt/pouch/.podhaus-share-mounted`), then `docker start backrest` or redeploy the stack."
     conditions:
       - "[STATUS] >= 200"
       - "[STATUS] < 400"
@@ -285,6 +349,7 @@ endpoints:
     method: POST
     group: services
     interval: 60s
+    alerts: *alerts
     headers:
       X-Api-Key: ${KOMODO_API_KEY}
       X-Api-Secret: ${KOMODO_API_SECRET}

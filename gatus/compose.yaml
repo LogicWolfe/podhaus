@@ -46,14 +46,28 @@ services:
     networks:
       - dockernet
     labels:
-      autoheal: "true"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
-    healthcheck:
-      test: ["CMD", "/gatus", "healthcheck"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    # No in-container healthcheck. Gatus ships FROM scratch (only
+    # /gatus, no wget/curl/sh), and the binary has no self-probe mode
+    # — so any healthcheck has to be either a multi-stage build that
+    # bundles a probe binary, or nothing. We choose nothing: the
+    # in-container probe would only confirm the HTTP listener is up,
+    # which is upstream of the property that actually matters ("is the
+    # alerter alerting"). That property is monitored externally
+    # instead — see docs (dead-man's-switch follow-up). autoheal label
+    # also removed: without a healthcheck it can never fire.
+    #
+    # Background: the prior `["CMD", "/gatus", "healthcheck"]` looked
+    # plausible but is a no-op (gatus has no `healthcheck` subcommand
+    # in main.go upstream). The binary ignored the arg, started the
+    # full server, hit "address already in use" on 8080, exited 1.
+    # Result: container marked unhealthy after start_period + retries
+    # × interval ≈ 3.5 min, autoheal killed it, gatus rebooted, and
+    # any check whose `interval × failure-threshold` exceeded ~3.5 min
+    # (Pipeline Log Ingest, Kangaroo Log Ingest — both 5m × 2 = 10m)
+    # never got the consecutive failures it needed to fire an alert.
+    # Postmark history showed 0 alerts ever sent for those endpoints
+    # despite hours of unhealthy state.
 
 networks:
   dockernet:

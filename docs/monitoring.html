@@ -81,19 +81,45 @@ Gatus endpoint/heartbeat checks ──► Postmark webhook ──► alerts@pod.
         Three monitor types in use:
       </p>
       <ul>
-        <li><strong>HTTP</strong> — periodic GET on each <code>*.pod.haus</code> endpoint with
-          status + body conditions.</li>
+        <li><strong>HTTP</strong> — periodic GET against the service's internal endpoint:
+          a dockernet container name + port (e.g. <code>http://hyperdx:8080/</code>,
+          <code>http://paperless:8000/</code>), the dockernet bridge gateway at
+          <code>172.18.0.1:&lt;port&gt;</code> for host-network services on bilby (Plex,
+          Home Assistant), or the LAN IP for off-host targets (the QNAP web UI at
+          <code>https://10.0.0.232/</code>). External probes are reserved for paths that
+          genuinely need full-path coverage (<code>storage.pod.haus</code>,
+          <code>kookaburra-probe.storage.pod.haus</code>, <code>nathanbaxter.com</code>,
+          <code>voice.pod.haus</code>) — paths that bypass Cloudflare Access by design.
+          Probing public <code>*.pod.haus</code> URLs for Access-fronted services is
+          deliberately avoided: Access returns <code>302 → login.cloudflareaccess.com</code>
+          for unauthenticated requests, which the default <code>[STATUS] &lt; 400</code>
+          condition accepts as healthy — masking backend failure. Bit us on 2026-05-30
+          (see <a href="/postmortems/postmortem-viewer.html?file=2026-05-30-power-outage-nfs-recovery.md">postmortem</a>).</li>
         <li><strong>Push (external endpoints)</strong> — bearer-token-protected URLs that
           jobs/scripts POST to with <code>success=true|false&amp;error=...</code>. Used for
           Backrest nightly heartbeats and the RAR-extraction backlog scan.</li>
         <li><strong>Komodo-API check</strong> — Gatus calls Komodo Core's <code>/read</code>
-          API and asserts that kangaroo's Periphery state is <code>Ok</code>. Surfaces
-          "Komodo Core can't reach kangaroo Periphery" as a normal Gatus alert.</li>
+          API and asserts a downstream state. Used for both Periphery reachability
+          (<code>GetServerState</code> → assert <code>status == Ok</code>) and for
+          containers gatus can't reach directly because they live on kangaroo
+          (<code>InspectDockerContainer</code> → assert <code>State.Status == running</code>;
+          covers <code>backrest</code> and <code>syncthing</code> on kangaroo).</li>
       </ul>
       <p>
-        Live monitors today cover every public hostname plus the Backrest, RAR-extraction
+        Live monitors today cover every podhaus service plus the Backrest, RAR-extraction
         (cron safety-net), and kangaroo-backrest heartbeats. <code>gatus.pod.haus</code>
         shows the live status page.
+      </p>
+      <p>
+        Email alerting is wired into the shared <code>*defaults</code> anchor:
+        every endpoint that spreads <code>&lt;&lt;: *defaults</code> inherits
+        <code>alerts: *alerts</code> (which is just <code>[{type: custom}]</code>,
+        picking up <code>failure-threshold: 3</code> / <code>send-on-resolved: true</code>
+        from <code>alerting.custom.default-alert</code>). Non-anchor endpoints declare
+        <code>alerts: *alerts</code> explicitly. Adding a new monitor without alerts
+        is a deliberate act now, not the default — the inverse of the pre-2026-05-30
+        behaviour where opting-in to alerts required hand-rolling an <code>alerts:</code>
+        block on every endpoint.
       </p>
 
       <h3 id="gatus-metrics">Gatus metrics</h3>
