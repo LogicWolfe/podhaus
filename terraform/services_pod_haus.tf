@@ -19,6 +19,11 @@ locals {
   default_pod_haus_bypass_policy = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id
   default_pod_haus_allow_policy  = cloudflare_zero_trust_access_policy.pod_haus_family_allow.id
 
+  # kangaroo (QNAP) LAN IP — single source of truth, consumed by its
+  # Cloudflare-tunnel backends AND the UniFi DHCP reservation
+  # (unifi_user.kangaroo, pinned to eth0's MAC). Change here to renumber.
+  kangaroo_lan_ip = "10.0.0.232"
+
   pod_haus_service_defaults = {
     account_id               = var.account_id
     zone_id                  = local.zones["pod.haus"]
@@ -95,7 +100,7 @@ module "kangaroo_backup" {
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
   hostname = "kangaroo-backup"
-  backend  = "http://10.0.0.25:9898"
+  backend  = "http://${local.kangaroo_lan_ip}:9898"
 }
 
 module "kangaroo" {
@@ -108,7 +113,7 @@ module "kangaroo" {
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
   hostname = "kangaroo"
-  backend  = "http://10.0.0.25:8080"
+  backend  = "http://${local.kangaroo_lan_ip}:8080"
 }
 
 module "komodo" {
@@ -224,7 +229,7 @@ module "syncthing" {
   tunnel_target = local.pod_haus_service_defaults.tunnel_target
 
   hostname = "sync"
-  backend  = "http://10.0.0.25:8384"
+  backend  = "http://${local.kangaroo_lan_ip}:8384"
 
   access_policy_ids = [
     cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id,

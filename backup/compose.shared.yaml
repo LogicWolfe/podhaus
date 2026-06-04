@@ -75,7 +75,7 @@ services:
     ports:
       # Published on each host's LAN so bilby's cloudflared can route
       # backups.pod.haus → backrest:9898 (dockernet, bilby) and
-      # kangaroo-backups.pod.haus → 10.0.0.25:9898 (LAN, kangaroo).
+      # kangaroo-backups.pod.haus → 10.0.0.232:9898 (LAN, kangaroo).
       - 9898:9898
     environment:
       BACKREST_PORT: "0.0.0.0:9898"

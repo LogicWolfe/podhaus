@@ -43,3 +43,18 @@ resource "unifi_port_forward" "mumble_tcp" {
     port = "64738"
   }
 }
+
+# DHCP reservation pinning kangaroo (the QNAP) to a stable LAN IP, so a
+# reboot can't drift it off the address every consumer expects. Bound to
+# eth0's MAC — the 1GbE NIC the box reliably gets a lease on (the 10GbE
+# eth1 lost its IP config in the 2026-06 power event). Replaces the old
+# manually-maintained reservation; the IP is `local.kangaroo_lan_ip`, the
+# single source of truth also feeding the Cloudflare-tunnel backends.
+# Import (existing client): terraform import unifi_client.kangaroo 6a1d392d4f9fa3fc2042ea93
+resource "unifi_client" "kangaroo" {
+  mac      = "24:5e:be:29:78:bf"
+  name     = "Kangaroo"
+  fixed_ip = local.kangaroo_lan_ip
+  # No network_id: the client is on the Default LAN, and setting it triggers a
+  # virtual-network override UniFi rejects for the default network.
+}

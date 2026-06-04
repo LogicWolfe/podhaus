@@ -23,7 +23,7 @@
       <p class="lead text-lg text-text-muted">
         Runs on kangaroo (post-Phase-16 relocation). Host network for LAN device discovery via
         UDP/21027 multicast. UI exposed at <code>sync.pod.haus</code> through the bilby
-        Cloudflare Tunnel, LAN-resolved to <code>10.0.0.25:8384</code>. GUI auth disabled —
+        Cloudflare Tunnel, LAN-resolved to <code>10.0.0.232:8384</code>. GUI auth disabled —
         Cloudflare Access is the gate externally.
       </p>
 
@@ -112,7 +112,7 @@
         Cloudflare Tunnel rule:
       </p>
       <pre><code>- hostname: sync.pod.haus
-  service: http://10.0.0.25:8384</code></pre>
+  service: http://10.0.0.232:8384</code></pre>
       <p>
         bilby's cloudflared routes over the LAN to kangaroo's published port. Pre-Phase-16
         this pointed at <code>172.18.0.1:8384</code> (bilby host gateway, where Syncthing used
