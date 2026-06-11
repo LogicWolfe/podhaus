@@ -140,14 +140,6 @@ services:
       - /proc:/proc
       - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
       - ${COMPOSE_KOMODO_REPO_PATH}:/etc/komodo/repo
-      # Bind the fenwick working clone so the bot's files_on_host
-      # stack def (which lives in the fenwick repo, run_directory =
-      # /etc/komodo/fenwick-working) can read its compose.yaml from
-      # the same on-disk file the host's editor edits and Docker
-      # bind-mounts as /app for `deno --watch`. v0.3 cutover.
-      # Default matches bilby's clone path; export
-      # COMPOSE_FENWICK_REPO_PATH to override on another host.
-      - ${COMPOSE_FENWICK_REPO_PATH:-/home/nathan/repos/fenwick}:/etc/komodo/fenwick-working
       - ${COMPOSE_KOMODO_KEYS_PATH}:/config/keys
     # Periphery returns HTTP 405 on `GET /` when alive (it only accepts
     # POST for its API). curl without -f exits 0 on any HTTP response,

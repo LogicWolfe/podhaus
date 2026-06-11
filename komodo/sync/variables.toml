@@ -7,15 +7,3 @@ description = "NFS4 mount for media storage on kangaroo NAS"
 name = "TZ"
 value = "Australia/Perth"
 description = "Timezone for all services"
-
-# bilby's clone of the fenwick monorepo. Referenced by:
-#   - fenwick's compose (${FENWICK_REPO}:/app for deno --watch)
-#   - Periphery's compose (${FENWICK_REPO}:/etc/komodo/fenwick-working
-#     so files_on_host can find the bot's compose)
-# Moved here from podhaus/fenwick/stack.toml in the v0.3 cutover —
-# co-located with the Periphery bind that now depends on it. Bilby-
-# specific path; another host would need this re-pointed.
-[[variable]]
-name = "FENWICK_REPO"
-value = "/home/nathan/repos/fenwick"
-description = "bilby's checkout of the fenwick repo (bind-mounted into Periphery + the fenwick container for deno --watch)"

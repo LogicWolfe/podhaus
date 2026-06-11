@@ -88,11 +88,11 @@ seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
 echo "Seeding host-discovered variable into Komodo..."
 seed_variable "PODHAUS_REPO"  "$PWD"            false
 
-# Fenwick stack-private vars (FENWICK_REPO, FENWICK_SIGNAL_*,
-# FENWICK_ADMIN_*) live in fenwick/stack.toml as [[variable]] blocks and
-# apply via the ResourceSync. Removed from this script — co-locating
-# stack-private config with the stack rather than scattering it across
-# the bootstrap script.
+# Fenwick stack-private vars (FENWICK_SIGNAL_*, FENWICK_ADMIN_*) live
+# in fenwick/stack.toml as [[variable]] blocks and apply via the
+# ResourceSync. Removed from this script — co-locating stack-private
+# config with the stack rather than scattering it across the
+# bootstrap script.
 
 # rclone.conf rendering moved into the backup stack's init container.
 # Both bilby and kangaroo render their own /rclone/rclone.conf (named

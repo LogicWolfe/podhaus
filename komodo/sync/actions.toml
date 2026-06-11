@@ -79,9 +79,8 @@ const NL = String.fromCharCode(10);
 
 // run_directory → path relative to the repo root.
 // files_on_host stacks have absolute /etc/komodo/repo/<rel> paths;
-// linked_repo stacks have relative paths. Stacks whose run_directory
-// points elsewhere (e.g. /etc/komodo/fenwick-working) aren't in our
-// mount and get skipped via the stat below.
+// linked_repo stacks have relative paths (e.g. the fenwick stacks)
+// and aren't in our mount — they get skipped via the stat below.
 function stackRelToRepo(runDir) {
   if (!runDir) return null;
   if (runDir.startsWith('/etc/komodo/repo/')) {
@@ -236,9 +235,9 @@ for (const s of stacksSummary) {
   const stackRel = stackRelToRepo(runDir);
   if (!stackRel) {
     // Stack lives outside our /syncs/podhaus mount (run_directory is
-    // empty or absolute path elsewhere — e.g. fenwick at
-    // /etc/komodo/fenwick-working). Logged by name so the skip set is
-    // visible per run; an unexpected entry here means a misrouted stack.
+    // empty/relative — e.g. the linked_repo fenwick stacks). Logged by
+    // name so the skip set is visible per run; an unexpected entry
+    // here means a misrouted stack.
     console.log(`skipped: ${stack.name} (run_directory=${runDir || '<empty>'})`);
     skipped++; continue;
   }

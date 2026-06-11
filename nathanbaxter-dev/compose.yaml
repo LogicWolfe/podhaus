@@ -32,8 +32,7 @@ services:
     # SELinux is enforcing on bilby; without label:disable the bind
     # of /home/nathan/repos/nathanbaxter into the container returns
     # EACCES on every read (npm surfaces it as a confusing
-    # ERR_INVALID_ARG_TYPE / "path is null"). Matches fenwick's bind
-    # of ${FENWICK_REPO} → /app for the same reason.
+    # ERR_INVALID_ARG_TYPE / "path is null").
     security_opt:
       - label:disable
     environment:
