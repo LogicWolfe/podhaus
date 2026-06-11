@@ -54,6 +54,13 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pod_haus" {
   config = {
     ingress = concat(
       [for r in local.pod_haus_module_ingress : { hostname = r.hostname, service = r.service, path = r.path, origin_request = r.origin_request }],
+      # ssh.pod.haus → bilby host sshd over the dockernet bridge gateway
+      # (same 172.18.0.1 host-reach pattern as Plex/Home Assistant).
+      # Inline rather than a module rule because it's a `type = "ssh"`
+      # browser-rendered app — see ssh_pod_haus.tf.
+      [
+        { hostname = "ssh.pod.haus", service = "ssh://172.18.0.1:22", path = null, origin_request = null },
+      ],
       # nathanbaxter.com public static site → Caddy (NOT a pod.haus
       # module / NOT Access-gated; cloudflared serves any zone). Caddy
       # maps it to the nathanbaxter-com bucket.
