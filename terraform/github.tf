@@ -59,9 +59,10 @@ resource "github_repository_webhook" "komodo_deploy" {
 # Sibling webhook for the fenwick repo. Same global secret, same
 # Access bypass (the path-scoped /listener/github application covers
 # both — see access.tf). Fires the fenwick-push-deploy procedure
-# (komodo/sync/procedures.toml) which staged-deploys the bot
-# (files_on_host, BatchDeployStackIfChanged) + the credential-
-# redactor (linked_repo, unconditional BatchDeployStack). The /main
+# (komodo/sync/procedures.toml): RunSync(fenwick) then a force
+# BatchDeployStack "fenwick*" — both fenwick stacks are linked_repo +
+# run_build, so Komodo builds the images on bilby; the Docker layer
+# cache makes an unchanged push a container-level no-op. The /main
 # segment is the Komodo branch filter — feature branches are
 # ignored.
 resource "github_repository_webhook" "fenwick_deploy" {
