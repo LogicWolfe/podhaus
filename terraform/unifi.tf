@@ -44,17 +44,30 @@ resource "unifi_port_forward" "mumble_tcp" {
   }
 }
 
-# DHCP reservation pinning kangaroo (the QNAP) to a stable LAN IP, so a
-# reboot can't drift it off the address every consumer expects. Bound to
-# eth0's MAC — the 1GbE NIC the box reliably gets a lease on (the 10GbE
-# eth1 lost its IP config in the 2026-06 power event). Replaces the old
-# manually-maintained reservation; the IP is `local.kangaroo_lan_ip`, the
-# single source of truth also feeding the Cloudflare-tunnel backends.
-# Import (existing client): terraform import unifi_client.kangaroo 6a1d392d4f9fa3fc2042ea93
+# DHCP reservations pinning kangaroo (the QNAP). Both NICs are cabled and
+# both reserved, so neither can drift off the address consumers expect:
+#   - eth0 1GbE (…78:bf) → kangaroo_ip_1g  (.232), the spare path
+#   - eth1 10GbE (…78:c0) → kangaroo_ip_10g (.25), the active path
+# Consumers follow local.kangaroo_active_ip (currently the 10GbE link).
+# Both stay live; QTS's arp_ignore/announce keep the two same-subnet IPs
+# from flapping. Import (existing clients):
+#   terraform import unifi_client.kangaroo     6a1d392d4f9fa3fc2042ea93
+#   terraform import unifi_client.kangaroo_10g 645c8c7f91871e0fa7119fec
 resource "unifi_client" "kangaroo" {
   mac      = "24:5e:be:29:78:bf"
   name     = "Kangaroo"
-  fixed_ip = local.kangaroo_lan_ip
+  fixed_ip = local.kangaroo_ip_1g
   # No network_id: the client is on the Default LAN, and setting it triggers a
   # virtual-network override UniFi rejects for the default network.
+}
+
+resource "unifi_client" "kangaroo_10g" {
+  mac      = "24:5e:be:29:78:c0"
+  name     = "Kangaroo"
+  fixed_ip = local.kangaroo_ip_10g
+  # No network_id, same as the 1G client: this reservation predated TF with
+  # a redundant Default-LAN virtual-network override, which UniFi rejects
+  # setting on the default network — so TF clears it (client stays on .25 /
+  # Default LAN). It also carries a Local DNS record (kangaroo.pod → .25)
+  # that the provider preserves through updates.
 }

@@ -19,10 +19,16 @@ locals {
   default_pod_haus_bypass_policy = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id
   default_pod_haus_allow_policy  = cloudflare_zero_trust_access_policy.pod_haus_family_allow.id
 
-  # kangaroo (QNAP) LAN IP — single source of truth, consumed by its
-  # Cloudflare-tunnel backends AND the UniFi DHCP reservation
-  # (unifi_user.kangaroo, pinned to eth0's MAC). Change here to renumber.
-  kangaroo_lan_ip = "10.0.0.232"
+  # kangaroo (QNAP) LAN IPs — two NICs, two live reservations:
+  #   kangaroo_ip_1g  → eth0 (1GbE, MAC …78:bf), the spare path
+  #   kangaroo_ip_10g → eth1 (10GbE, MAC …78:c0), the active path
+  # kangaroo_active_ip is the cutover knob the tunnel backends point at;
+  # flip it to kangaroo_ip_1g to fail back onto 1GbE. Both reservations
+  # stay live — QTS sets arp_ignore=1/arp_announce=2 so the two IPs
+  # coexist on the subnet without ARP flux.
+  kangaroo_ip_1g     = "10.0.0.232"
+  kangaroo_ip_10g    = "10.0.0.25"
+  kangaroo_active_ip = local.kangaroo_ip_10g
 
   pod_haus_service_defaults = {
     account_id               = var.account_id
@@ -100,7 +106,7 @@ module "kangaroo_backup" {
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
   hostname = "kangaroo-backup"
-  backend  = "http://${local.kangaroo_lan_ip}:9898"
+  backend  = "http://${local.kangaroo_active_ip}:9898"
 }
 
 module "kangaroo" {
@@ -113,7 +119,7 @@ module "kangaroo" {
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
   hostname = "kangaroo"
-  backend  = "http://${local.kangaroo_lan_ip}:8080"
+  backend  = "http://${local.kangaroo_active_ip}:8080"
 }
 
 module "komodo" {
@@ -229,7 +235,7 @@ module "syncthing" {
   tunnel_target = local.pod_haus_service_defaults.tunnel_target
 
   hostname = "sync"
-  backend  = "http://${local.kangaroo_lan_ip}:8384"
+  backend  = "http://${local.kangaroo_active_ip}:8384"
 
   access_policy_ids = [
     cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id,
