@@ -65,8 +65,12 @@ services:
       # 1000(nathan):100(users) on the host to match the Plex process's
       # uid/gid (PLEX_UID=1000 PLEX_GID=100 above).
       - /var/lib/plex-transcode:/transcode:z
-      # BIFs (video scrubbing thumbnails) live on Pouch — ~183 GB
-      - ${MEDIA_DIR}/plex-video-thumbnails:/config/Library/Application Support/Plex Media Server/Media/localhost
+      # BIFs (video scrubbing thumbnails) live on Jump (QNAP SSD), not Pouch.
+      # ~183 GB of regenerable scrub thumbnails — kept off bilby's NVMe (no
+      # room) and off Pouch so a Pouch outage can't take Plex down (it did:
+      # the 2026-06 Pouch loss exited Plex via this broken bind). Regenerated
+      # on the scheduled BIF task; deliberately unbacked-up (pure derived data).
+      - /mnt/jump/plex-video-thumbnails:/config/Library/Application Support/Plex Media Server/Media/localhost
       # Media files
       - ${MEDIA_DIR}:/Users/Shared/Pouch
       # Healthcheck + ofelia scripts as a directory bind so host edits

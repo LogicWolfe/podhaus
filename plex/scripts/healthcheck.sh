@@ -3,9 +3,10 @@
 # Fails if Plex API is down or critical remote mounts are unreadable.
 #
 # /config itself is a local bind mount to /var/lib/plex-local on the host
-# (post Phase 6 pivot — see alligator-bilby-migration.md). The only mounts
-# that can fail independently of local disk are the Pouch NFS bind mounts
-# for media files and BIF scrubbing thumbnails. Check both.
+# (post Phase 6 pivot — see alligator-bilby-migration.md). The mounts that
+# can fail independently of local disk are the media files (Pouch NFS) and
+# the BIF scrubbing thumbnails (Jump NFS — a separate export/volume). Check
+# both.
 #
 # Sentinel-marker check (not `ls`): the marker .podhaus-share-mounted
 # lives on the QNAP NFS share itself at every bind-source path, so it's
@@ -21,9 +22,9 @@ curl -sf http://localhost:32400/identity > /dev/null
 # Pouch NFS mount — media files (bind from /mnt/pouch on host).
 [ -e /Users/Shared/Pouch/.podhaus-share-mounted ]
 
-# BIF scrubbing thumbnails — bind from /mnt/pouch/plex-video-thumbnails
-# on host. If Pouch is unmounted, the chattr +i tripwire on /mnt/pouch
+# BIF scrubbing thumbnails — bind from /mnt/jump/plex-video-thumbnails
+# on host. If Jump is unmounted, the chattr +i tripwire on /mnt/jump
 # blocks Docker's subdir auto-create entirely, so Plex won't even start
-# in that state. This check guards against the post-start case (Pouch
+# in that state. This check guards against the post-start case (Jump
 # went away mid-run).
 [ -e "/config/Library/Application Support/Plex Media Server/Media/localhost/.podhaus-share-mounted" ]
