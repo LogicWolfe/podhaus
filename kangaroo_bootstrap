@@ -5,7 +5,7 @@
 #
 # What it does (in order):
 #   1. Verify SSH + Docker on kangaroo.
-#   2. Create periphery dir layout under /share/CACHEDEV1_DATA/Container.
+#   2. Create periphery dir layout under /share/CACHEDEV2_DATA/Container.
 #   3. SCP keys (private + Core's pub) and render config (TZ + GitHub PAT).
 #   4. SSH-execute `docker compose up -d`.
 #   5. Wait for Periphery health (outbound dial settles via Core in <30s).
@@ -22,10 +22,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 # --- Config ---
 KANGAROO_SSH="${KANGAROO_SSH:-admin@10.0.0.25}"
-KANGAROO_DIR="/share/CACHEDEV1_DATA/Container/komodo-periphery"
+# Container state lives on CACHEDEV2 (Jump, the backed-up volume) per the
+# placement rule in docs/storage.html — never CACHEDEV1/Pouch.
+KANGAROO_DIR="/share/CACHEDEV2_DATA/Container/komodo-periphery"
 # Container Station ships docker outside the default SSH PATH on QTS.
 # Override via env if your install differs.
-KANGAROO_DOCKER="${KANGAROO_DOCKER:-/share/CACHEDEV1_DATA/.qpkg/container-station/usr/bin/docker}"
+KANGAROO_DOCKER="${KANGAROO_DOCKER:-/share/CACHEDEV2_DATA/.qpkg/container-station/usr/bin/docker}"
 PERIPHERY_HEALTH_TIMEOUT="${PERIPHERY_HEALTH_TIMEOUT:-120}"
 BILBY_KEYS_DIR="${BILBY_KEYS_DIR:-/opt/komodo/keys}"
 

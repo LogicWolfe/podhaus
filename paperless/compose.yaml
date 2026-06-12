@@ -115,8 +115,8 @@ services:
     healthcheck:
       # Sentinel-marker check for /usr/src/paperless/media — proves the
       # bind source /mnt/jump/paperless is the real Jump NFS share via
-      # /mnt/jump/.podhaus-jump-mounted. A bare-stub /mnt/jump lacks the
-      # marker and goes red. /usr/src/paperless/data is local NVMe (no
+      # its .podhaus-share-mounted marker. A bare-stub /mnt/jump lacks
+      # the marker and goes red. /usr/src/paperless/data is local NVMe (no
       # remote-failure mode) so a cheap `ls` is fine. The 2026-05-23
       # post-reboot incident bit this — bare-stub Jump caused init to
       # fail with `mkdir: cannot create directory ... Permission denied`,

@@ -102,8 +102,9 @@ endpoints:
 
   # Probe the QNAP web UI directly on the LAN — gatus is on dockernet,
   # which NATs out to the LAN gateway. Self-signed cert, hence insecure.
+  # .25 is the active 10GbE link (.232 is the 1GbE live spare).
   - name: Kangaroo (NAS)
-    url: https://10.0.0.232/
+    url: https://10.0.0.25/
     <<: *defaults
     client:
       insecure: true

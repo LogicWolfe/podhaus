@@ -42,8 +42,8 @@
 
       <h3 id="jump">Jump (NAS SSD)</h3>
       <p>
-        QNAP SSD array, RAID5, ~382 GB total / ~280 GB free. Durable storage that
-        we'd really rather not lose. Two live consumers:
+        QNAP SSD array (CACHEDEV2). Durable storage that we'd really rather not
+        lose. Live consumers:
       </p>
       <ul>
         <li><strong>Restic repo</strong> at <code>/mnt/jump/backups/</code> (bilby view) or
@@ -51,6 +51,12 @@
           backup target.</li>
         <li><strong>Kangaroo's restic repo</strong> at <code>/mnt/jump/backups-kangaroo/</code> —
           separate from bilby's to avoid two-client coordination.</li>
+        <li><strong>Paperless media</strong> at <code>/mnt/jump/paperless/</code> — small,
+          random-read, must-not-lose.</li>
+        <li><strong>Plex BIF thumbnails</strong> at <code>/mnt/jump/plex-video-thumbnails/</code>
+          — regenerable, moved off Pouch 2026-06.</li>
+        <li><strong>Kangaroo container state</strong> at
+          <code>/share/CACHEDEV2_DATA/Container/</code> — see the placement rule below.</li>
       </ul>
       <p>
         ClickStack telemetry is <em>not</em> a Jump consumer — ClickHouse and MongoDB live on
@@ -66,9 +72,9 @@
 
       <h3 id="pouch">Pouch (NAS HDD)</h3>
       <p>
-        QNAP HDD array, RAID5 across 5 drives, ~29 TB / ~5 TB free at last check. Bulk content
-        where capacity matters more than per-drive resilience: Plex media, paperless documents,
-        flood downloads, Syncthing-replicated folders, OneNote export archive, BIFs (~183 GB).
+        QNAP HDD array, RAID5 across 4 drives (static volume, rebuilt 2026-06), ~21.8 TB usable.
+        Bulk content where capacity matters more than per-drive resilience: Plex media,
+        flood downloads, Syncthing-replicated folders.
       </p>
       <p>
         Bilby mounts Pouch over NFS at <code>/mnt/pouch</code>; kangaroo accesses it at
@@ -90,6 +96,17 @@
         <li><strong>5–50 GB or "we'd hate to lose this":</strong> ask. Probably Jump.</li>
         <li><strong>&gt;50 GB, bulk, regenerable:</strong> Pouch.</li>
       </ul>
+      <aside class="callout warning">
+        <span class="callout-title">kangaroo container state goes on CACHEDEV2 (Jump) — always</span>
+        Every kangaroo-resident stack's state dir lives under
+        <code>/share/CACHEDEV2_DATA/Container/</code>, the backed-up SSD volume — Container
+        Station itself installs there too (it follows the QTS default volume, which is
+        CACHEDEV2). <strong>CACHEDEV1 (Pouch) holds only unbacked bulk media and
+        Syncthing's synced data — never container state.</strong> The 2026-06 Pouch RAID
+        failure wiped Container Station and every stack whose state had defaulted onto
+        CACHEDEV1; state survived only because backrest <em>copied</em> it cross-volume.
+        Placement on the backed-up volume is the model, copies are the safety net.
+      </aside>
 
       <h2 id="nas-quirks">NFS quirks</h2>
       <aside class="callout warn">
@@ -159,7 +176,7 @@
           <tr><td><code>/mnt/pouch</code></td><td>bilby</td><td>NFS to QNAP HDD (Pouch).</td></tr>
           <tr><td><code>/share/CACHEDEV1_DATA/Pouch</code></td><td>kangaroo</td><td>Direct access to Pouch.</td></tr>
           <tr><td><code>/share/CACHEDEV2_DATA/Jump</code></td><td>kangaroo</td><td>Direct access to Jump.</td></tr>
-          <tr><td><code>/share/CACHEDEV1_DATA/Container/</code></td><td>kangaroo</td><td>Container state on the SSD (Periphery, Syncthing, kangaroo Backrest).</td></tr>
+          <tr><td><code>/share/CACHEDEV2_DATA/Container/</code></td><td>kangaroo</td><td>Container state on the backed-up SSD volume (Periphery, Syncthing, kangaroo Backrest). Never on CACHEDEV1 — see the placement rule above.</td></tr>
         </tbody>
       </table>
 

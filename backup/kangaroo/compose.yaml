@@ -34,8 +34,8 @@ services:
       # Absolute host paths — Periphery's container-side relative-path
       # resolution doesn't match the QNAP host's view of the cloned repo,
       # and ${PODHAUS_REPO} doesn't exist on kangaroo (no komodo-start).
-      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro
-      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/kangaroo/config.json.tmpl:/tmpl/config.json.tmpl:ro
+      - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro
+      - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/kangaroo/config.json.tmpl:/tmpl/config.json.tmpl:ro
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -47,9 +47,13 @@ services:
       # all_squash NFS pattern don't apply for this path.
       - /share/CACHEDEV2_DATA/Jump/backups-kangaroo:/repos/podhaus-kangaroo
       # Source data — read-only bind mounts of every kangaroo-resident
-      # stack's state dir.
-      - /share/CACHEDEV1_DATA/Container/syncthing-config:/userdata/syncthing:ro
-      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo:/userdata/komodo-periphery:ro
+      # stack's state dir. komodo-periphery is the PARENT dir (not just
+      # etc-komodo) so the v2 PKI keys/ sibling is captured too — keys
+      # being outside backrest's scope is what made the 2026-06 Pouch
+      # wipe cost the Periphery identity. The repos/ clone underneath is
+      # excluded in config.json.tmpl (reconstructible, churns every pull).
+      - /share/CACHEDEV2_DATA/Container/syncthing-config:/userdata/syncthing:ro
+      - /share/CACHEDEV2_DATA/Container/komodo-periphery:/userdata/komodo-periphery:ro
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
       # Recreate when the backrest-init image rebuilds (init-tools/

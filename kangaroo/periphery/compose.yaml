@@ -45,10 +45,10 @@ services:
       # Periphery state: cloned Linked Repo working dirs, deployed stack
       # files, action cache. Persisted on the QNAP storage pool so it
       # survives Container Station upgrades.
-      - /share/CACHEDEV1_DATA/Container/komodo-periphery/etc-komodo:/etc/komodo
+      - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo:/etc/komodo
       # v2 PKI keys. Bind is separate from /etc/komodo so a periphery
       # state reset (rare) doesn't take the keys with it.
-      - /share/CACHEDEV1_DATA/Container/komodo-periphery/keys:/config/keys
+      - /share/CACHEDEV2_DATA/Container/komodo-periphery/keys:/config/keys
     # NB: no SELinux label:disable here — QTS doesn't run SELinux. Bilby's
     # Periphery needs label:disable for Fedora Asahi; QNAP doesn't.
     # NB: no repo bind-mount. Bilby's Periphery has the repo at /etc/komodo/repo

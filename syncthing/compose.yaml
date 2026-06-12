@@ -21,8 +21,11 @@ services:
     volumes:
       # Syncthing's database, identity (cert/key), config.xml. First-run
       # autogen lands here; subsequent restarts reuse the persisted device
-      # ID. Backed up by kangaroo/backrest.
-      - /share/CACHEDEV1_DATA/Container/syncthing-config:/var/syncthing/config
+      # ID. Lives on CACHEDEV2 (Jump, the backed-up volume) per the
+      # placement rule in docs/storage.html — kangaroo container state
+      # never goes on CACHEDEV1/Pouch (unbacked bulk media). Captured by
+      # the kangaroo backrest `syncthing` plan from the same path.
+      - /share/CACHEDEV2_DATA/Container/syncthing-config:/var/syncthing/config
       # The data being synced. Pouch is the user's main media + docs share;
       # SkyWorkBackup is a sub-folder share. Both have existing .stfolder
       # markers + .stignore files that Syncthing will auto-discover when
