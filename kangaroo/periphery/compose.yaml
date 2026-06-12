@@ -27,11 +27,16 @@ services:
       # in komodo/keys/ that Core's KOMODO_PERIPHERY_PUBLIC_KEYS trusts.
       PERIPHERY_PRIVATE_KEY: file:/config/keys/periphery.key
       PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub
-      # v2 outbound: Periphery dials Core (LAN). No inbound :8120 needed;
-      # the noise handshake is the auth gate (replaces v1's allowed_ips +
-      # passkey-list combo).
+      # v2 outbound: Periphery dials Core (LAN). The noise handshake is
+      # the auth gate (replaces v1's allowed_ips + passkey-list combo).
       PERIPHERY_CORE_ADDRESSES: ws://10.0.0.119:9120
       PERIPHERY_CONNECT_AS: kangaroo
+      # Since Periphery v2.2.0, setting core_addresses defaults
+      # server_enabled to false — no :8120 listener at all, which fails
+      # the healthcheck below (curl gets connection-refused forever).
+      # Re-enable the internal listener (no host port publish) purely as
+      # the liveness probe target.
+      PERIPHERY_SERVER_ENABLED: "true"
       # Periphery has no default config-file discovery — must point at the
       # rendered file explicitly. kangaroo_bootstrap drops the rendered
       # periphery.config.toml at /etc/komodo/ (host: etc-komodo/).

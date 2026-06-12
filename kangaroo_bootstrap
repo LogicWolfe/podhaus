@@ -57,6 +57,13 @@ log "Ensuring directory layout on kangaroo: $KANGAROO_DIR"
 ssh_kangaroo "mkdir -p '$KANGAROO_DIR/etc-komodo' '$KANGAROO_DIR/keys' && chmod 700 '$KANGAROO_DIR/keys'"
 ok "directories ready"
 
+# --- 2b. dockernet bridge ---
+# Komodo-deployed kangaroo stacks declare dockernet as external; a fresh
+# Container Station install doesn't have it (bit the 2026-06 rebuild).
+log "Ensuring dockernet bridge on kangaroo"
+ssh_kangaroo "$KANGAROO_DOCKER network inspect dockernet >/dev/null 2>&1 || $KANGAROO_DOCKER network create dockernet"
+ok "dockernet present"
+
 # --- 3a. Ship keys (private + Core's pub) ---
 log "Shipping v2 PKI keys to kangaroo"
 # Stream via stdin so the privkey never appears on disk anywhere except

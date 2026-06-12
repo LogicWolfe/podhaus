@@ -47,6 +47,13 @@ services:
       # host's table → tailscale0 → bilby's tailscale0.
       PERIPHERY_CORE_ADDRESSES: ws://bilby-podnet.tail9ceb.ts.net:9120
       PERIPHERY_CONNECT_AS: kookaburra
+      # Since Periphery v2.2.0, setting core_addresses defaults
+      # server_enabled to false — no :8120 listener at all, which fails
+      # the healthcheck below (curl gets connection-refused forever).
+      # Re-enable the internal listener (no host port publish) purely as
+      # the liveness probe target. Bit kangaroo on 2026-06-12 when its
+      # rebuild pulled a fresh image.
+      PERIPHERY_SERVER_ENABLED: "true"
       PERIPHERY_CONFIG_PATHS: /etc/komodo/periphery.config.toml
       TZ: ${TZ}
     volumes:

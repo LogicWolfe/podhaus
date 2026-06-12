@@ -82,11 +82,53 @@ during the .25 cutover window 2026-06-10) were `docker start`ed 2026-06-12
   the UI.** "RAR Extraction" heartbeat stays red until the pipeline next
   runs.
 
-### 2. kangaroo container stacks are DOWN (Container Station gone)
-Container Station lived on the wiped Pouch volume → gone. Everything
-kangaroo-resident is down: **syncthing, kangaroo-backup (backrest), kangaroo
-Periphery, kangaroo-logging, kangaroo-autoheal**. Rebuild requires reinstalling
-Container Station (see #3), regenerating Periphery keys (#4), then redeploying.
+### 2. kangaroo container-plane rebuild — ✅ COMPLETE (2026-06-12 ~22:10)
+All five kangaroo containers up + healthy on CACHEDEV2 paths: Periphery,
+syncthing (fresh identity), backrest (+init), alloy, autoheal. Gatus: every
+service endpoint green; only the 3 heartbeats remain red until their next
+scheduled runs (backrest nightlies 04:00/04:10, RAR extraction on next
+pipeline run). Komodo CRITICAL alert auto-resolved. Deploy-time fixes below
+are committed locally — needs push.
+Progress 2026-06-12 (evening):
+- ✅ **Container Station reinstalled on CACHEDEV2** via `qpkg_cli` over SSH
+  (fully headless — engine started via CS's own supervisor; docker
+  27.1.2-qnap8, data-root on CACHEDEV2). The QTS default volume is already
+  CACHEDEV2, so placement was native.
+- ✅ **Periphery bootstrapped** (`kangaroo_bootstrap`, new CACHEDEV2 paths,
+  original identity — see #4). kangaroo **state=Ok** in Komodo.
+- ✅ **Placement-fix commit `590dbd5`** staged locally: full CACHEDEV1 →
+  CACHEDEV2 bind sweep (syncthing/periphery/backup/logging), backrest
+  source widened to capture PKI keys (repos/ clone excluded), bootstrap
+  paths, gatus probe → .25, storage placement rule + stale-doc refresh.
+- ⏳ **Remaining:** push `590dbd5` (permission gate wants an explicit
+  per-push green light) → webhook deploys syncthing/backup/logging/
+  autoheal onto the new paths → verify → hand the fresh syncthing device
+  ID to the user for pairing (#5). No restic restore needed: Periphery
+  config is bootstrap-regenerated, syncthing identity is deliberately
+  fresh.
+- ⚠ New finding: the `@reboot` crontab line (CS-upgrade survival) had
+  been **silently stripped by QTS's crond** (no `@reboot` support) — the
+  mechanism was dead all along. Bootstrap re-added it; expect it to be
+  stripped again. Low severity (docker's `unless-stopped` policies cover
+  reboots once the engine is up), but the bootstrap should eventually use
+  a supported mechanism (e.g. a numbered cron schedule or autorun.sh).
+- ✅ Fixed during deploy (rebuild-only gaps, all closed in working tree):
+  - **Periphery v2.2.0 regression:** with `core_addresses` set,
+    `server_enabled` now defaults to false → no :8120 listener → the
+    healthcheck red-looped. Fixed via `PERIPHERY_SERVER_ENABLED: "true"`
+    in BOTH `kangaroo/periphery/` and `kookaburra/periphery/` composes
+    (kookaburra hits the same thing on its next image pull).
+  - **dockernet missing on fresh Container Station** — backup/logging
+    deploys failed (`network dockernet … could not be found`). Created
+    manually + `kangaroo_bootstrap` now ensures it (mirrors
+    kookaburra_bootstrap).
+  - **syncthing-config ownership** — docker auto-created the fresh bind
+    dir as root; syncthing (1000:100) crash-looped on cert write. Fixed
+    via the runbook chown.
+  - Linked-repo first-deploy **concurrent-clone race**: three stacks
+    cloning `/etc/komodo/repos/podhaus` simultaneously; two lost. Retry
+    after the clone completes succeeds — known one-time-per-rebuild
+    quirk, no fix needed.
 
 ### 3. Backup-placement architecture fix (the gap this outage exposed)
 **Root cause:** kangaroo container state lived on **CACHEDEV1 (Pouch,
@@ -128,6 +170,12 @@ regenerate it from a pinelake listing during re-pair. **Decision (2026-06-12):
 `.stignore` stays out of the repo** — it describes exactly the data it lives
 beside, so losing it alongside that data costs nothing; no config-as-code
 carve-in needed.
+
+**Status 2026-06-12:** syncthing redeployed with a **fresh identity**:
+device ID `HDF5HFT-TIFGFRV-Z6XJIRU-EJS64HO-54EERPP-PFCZXKH-EGOILDV-P3NXYAR`.
+User pairs it on pinelake + other devices; set kangaroo's folder **Receive
+Only** when accepting the share, regenerate `.stignore` from a pinelake
+listing before any flip to Send & Receive.
 
 **⚠ Cascade risk at rebuild:** do **not** restore the old Syncthing identity +
 folder config and let it reconnect to pinelake against an empty/partial Pouch —
