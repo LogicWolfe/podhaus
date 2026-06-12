@@ -60,12 +60,23 @@ this outage exposed.
 
 ## Open issues
 
-### 1. Kids/TV restore (in flight)
-rclone SFTP copy USB → Pouch. ~37% / ETA ~4–5h as of 2026-06-12 18:30
-(log: `/home/nathan/kidstv-restore.log`, conf `/tmp/kangaroo-sftp.conf`).
-- On completion: verify `find /mnt/pouch/Kids/TV -type f | wc -l` **== 8493**
-  (USB source count), then trigger a Plex **"Kids TV"** library scan.
-- Keep the USB backup (`/mnt/usb4t`) until verified.
+### 1. Kids/TV restore — ✅ done; 28 episodes unrecoverable (USB bad sectors)
+**8465 / 8493** files restored to Pouch (2026-06-13). The 28 missing are
+`Unrecovered read error` bad sectors on the **USB rescue drive** (sda
+Medium Error in dmesg); a retry pass recovered none. All are
+re-acquirable single episodes — user decision: re-download via flood vs
+drop. USB drive is failing media; it holds nothing unique beyond the
+unreadable 28 — **retire it**.
+
+Unrecoverable episodes (28 files; double-episodes count as one file):
+100% Wolf S01E10/E12/E25 · Ada Twist S01E02 · ALVINNN S01E09, S02E03 ·
+Avatar TLA S02E16, S03E16 · Big Hero 6 S01E01 · Blaze S05E08/E15 ·
+Bluey S01E49 · Dinosaur Train S01E15E16, S01E35E36, S02E03E04,
+S03E13E14 · DuckTales (1987) S01E36 · Get Rolling with Otis S02E03 ·
+Hilda S01E12 · Kim Possible S02E05 · Maya and the Three S01E02 ·
+MLP FiM S02E17 (YayPonies file), S09E14 · Phineas and Ferb S04E18 ·
+Spidey S04E12 · Star Wars Young Jedi Adventures S01E05 · Teachers Pet
+S01E08 · Stinky & Dirty S02E25
 
 ### 1b. bilby NFS-bind containers stopped during the incident — ✅ restarted
 flood (stopped at outage start 2026-06-05), paperless + backrest (stopped
@@ -225,7 +236,16 @@ watch state**. Mechanics verified from the DB:
   home / clean up the duplicates.
 - USB drive `/mnt/usb4t` = Kids/TV source; keep until the restore is verified.
 
-### 10. Monitoring — complete red inventory (verified 2026-06-12)
+### 10. Monitoring — ✅ ALL GREEN (2026-06-13 ~06:20)
+Every gatus endpoint green, zero reds. Final fix: the `rar-backlog`
+ofelia job had been silently dead since 2026-05-30 — ofelia restarted
+during that outage's recovery while flood was still down, so the
+`job-exec` never re-registered (the exact label-re-read trap Stage 3
+exists for), and yesterday's push never reached Stage 3 because Stage 2
+aborted on the kangaroo deploy failures. Restarted ofelia (flood now up,
+job re-registered) + ran `rar-backlog.sh` once to push the heartbeat.
+
+Red inventory as found 2026-06-12, for the postmortem:
 11 of 25 gatus endpoints red; every one maps to a known cause above, no
 surprises hiding:
 - **Paperless, Flood (Torrent), Backrest (bilby)** + heartbeats **Backrest
