@@ -176,6 +176,37 @@ executions = [
 # container's own `git clone --depth 1 -b main`, not from any
 # Komodo-managed working tree.
 
+# pets-alive-push-deploy — push-to-deploy for the pets-alive engine
+# (linked_repo + run_build; Komodo builds the image on bilby). Same
+# shape + rationale as fenwick-push-deploy above: Stage 0 reconciles
+# the sync, Stage 1 force-deploys (the linked-repo stale-clone deadlock
+# makes IfChanged a permanent no-op; the Docker layer cache makes an
+# unchanged push a container-level no-op). Bound to its own GitHub
+# webhook (.../procedure/pets-alive-push-deploy/main; see
+# ../../terraform/github.tf) and to `deno task deploy` in the repo.
+
+[[procedure]]
+name = "pets-alive-push-deploy"
+description = "Push-to-deploy for the pets-alive engine stack."
+tags = ["pets-alive", "podhaus"]
+config.webhook_enabled = true
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Reconcile pets-alive stack definition (sync TOML -> Komodo)"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params = { sync = "pets-alive" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy pets-alive (build + up; layer cache makes an unchanged push a no-op)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "pets-alive*" }, enabled = true },
+]
+
+
 [[procedure]]
 name = "nathanbaxter-deploy"
 description = "Push-to-deploy for nathanbaxter.com. Force-deploys the nathanbaxter-deploy stack, whose one-shot builder clones, builds, and mirrors dist/ to the nathanbaxter-com bucket."

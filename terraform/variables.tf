@@ -32,6 +32,7 @@ locals {
     "nathanbaxter.net"     = "66d58478b39221b80ee2c5ef0202b55b"
     "nathanbaxter.org"     = "8a17b7fa77e6a7b94b4f2f65fd2c86ea"
     "podfoundation.org.au" = "67c381c6b8f1862734cfed38122926af"
+    "indigopod.au"         = "a21685ed1bee0bdc7955b728599989ee"
   }
 
   tunnels = {

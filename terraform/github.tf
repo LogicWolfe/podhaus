@@ -97,3 +97,22 @@ resource "github_repository_webhook" "nathanbaxter_deploy" {
     secret       = var.komodo_webhook_secret
   }
 }
+
+# Sibling webhook for the pets-alive engine repo. Same global secret +
+# Access bypass (path-scoped /listener/github app in access.tf). Fires
+# pets-alive-push-deploy (komodo/sync/procedures.toml): RunSync then a
+# force BatchDeployStack "pets-alive*" — linked_repo + run_build, so
+# Komodo builds the image on bilby; the layer cache makes an unchanged
+# push a container-level no-op. /main is the branch filter.
+resource "github_repository_webhook" "pets_alive_deploy" {
+  repository = "pets-alive"
+  events     = ["push"]
+  active     = true
+
+  configuration {
+    url          = "https://komodo.pod.haus/listener/github/procedure/pets-alive-push-deploy/main"
+    content_type = "json"
+    insecure_ssl = false
+    secret       = var.komodo_webhook_secret
+  }
+}
