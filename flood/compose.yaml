@@ -55,10 +55,11 @@ services:
       FLOOD_SECRET: ${FLOOD_SECRET}
       GID: "44"
       TZ: ${TZ}
-      # Used by /scripts/rar-backlog.sh to push daily health pings to
-      # Gatus's heartbeat_rar-extraction external endpoint. Shared-secret
-      # bearer token; Gatus rejects pushes with any other value.
-      GATUS_UNPACKERR_PUSH_TOKEN: ${GATUS_UNPACKERR_PUSH_TOKEN}
+      # Shared Gatus heartbeat push token for this container's ofelia jobs:
+      # /scripts/rar-backlog.sh (heartbeat_rar-extraction) and
+      # /scripts/pinelake-stignore.sh (heartbeat_pinelake-stignore).
+      # Shared-secret bearer token; Gatus rejects pushes with any other value.
+      GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
     volumes:
       # rtorrent session (~16 MB: .torrent + .libtorrent_resume + .rtorrent
       # files). Local NVMe per the post-phase-6 sizing rule. The .rtorrent.rc

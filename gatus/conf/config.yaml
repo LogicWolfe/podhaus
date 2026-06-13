@@ -392,7 +392,7 @@ external-endpoints:
   # threshold tolerates one missed firing.
   - name: RAR Extraction
     group: heartbeat
-    token: ${GATUS_UNPACKERR_PUSH_TOKEN}
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
     heartbeat:
       interval: 25h
     alerts:
@@ -417,4 +417,58 @@ external-endpoints:
         description: "Kangaroo's nightly Backrest pipeline didn't check in. Either no snapshots ran on kangaroo (check `docker logs backrest` filtered by host=kangaroo in HyperDX (watch.pod.haus)), or the success-hook on the backrest-state plan failed. Manually trigger a snapshot of any kangaroo plan from gatus.pod.haus to test."
         failure-threshold: 3
         success-threshold: 2
+        send-on-resolved: true
+
+  # --- ofelia job dead-man's-switches ---
+  # Every ofelia job pushes a heartbeat on each run; missing pushes mean
+  # the job silently stopped firing. The 2026-05/06 incident proved this:
+  # `rar-backlog` was dead 13 days (ofelia restarted while flood was down,
+  # so the job-exec never re-registered — the released ofelia image reads
+  # labels only at startup). Only that one job had a heartbeat then; these
+  # close the gap for the rest. Shared GATUS_OFELIA_PUSH_TOKEN.
+
+  # clickstack-mongo-dump — nightly HyperDX mongo logical dump (03:50 AWST).
+  # The mongo image has no wget/curl, so /scripts/mongo-dump.sh pushes via
+  # a bash /dev/tcp request. 25h tolerates one missed firing.
+  - name: ClickStack Mongo Dump
+    group: heartbeat
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
+    heartbeat:
+      interval: 25h
+    alerts:
+      - type: custom
+        description: "HyperDX mongo nightly dump didn't check in — the dashboards/alerts/source config (tiny but hand-built, not reconstructible from telemetry) may have no fresh archive. Check ofelia + `docker logs clickstack-mongo`, and /var/lib/clickstack/mongo-dumps for the latest archive."
+        failure-threshold: 3
+        success-threshold: 2
+        send-on-resolved: true
+
+  # plex-stats-cleanup — monthly statistics prune + VACUUM (1st, 05:30
+  # AWST). 32-day interval tolerates the monthly cadence; gatus sqlite
+  # storage persists last-seen across restarts so this won't false-red on
+  # a deploy.
+  - name: Plex Stats Cleanup
+    group: heartbeat
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
+    heartbeat:
+      interval: 768h
+    alerts:
+      - type: custom
+        description: "Monthly Plex statistics prune + VACUUM hasn't run in over a month — the Plex DB stats tables will slowly bloat. Low urgency. Check ofelia + `docker exec plex /scripts/stats-cleanup.sh`."
+        failure-threshold: 1
+        success-threshold: 1
+        send-on-resolved: true
+
+  # pinelake-stignore — reconciles Pouch's .stignore allowlist with
+  # pinelake-tagged finished torrents; ofelia ticks every 5 min (plus the
+  # rtorrent event hook). 30m tolerates a few missed ticks.
+  - name: Pinelake Stignore
+    group: heartbeat
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
+    heartbeat:
+      interval: 30m
+    alerts:
+      - type: custom
+        description: "The pinelake .stignore reconciler hasn't ticked in 30 min — newly-completed pinelake-tagged torrents won't be allowlisted for replication until it resumes. Check ofelia + `docker exec flood /scripts/pinelake-stignore.sh`."
+        failure-threshold: 2
+        success-threshold: 1
         send-on-resolved: true

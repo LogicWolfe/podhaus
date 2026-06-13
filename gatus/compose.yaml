@@ -11,7 +11,7 @@ services:
       TZ: ${TZ}
       POSTMARK_SERVER_TOKEN: ${POSTMARK_SERVER_TOKEN}
       GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
-      GATUS_UNPACKERR_PUSH_TOKEN: ${GATUS_UNPACKERR_PUSH_TOKEN}
+      GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
       GATUS_BACKREST_KANGAROO_PUSH_TOKEN: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
       # Komodo Core API credentials — used by the "Kangaroo Periphery
       # (via Komodo)" check that asserts kangaroo's Server state is Ok.

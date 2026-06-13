@@ -22,10 +22,10 @@ set -u
 
 AGE_MINUTES=120  # 2 hours — RARs younger than this may still be extracting
 GATUS_URL="http://gatus:8080/api/v1/endpoints/heartbeat_rar-extraction/external"
-TOKEN="${GATUS_UNPACKERR_PUSH_TOKEN:-}"
+TOKEN="${GATUS_OFELIA_PUSH_TOKEN:-}"
 
 if [ -z "$TOKEN" ]; then
-    echo "[rar-backlog] ERROR: GATUS_UNPACKERR_PUSH_TOKEN not set in env" >&2
+    echo "[rar-backlog] ERROR: GATUS_OFELIA_PUSH_TOKEN not set in env" >&2
     exit 1
 fi
 

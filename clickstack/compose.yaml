@@ -83,6 +83,9 @@ services:
       - label:disable
     environment:
       TZ: ${TZ}
+      # Heartbeat push token for /scripts/mongo-dump.sh → Gatus
+      # heartbeat_clickstack-mongo-dump. Shared ofelia push token.
+      GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
     volumes:
       # Local NVMe. Holds HyperDX app state only (dashboards, alerts,
       # users, source defs, ingestion key) — tiny but irreplaceable;
@@ -91,6 +94,9 @@ services:
       # mongodump target for the nightly backup job. Bound RO into
       # Backrest separately (backup/bilby).
       - /var/lib/clickstack/mongo-dumps:/dump
+      # mongo-dump.sh (the ofelia job below). Directory bind per the
+      # bind-mount rule; host edits propagate on next deploy.
+      - ${PODHAUS_REPO}/clickstack/scripts:/scripts:ro,z
     networks:
       - dockernet
     mem_limit: 1g
@@ -98,14 +104,13 @@ services:
       autoheal: "true"
       # Nightly logical dump at 03:50 AWST — inside the 04:00 dead-time
       # window, ahead of Backrest's 04:00 plans so the same night's
-      # restic run captures a fresh archive. Keeps the latest ~14.
-      # mongodump ships in the mongo image; no extra container.
+      # restic run captures a fresh archive. mongodump ships in the mongo
+      # image; the dump + retention + Gatus heartbeat live in
+      # /scripts/mongo-dump.sh (the image has no wget/curl, so the
+      # heartbeat pushes via bash /dev/tcp).
       ofelia.enabled: "true"
       ofelia.job-exec.clickstack-mongo-dump.schedule: "0 50 3 * * *"
-      ofelia.job-exec.clickstack-mongo-dump.command: >-
-        bash -c "mongodump --uri='mongodb://localhost:27017/hyperdx' --gzip
-        --archive=/dump/hyperdx-$(date +%F).archive &&
-        ls -1t /dump/hyperdx-*.archive | tail -n +15 | xargs -r rm -f"
+      ofelia.job-exec.clickstack-mongo-dump.command: "/scripts/mongo-dump.sh"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # mongo:5.0 image ships the legacy `mongo` shell (not mongosh).

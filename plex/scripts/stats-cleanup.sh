@@ -67,3 +67,11 @@ printf '[stats-cleanup %s] VACUUM took=%ds  size: %d -> %d bytes (reclaimed %d)\
     "$(ts)" \
     "$((vacuum_end - vacuum_start))" \
     "$before_size" "$after_size" "$reclaimed"
+
+# Dead-man's-switch heartbeat — a missing push means ofelia stopped
+# running this job (see gatus heartbeat_plex-stats-cleanup). Tolerate a
+# push failure: the monthly cleanup itself already succeeded above.
+curl -fsS -m 10 -X POST \
+    -H "Authorization: Bearer ${GATUS_OFELIA_PUSH_TOKEN}" \
+    "http://gatus:8080/api/v1/endpoints/heartbeat_plex-stats-cleanup/external?success=true" \
+    >/dev/null 2>&1 || echo "[stats-cleanup $(ts)] WARN: gatus heartbeat push failed"
