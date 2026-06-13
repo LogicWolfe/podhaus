@@ -85,6 +85,24 @@
         </tbody>
       </table>
 
+      <aside class="callout note">
+        <span class="callout-title">GUI auth is intentionally off — silence the warning the right way</span>
+        We run the GUI open (no user/password): externally gated by Cloudflare Access,
+        LAN trusted. Syncthing then shows a red <em>"remote access without a password"</em>
+        banner. That banner is <strong>not</strong> a dismissible notification — it's a
+        live <code>openNoAuth</code> check recomputed every page load, so clicking the
+        × or acking <code>authenticationUserAndPassword</code> does nothing. The only
+        lever is <code>gui.insecureAdminAccess=true</code> (per the source comment, "the
+        magic setting to silence the warning"). It changes <em>no</em> access behaviour —
+        the GUI is already open without it; it only flips the banner off and adds one
+        startup log line. Set it without restoring a fresh-rebuild config via:
+        <pre><code>curl -s -X PATCH -H "X-API-Key: $(grep -oP '(?&lt;=&lt;apikey&gt;)[^&lt;]+' config.xml)" \
+  -d '{"insecureAdminAccess":true}' http://10.0.0.25:8384/rest/config/gui</code></pre>
+        It persists in <code>config.xml</code> (backed up), but a fresh-identity rebuild
+        resets it — re-apply the one PATCH. There is no Syncthing env var for it, so it
+        can't be baked into compose.
+      </aside>
+
       <h2 id="permissions">Permissions</h2>
       <p>
         Container runs as <code>1000:100</code> (PodHaus:everyone) to match existing file
