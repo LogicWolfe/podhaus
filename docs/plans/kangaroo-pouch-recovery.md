@@ -84,10 +84,8 @@ during the .25 cutover window 2026-06-10) were `docker start`ed 2026-06-12
 ~21:15 AWST after verifying mounts + sentinels. **All three healthy.**
 - ✅ **backrest** — nightly bilby backups resume (missed 2026-06-10 → -12;
   heartbeat greens after the next nightly run).
-- ✅ **paperless** — fully recovered, media on Jump intact. Remaining: fix the
-  stale `.podhaus-jump-mounted` sentinel name in the healthcheck *comment*
-  in `paperless/compose.yaml` (test itself is correct) — fold into the prep
-  commit.
+- ✅ **paperless** — fully recovered, media on Jump intact. Stale
+  `.podhaus-jump-mounted` healthcheck *comment* fixed in `590dbd5`.
 - ✅ **flood** — restarted; rtorrent loaded its 269 surviving session entries
   against wiped `/data`. **User is handling the missing-torrent fallout in
   the UI.** "RAR Extraction" heartbeat stays red until the pipeline next
@@ -111,18 +109,26 @@ Progress 2026-06-12 (evening):
   CACHEDEV2 bind sweep (syncthing/periphery/backup/logging), backrest
   source widened to capture PKI keys (repos/ clone excluded), bootstrap
   paths, gatus probe → .25, storage placement rule + stale-doc refresh.
-- ⏳ **Remaining:** push `590dbd5` (permission gate wants an explicit
-  per-push green light) → webhook deploys syncthing/backup/logging/
-  autoheal onto the new paths → verify → hand the fresh syncthing device
-  ID to the user for pairing (#5). No restic restore needed: Periphery
-  config is bootstrap-regenerated, syncthing identity is deliberately
-  fresh.
-- ⚠ New finding: the `@reboot` crontab line (CS-upgrade survival) had
-  been **silently stripped by QTS's crond** (no `@reboot` support) — the
-  mechanism was dead all along. Bootstrap re-added it; expect it to be
-  stripped again. Low severity (docker's `unless-stopped` policies cover
-  reboots once the engine is up), but the bootstrap should eventually use
-  a supported mechanism (e.g. a numbered cron schedule or autorun.sh).
+- ✅ **Pushed + deployed** (2026-06-12 → 13). All five kangaroo
+  containers up + healthy on CACHEDEV2; fresh syncthing device ID handed
+  off (#5). No restic restore needed: Periphery config bootstrap-
+  regenerated, syncthing identity deliberately fresh.
+- ✅ Boot-survival fixed 2026-06-13. The old `@reboot` crontab line was
+  inert (present, not stripped) because kangaroo's cron is **BusyBox
+  crond v1.24.1**, which doesn't implement the `@reboot` nickname — so
+  boot-recovery never ran. Root concern: CS leaves its **user** Docker
+  engine at `autostart=false` and the qpkg boot script starts only
+  system-docker + ctstation, so the `restart: unless-stopped` stacks
+  depend on ctstation restoring engine state. Replaced with the native
+  QNAP boot hook **`kangaroo/host-autorun/autorun.sh`** (mirrors
+  `bilby/host-systemd/`): installed on the boot DOM (`sdg6`, survives
+  firmware + CS upgrades) via `install.sh`, gated by `Misc Autorun=TRUE`.
+  Its one job is `supervisord ctl start docker`; Docker's restart
+  policies bring all five stacks back. `kangaroo_bootstrap` now installs
+  it (replacing the dead crontab step). Validated under a minimal
+  boot-like PATH (`env -i`) — no-op when the engine is already up, no
+  container bounce. The only un-coverable gap is an actual reboot test,
+  deferred (would drop Pouch/Jump to bilby).
 - ✅ Fixed during deploy (rebuild-only gaps, all closed in working tree):
   - **Periphery v2.2.0 regression:** with `core_addresses` set,
     `server_enabled` now defaults to false → no :8120 listener → the
@@ -141,7 +147,10 @@ Progress 2026-06-12 (evening):
     after the clone completes succeeds — known one-time-per-rebuild
     quirk, no fix needed.
 
-### 3. Backup-placement architecture fix (the gap this outage exposed)
+### 3. Backup-placement architecture fix — ✅ DONE (committed + deployed)
+All of a–d landed in commit `590dbd5` + the redeploy; container state now
+lives natively on CACHEDEV2 and is captured by backrest from there.
+
 **Root cause:** kangaroo container state lived on **CACHEDEV1 (Pouch,
 unbacked)** because Container Station defaulted there — it was only rescued by
 backrest's cross-volume copy to the restic repo on **Jump (CACHEDEV2)** +
@@ -182,11 +191,14 @@ regenerate it from a pinelake listing during re-pair. **Decision (2026-06-12):
 beside, so losing it alongside that data costs nothing; no config-as-code
 carve-in needed.
 
-**Status 2026-06-12:** syncthing redeployed with a **fresh identity**:
+**Status 2026-06-13:** syncthing redeployed with a **fresh identity**:
 device ID `HDF5HFT-TIFGFRV-Z6XJIRU-EJS64HO-54EERPP-PFCZXKH-EGOILDV-P3NXYAR`.
-User pairs it on pinelake + other devices; set kangaroo's folder **Receive
-Only** when accepting the share, regenerate `.stignore` from a pinelake
-listing before any flip to Send & Receive.
+GUI open-access warning silenced the right way (`gui.insecureAdminAccess`
+— not a password; see `docs/runbooks/syncthing.html`). **User is pairing**
+the device on pinelake + other devices, folder path `/var/syncthing/Pouch`,
+folder **Receive Only**. Remaining before any flip to Send & Receive:
+regenerate `.stignore` from a pinelake listing, confirm Pouch fully
+restored.
 
 **⚠ Cascade risk at rebuild:** do **not** restore the old Syncthing identity +
 folder config and let it reconnect to pinelake against an empty/partial Pouch —

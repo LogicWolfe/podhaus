@@ -130,25 +130,18 @@ if [ "$state" != "Ok" ]; then
     warn "kangaroo didn't reach state=Ok within ${PERIPHERY_HEALTH_TIMEOUT}s — check 'docker logs komodo-periphery' on kangaroo."
 fi
 
-# --- 6. CS-upgrade survival: @reboot crontab line ---
-# /etc/config/crontab persists across QTS firmware AND Container Station
-# upgrades — much more reliable than CS's own Application registry.
-log "Installing @reboot crontab line on kangaroo (CS-upgrade survival)"
-CRON_MARKER="# komodo-periphery autostart (managed by kangaroo_bootstrap)"
-CRON_LINE="@reboot for i in \$(seq 1 60); do $KANGAROO_DOCKER info >/dev/null 2>&1 && break; sleep 5; done; cd $KANGAROO_DIR && $KANGAROO_DOCKER compose up -d >/var/log/komodo-periphery-boot.log 2>&1"
-
-ssh_kangaroo "
-    set -eu
-    if grep -qF '$CRON_MARKER' /etc/config/crontab 2>/dev/null; then
-        echo '  crontab line already present — skipping'
-    else
-        printf '%s\n%s\n' '$CRON_MARKER' '$CRON_LINE' >> /etc/config/crontab
-        crontab /etc/config/crontab
-        /etc/init.d/crond.sh restart >/dev/null
-        echo '  crontab line installed + crond reloaded'
-    fi
-"
-ok "@reboot recovery armed"
+# --- 6. CS-upgrade survival: autorun.sh boot hook ---
+# Start CS's user Docker engine at boot via the native QNAP autorun.sh
+# hook (boot DOM, survives firmware + Container Station upgrades). The
+# stacks are all restart:unless-stopped, so engine-up brings them back.
+# (Replaces a `@reboot` crontab line that never ran — BusyBox crond
+# doesn't implement the `@reboot` nickname.)
+log "Installing autorun.sh boot hook on kangaroo (CS-upgrade survival)"
+AUTORUN_DIR="$(dirname "$KANGAROO_DIR")/host-autorun"
+ssh_kangaroo "mkdir -p '$AUTORUN_DIR'"
+scp -q kangaroo/host-autorun/autorun.sh kangaroo/host-autorun/install.sh "$KANGAROO_SSH:$AUTORUN_DIR/"
+ssh_kangaroo "chmod +x '$AUTORUN_DIR/install.sh' '$AUTORUN_DIR/autorun.sh' && '$AUTORUN_DIR/install.sh'"
+ok "autorun.sh boot hook installed"
 
 # --- 7. Verify kangaroo in komodo/sync/servers.toml ---
 # Outbound mode requires the Server's `address` field to be empty (or unset)
