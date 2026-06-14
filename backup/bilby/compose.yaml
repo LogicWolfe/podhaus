@@ -65,6 +65,12 @@ services:
       - /var/lib/paperless-data:/userdata/paperless/data:ro
       - /mnt/jump/paperless/documents:/userdata/paperless/documents:ro
       - /var/lib/minio:/userdata/minio:ro
+      # Pets engine: its SQLite DB + the MinIO bucket holding the art the DB
+      # references, mounted together so one plan snapshots a consistent set
+      # (the app writes an asset before the DB references it, so a combined
+      # snapshot never has a dangling reference).
+      - /var/lib/pets-alive:/userdata/pets:ro
+      - /var/lib/minio/pets-alive-assets:/userdata/pets-assets:ro
       # ClickStack HyperDX app-state: the nightly mongodump archives
       # (ofelia job on clickstack-mongo writes /var/lib/clickstack/
       # mongo-dumps). Quiescent gzip archives — restic-safe, unlike a

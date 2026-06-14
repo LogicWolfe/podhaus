@@ -287,6 +287,25 @@
         }
       ],
       "skipIfUnchanged": true
+    },
+    {
+      "id": "pets",
+      "repo": "podhaus",
+      "paths": ["/userdata/pets", "/userdata/pets-assets"],
+      "schedule": {
+        "cron": "0 * * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "hourly": 48,
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
     }
   ]
 }
