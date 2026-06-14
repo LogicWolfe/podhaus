@@ -34,6 +34,9 @@ services:
       RCLONE_ONEDRIVE_TOKEN_B64: ${RCLONE_ONEDRIVE_TOKEN_B64}
       GATUS_BASE_URL: ${GATUS_BASE_URL}
       GATUS_BACKREST_ENDPOINT_ID: ${GATUS_BACKREST_ENDPOINT_ID}
+      # Per-plan dead-man's-switch endpoint (bilby's pets plan); empty on
+      # hosts that don't set it (e.g. kangaroo has no pets plan).
+      GATUS_BACKREST_PETS_ENDPOINT_ID: ${GATUS_BACKREST_PETS_ENDPOINT_ID:-}
       BACKREST_INSTANCE: ${BACKREST_INSTANCE}
     volumes:
       - backrest-config:/config

@@ -47,10 +47,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    # Bilby-only: the dead-man's-switch endpoint the hourly pets plan pushes
-    # to (non-secret Gatus endpoint key; merged into the shared env).
-    environment:
-      GATUS_BACKREST_PETS_ENDPOINT_ID: heartbeat_backrest-pets
     volumes:
       # Restic repository target on Jump (NAS SSD). Per the storage tier
       # rule, the backup repo lives on Jump — durable storage we'd hate
