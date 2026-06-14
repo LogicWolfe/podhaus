@@ -390,6 +390,23 @@ external-endpoints:
         success-threshold: 2
         send-on-resolved: true
 
+  # Hourly pets backup heartbeat. The pets plan (DB + assets in one
+  # consistent snapshot) pushes on EVERY run — success OR unchanged-skip —
+  # so it checks in hourly without false alarms during quiet periods.
+  # Failures still also surface immediately on "Backrest Nightly" (the
+  # repo-level any-error hook names the failing plan).
+  - name: Backrest Pets
+    group: heartbeat
+    token: ${GATUS_BACKREST_PUSH_TOKEN}
+    heartbeat:
+      interval: 3h
+    alerts:
+      - type: custom
+        description: "The hourly pets backup stopped checking in. The pets plan pushes a heartbeat every hour on success or unchanged-skip; >3h of silence means it stopped running or backrest is down. Investigate: `docker logs backrest`, the backrest UI (backups.pod.haus), or query in HyperDX (watch.pod.haus)."
+        failure-threshold: 1
+        success-threshold: 1
+        send-on-resolved: true
+
   # Daily safety-net check from flood/rar-backlog.sh (ofelia-driven at
   # 04:50 AWST). Real-time extraction is handled by the rtorrent
   # event.download.finished hook (flood/scripts/rtorrent-extract.sh);
