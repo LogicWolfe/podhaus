@@ -26,16 +26,16 @@ include_resources = true
 delete = false                      # additive (mirrors podhaus sync)
 managed = false                     # Stage 0 of fenwick-push-deploy runs this explicitly
 
-# The pets-alive sync walks the pets-alive engine repo for its
+# The pets sync walks the pets engine repo for its
 # [[stack]] block (stack.toml at the repo root). Mirrors the fenwick
-# sync; Stage 0 of pets-alive-push-deploy runs it explicitly.
+# sync; Stage 0 of pets-push-deploy runs it explicitly.
 [[sync]]
-name = "pets-alive"
-description = "ResourceSync for the stack def that lives in the pets-alive engine repo."
-tags = ["pets-alive", "podhaus"]
+name = "pets"
+description = "ResourceSync for the stack def that lives in the pets engine repo."
+tags = ["pets", "podhaus"]
 
 [sync.config]
-linked_repo = "pets-alive"
+linked_repo = "pets"
 resource_path = ["./"]
 include_variables = true
 include_resources = true

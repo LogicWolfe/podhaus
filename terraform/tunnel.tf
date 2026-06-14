@@ -71,12 +71,12 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pod_haus" {
         { hostname = "www.nathanbaxter.com", service = "http://caddy:80", path = null, origin_request = null },
         { hostname = "dev.nathanbaxter.com", service = "http://nathanbaxter-dev:4321", path = null, origin_request = null },
       ],
-      # pets-alive.indigopod.au public game → the pets-alive engine
+      # pets.indigopod.au public game → the pets engine
       # container. NOT Access-gated (her friends sign in to the game
       # itself, not at the edge); cloudflared serves any zone. DNS CNAME
       # in dns_indigopod_au.tf.
       [
-        { hostname = "pets-alive.indigopod.au", service = "http://pets-alive:8000", path = null, origin_request = null },
+        { hostname = "pets.indigopod.au", service = "http://pets:8000", path = null, origin_request = null },
       ],
       [
         { service = "http_status:404" },

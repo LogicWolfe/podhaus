@@ -58,18 +58,18 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"
 branch = "main"
 
-# Bilby clone of the pets-alive engine repo (the father–daughter pet
+# Bilby clone of the pets engine repo (the father–daughter pet
 # simulator). Standalone private repo, same linked_repo + run_build
 # pattern as fenwick — Komodo builds the image on bilby. The shared
 # LogicWolfe PAT already covers this private repo (no new credential).
 [[repo]]
-name = "pets-alive"
-description = "Komodo-managed clone of the pets-alive engine repo on bilby's Periphery"
-tags = ["podhaus", "bilby", "pets-alive"]
+name = "pets"
+description = "Komodo-managed clone of the pets engine repo on bilby's Periphery"
+tags = ["podhaus", "bilby", "pets"]
 
 [repo.config]
 server = "podhaus"             # = bilby
 git_provider = "github.com"
 git_account = "LogicWolfe"
-repo = "LogicWolfe/pets-alive"
+repo = "LogicWolfe/pets"
 branch = "main"
