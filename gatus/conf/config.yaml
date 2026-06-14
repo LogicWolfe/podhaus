@@ -205,6 +205,14 @@ endpoints:
     url: https://nathanbaxter.com/
     <<: *defaults
 
+  # pets.indigopod.au: Cloudflare-proxied → pod_haus tunnel → the pets
+  # engine container. /api/content exercises the whole stack (tunnel →
+  # container → SQLite → published content), so it catches a tunnel,
+  # container, or content-store break — not just a static 200.
+  - name: pets.indigopod.au
+    url: https://pets.indigopod.au/api/content
+    <<: *defaults
+
   # Surfaces "Komodo Core can't reach <Periphery>" as a Gatus alert.
   # Periphery's :8120 isn't on dockernet so we check via Komodo Core's API:
   # POST GetServerState, assert status == Ok. Headers carry Komodo's API
