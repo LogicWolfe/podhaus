@@ -114,20 +114,41 @@
         failures).
       </aside>
 
-      <h2 id="email-ingest">Email ingest (not yet configured)</h2>
+      <h2 id="email-ingest">Email ingest</h2>
       <p>
-        The compose env var <code>PAPERLESS_EMAIL_TASK_CRON: "*/10 * * * *"</code> is
-        already wired — Paperless polls IMAP every 10 minutes — but no mail account has
-        been configured inside Paperless, so the cron is a no-op. Full setup steps in
-        <a href="/plans/plan-viewer.html?file=alligator-bilby-migration/paperless-email-ingest.md">Paperless
-        email ingest</a>: Fastmail alias → "Paperless Ingest" folder → app-password →
-        Paperless mail account + rule.
+        Mail sent or forwarded to the Fastmail alias <code>paperless@nathanbaxter.com</code>
+        lands automatically as one searchable document. Fastmail files alias mail into a
+        <code>Paperless</code> folder; Paperless polls it every 10 minutes
+        (<code>PAPERLESS_EMAIL_TASK_CRON</code>) and consumes everything in
+        <strong>full-email mode</strong> — body + attachments bundled into a single
+        document, with a copy-pasteable text layer (covers the "compose a note with an
+        inline image + typed text" use case). Source mail is deleted after a successful
+        parse (lands in Fastmail Trash; a failed parse leaves it for retry).
+      </p>
+      <p>
+        Two pieces make this work:
+      </p>
+      <ul>
+        <li><strong>Custom image</strong> (<code>paperless/Dockerfile</code>): the stock
+          Paperless image plus <code>paperlessngx-mail-parser</code> (toweosp), a parser
+          that wins <code>message/rfc822</code> dispatch and renders the bundled
+          full-email document. Still uses the existing Gotenberg + Tika sidecars.</li>
+        <li><strong><code>paperless-mail-init</code></strong>: a one-shot container that
+          upserts the Fastmail mail account + ingest rule via the REST API on every deploy
+          from the Komodo-injected <code>OP__KOMODO__PAPERLESS_FASTMAIL_IMAP__*</code>
+          credentials. Config-as-code — a DB wipe + redeploy reproduces both with no UI
+          step.</li>
+      </ul>
+      <p>
+        Setup history + the API field/enum reference live in the
+        <a href="/plans/plan-viewer.html?file=alligator-bilby-migration/paperless-email-ingest.md">email
+        ingest plan</a>.
       </p>
 
       <h2 id="see-also">See also</h2>
       <ul>
         <li><a href="/plans/plan-viewer.html?file=alligator-bilby-migration/paperless-email-ingest.md">Email
-          ingest plan</a> — Fastmail IMAP setup, not yet executed.</li>
+          ingest plan</a> — Fastmail IMAP setup + parser/init design.</li>
         <li><a href="/plans/index.html">Plans</a> — the migration plan covers Phase 10 (bulk
           import) in detail including the curation YAML structure.</li>
         <li><code>~/repos/podhaus-migration-state/paperless-imports.sqlite</code> (off-repo

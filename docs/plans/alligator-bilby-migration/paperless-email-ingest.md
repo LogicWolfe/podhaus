@@ -220,9 +220,18 @@ Fastmail settings, and the Paperless container only egresses to
 
 ## Status
 
-Fastmail side + 1P item (Parts 1–2) **done**. Remaining: Part 3 code
-(custom Paperless build + parser, `paperless-mail-init` container +
-`mail-init.sh`, stack.toml env refs) — stageable now; then Part 4
-deploy + smoke test, which needs explicit authorization. Open item to
-verify before deploy: the in-image parser install mechanism (venv vs
-init-script).
+**Deployed and live** (2026-06-18). Custom Paperless image (toweosp
+parser, baked via `uv pip install --system`) + `paperless-mail-init`
+are running; the parser wins `message/rfc822` dispatch and the
+`Fastmail` account + `Paperless ingest` rule (full-email scope, delete
+after parse, tag `email-ingest`) are configured in the DB. Awaiting the
+final user smoke test: send/forward mail to `paperless@nathanbaxter.com`
+and confirm it lands within ≤10 min.
+
+Deploy gotcha encountered: a `stack.toml`-only change (surfacing
+`PODHAUS_REPO`) didn't trigger Stage 2 IfChanged — the redeploy needed
+a change to a hashed runtime file (`compose.yaml`). The current state
+needs no further pushes.
+
+Once the smoke test passes, fold any remaining current-state detail
+into the runbook and delete this plan per the docs/plans contract.
