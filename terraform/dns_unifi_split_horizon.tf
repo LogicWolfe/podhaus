@@ -63,6 +63,21 @@ resource "unifi_dns_record" "voice_pod_haus" {
   enabled     = true
 }
 
+# music.pod.haus → bilby (Caddy) on LAN. Home Assistant runs on bilby and
+# its server-to-server websocket to Music Assistant can't carry a
+# Cloudflare Access cookie, so it must reach MA without traversing the
+# CF edge. This split-horizon record points LAN clients (and bilby's own
+# host resolver, which HA shares via network_mode: host) at Caddy, which
+# fronts MA with a real LE cert. Off-LAN browsers use the public CF
+# record → tunnel. See caddy/Caddyfile + MA base_url = https://music.pod.haus.
+resource "unifi_dns_record" "music_pod_haus" {
+  name        = "music.pod.haus"
+  record_type = "A"
+  value       = "10.0.0.119"
+  ttl         = 300
+  enabled     = true
+}
+
 # Gatus external-path probe — UniFi returns the kookaburra relay
 # reserved IP for this *.storage.pod.haus subdomain so the on-bilby
 # gatus container (which uses host DNS via UniFi) reaches the relay

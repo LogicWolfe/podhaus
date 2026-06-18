@@ -5,6 +5,15 @@ services:
     restart: unless-stopped
     privileged: true
     network_mode: host
+    # Pin music.pod.haus to bilby so HA reaches Music Assistant through
+    # Caddy (real LE cert) instead of Cloudflare. music.pod.haus carries a
+    # Cloudflare AAAA we can't suppress on this CF plan, and HA would
+    # otherwise prefer that IPv6 → hit Cloudflare Access, which blocks
+    # server-to-server clients. This IPv4-only entry means HA never sees
+    # the AAAA. Pairs with the UniFi split-horizon A record
+    # (terraform/dns_unifi_split_horizon.tf) + MA base_url=https://music.pod.haus.
+    extra_hosts:
+      - "music.pod.haus:10.0.0.119"
     environment:
       TZ: ${TZ}
     volumes:

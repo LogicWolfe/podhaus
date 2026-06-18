@@ -26,6 +26,21 @@ storage.pod.haus, *.storage.pod.haus {
 	reverse_proxy minio:9000
 }
 
+# music.pod.haus — Music Assistant web UI, served LAN-direct by Caddy so
+# Home Assistant's server-to-server websocket to MA bypasses Cloudflare
+# Access (which blocks non-browser clients carrying no Access cookie).
+# Pairs with the split-horizon A record (dns_unifi_split_horizon.tf): on
+# the LAN this name resolves to bilby → Caddy → MA; off-LAN it resolves
+# to the public CF record → tunnel → MA. MA's base_url is
+# https://music.pod.haus so every client is told to use this name. MA is
+# host-network, so Caddy reaches it over the dockernet bridge gateway.
+music.pod.haus {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	reverse_proxy 172.18.0.1:8095
+}
+
 # nathanbaxter.com — public static site, served from the
 # `nathanbaxter-com` bucket (anonymous GetObject). The PUBLIC site is
 # https + Cloudflare-proxied; this `http://` is only the internal
