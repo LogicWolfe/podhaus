@@ -398,8 +398,11 @@ description = "Service port (well-known, not a secret)"</code></pre>
       <h2 id="healthchecks">Healthchecks and autoheal</h2>
       <p>
         Most stacks declare a <code>healthcheck</code> + <code>labels: autoheal: "true"</code>.
-        The host's autoheal stack restarts any container whose healthcheck reports unhealthy
-        for ~3 consecutive cycles.
+        The host's autoheal stack restarts any <em>running</em> container whose healthcheck
+        reports unhealthy — and keeps restarting it every cycle (~30 s) until it goes healthy
+        or leaves the running set. The healthcheck's <code>retries</code> is the
+        <em>detection threshold</em> (consecutive failed probes before <code>unhealthy</code>,
+        ≈ <code>retries</code> × <code>interval</code>), not a restart cap.
       </p>
       <p>
         Skip the healthcheck (and the autoheal label) when the image is distroless and has no
@@ -407,6 +410,38 @@ description = "Service port (well-known, not a secret)"</code></pre>
         <code>paperless-tika</code>, and others. Liveness for those services comes from a
         downstream service's logs surfacing the dependency failure, plus external Gatus
         monitoring of the public hostname.
+      </p>
+      <h3 id="autoheal-patient-window">The autoheal / restart-policy seam, and the patient window</h3>
+      <p>
+        Three mechanisms can bring a container back, and they don't compose. The Docker
+        <strong>restart policy</strong> reacts to a process <em>crashing</em> but is suppressed
+        after an explicit <code>docker stop</code>/<code>restart</code> (the contract that
+        distinguishes <code>unless-stopped</code> from <code>always</code>);
+        <strong>autoheal</strong> restarts <em>running</em> unhealthy containers via an explicit
+        <code>docker restart</code> — exactly the operation that suppresses the policy; and
+        Komodo <strong>IfChanged</strong> recreates only on a content change. A container that
+        lands in <code>exited</code> via an explicit restart (or a boot-time network-attach
+        failure) falls between all three — it is recovered by nothing.
+      </p>
+      <p>
+        This bit the fleet on 2026-06-16: a kangaroo NFS outage (the NAS rebooting for a
+        firmware auto-update) tripped <code>flood</code>'s sentinel healthcheck, autoheal
+        restart-stormed it every 30 s, and one restart — tearing down namespaces while the
+        NFS bind hung — wedged it to <code>exited</code>, where autoheal (watches running) and
+        the restart policy (suppressed) both ignored it. See
+        <a href="/postmortems/postmortem-viewer.html?file=2026-06-16-firmware-reboot-recovery.md">postmortem</a>.
+      </p>
+      <p>
+        The rule for any container that binds an NFS path: restarting it can't fix a down NFS
+        server, and restarting <em>repeatedly</em> while the bind hangs is what risks the wedge.
+        So these containers use a <strong>patient detection window</strong> —
+        <code>retries: 15</code> at <code>interval: 60s</code> (≈15 min) — so a transient
+        kangaroo NFS outage (every firmware reboot drops Pouch/Jump for minutes) rides out
+        <em>without</em> autoheal ever firing; one successful probe after NFS returns resets to
+        healthy in ~60 s. autoheal is retained for genuine app hangs, which present as
+        sustained-unhealthy past the window. kangaroo's own <code>autorun.sh</code> closes the
+        boot-race half of the seam by reconciling <code>exited</code> containers at boot
+        (clearing the stale network endpoint, then <code>docker start</code>).
       </p>
       <h3 id="nfs-bind-healthcheck">NFS-bind healthcheck pattern</h3>
       <p>
@@ -447,23 +482,27 @@ description = "Service port (well-known, not a secret)"</code></pre>
       <ul>
         <li><code>/mnt/pouch/.podhaus-share-mounted</code> — for any bind at the Pouch root
           (flood, plex media).</li>
-        <li><code>/mnt/pouch/plex-video-thumbnails/.podhaus-share-mounted</code> — plex BIF
-          subdir bind.</li>
         <li><code>/mnt/jump/.podhaus-share-mounted</code>, <code>/mnt/jump/paperless/.podhaus-share-mounted</code>,
           <code>/mnt/jump/backups/.podhaus-share-mounted</code>,
-          <code>/mnt/jump/paperless/documents/.podhaus-share-mounted</code> — Jump consumers.</li>
+          <code>/mnt/jump/paperless/documents/.podhaus-share-mounted</code>,
+          <code>/mnt/jump/plex-video-thumbnails/.podhaus-share-mounted</code> (plex BIF, moved
+          off Pouch) — Jump consumers.</li>
       </ul>
       <p>
         When adding a stack that binds a new sub-path under Pouch or Jump, drop a marker
         in that path first: <code>sudo touch /mnt/pouch/&lt;subpath&gt;/.podhaus-share-mounted</code>.
         The marker is written to the QNAP share, so it persists across reboots and is visible
-        to every container that binds that path.
+        to every container that binds that path. The full set is also codified in
+        <code>bilby/host-systemd/install.sh</code> (re-touched on each run — e.g. to restore
+        markers after a share rebuild wipes them); add new sub-paths to that list too.
       </p>
       <aside class="callout note">
         <span class="callout-title">Companion: the chattr +i tripwire</span>
         The healthcheck is the last line of defence — the first is the host-level tripwire.
         Bare <code>/mnt/pouch</code> and <code>/mnt/jump</code> have <code>chattr +i</code>
-        set on their underlying btrfs dirs. If NFS isn't mounted, Docker can't auto-create
+        set on their underlying btrfs dirs (applied idempotently by
+        <code>bilby/host-systemd/install.sh</code> via a non-recursive <code>mount --bind /</code>
+        that reaches the bare dir under the NFS overlay). If NFS isn't mounted, Docker can't auto-create
         bind-source subdirs at container start (the immutable bit blocks the mkdir) — so
         affected stacks fail loudly at deploy rather than silently running on bare-stub binds.
         With NFS mounted, the bit is irrelevant (NFS supersedes the btrfs dir). See
