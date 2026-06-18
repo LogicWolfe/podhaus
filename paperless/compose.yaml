@@ -172,6 +172,11 @@ services:
       PAPERLESS_FASTMAIL_HOSTNAME: ${PAPERLESS_FASTMAIL_HOSTNAME}
       PAPERLESS_FASTMAIL_PORT: ${PAPERLESS_FASTMAIL_PORT}
     volumes:
+      # ${PODHAUS_REPO} is interpolated at compose-render time, so the stack
+      # MUST surface PODHAUS_REPO=[[PODHAUS_REPO]] in stack.toml's environment
+      # (it's not a container env var — see plex). Without it this resolves to
+      # an empty prefix, Docker stubs an empty /paperless/scripts dir, and the
+      # init silently no-ops.
       - ${PODHAUS_REPO}/paperless/scripts/mail-init.sh:/script/mail-init.sh:ro,z
     command:
       - /bin/sh
