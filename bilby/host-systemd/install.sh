@@ -10,6 +10,9 @@
 #   3. mnt-{pouch,jump}.automount.d/ drop-ins disable systemd's start-rate
 #      limit so an automount unit can never go to permanently-failed state
 #      (the 2026-05-30 failure mode).
+#   4. firewalld: stages the declarative zone + custom service XML from
+#      bilby/firewalld/ (source of truth) and reloads. The XML is the
+#      config; this script just installs and reloads it.
 #
 # Run as root on bilby. Requires sudo.
 
@@ -80,8 +83,36 @@ for p in /mnt/pouch /mnt/jump /mnt/jump/backups /mnt/jump/paperless \
     fi
 done
 
+# --- firewalld declarative config (bilby/firewalld/) ---
+# The XML under bilby/firewalld/ is the source of truth for bilby's
+# firewall; this stages it the same way the systemd units above are
+# staged, then reloads. Custom service definitions are installed BEFORE
+# the zone so the zone never references an undefined service. A bad edit
+# is caught by --check-config before any reload (reloads don't drop
+# established connections, so ssh survives regardless).
+if command -v firewall-cmd >/dev/null 2>&1; then
+  FW_SRC="$REPO_DIR/../firewalld"
+  install -d -m 0755 /etc/firewalld/services
+  for svc in "$FW_SRC"/services/*.xml; do
+    install -m 0644 "$svc" "/etc/firewalld/services/$(basename "$svc")"
+    echo "  firewalld service: $(basename "$svc")"
+  done
+  install -m 0644 "$FW_SRC/zones/public.xml" /etc/firewalld/zones/public.xml
+  echo "  firewalld zone: public.xml"
+  if firewall-cmd --check-config; then
+    firewall-cmd --reload
+    echo "  firewalld reloaded"
+  else
+    echo "  ERROR: firewall-cmd --check-config failed — NOT reloading; fix the XML" >&2
+    exit 1
+  fi
+else
+  echo "  WARNING: firewall-cmd not found — skipping firewalld config" >&2
+fi
+
 echo "Installed. Verify:"
 echo "  systemctl cat wait-for-qnap-nfs.service"
+echo "  firewall-cmd --list-services   # ssh mdns dhcpv6-client plex music-assistant"
 echo "  systemctl cat docker.service | grep -A2 'After=wait-for-qnap'"
 echo "  systemctl cat mnt-pouch.automount | grep -A2 'StartLimit'"
 echo "  systemctl cat mnt-jump.automount  | grep -A2 'StartLimit'"

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Music Assistant LAN ports.
+
+  8097/tcp - streamserver. AirPlay-2 players (e.g. the living-room Bowers
+             & Wilkins Formation) fetch audio by connecting directly to
+             this port on bilby over the LAN.
+
+  8095/tcp - web UI / websocket API. Open on the LAN because the Home
+             Assistant Music Assistant integration discovers the server
+             at its LAN address (10.0.0.119:8095) and drives the login
+             OAuth redirect through the *browser* to that address — which
+             the browser must reach directly. The Cloudflare tunnel
+             (music.pod.haus) only covers remote human access, not the
+             integration's discovered-address auth redirect, and HA's own
+             server-to-server connection can't traverse Cloudflare Access.
+
+  Discovery (mDNS/5353) is already allowed by the `mdns` service. If
+  AirPlay timing/control needs inbound UDP, add it here and re-run
+  install.sh.
+-->
+<service>
+  <short>Music Assistant</short>
+  <description>Music Assistant web UI/API (8095) + audio streamserver (8097).</description>
+  <port port="8095" protocol="tcp"/>
+  <port port="8097" protocol="tcp"/>
+</service>

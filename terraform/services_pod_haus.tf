@@ -174,6 +174,24 @@ module "plex" {
   backend  = "http://172.18.0.1:32400"
 }
 
+# Music Assistant web UI. Host-network on bilby (like HA/Plex), reached
+# by cloudflared over the dockernet gateway. This fronts ONLY the 8095
+# web UI + the HA OAuth login redirect — the AirPlay audio stream (8097)
+# is a direct LAN fetch by the speaker and is handled by the firewall
+# (bilby/firewalld/), not the tunnel.
+module "music" {
+  source = "./modules/pod_haus_service"
+
+  account_id               = local.pod_haus_service_defaults.account_id
+  zone_id                  = local.pod_haus_service_defaults.zone_id
+  tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
+  default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
+
+  hostname = "music"
+  backend  = "http://172.18.0.1:8095"
+}
+
 # logs.pod.haus (VictoriaLogs vmui) and grafana.pod.haus were removed
 # when ClickStack/HyperDX (watch.pod.haus) replaced them — see
 # docs/plans/clickstack-migration/cutover.md Phase D.

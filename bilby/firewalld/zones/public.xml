@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  bilby firewalld `public` zone — declarative source of truth, installed
+  to /etc/firewalld/zones/public.xml by bilby/host-systemd/install.sh.
+  This file is authoritative: it captures the full allowed set, so a
+  rebuilt host reproduces the firewall exactly.
+
+  Allowed services:
+    ssh             - host administration (keep explicit — never drop)
+    mdns            - service discovery (AirPlay/Sonos/Cast/UniFi); also
+                      how Music Assistant finds the AirPlay speaker
+    dhcpv6-client   - IPv6 address autoconfiguration
+    plex            - Plex direct LAN streaming (tcp/32400)
+    music-assistant - MA web UI tcp/8095 + streamserver tcp/8097
+                      (services/music-assistant.xml)
+
+  Rich rule — trust the home LAN (10.0.0.0/24):
+    AirPlay playback (MA → Bowers & Wilkins Formation) needs the speaker
+    to send UDP timing/control packets BACK to MA on dynamic, per-session
+    ports. Those inbound NEW flows aren't covered by the named services
+    above and conntrack doesn't see them as RELATED, so the zone's default
+    drop killed the handshake ("Playback failed to start"). The home LAN
+    is trusted, so we accept all traffic sourced from it. Non-LAN sources
+    (tailnet 100.x, routed traffic) still hit the filtered service list.
+-->
+<zone>
+  <short>Public</short>
+  <description>For use in public areas. You do not trust the other computers on networks to not harm your computer. Only selected incoming connections are accepted.</description>
+  <service name="ssh"/>
+  <service name="mdns"/>
+  <service name="dhcpv6-client"/>
+  <service name="plex"/>
+  <service name="music-assistant"/>
+  <forward/>
+  <rule family="ipv4">
+    <source address="10.0.0.0/24"/>
+    <accept/>
+  </rule>
+</zone>
