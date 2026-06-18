@@ -108,7 +108,12 @@ services:
       test: ["CMD-SHELL", "timeout 10 sh -c 'wget -q -O- http://localhost:3000/ >/dev/null && grep -q \" /flood-db \" /proc/mounts && [ -e /data/.podhaus-share-mounted ]'"]
       interval: 60s
       timeout: 15s
-      retries: 3
+      # retries 15 (≈15-min patience at 60s interval): a kangaroo NFS
+      # outage — every QNAP firmware auto-update reboots the NAS, dropping
+      # Pouch/Jump for minutes — must ride out without autoheal restart-
+      # storming this NFS-bind container (the storm wedged flood 2026-06-16).
+      # One successful probe after NFS returns resets to healthy in ~60s.
+      retries: 15
       start_period: 60s
     networks:
       - dockernet

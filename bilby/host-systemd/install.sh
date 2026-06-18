@@ -37,6 +37,49 @@ install -m 0644 "$REPO_DIR/mnt-jump.automount.d/10-no-rate-limit.conf" "$DEST/mn
 systemctl daemon-reload
 systemctl enable wait-for-qnap-nfs.service
 
+# --- NFS-bind stub tripwire + share sentinels (2026-05-23 postmortem) ---
+# Two host/NAS-side defenses applied by hand in the 2026-05-23 remediation
+# and never codified. Folding them in makes them reproducible: a Pouch
+# RAID rebuild wipes the sentinels, and a fresh host has no tripwire.
+
+# 1. chattr +i on the BARE /mnt/{pouch,jump} mountpoints, so a missed NFS
+#    mount makes Docker's bind-subdir auto-create fail loudly instead of
+#    silently writing real data to local disk. The bit lives on the
+#    underlying btrfs inode, which NFS shadows when mounted — a
+#    non-recursive bind of / exposes the bare dirs (without their NFS
+#    overlays), so we set +i idempotently on a live host without
+#    disturbing running containers. Mounting NFS over a +i dir is
+#    unaffected.
+TRIP=$(mktemp -d)
+mount --bind / "$TRIP"
+for mp in mnt/pouch mnt/jump; do
+    d="$TRIP/$mp"
+    install -d -m 0755 "$d"
+    if [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
+        echo "  WARNING: bare /$mp non-empty while unmounted — possible local-disk stub contamination; NOT setting +i. Inspect." >&2
+    elif chattr +i "$d"; then
+        echo "  tripwire: +i ensured on /$mp"
+    else
+        echo "  WARNING: chattr +i /$mp failed" >&2
+    fi
+done
+umount "$TRIP" 2>/dev/null || umount -l "$TRIP"
+rmdir "$TRIP"
+
+# 2. Sentinel markers on the real NFS shares. Each NFS bind-source subpath
+#    a stack uses gets a .podhaus-share-mounted file ON the share, so a
+#    container's healthcheck can prove it bound the real share, not a
+#    local stub. Touching the path triggers the automount. Keep this list
+#    in sync with NFS binds (AGENTS.md: drop a marker when you add one).
+for p in /mnt/pouch /mnt/jump /mnt/jump/backups /mnt/jump/paperless \
+         /mnt/jump/paperless/documents /mnt/jump/plex-video-thumbnails; do
+    if [ -d "$p" ] && touch "$p/.podhaus-share-mounted" 2>/dev/null; then
+        echo "  sentinel: $p/.podhaus-share-mounted"
+    else
+        echo "  WARNING: could not write sentinel at $p (share unmounted/unreachable or path missing)" >&2
+    fi
+done
+
 echo "Installed. Verify:"
 echo "  systemctl cat wait-for-qnap-nfs.service"
 echo "  systemctl cat docker.service | grep -A2 'After=wait-for-qnap'"

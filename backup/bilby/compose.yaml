@@ -45,7 +45,12 @@ services:
       test: ["CMD-SHELL", "wget -q -O- http://localhost:9898/ > /dev/null && [ -e /repos/podhaus/.podhaus-share-mounted ]"]
       interval: 60s
       timeout: 10s
-      retries: 3
+      # retries 15 (≈15-min patience at 60s interval): a kangaroo NFS
+      # outage — every QNAP firmware auto-update reboots the NAS, dropping
+      # Pouch/Jump for minutes — must ride out without autoheal restart-
+      # storming this NFS-bind container. One successful probe after NFS
+      # returns resets to healthy in ~60s.
+      retries: 15
       start_period: 30s
     volumes:
       # Restic repository target on Jump (NAS SSD). Per the storage tier

@@ -125,7 +125,12 @@ services:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/ > /dev/null && ls /usr/src/paperless/data > /dev/null && [ -e /usr/src/paperless/media/.podhaus-share-mounted ]"]
       interval: 60s
       timeout: 15s
-      retries: 3
+      # retries 15 (≈15-min patience at 60s interval): a kangaroo NFS
+      # outage — every QNAP firmware auto-update reboots the NAS, dropping
+      # Pouch/Jump for minutes — must ride out without autoheal restart-
+      # storming this NFS-bind container. One successful probe after NFS
+      # returns resets to healthy in ~60s.
+      retries: 15
       start_period: 120s
     networks:
       - dockernet
