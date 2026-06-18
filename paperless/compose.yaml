@@ -72,7 +72,13 @@ services:
 
   paperless:
     container_name: paperless
-    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_PAPERLESS:-unset}
+    image: paperless-ngx:local
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       paperless-postgres:
@@ -103,6 +109,10 @@ services:
       PAPERLESS_EMAIL_TASK_CRON: "*/10 * * * *"
       PAPERLESS_CONSUMER_ENABLE_BARCODES: "true"
       PAPERLESS_TIME_ZONE: ${TZ}
+      # toweosp mail parser, baked into the image (see Dockerfile). Django
+      # app path uses underscores (the source package is paperlessngx_mail_parser);
+      # the project README's hyphenated form is a typo.
+      PAPERLESS_APPS: paperlessngx_mail_parser.apps.MailparserConfig
     volumes:
       # Paperless app state (search index, models, classifiers) on local
       # NVMe per the sizing rule. Documents on Jump — small + random-read,
@@ -134,6 +144,45 @@ services:
       start_period: 120s
     networks:
       - dockernet
+
+  # Config-as-code for Paperless's mail account + ingest rule (DB objects
+  # with no env/file config path). Upserts both via the REST API on every
+  # deploy from the Komodo-injected Fastmail credentials, so a DB wipe +
+  # redeploy reproduces the config with no manual UI step. Same shape as
+  # plex-preferences-init. One-shot; ignore_services in stack.toml so its
+  # exit-0 doesn't false-red the stack.
+  paperless-mail-init:
+    container_name: paperless-mail-init
+    image: init-tools:local
+    build:
+      context: ../init-tools
+      dockerfile: Dockerfile
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_PAPERLESS_MAIL_INIT:-unset}
+    pull_policy: never
+    user: "0:0"
+    depends_on:
+      paperless:
+        condition: service_healthy
+    environment:
+      PAPERLESS_ADMIN_USER: nathan
+      PAPERLESS_ADMIN_PASSWORD: ${PAPERLESS_ADMIN_PASSWORD}
+      PAPERLESS_FASTMAIL_USERNAME: ${PAPERLESS_FASTMAIL_USERNAME}
+      PAPERLESS_FASTMAIL_PASSWORD: ${PAPERLESS_FASTMAIL_PASSWORD}
+      PAPERLESS_FASTMAIL_HOSTNAME: ${PAPERLESS_FASTMAIL_HOSTNAME}
+      PAPERLESS_FASTMAIL_PORT: ${PAPERLESS_FASTMAIL_PORT}
+    volumes:
+      - ${PODHAUS_REPO}/paperless/scripts/mail-init.sh:/script/mail-init.sh:ro,z
+    command:
+      - /bin/sh
+      - /script/mail-init.sh
+    restart: "no"
+    networks:
+      - dockernet
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      # Recreate (re-run the upsert) when the custom paperless image rebuilds.
+      podhaus.depends-on-paperless: ${BUILD_HASH_PAPERLESS:-unset}
 
 networks:
   dockernet:

@@ -7,10 +7,20 @@ tags = ["podhaus"]
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/paperless"
+# Custom paperless image (Dockerfile + toweosp mail parser) + init-tools
+# image for paperless-mail-init both build inline.
+run_build = true
+# paperless-mail-init is a one-shot upsert that exits 0; without this Komodo
+# counts the exited init and false-reds the whole stack.
+ignore_services = ["paperless-mail-init"]
 
 environment = """
 PAPERLESS_SECRET_KEY=[[OP__KOMODO__PAPERLESS_SECRET_KEY__PASSWORD]]
 PAPERLESS_POSTGRES_PASSWORD=[[OP__KOMODO__PAPERLESS_POSTGRES_PASSWORD__PASSWORD]]
 PAPERLESS_ADMIN_PASSWORD=[[OP__KOMODO__PAPERLESS_ADMIN_PASSWORD__PASSWORD]]
+PAPERLESS_FASTMAIL_USERNAME=[[OP__KOMODO__PAPERLESS_FASTMAIL_IMAP__USERNAME]]
+PAPERLESS_FASTMAIL_PASSWORD=[[OP__KOMODO__PAPERLESS_FASTMAIL_IMAP__PASSWORD]]
+PAPERLESS_FASTMAIL_HOSTNAME=[[OP__KOMODO__PAPERLESS_FASTMAIL_IMAP__HOSTNAME]]
+PAPERLESS_FASTMAIL_PORT=[[OP__KOMODO__PAPERLESS_FASTMAIL_IMAP__PORT]]
 TZ=[[TZ]]
 """
