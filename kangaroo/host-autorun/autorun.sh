@@ -98,19 +98,25 @@ IP=/usr/bin/ip
             || echo "reconcile: FAILED to start $c"
     done
 
-    # Pass 2: reattach running-but-detached containers. NetworkMode names
+    # Pass 2: recover running-but-detached containers. NetworkMode names
     # the user network the container belongs on; if it's missing from the
-    # live attachment, reconnect. host/none/default/bridge have no user
-    # bridge to rejoin, so they're skipped.
+    # live attachment, the container is detached. Clear any stale endpoint
+    # and `restart` — NOT `network connect`. A live `connect` gives the
+    # process a working interface but leaves long-running clients (alloy's
+    # OTLP exporter) wedged on the old connection state: egress passes but
+    # it ships nothing and goes silent (the green-but-dead trap from
+    # 2026-06-18). `restart` reattaches by name and rebuilds the process.
+    # host/none/default/bridge have no user bridge to rejoin — skipped.
     for c in $("$DOCKER" ps -q); do
         managed "$c" || continue
         nm=$("$DOCKER" inspect -f '{{.HostConfig.NetworkMode}}' "$c")
         case "$nm" in host|none|default|bridge|"") continue ;; esac
         "$DOCKER" inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c" \
             | grep -qw "$nm" && continue
-        "$DOCKER" network connect "$nm" "$c" >/dev/null 2>&1 \
-            && echo "reconcile: reattached $c to $nm" \
-            || echo "reconcile: FAILED to reattach $c to $nm"
+        "$DOCKER" network disconnect -f "$nm" "$c" >/dev/null 2>&1 || true
+        "$DOCKER" restart "$c" >/dev/null 2>&1 \
+            && echo "reconcile: restarted detached $c (reattach $nm)" \
+            || echo "reconcile: FAILED to restart detached $c"
     done
 ) >> /var/log/komodo-periphery-boot.log 2>&1 &
 # <<< podhaus kangaroo autorun <<<

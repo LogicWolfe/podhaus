@@ -327,13 +327,21 @@ WHERE LogAttributes['host']='&lt;host&gt;'</code></pre>
               <pre><code>$DK network disconnect -f dockernet alloy backrest   # clear dangling refs
 $DK network rm dockernet                             # drop the phantom record
 $DK network create dockernet                          # recreate a live bridge
-$DK network connect dockernet alloy
-$DK network connect dockernet backrest</code></pre>
-              Then confirm a default route landed
-              (<code>$DK exec alloy bash -c '(exec 3&lt;&gt;/dev/tcp/10.0.0.119/4318)' &amp;&amp; echo OK</code>);
-              if egress still fails, <code>$DK restart alloy</code> to rebuild the namespace.
-              The kangaroo <code>autorun.sh</code> reconcile now heals both the phantom
-              network and running-but-detached containers <em>at boot</em>, but a mid-life
+$DK restart alloy backrest                           # reattach by name + rebuild the exporter</code></pre>
+              The final <code>restart</code> is <strong>mandatory, not conditional</strong>.
+              <code>network connect</code> on a <em>running</em> alloy gives it a working
+              interface (an egress TCP test to <code>10.0.0.119:4318</code> will pass) but
+              leaves its OTLP exporter wedged on the old connection state — it then goes
+              silent and ships nothing, a green-but-dead trap that bit this repair on
+              2026-06-18. <code>restart</code> reattaches by network name and rebuilds the
+              process. <strong>Verify with the data, not the container:</strong> rerun the
+              staleness query
+              (<code>SELECT count() FROM default.otel_logs WHERE Timestamp &gt; now() -
+              INTERVAL 5 MINUTE AND LogAttributes['host']='kangaroo'</code> on
+              <code>clickstack-clickhouse</code>) and confirm rows resume — a passing egress
+              test or a healthy container is not proof of ingest. The kangaroo
+              <code>autorun.sh</code> reconcile heals both the phantom network and
+              running-but-detached containers (via restart) <em>at boot</em>, but a mid-life
               detach (no reboot) still needs this manual repair — the staleness alert is the
               detection net for that case. See
               <a href="/postmortems/postmortem-viewer.html?file=2026-06-16-firmware-reboot-recovery.md">the
