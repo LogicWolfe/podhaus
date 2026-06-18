@@ -343,40 +343,53 @@ description = "Service port (well-known, not a secret)"</code></pre>
         <code>${PODHAUS_REPO}/&lt;stack&gt;/...</code>, never relative paths.
       </aside>
       <aside class="callout caution">
-        <span class="callout-title">Config-only commits don't auto-reload running containers</span>
+        <span class="callout-title">Config-only commits recreate the container (since 2026-06-18) — via the Stage-1 reconcile</span>
         Directory bind mounts mean a host-side edit is <em>visible on disk</em>
         inside the container immediately — but the process running inside is
-        already past its config-load step and won't re-read the file. The
-        push-deploy procedure's <code>DeployStack</code> step runs
-        <code>docker compose up -d</code>, which is a <strong>no-op</strong>
-        when nothing in the compose config itself has changed; the container
-        keeps running with the cached (old) config. The new content sits on
-        disk, untouched, until the operator does one of:
-        <ul>
-          <li><code>docker compose up -d --force-recreate &lt;service&gt;</code> — cleanest; new container reads new file.</li>
-          <li>Send the daemon a reload signal it understands (e.g.
-            <code>docker kill -s HUP &lt;container&gt;</code> for nginx,
-            cloudflared, ofelia, alloy with the right command flag, etc.).</li>
-          <li>Hit a daemon-provided reload endpoint (some tools: caddy admin
-            API <code>caddy reload</code>, alloy
-            <code>/-/reload</code>, etc.).</li>
-        </ul>
-        <strong>Auto-reload exceptions known in this fleet:</strong>
-        <code>cloudflare-tunnel</code> re-reads
-        <code>config.yml</code> on each reconnect cycle (see the dns-push
-        section below). Most other config-bind-mount stacks
-        (<code>alloy</code>, <code>caddy</code>, <code>gatus</code>) need an
-        explicit recreate/signal. When in doubt, force-recreate.
+        already past its config-load step and won't re-read the file. And
+        Komodo's <code>DeployStackIfChanged</code> is a <strong>no-op</strong>
+        when the compose <em>text</em> is unchanged, so by itself a deploy
+        pulls the new bind-mounted file but leaves the process on the cached
+        old config.
         <br><br>
-        Real incident (2026-05-22): kookaburra's
-        <code>logging/kookaburra/alloy-conf/config.alloy</code> was changed
-        to use the bilby MagicDNS FQDN, committed, push-deployed. The
-        Periphery clone advanced (<code>git pull</code> succeeded), the new
-        file was on disk inside the running alloy container, but alloy kept
-        shipping to the old endpoint until <code>docker compose up -d
-        --force-recreate alloy</code> was run by hand. Same failure class as
-        the file-bind-mount inode trap — silent divergence between disk and
-        running process.
+        The <code>podhaus-inject-content-hashes</code> action closes this. A
+        change to any committed in-stack file
+        (<code>&lt;stack&gt;/conf*/</code>, <code>caddy/conf*/</code>,
+        <code>cloudflare-tunnel/conf/</code>, <code>alloy-conf/</code>,
+        <code>&lt;stack&gt;/scripts/</code>, …) changes the stack's
+        <code>STACK_CONTENT_HASH</code>; the action notices the running
+        container's <code>podhaus.stack-content-hash</code> label is stale and
+        <strong>force-deploys the stack</strong>, recreating the container so
+        the process re-reads its config. No manual step on a normal push.
+        <ul>
+          <li>It's a <strong>recreate (full restart)</strong>, not an in-place
+            reload. Fine for startup-read config. If you specifically want a
+            graceful <code>SIGHUP</code>/reload-endpoint instead of a restart,
+            that's still a manual choice
+            (<code>docker kill -s HUP &lt;container&gt;</code>,
+            <code>caddy reload</code>, alloy <code>/-/reload</code>, …).</li>
+          <li>Triggered only by the push procedure / <code>komodo-sync</code>
+            — not a bare <code>docker compose up -d</code>.</li>
+          <li><strong>Not covered:</strong> secret / <code>variables.toml</code>
+            value changes — the content hash excludes the deploy-written
+            <code>.env</code> (see
+            <a href="/komodo.html">Komodo</a> / AGENTS.md content-hash note).
+            <code>cloudflare-tunnel</code> also auto-reloads
+            <code>config.yml</code> on each reconnect, independent of this.</li>
+        </ul>
+        <strong>Why this needed fixing (the latent bug):</strong> the
+        content-hash label was always present, but nothing made the deploy
+        actually <em>run</em> on a hash change — Komodo's IfChanged only diffs
+        compose text, and the hash lives in a <code>${VAR}</code> ref that
+        never alters that text. It looked like it worked only because
+        compose-text edits happened often enough to refresh labels as a side
+        effect. Config-only edits silently didn't apply. Real incident
+        (2026-05-22): kookaburra's
+        <code>logging/kookaburra/alloy-conf/config.alloy</code> was changed,
+        committed, push-deployed — the file landed on disk but alloy kept
+        shipping to the old endpoint until a manual
+        <code>--force-recreate</code>. The same class bit a gatus config edit
+        on 2026-06-18, which is what surfaced and fixed the root cause.
       </aside>
 
       <h2 id="selinux">SELinux on Fedora Asahi</h2>

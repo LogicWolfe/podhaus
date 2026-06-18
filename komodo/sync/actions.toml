@@ -18,12 +18,13 @@
 [[action]]
 name = "podhaus-inject-content-hashes"
 description = """
-Compute per-service content hashes from the bilby-side repo and inject \
-STACK_CONTENT_HASH + per-service BUILD_HASH_<name> variables into each \
-podhaus stack's stored environment. Run as Stage 1 of \
-`podhaus-push-deploy` so the hashes are in place before \
-`BatchDeployStackIfChanged` runs. See AGENTS.md \"Content-hash change \
-detection\" for the architectural rationale.\
+Compute per-service content hashes from the bilby-side repo, inject \
+STACK_CONTENT_HASH + per-service BUILD_HASH_<name> into each podhaus \
+stack's stored env, then force-deploy any stack whose running container \
+carries a stale hash label while its compose text is unchanged — the \
+config-only / build-context changes Komodo's DeployStackIfChanged can't \
+see. Stage 1 of `podhaus-push-deploy`. See AGENTS.md \"Content-hash \
+change detection\" for the architectural rationale.\
 """
 tags = ["podhaus"]
 
@@ -45,13 +46,20 @@ reload_deno_deps = false
 file_contents = """
 // podhaus-inject-content-hashes
 //
-// Compute two kinds of hashes per stack, inject both into the stack's
-// stored env, idempotently:
+// Two responsibilities, run as Stage 1 of `podhaus-push-deploy`:
+//   (1) inject per-stack content hashes into stored env, and
+//   (2) force-deploy stacks whose running containers carry a stale hash
+//       label but whose compose text is unchanged (the reconcile at the
+//       bottom). (2) is what actually makes the hashes load-bearing —
+//       see the long note above that pass.
+//
+// The two hashes, injected idempotently into stack.config.environment:
 //
 //   STACK_CONTENT_HASH=<hash>
-//     Hash of the stack's own directory contents. Every service in the
-//     stack references this via its `podhaus.stack-content-hash` label,
-//     so any stack-dir change recreates every service in the stack.
+//     Hash of the stack's COMMITTED directory contents (the deploy-
+//     written `.env` is excluded — see hashDir). Every service carries a
+//     `podhaus.stack-content-hash` label referencing it; the reconcile
+//     recreates the stack when the running label drifts from this.
 //
 //   BUILD_HASH_<SERVICE>=<hash>
 //     One entry per service that has `build:` in this stack's compose.
@@ -64,15 +72,17 @@ file_contents = """
 //     Service names with dashes / dots become underscores; whole name
 //     is uppercased to match shell env-var conventions.
 //
-// All values land in stack.config.environment via UpdateStack, which
-// Komodo's standard env-rendering machinery then writes to .env for
-// the deploy. Stage 0 (RunSync) overwrites the env from stack.toml
-// every run; this Action re-adds the hashes after. Stage 2
-// (BatchDeployStackIfChanged) compares the resulting stored env to
-// the deployed env and deploys any stack whose env diff includes a
-// changed hash. Works uniformly for files_on_host and linked_repo
-// stacks — the hashes come from bilby's view of the repo, routing
-// around Komodo's stale-Periphery-clone IfChanged on linked_repo.
+// Why the injected env is necessary but NOT sufficient: it lands in
+// stack.config.environment via UpdateStack, which Komodo writes to .env
+// at deploy time so the label renders to the real hash. But Komodo's
+// DeployStackIfChanged (Stage 2) decides \"changed\" by diffing the
+// compose-file TEXT — and the hashes live in `${VAR}` refs, so a hash
+// change never alters that text. Stage 2 therefore never deploys on a
+// hash change alone (proven 2026-06-18). The reconcile below is the
+// trigger; Stage 2 is left to own compose-text changes + new stacks.
+// Works uniformly for files_on_host and linked_repo stacks — the hashes
+// come from bilby's view of the repo, and the reconcile reads each
+// stack's containers on their own host.
 
 const REPO_ROOT = '/syncs/podhaus';
 const NL = String.fromCharCode(10);
@@ -120,6 +130,15 @@ async function hashDir(absDir) {
       if (entry.isDirectory) {
         await recurse(child, childRel);
       } else if (entry.isFile) {
+        // Exclude `.env`: Komodo writes a rendered `.env` (resolved
+        // secrets + the self-referential STACK_CONTENT_HASH) into each
+        // stack's run_directory at DEPLOY time. Hashing it would make the
+        // hash depend on its own previous output — it never converges
+        // (every deploy rewrites .env with the hash it just stamped, so
+        // the next hash differs) — and would fold secret values into the
+        // trigger. The hash must reflect COMMITTED content only. See
+        // AGENTS.md \"Content-hash change detection\".
+        if (entry.name === '.env') continue;
         files.push({ rel: childRel, data: await Deno.readFile(child) });
       }
     }
@@ -202,6 +221,42 @@ async function buildContexts(composeFiles) {
   return merged;
 }
 
+// Parse compose files for each service's container_name and the set of
+// podhaus.* hash labels it declares. Used by the post-injection reconcile
+// to compare a stack's freshly computed hashes against what its running
+// containers actually carry. Returns svc -> { containerName, labelKeys }.
+async function parseServiceMeta(composeFiles) {
+  const merged = {};
+  for (const cf of composeFiles) {
+    let doc;
+    try { doc = YAML.parse(await Deno.readTextFile(cf)); } catch { continue; }
+    const services = doc?.services;
+    if (!services || typeof services !== 'object') continue;
+    for (const [svc, def] of Object.entries(services)) {
+      if (!def || typeof def !== 'object') continue;
+      const cur = merged[svc] ?? { containerName: null, labelKeys: [] };
+      if (typeof def.container_name === 'string') cur.containerName = def.container_name;
+      const keys = new Set(cur.labelKeys);
+      const labels = def.labels;
+      if (Array.isArray(labels)) {
+        for (const item of labels) {
+          if (typeof item === 'string') {
+            const k = item.split('=')[0];
+            if (k.startsWith('podhaus.')) keys.add(k);
+          }
+        }
+      } else if (labels && typeof labels === 'object') {
+        for (const k of Object.keys(labels)) {
+          if (k.startsWith('podhaus.')) keys.add(k);
+        }
+      }
+      cur.labelKeys = Array.from(keys);
+      merged[svc] = cur;
+    }
+  }
+  return merged;
+}
+
 // --- main ---
 
 // Build the linked-repo allowlist by name. Stacks tied to a linked_repo
@@ -219,6 +274,7 @@ const stacksSummary = await komodo.read('ListStacks', {});
 let processed = 0;
 let updated = 0;
 let skipped = 0;
+const stackPlans = [];
 
 for (const s of stacksSummary) {
   const stack = await komodo.read('GetStack', { stack: s.id ?? s.name });
@@ -267,6 +323,45 @@ for (const s of stacksSummary) {
     buildHashes[svc] = await hashDir(absCtx);
   }
 
+  // Record what this stack's running containers SHOULD carry, for the
+  // reconcile pass after the loop. expectedLabels maps each podhaus.*
+  // label to the hash the container must show.
+  const svcMeta = await parseServiceMeta(composeFiles);
+  const planServices = [];
+  for (const [svc, meta] of Object.entries(svcMeta)) {
+    const expectedLabels = {};
+    for (const key of meta.labelKeys) {
+      if (key === 'podhaus.stack-content-hash') {
+        expectedLabels[key] = stackHash;
+      } else if (key.startsWith('podhaus.depends-on-')) {
+        const dep = key.substring('podhaus.depends-on-'.length);
+        if (dep in buildHashes) expectedLabels[key] = buildHashes[dep];
+      }
+    }
+    planServices.push({ containerName: meta.containerName, expectedLabels });
+  }
+  // Tell apart \"Stage 2 will handle this\" (compose TEXT changed → its
+  // IfChanged fires) from \"only Stage 2 misses it\" (config-only /
+  // build-context change, compose unchanged). The reconcile deploys ONLY
+  // the latter, so no stack is ever deployed by both paths. Compared by
+  // content set (paths can be stored differently), against the stack's
+  // deployed compose contents.
+  const composeNow = [];
+  for (const cf of composeFiles) {
+    try { composeNow.push(await Deno.readTextFile(cf)); } catch { /* skip */ }
+  }
+  const deployedNow = (stack.info?.deployed_contents ?? []).map((f) => f.contents);
+  const a = composeNow.slice().sort();
+  const b = deployedNow.slice().sort();
+  const composeUnchanged = a.length === b.length && a.every((c, i) => c === b[i]);
+  stackPlans.push({
+    name: stack.name,
+    id: stack._id?.$oid ?? stack.id ?? stack.name,
+    serverId: stack.config?.server_id ?? null,
+    services: planServices,
+    composeUnchanged,
+  });
+
   // Construct the new env. Start from stored env minus any prior
   // STACK_CONTENT_HASH / BUILD_HASH_* line; append fresh values in a
   // stable order so unchanged repeated runs produce identical output.
@@ -301,4 +396,70 @@ for (const s of stacksSummary) {
 console.log(
   `[podhaus-inject-content-hashes] processed=${processed} env-updated=${updated} skipped=${skipped}`
 );
+
+// --- reconcile: force-deploy stacks whose running containers carry a
+// stale content-hash label, but ONLY where the compose TEXT is unchanged.
+//
+// This closes the gap that makes the hashes load-bearing. Komodo's
+// DeployStackIfChanged (the procedure's Stage 2) decides \"changed\" by
+// diffing the compose-file TEXT it stored at deploy time — and the hashes
+// live in `${STACK_CONTENT_HASH}` / `${BUILD_HASH_*}` variable refs, so a
+// hash change never alters that text. Result (verified 2026-06-18): a
+// conf-only edit injected the right hash into stored env but Stage 2
+// no-op'd, leaving the container on a stale config (gatus ran an old
+// staleness window for ~hours; its label sat at `unset`). The injected
+// env is NOT a deploy trigger on its own.
+//
+// So this pass reads each stack's running containers and compares their
+// podhaus.* hash labels to the freshly computed hashes; on a mismatch it
+// force-deploys (DeployStack, not IfChanged), which renders the new
+// label into the container. We deploy ONLY stacks whose compose text is
+// unchanged — compose-text changes and brand-new stacks are Stage 2's
+// job, and deploying them here too would double-recreate. The deployed
+// container label is the only ground truth: stored env and
+// `deployed_contents` don't reflect what's actually running.
+const servers = await komodo.read('ListServers', {});
+const serverNameById = new Map(servers.map((sv) => [sv.id, sv.name]));
+
+let reconciled = 0;
+for (const plan of stackPlans) {
+  if (!plan.composeUnchanged) continue; // Stage 2 owns compose-text changes + new stacks
+  const serverName = serverNameById.get(plan.serverId);
+  if (!serverName) {
+    console.log(`reconcile: ${plan.name} — unknown server ${plan.serverId}; skipping`);
+    continue;
+  }
+  let stale = null;
+  for (const svc of plan.services) {
+    if (!svc.containerName || Object.keys(svc.expectedLabels).length === 0) continue;
+    let inspect;
+    try {
+      inspect = await komodo.read('InspectDockerContainer', {
+        server: serverName, container: svc.containerName,
+      });
+    } catch {
+      // Container absent / server unreachable. New-stack first-deploy is
+      // Stage 2's job and crash recovery is autoheal's; skip rather than
+      // risk a spurious deploy on a transient inspect error.
+      continue;
+    }
+    const labels = (inspect && inspect.Config && inspect.Config.Labels) || {};
+    for (const [key, want] of Object.entries(svc.expectedLabels)) {
+      if (labels[key] !== want) {
+        stale = `${svc.containerName} ${key}=${labels[key]} want ${want}`;
+        break;
+      }
+    }
+    if (stale) break;
+  }
+  if (!stale) continue;
+  try {
+    await komodo.execute('DeployStack', { stack: plan.id });
+    reconciled++;
+    console.log(`reconcile: DeployStack ${plan.name} (${stale})`);
+  } catch (e) {
+    console.log(`reconcile: FAILED to deploy ${plan.name}: ${e}`);
+  }
+}
+console.log(`[podhaus-inject-content-hashes] reconcile: deployed=${reconciled}`);
 """
