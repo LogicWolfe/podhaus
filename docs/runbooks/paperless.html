@@ -118,7 +118,7 @@
       <p>
         Mail sent or forwarded to the Fastmail alias <code>paperless@nathanbaxter.com</code>
         lands automatically as one searchable document. Fastmail files alias mail into a
-        <code>Paperless</code> folder; Paperless polls it every 10 minutes
+        <code>Paperless</code> folder; Paperless polls it every minute
         (<code>PAPERLESS_EMAIL_TASK_CRON</code>) and consumes everything in
         <strong>full-email mode</strong> — body + attachments bundled into a single
         document, with a copy-pasteable text layer (covers the "compose a note with an
@@ -140,15 +140,29 @@
           step.</li>
       </ul>
       <p>
-        Setup history + the API field/enum reference live in the
-        <a href="/plans/plan-viewer.html?file=alligator-bilby-migration/paperless-email-ingest.md">email
-        ingest plan</a>.
+        <strong>Credential recovery:</strong> the IMAP login lives in the 1Password
+        <em>Homelab</em> item <code>Paperless Fastmail IMAP</code> (fields
+        <code>username</code> = primary Fastmail login, not the alias; <code>password</code>
+        = a revocable IMAP app-password; <code>hostname</code>; <code>port</code>),
+        synced by <code>komodo-op</code> into the
+        <code>OP__KOMODO__PAPERLESS_FASTMAIL_IMAP__*</code> variables above. The exact
+        account + rule field values (full-email consumption scope, inline-attachment
+        handling, delete-after-parse action, the <code>email-ingest</code> tag) are the
+        authoritative REST upsert in <code>paperless/scripts/mail-init.sh</code> — edit
+        there, not in the UI, or the next deploy reverts it.
       </p>
+      <aside class="callout note">
+        <span class="callout-title">${PODHAUS_REPO} must be surfaced</span>
+        <code>paperless-mail-init</code> bind-mounts its script via
+        <code>${PODHAUS_REPO}</code>, which is interpolated at compose-render time — so
+        <code>paperless/stack.toml</code> must carry
+        <code>PODHAUS_REPO=[[PODHAUS_REPO]]</code> in its <code>environment</code> block.
+        Without it the path resolves to an empty prefix, Docker stubs an empty dir, and
+        the init silently no-ops.
+      </aside>
 
       <h2 id="see-also">See also</h2>
       <ul>
-        <li><a href="/plans/plan-viewer.html?file=alligator-bilby-migration/paperless-email-ingest.md">Email
-          ingest plan</a> — Fastmail IMAP setup + parser/init design.</li>
         <li><a href="/plans/index.html">Plans</a> — the migration plan covers Phase 10 (bulk
           import) in detail including the curation YAML structure.</li>
         <li><code>~/repos/podhaus-migration-state/paperless-imports.sqlite</code> (off-repo

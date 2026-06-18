@@ -33,19 +33,13 @@ documentation overhaul.
 
 ## Remaining work
 
-Three streams, all independent.
+Two streams, all independent.
 
-1. [**Paperless email ingest**](paperless-email-ingest.md) — set up
-   Fastmail alias + IMAP-polling Paperless mail account so anything
-   forwarded to `paperless@<domain>` lands in the archive
-   automatically. The compose-level `PAPERLESS_EMAIL_TASK_CRON` is
-   already wired; just needs the alias + folder + app password +
-   Paperless mail rule.
-2. [**Railway migrations**](railway-migrations.md) — bring doggos
+1. [**Railway migrations**](railway-migrations.md) — bring doggos
    (kid's static site) and yiayia (board app) home from Railway. The
    Komodo webhook bypass Access app is already in place (TF-managed)
    and the auto-deploy webhook + GitHub-side hook are live too.
-3. [**Deferred follow-ups**](deferred-followups.md) — non-blocking
+2. [**Deferred follow-ups**](deferred-followups.md) — non-blocking
    items surfaced during the migration: NFS bind-mount auto-recovery,
    ofelia self-restart workaround removal pending upstream PR,
    host-package runbook, orphan-container behaviour documentation,
@@ -61,6 +55,11 @@ outbound mode (no inbound :8120 listener). Current state lives in
 
 [Paperless stabilization](paperless-stabilization.md) is **done**
 (2026-05-12). See [Completed work](completed-work.md) for the recap.
+
+Paperless email ingest is **done** (2026-06-18) — full-email-mode IMAP
+ingest from a Fastmail alias via the toweosp parser + a config-as-code
+`paperless-mail-init` container. Current state lives in the
+[Paperless runbook](/runbooks/paperless.html#email-ingest).
 
 [Terraform foundation](terraform-setup.md) and
 [Cloudflare as Terraform](cloudflare-terraform.md) are **done**.
