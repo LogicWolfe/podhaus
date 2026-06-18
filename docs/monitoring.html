@@ -305,12 +305,40 @@ WHERE LogAttributes['host']='&lt;host&gt;'</code></pre>
 
       <h3 id="known-issues">Known issues</h3>
       <ul>
-        <li><strong>kangaroo Alloy OTLP exporter can stall silently.</strong> The cross-LAN
-          exporter on <code>kangaroo-logging</code> can stop shipping and not self-recover.
-          The port-only container healthcheck can't detect this (the socket stays open). The
-          current workaround is <code>RestartStack kangaroo-logging</code>. A real guard —
-          metrics-based healthcheck/autoheal, exporter retry-queue tuning, or a scheduled
-          restart — is an open follow-up.</li>
+        <li><strong>kangaroo Alloy log ingest can go stale — two distinct causes, two
+          different fixes.</strong> The <em>Kangaroo Log Ingest (staleness)</em> Gatus check
+          fires for both; the port-only container healthcheck detects neither (the socket
+          stays open, so the container reads healthy and autoheal ignores it). Read the alloy
+          log to tell them apart — <code>GetContainerLog kangaroo alloy</code>:
+          <ul>
+            <li><strong>Exporter wedge</strong> — the exporter stops shipping but the network
+              path is fine (no connection errors in the log, just silence). Fix:
+              <code>RestartStack kangaroo-logging</code>.</li>
+            <li><strong>dockernet detach / phantom network</strong> — the log shows
+              <code>dial tcp 10.0.0.119:4318: connect: network is unreachable</code>. alloy
+              has lost its dockernet attachment (<code>NetworkSettings.Networks</code> empty),
+              usually because dockernet went <em>phantom</em> after Container Station churn:
+              the libnetwork record survives (<code>network inspect</code> passes) but the
+              bridge datapath is gone, so attaches fail with
+              <code>network &lt;id&gt; does not exist</code>. A <code>RestartStack</code> does
+              <em>not</em> fix this — the container restarts and still has no usable network.
+              Repair over SSH (<code>admin@10.0.0.25</code>;
+              <code>DK=/share/CACHEDEV2_DATA/.qpkg/container-station/usr/bin/docker</code>):
+              <pre><code>$DK network disconnect -f dockernet alloy backrest   # clear dangling refs
+$DK network rm dockernet                             # drop the phantom record
+$DK network create dockernet                          # recreate a live bridge
+$DK network connect dockernet alloy
+$DK network connect dockernet backrest</code></pre>
+              Then confirm a default route landed
+              (<code>$DK exec alloy bash -c '(exec 3&lt;&gt;/dev/tcp/10.0.0.119/4318)' &amp;&amp; echo OK</code>);
+              if egress still fails, <code>$DK restart alloy</code> to rebuild the namespace.
+              The kangaroo <code>autorun.sh</code> reconcile now heals both the phantom
+              network and running-but-detached containers <em>at boot</em>, but a mid-life
+              detach (no reboot) still needs this manual repair — the staleness alert is the
+              detection net for that case. See
+              <a href="/postmortems/postmortem-viewer.html?file=2026-06-16-firmware-reboot-recovery.md">the
+              firmware-reboot postmortem</a>.</li>
+          </ul></li>
         <li><strong>ClickHouse MergeTree part explosion.</strong> The collector's frequent
           small inserts create a large number of MergeTree parts.
           <code>async_load_databases</code> decouples ClickHouse startup from part count so a

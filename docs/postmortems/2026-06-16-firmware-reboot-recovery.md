@@ -126,6 +126,16 @@ All landed in commit `6b9bcb6` unless noted.
   are skipped). Closes gaps (1) and (2) for kangaroo at boot. Deployed
   via the existing `install.sh` (copies the tracked script to the boot
   DOM); proven only on the next firmware reboot.
+- [x] **2026-06-18 (hardened, see recurrence below)**: the same reconcile
+  was found to have two blind spots when alloy went stale again that
+  afternoon. `network inspect dockernet` false-passes on a *phantom*
+  network (libnetwork record present, bridge datapath gone), so the
+  `|| create` never fired; and the `status=exited` filter skips a
+  *running-but-detached* container (port open → healthcheck green →
+  autoheal blind). Reworked into `ensure_dockernet` (probes the actual
+  `br-<id>` bridge interface, not the record; rm + recreate if phantom) +
+  a second pass that reattaches running containers whose `NetworkMode`
+  network is missing from their live attachment.
 - [x] **2026-06-18**: Patient healthcheck window — `retries: 3 → 15` (at
   `interval: 60s` ≈ 15-min patience) on the four NFS-bind consumers
   (`flood`, `plex`, `paperless`, bilby `backrest`). A kangaroo NFS outage
@@ -146,6 +156,20 @@ All landed in commit `6b9bcb6` unless noted.
   present; the stopped containers held a stale endpoint that had to be
   cleared first.
 - [x] **2026-06-18**: bilby — `docker start flood`.
+- [x] **2026-06-18 (recurrence, ~04:30 UTC)**: `Kangaroo Log Ingest`
+  went red again — *not* a reboot. alloy was running and healthy (port
+  open) but its log showed
+  `dial tcp 10.0.0.119:4318: connect: network is unreachable`; it had
+  zero networks attached. `dockernet` had gone phantom (record present,
+  bridge gone), so `network connect` failed with
+  `network 94d2b77a... does not exist`. Repaired:
+  `network disconnect -f dockernet {alloy,backrest}` → `network rm
+  dockernet` → `network create dockernet` → `network connect` both. Egress
+  restored (TCP to `10.0.0.119:4318` OK, exporter quiet). Likely fallout
+  from the manual disconnect/connect churn during the earlier recovery,
+  not the firmware reboot itself — a mid-life detach the boot autorun
+  can't catch, which is what motivated the hardening above and the
+  repair runbook in `docs/monitoring.html#known-issues`.
 
 ### Documentation (in-repo)
 
@@ -192,6 +216,22 @@ All landed in commit `6b9bcb6` unless noted.
   when-not-if event. The host-side automount/sentinel/tripwire work from
   the prior two postmortems wasn't enough on its own — the containers
   also have to come back, and that's a separate set of mechanisms.
+
+- **A "phantom" network outlives its datapath, and `network inspect`
+  won't tell you.** Container Station churn can leave `dockernet` with a
+  live libnetwork record but no bridge, so `inspect` passes while every
+  attach fails with `network <id> does not exist`. Presence checks have
+  to probe the real `br-<id>` interface; healing it needs `rm` +
+  recreate, not `create` (which no-ops on the surviving record).
+
+- **"Running but detached" is a second seam, parallel to "exited."** A
+  container can be running, port-open, and healthcheck-green while
+  carrying *zero* networks — invisible to autoheal (it's not unhealthy)
+  and to an `exited`-only reconcile. The boot reconcile now also acts on
+  "running, restart-managed, but missing the network its `NetworkMode`
+  names." A mid-life detach (no reboot) still escapes the boot hook; the
+  `Kangaroo Log Ingest` staleness alert is the detection net there, and
+  the repair is runbooked in `docs/monitoring.html#known-issues`.
 
 ## Out of scope
 
