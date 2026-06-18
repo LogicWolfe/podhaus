@@ -94,6 +94,24 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "music-assistant",
+      "repo": "podhaus",
+      "paths": ["/userdata/music-assistant"],
+      "schedule": {
+        "cron": "35 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "paperless",
       "repo": "podhaus",
       "paths": ["/userdata/paperless"],

@@ -1,0 +1,35 @@
+services:
+  music-assistant:
+    container_name: music-assistant
+    image: ghcr.io/music-assistant/server:latest
+    restart: unless-stopped
+    # Host networking is mandatory: Music Assistant needs L2 / mDNS access
+    # to discover and stream to the living-room Bowers & Wilkins Formation
+    # (AirPlay 2 — no Chromecast/DLNA, so this is the only HA-native path to
+    # play notifications on it). Same reason home-assistant runs host-mode.
+    # Claims TCP 8095 (web UI) + 8097 (audio stream) on bilby.
+    network_mode: host
+    environment:
+      TZ: ${TZ}
+    volumes:
+      # MA server state: provider config (the AirPlay provider that drives
+      # the Formation), player settings, the instance id the HA integration
+      # pairs against, and library metadata. UI-reconstructible but backed
+      # up by the `music-assistant` plan in backup/bilby/ per the
+      # not-regenerable-enough-to-skip call.
+      - music-assistant-data:/data
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      # MA is a Python app, so python3 is always on PATH — don't assume
+      # wget/curl are in the image. A TCP connect to the web port proves
+      # the server is up without coupling to any HTTP status of `/`.
+      test: ["CMD-SHELL", "python3 -c \"import socket; socket.create_connection(('127.0.0.1', 8095), 5)\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+volumes:
+  music-assistant-data:

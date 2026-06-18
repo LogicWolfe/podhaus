@@ -102,6 +102,10 @@ services:
       # cert preserves the server fingerprint so already-trusted
       # clients don't re-prompt after a rebuild.
       - mumble_mumble-data:/userdata/mumble:ro
+      # Music Assistant server state (AirPlay provider config, player
+      # settings, instance id HA pairs against, library metadata). Named
+      # volume from the music-assistant stack.
+      - music-assistant_music-assistant-data:/userdata/music-assistant:ro
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -129,4 +133,6 @@ volumes:
   bugsink_bugsink-data:
     external: true
   mumble_mumble-data:
+    external: true
+  music-assistant_music-assistant-data:
     external: true

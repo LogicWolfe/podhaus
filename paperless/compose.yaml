@@ -106,7 +106,7 @@ services:
       PAPERLESS_TIKA_ENABLED: "true"
       PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://paperless-gotenberg:3000
       PAPERLESS_TIKA_ENDPOINT: http://paperless-tika:9998
-      PAPERLESS_EMAIL_TASK_CRON: "*/10 * * * *"
+      PAPERLESS_EMAIL_TASK_CRON: "* * * * *"
       PAPERLESS_CONSUMER_ENABLE_BARCODES: "true"
       PAPERLESS_TIME_ZONE: ${TZ}
       # toweosp mail parser, baked into the image (see Dockerfile). Django

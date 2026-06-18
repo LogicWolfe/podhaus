@@ -1,0 +1,13 @@
+[[stack]]
+name = "music-assistant"
+description = "Music Assistant — media bridge for AirPlay 2 speakers (living-room B&W Formation)"
+tags = ["podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/music-assistant"
+
+environment = """
+TZ=[[TZ]]
+"""
