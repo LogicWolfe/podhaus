@@ -443,6 +443,12 @@ for (const plan of stackPlans) {
       // risk a spurious deploy on a transient inspect error.
       continue;
     }
+    // Only reconcile RUNNING containers. A stopped container has no live
+    // config to be stale, and force-deploying it would START a stack
+    // that's intentionally down — e.g. vpn-diagnostics, the normally-
+    // stopped repro harness (deploy=false). Bringing a stack up is not
+    // the reconcile's job. Exited one-shot inits are skipped the same way.
+    if (((inspect && inspect.State && inspect.State.Status) || '') !== 'running') continue;
     const labels = (inspect && inspect.Config && inspect.Config.Labels) || {};
     for (const [key, want] of Object.entries(svc.expectedLabels)) {
       if (labels[key] !== want) {
