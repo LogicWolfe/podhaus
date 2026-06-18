@@ -301,13 +301,23 @@ endpoints:
     # active part (489M rows / 112 parts at the time of writing) and
     # times out at gatus's 10 s budget. count() also matches the
     # check criterion directly — one threshold, not two.
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 20 MINUTE AND LogAttributes['host']='kangaroo'"
+    #
+    # 60-minute window (not 20): kangaroo is a low-volume host — its
+    # containers organically emit only a few log lines per HOUR when
+    # healthy. The bulk of "kangaroo log volume" is alloy logging about
+    # itself, and that's heavy ONLY when alloy is erroring (Exporting
+    # failed retry spam). So a healthy, quiet alloy can leave a 20-min
+    # window empty and false-red. 60 min comfortably exceeds the organic
+    # gap while still catching a genuinely dead pipeline within the
+    # 2-fail (10-min) alert debounce. See 2026-06-18 in the firmware-
+    # reboot postmortem.
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 60 MINUTE AND LogAttributes['host']='kangaroo'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
     alerts:
       - type: custom
-        description: "No kangaroo logs reached ClickHouse in 20+ min. The cross-LAN Alloy->collector pipeline is silently down (recurring known issue — exporter wedge). Investigate kangaroo Alloy; `RestartStack kangaroo-logging` restores it. See clickstack-migration/ingestion-pipeline.md."
+        description: "No kangaroo logs reached ClickHouse in 60+ min — the cross-LAN Alloy->collector pipeline is down. Two causes, two fixes: an exporter wedge (no errors in alloy's log, just silence) clears with `RestartStack kangaroo-logging`; a dockernet detach / phantom network (alloy log shows 'network is unreachable') needs the disconnect/rm/create/restart repair. Full runbook: docs/monitoring.html#known-issues."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true
