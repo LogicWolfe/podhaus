@@ -536,6 +536,28 @@ external-endpoints:
   # left these heartbeats as event-only — they could only ever alert on a
   # received-but-failed push, never on missing pushes. See Gatus README
   # → External Endpoints.
+
+  # Brinno construction time-lapse downloader (the fenwick-brinno-downloader
+  # stack). It pushes a heartbeat per archived video — roughly daily, since
+  # it downloads the previous day's footage once the camera finishes
+  # uploading it. >48h of silence means no new footage is landing (a
+  # two-day grace tolerates a late upload / a missed day). Endpoint key
+  # (for the service's push URL) is `timelapse_brinno`. Uses the
+  # general-purpose heartbeat push token — these tokens aren't per-service
+  # (the URL's endpoint key is what routes a heartbeat to the right check),
+  # so new endpoints share GATUS_HEARTBEAT_PUSH_TOKEN rather than minting one.
+  - name: Brinno
+    group: Timelapse
+    token: ${GATUS_HEARTBEAT_PUSH_TOKEN}
+    heartbeat:
+      interval: 48h
+    alerts:
+      - type: custom
+        description: "Site time-lapse footage stopped arriving. The brinno-downloader checks in once per archived video (~daily); >48h of silence means no new footage is being downloaded — the camera may be offline, unpowered, or moved, its MCS cloud upload may have stalled, or the downloader is stuck. Investigate: `docker logs brinno-downloader`, the camera's power/connectivity, or the MCS app (mcs.my.brinno.com)."
+        failure-threshold: 1
+        success-threshold: 1
+        send-on-resolved: true
+
   - name: Backrest Nightly
     group: Backup
     token: ${GATUS_BACKREST_PUSH_TOKEN}

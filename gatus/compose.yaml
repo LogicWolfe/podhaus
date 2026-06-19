@@ -18,6 +18,10 @@ services:
       GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
       GATUS_BACKREST_KANGAROO_PUSH_TOKEN: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
+      # General-purpose push token for new external-endpoint heartbeats (the
+      # specific tokens above are kept, no migration). The endpoint key in the
+      # push URL is what routes a heartbeat; the token is just shared auth.
+      GATUS_HEARTBEAT_PUSH_TOKEN: ${GATUS_HEARTBEAT_PUSH_TOKEN}
       # Komodo Core API credentials — used by the "Kangaroo Periphery
       # (via Komodo)" check that asserts kangaroo's Server state is Ok.
       KOMODO_API_KEY: ${KOMODO_API_KEY}
