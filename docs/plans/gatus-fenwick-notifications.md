@@ -1,111 +1,86 @@
-# Gatus → Fenwick notifications + status-page grouping
+# Gatus → Fenwick notifications
 
-Two related pieces of work on the Gatus monitoring stack, started
-2026-06-19:
-
-1. **Status-page retention + service grouping** — edits complete, not
-   yet deployed.
-2. **Route alerting through Fenwick** (Signal, agent-decided) instead of
-   Postmark — designed, not yet built.
+Route Gatus alerting through Fenwick (Signal, agent-decided) instead of
+Postmark email. The status-page retention + service-grouping work that
+preceded this shipped 2026-06-19 — see *Done* below; the live work is the
+Fenwick switch.
 
 ---
 
-## Done so far (in the working tree, undeployed)
+## As-built (2026-06-19)
 
-### Retention fix
+Both sides shipped. The design below is accurate to what was built;
+deviations and as-built facts:
 
-`gatus/conf/config.yaml` storage block used a non-existent key
-`capping: 65000`, silently ignored by Gatus's lenient YAML parser — so
-retention sat at the defaults (100 results, ~3 h at 2 m intervals)
-despite the comment claiming 90 days. Fixed to the real keys:
-
-- `maximum-number-of-results: 65000` — ~90 days of per-endpoint probe
-  history. Consumed by the **endpoint-detail page** (paginated, 50/page)
-  and the API, *not* the home strip (front-end-capped at ~50 boxes).
-- `maximum-number-of-events: 10000` — the detail page's **Events
-  timeline** (status transitions); default 50 truncated incident history
-  on flappy endpoints. One tiny row per transition.
-
-Neither affects alerting (driven by live thresholds) or HyperDX
-retention. Larger history only accrues from deploy forward — no
-backfill.
-
-### Service-primary grouping
-
-Regrouped all 30 endpoints from the old flat `services` / `heartbeat`
-buckets to **service-primary** groups (host stays an axis only where the
-thing *is* a host or a cross-host service). 15 groups:
-
-| Group | Members |
-|---|---|
-| Komodo | Komodo, Bilby Periphery, Kangaroo Periphery, Komodo Alerts |
-| Backup | Backrest bilby + kangaroo, Backrest Nightly, Backrest Kangaroo Nightly, Backrest Pets |
-| Observability | HyperDX, Pipeline Log Ingest, Kangaroo Log Ingest, ClickStack Mongo Dump |
-| Torrents | Flood, RAR Extraction, Pinelake Stignore |
-| Plex | Plex, Plex Stats Cleanup |
-| Storage | MinIO on-bilby, MinIO via relay |
-| Yiayia | Frontend, Device |
-| Kangaroo | Kangaroo (NAS) — the QNAP box itself |
-| Pets · Syncthing · Paperless · Home Assistant · Mumble · UniFi · nathanbaxter.com | one endpoint each |
-
-Decisions baked in: both Peripheries live under **Komodo** (the service),
-not a kangaroo host group; **Backup** holds all backrest incl. the Pets
-heartbeat; **ClickStack Mongo Dump** sits under Observability;
-**nathanbaxter.com** is its own group, not folded into Storage.
-
-**The coupled part — push-endpoint keys.** A Gatus external-endpoint's
-push key is `<group>_<name>` (lowercased, with `/ _ . , space # + &` →
-`-`). Moving the 7 heartbeats out of `heartbeat` changed their keys, so
-every sender was updated in lockstep:
-
-| New key | Sender updated |
-|---|---|
-| `backup_backrest-nightly` | `backup/bilby/stack.toml` |
-| `backup_backrest-pets` | `backup/bilby/stack.toml` |
-| `backup_backrest-kangaroo-nightly` | `backup/kangaroo/stack.toml` |
-| `torrents_rar-extraction` | `flood/scripts/rar-backlog.sh` |
-| `torrents_pinelake-stignore` | `flood/scripts/pinelake-stignore.sh` |
-| `observability_clickstack-mongo-dump` | `clickstack/scripts/mongo-dump.sh` |
-| `plex_plex-stats-cleanup` | `plex/scripts/stats-cleanup.sh` |
-
-Comments referencing the old keys (in the above + `flood/compose.yaml`,
-`plex/compose.yaml`, `clickstack/compose.yaml`,
-`docs/runbooks/flood.html`) were updated too. `docs/monitoring.html`'s
-"adding a monitor" section now describes the service-primary convention.
-
-### Rollout caveats for the grouping deploy
-
-- **Key change resets per-endpoint history.** Each moved heartbeat is a
-  *new* endpoint in Gatus's eyes — its old results/events are dropped and
-  last-seen resets. For the long-interval ones (esp. **Plex Stats
-  Cleanup**, 768 h) seed a baseline after deploy by POSTing one success
-  to the new key, or just accept it'll establish on the job's next run.
-- **Transient push failures during rollout.** Between the gatus redeploy
-  (new keys live) and the sender stacks' redeploy, pushes to the changed
-  keys 404 (logged as WARN by each sender, non-fatal). Self-heals once
-  both sides land in the same Stage-2 batch.
-- **Pinelake monitoring plan** (`docs/plans/pinelake-migration/`) still
-  describes its own `backup-pinelake` group naming — reconcile with this
-  service-primary convention when pinelake lands.
+- **Fenwick `service_alert`** — built TDD, full `deno task check` gate
+  green (374 tests), live in `fenwick` origin/main (rode in under the
+  other agent's `affb994`, which includes it). Verified: the running
+  container recognises `service_alert` over `/events` (a malformed
+  inject returns 400 "invalid payload", not 422 "not injectable").
+- **Tool scope deviation:** the `service_alert` eventToolMap row scopes
+  `send_signal_message` + `read_activity_log` only — **`create_schedule`
+  was deferred** (the plan listed it for the aggregation iteration).
+  Reason: the codebase convention is tools arrive red-first with the
+  behaviour that needs them, and the sibling `schedule_fired` row
+  deliberately excludes it as "a runaway surface." The aggregation
+  iteration ("notify once, then batch") adds it then.
+- **Guidance preseed:** a `service_alert = "notify me"` BOOTSTRAP_ROW was
+  added (matches the `email_arrival` precedent). It seeds on
+  email-manager registration, so it auto-applies to *new* accounts; the
+  existing admin gets the same default behaviour from the handler
+  instruction (which says "notify the member with the alert") and can
+  author explicit guidance via chat. No retroactive seed was forced.
+- **Token env-name:** Fenwick's container exposes the secret as
+  `INTERNAL_HTTP_TOKEN` (the compose strips the `FENWICK_` prefix).
+  Irrelevant to the wire contract — Gatus sends its own
+  `${FENWICK_INTERNAL_HTTP_TOKEN}`, and both stacks resolve the *same*
+  1P value (`OP__KOMODO__FENWICK_INTERNAL_TOKEN__CREDENTIAL`), so the
+  bearer matches regardless of per-container var name.
+- **Gatus side** (this commit): `custom` alerter → `fenwick:8088/
+  events/async` with the bearer + `X-Fenwick-User: Nathan`; `email`
+  (Postmark SMTP) added as the Fenwick-health backstop; new `Fenwick`
+  group = `/health` liveness + the 24h Signal-delivery ClickHouse check,
+  both `type: email`. `FENWICK_INTERNAL_HTTP_TOKEN` wired into
+  stack.toml + compose.
 
 ---
 
-## Pending: route alerting through Fenwick
+## Done (shipped & validated 2026-06-19)
 
-**Goal.** Replace the Postmark email alerter with a push to Fenwick, and
-let Fenwick (the Signal/email home-helper agent) decide how to notify —
-under household guidance. An LLM call per alert is the point: Fenwick can
-start simple ("just notify me") and grow to "notify on the first alert
-for a service, then aggregate" without code changes, only guidance.
+- **Retention fix** — `gatus/conf/config.yaml` used a non-existent
+  `capping` key (silently ignored, retention stuck at the ~3 h default).
+  Replaced with `maximum-number-of-results: 65000` (~90 d detail-page +
+  API history) and `maximum-number-of-events: 10000` (the detail-page
+  Events timeline).
+- **Service-primary grouping** — all endpoints regrouped from the flat
+  `services` / `heartbeat` buckets into service groups (Komodo, Backup,
+  Observability, Torrents, Plex, Storage, Yiayia, + per-service
+  singletons). Every push-client's endpoint-ID was updated in lockstep
+  (push key = `<group>_<name>`). Convention now documented at
+  `docs/monitoring.html#adding-monitor`.
+- **Kookaburra coverage** — added *Kookaburra Periphery* (GetServerState
+  == Ok, group Komodo) and *Kookaburra Log Ingest* (30-min staleness,
+  group Observability). Both live and green.
+
+Deploy reconciled; all polled endpoints green; heartbeats verified on
+their new keys (Plex Stats Cleanup seeded manually). Nothing outstanding.
+
+---
+
+## Goal (remaining work)
+
+Replace the Postmark email alerter with a push to Fenwick, and let
+Fenwick (the Signal/email home-helper agent) decide how to notify — under
+household guidance. An LLM call per alert is the point: Fenwick starts
+simple ("just notify me") and grows to "notify on the first alert for a
+service, then aggregate" by editing guidance, not code.
 
 ### Fenwick side (new code, in the `fenwick` repo)
 
-- **A new injectable source event type** — e.g. `service_alert` — added
-  alongside `signal_message` / `email_arrival` / `schedule_fired`:
+- **New injectable source event type `service_alert`**, alongside
+  `signal_message` / `email_arrival` / `schedule_fired`:
   - union + `INJECTABLE_TYPES` / `isInjectableType` in `src/events/`
   - payload schema + brand-wrap in `src/channels/http/injectable.ts`
-    (straw-man payload: `service`, `group`, `status`
-    triggered/resolved, `description`, `errors`, `conditions`)
   - a handler mirroring `src/handlers/schedule-fired-handler.ts` that
     runs the agent on the event
   - an `eventToolMap` row scoping its tools: `SendSignalMessageTool`
@@ -116,9 +91,9 @@ for a service, then aggregate" without code changes, only guidance.
   `FENWICK_INTERNAL_HTTP_TOKEN`; the principal is auth-derived, so Gatus
   presents `X-Fenwick-User: Nathan` and the alert triages in the admin
   context with admin guidance.
-- **Preseed guidance** for the new event type = "notify me." Iterate
-  later toward first-alert-then-aggregate (read activity log to dedup;
-  schedule a follow-up summary so a quiet period still closes out).
+- **Preseed guidance** for the event type = "notify me." Iterate later
+  toward first-alert-then-aggregate (read activity log to dedup; schedule
+  a follow-up summary so a quiet period still closes out).
 
 ### Gatus side (config only)
 
@@ -126,7 +101,7 @@ for a service, then aggregate" without code changes, only guidance.
   (async 202 — don't block Gatus's HTTP client on an LLM round-trip),
   with `Authorization: Bearer ${FENWICK_INTERNAL_HTTP_TOKEN}` +
   `X-Fenwick-User: Nathan`, body templated as `{type: "service_alert",
-  payload: {…}}` from Gatus's `[ENDPOINT_NAME]` etc. placeholders.
+  payload: {…}}`.
 - Add `FENWICK_INTERNAL_HTTP_TOKEN` to `gatus/stack.toml` (same 1P
   source Fenwick uses: `OP__KOMODO__FENWICK_INTERNAL_TOKEN__CREDENTIAL`)
   and map it through `gatus/compose.yaml`.
@@ -136,8 +111,8 @@ for a service, then aggregate" without code changes, only guidance.
 Putting the agent in the alert path means a Fenwick / signal-cli / LLM
 outage makes alerts silently vanish. So the **fenwick-health checks
 specifically** keep alerting via Postmark — they must not route through
-the thing they're watching. Mechanism: Gatus supports multiple alerter
-types; each endpoint picks via its `alerts:` list.
+the thing they're watching. Gatus supports multiple alerter types; each
+endpoint picks via its `alerts:` list.
 
 - `custom` alerter → Fenwick (default for everything via the `*alerts`
   anchor).
@@ -145,23 +120,56 @@ types; each endpoint picks via its `alerts:` list.
   existing `POSTMARK_SERVER_TOKEN` as both username and password — the
   current Postmark path is the HTTP-API `custom` alerter, which we're
   giving to Fenwick, so Postmark moves to the native `email` type).
-- **New** fenwick-health endpoints (the `fenwick` container `/health`,
-  the `signal-cli-rest-api` sidecar, optionally an end-to-end send)
-  carry `alerts: [- type: email]`. None exist today.
-
-### Open decisions before building Fenwick
-
-1. Event type name (`service_alert`?).
-2. Exact payload contract Gatus sends.
-3. Which fenwick-health probes to add for the Postmark backstop.
+- **New `Fenwick` group of health endpoints**, all alerting via `email`:
+  - **Signal delivery (24h)** — *the centerpiece.* gatus queries
+    ClickHouse (same pattern + creds as the existing log-ingest staleness
+    checks) for ≥1 successful `/v2/send` by Fenwick in the last 24h:
+    `countIf(SpanAttributes['http.response.status_code']='201') > 0` over
+    `otel_traces WHERE ServiceName='fenwick' AND url.full LIKE
+    '%/v2/send%'`. Zero → email alert. Catches the silent-Signal-failure
+    class end-to-end (a failed send never produces a 201) with **no
+    Fenwick code** — the send is already auto-instrumented as an outbound
+    HTTP span. Reliable because Fenwick's daily Signal digest guarantees a
+    daily send (verified ≥6 successful sends/day across the last 8 days,
+    never a zero-day). Detects send-*accepted* (201 = handed to the Signal
+    server), not phone-delivered.
+  - **Fenwick liveness** — `GET fenwick:8088/health` (returns `ok`), for
+    minutes-not-hours detection of a hard container-down (the 24h check
+    catches it too, but slowly).
 
 ---
 
-## Deploy order (when authorized)
+## Decisions
 
-Grouping + retention and the Fenwick switch can ship separately. For the
-grouping/retention deploy: one `git push` (or `./komodo-sync`) — Stage-2
-redeploys gatus + the touched sender stacks (backup, flood, clickstack,
-plex) in one batch, so the key change and the sender updates land
-together. Then seed the long-interval heartbeat keys. Nothing here is
-deployed yet — awaiting green light.
+1. **Event type name** — ✅ `service_alert`.
+2. **Payload contract** — ✅ `{ service, group, status (triggered/
+   resolved), description, errors, conditions }`, mapped from Gatus's
+   `[ENDPOINT_NAME]` / `[ENDPOINT_GROUP]` / `[ALERT_TRIGGERED_OR_RESOLVED]`
+   / `[ALERT_DESCRIPTION]` / `[RESULT_ERRORS]` / `[RESULT_CONDITIONS]`.
+3. **Which fenwick-health probes for the Postmark backstop** — ✅
+   Resolved: a 24h **Signal-delivery** check (the ClickHouse
+   `/v2/send`-success query, detailed in the backstop section above) as
+   the primary end-to-end backstop, plus a cheap Fenwick `/health`
+   liveness probe for fast container-down detection. Both alert via
+   `email` (Postmark). **No daily heartbeat needed** — the existing daily
+   Signal digest guarantees the 24h window is populated (verified ≥6
+   successful sends/day over the last 8 days, never zero). Sidecar
+   liveness + registration-assertion dropped as redundant (a dead or
+   deregistered sidecar surfaces as zero successful sends). **Deferred:**
+   true delivery-receipt tracking — the only thing that catches
+   "accepted-201-but-never-arrived"; Fenwick doesn't consume receipts
+   today, so revisit only if a future incident is that class rather than a
+   failed send. **Known residual:** a Claude API outage isn't probed
+   (notification needs the LLM call) — accepted at personal scale.
+
+---
+
+## Deploy order
+
+Fenwick-side and Gatus-side ship independently of each other but want
+coordinating: the `custom`-alerter repoint should land only once the
+`service_alert` handler + guidance are live in Fenwick, else alerts hit a
+404 / unhandled type. Sequence: build + deploy Fenwick (new event type,
+preseeded guidance) → add the fenwick-health endpoints + move Postmark to
+the `email` alerter (Gatus) → repoint `custom` at Fenwick (Gatus). Each is
+a normal push-to-deploy.

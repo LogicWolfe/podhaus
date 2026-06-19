@@ -42,33 +42,60 @@ ui:
   header: PodHaus
 
 alerting:
+  # Default alerter for every service check: push the alert to Fenwick
+  # (the Signal/email home-helper agent) over its token-gated internal
+  # HTTP transport. Fenwick runs one agent turn per alert and decides how
+  # to notify, under household guidance (starts as "just notify me"; can
+  # iterate toward dedup/aggregate without code changes). `/events/async`
+  # returns 202 immediately so this alerter call never blocks on the LLM
+  # round-trip. The body is the `service_alert` contract Fenwick's
+  # injectable schema validates; `X-Fenwick-User: Nathan` is the
+  # auth-derived principal the turn triages as.
+  #
+  # Placeholder substitution is raw (Gatus does strings.ReplaceAll; only
+  # [RESULT_ERRORS] gets its double-quotes escaped, not newlines), so
+  # every substituted value must stay JSON-safe. It does: endpoint
+  # names/groups, the TRIGGERED/RESOLVED token, and our own
+  # [ALERT_DESCRIPTION] strings carry no raw double-quotes; conditions
+  # are quote-free expressions. (Push endpoints render the literal
+  # [RESULT_CONDITIONS] token — still a valid JSON string; the agent
+  # ignores it.)
   custom:
-    url: "https://api.postmarkapp.com/email"
+    url: "http://fenwick:8088/events/async"
     method: POST
     headers:
-      Accept: application/json
       Content-Type: application/json
-      X-Postmark-Server-Token: ${POSTMARK_SERVER_TOKEN}
-    # Placeholder notes:
-    #   [ALERT_DESCRIPTION] always renders (empty if not set). Set per
-    #     alert to explain what it means + where to investigate.
-    #   [RESULT_ERRORS] renders the `error=...` query param (or HTTP
-    #     errors) for both HTTP and push-style external endpoints. Push
-    #     endpoints use this to convey per-invocation failure context
-    #     (e.g., "443 folders unhealthy") — the sender URL-encodes them.
-    #   [RESULT_CONDITIONS] renders the failed condition expression
-    #     (e.g., "✗ `[STATUS] < 400`") for HTTP endpoints; push-style
-    #     external-endpoints have no conditions, so Gatus leaves the
-    #     literal token in place. Kept for HTTP diagnostics; tolerate
-    #     the trailing placeholder on push endpoints.
+      Authorization: "Bearer ${FENWICK_INTERNAL_HTTP_TOKEN}"
+      X-Fenwick-User: Nathan
     body: |
       {
-        "From": "uptime@nathanbaxter.com",
-        "To": "nathan@nathanbaxter.com",
-        "Subject": "[ALERT_TRIGGERED_OR_RESOLVED] [ENDPOINT_NAME]",
-        "HtmlBody": "<p><strong>Status:</strong> [ALERT_TRIGGERED_OR_RESOLVED]</p><p><strong>Endpoint:</strong> [ENDPOINT_GROUP] / [ENDPOINT_NAME]</p><p><strong>What this means:</strong> [ALERT_DESCRIPTION]</p><p><strong>Details:</strong> [RESULT_ERRORS]</p><p><strong>Status page:</strong> <a href=\"https://gatus.pod.haus\">gatus.pod.haus</a> · <strong>Logs:</strong> <a href=\"https://watch.pod.haus\">watch.pod.haus</a></p><p><strong>Failed conditions:</strong><br/>[RESULT_CONDITIONS]</p>",
-        "MessageStream": "outbound"
+        "type": "service_alert",
+        "payload": {
+          "service": "[ENDPOINT_NAME]",
+          "group": "[ENDPOINT_GROUP]",
+          "status": "[ALERT_TRIGGERED_OR_RESOLVED]",
+          "description": "[ALERT_DESCRIPTION]",
+          "errors": "[RESULT_ERRORS]",
+          "conditions": "[RESULT_CONDITIONS]"
+        }
       }
+    default-alert:
+      enabled: true
+      failure-threshold: 3
+      success-threshold: 2
+      send-on-resolved: true
+
+  # The Postmark backstop — used ONLY by the Fenwick-health checks (the
+  # `Fenwick` group below), which must NOT route through the thing they
+  # watch. Native SMTP to Postmark (the server token is both username
+  # and password); `from` is the verified Postmark sender signature.
+  email:
+    from: "uptime@nathanbaxter.com"
+    to: "nathan@nathanbaxter.com"
+    host: "smtp.postmarkapp.com"
+    port: 587
+    username: "${POSTMARK_SERVER_TOKEN}"
+    password: "${POSTMARK_SERVER_TOKEN}"
     default-alert:
       enabled: true
       failure-threshold: 3
@@ -78,11 +105,14 @@ alerting:
 # --- Reusable defaults ---
 
 # Single alert wired into the default endpoint shape so every service
-# check emails on failure. `alerting.custom.default-alert` above sets
-# threshold + send-on-resolved; the per-alert block only needs `type:
-# custom` to pick those up. Endpoints that need a custom description
-# declare their own `alerts:` list (this anchor's value is replaced,
-# not merged, when an endpoint declares its own).
+# check pushes to Fenwick on failure (the `custom` alerter → Fenwick).
+# `alerting.custom.default-alert` above sets threshold + send-on-resolved;
+# the per-alert block only needs `type: custom` to pick those up.
+# Endpoints that need a custom description declare their own `alerts:`
+# list (this anchor's value is replaced, not merged, when an endpoint
+# declares its own). The Fenwick-health checks deliberately opt out of
+# this anchor and use `type: email` (Postmark) instead — they must not
+# route through Fenwick.
 _alerts: &alerts
   - type: custom
 
@@ -444,6 +474,57 @@ endpoints:
     conditions:
       - "[STATUS] == 200"
       - "[BODY].State.Status == running"
+
+  # --- Fenwick health (the alert pipeline's own backstop) ---
+  # Since every other check now alerts THROUGH Fenwick, these watch the
+  # path itself (Gatus → Fenwick → signal-cli → Signal). They alert via
+  # `email` (Postmark), NOT `custom` (Fenwick) — a check must never route
+  # through the thing it watches. See docs/plans/gatus-fenwick-notifications.md.
+
+  # Liveness: Fenwick's Hono server answers /health with "ok". Fast
+  # (minutes) detection of a hard container-down / crash-loop / failed
+  # deploy — the case where alerts vanish entirely.
+  - name: Fenwick
+    url: http://fenwick:8088/health
+    group: Fenwick
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == ok"
+    alerts:
+      - type: email
+        description: "Fenwick's HTTP server isn't answering on :8088/health — the bot is down or crash-looping, so every alert routed through Fenwick is silently undelivered. Check `docker logs fenwick` and redeploy. (This alert arrives via Postmark email, independent of Fenwick.)"
+        failure-threshold: 3
+        success-threshold: 2
+        send-on-resolved: true
+
+  # End-to-end "Fenwick can actually send a Signal message": query
+  # ClickHouse for >=1 successful /v2/send (signal-cli returns 201) by
+  # Fenwick in the last 24h. Fenwick's daily Signal digest guarantees a
+  # daily send (verified >=6/day), so a 24h window with zero successes
+  # means the Signal path is broken (signal-cli down, a protocol or
+  # account-registration failure) — exactly the silent delivery failure
+  # bare liveness can't see. Same direct-ClickHouse pattern + creds as
+  # the log-ingest staleness checks; the Map predicate is bounded by the
+  # 24h Timestamp filter so the scan stays well under the 10s budget.
+  - name: Signal Delivery (Fenwick)
+    url: http://clickstack-clickhouse:8123/
+    method: POST
+    group: Fenwick
+    interval: 15m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: "SELECT toUInt8(countIf(SpanAttributes['http.response.status_code'] = '201') > 0) FROM otel_traces WHERE Timestamp > now() - INTERVAL 24 HOUR AND ServiceName = 'fenwick' AND SpanAttributes['url.full'] LIKE '%/v2/send%'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: email
+        description: "Fenwick hasn't successfully delivered a Signal message in 24h+ — no 201 from signal-cli's /v2/send in the trace pipeline. The daily digest guarantees a daily send, so zero means the Signal path is broken (signal-cli down, or a protocol/account-registration failure); inbound Signal-routed alerts won't reach me. Check `docker logs signal-cli-rest-api` + fenwick. (Via Postmark email, independent of Fenwick.)"
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
 
 # --- Heartbeat endpoints (push-style) ---
 

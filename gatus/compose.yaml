@@ -9,7 +9,12 @@ services:
       - label:disable
     environment:
       TZ: ${TZ}
+      # Postmark SMTP credential — now used only by the `email` alerter
+      # (the Fenwick-health backstop), not the default `custom` alerter.
       POSTMARK_SERVER_TOKEN: ${POSTMARK_SERVER_TOKEN}
+      # Bearer token for the default `custom` alerter's push to Fenwick's
+      # internal /events transport. Same 1P source Fenwick itself uses.
+      FENWICK_INTERNAL_HTTP_TOKEN: ${FENWICK_INTERNAL_HTTP_TOKEN}
       GATUS_BACKREST_PUSH_TOKEN: ${GATUS_BACKREST_PUSH_TOKEN}
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
       GATUS_BACKREST_KANGAROO_PUSH_TOKEN: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
