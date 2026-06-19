@@ -85,10 +85,13 @@
         The chime is <code>/var/lib/home-assistant/www/doorbell.wav</code>
         (served unauthenticated at <code>/local/doorbell.wav</code>, which MA
         fetches at <code>http://10.0.0.119:8123/local/doorbell.wav</code>). It
-        carries a deliberate <strong>~0.8s of leading silence</strong> — AirPlay
-        clips the first fraction of a second establishing the stream, so the
-        glitch lands on silence instead of the bells — and the trailing
-        near-silent reverb tail is trimmed off.
+        carries a deliberate <strong>~4.5s of leading silence</strong> — AirPlay
+        clips audio while it establishes the stream, and the Formation waking
+        from deep sleep (after a long idle) takes a couple of seconds, so the
+        lead-in absorbs that cold-start wake and the bells always play in full
+        — and the trailing near-silent reverb tail is trimmed off. (A warm
+        speaker only needs a fraction of that; the household trades ~4.5s of
+        pre-chime quiet for never clipping the start.)
       </p>
 
       <aside class="callout warn">
