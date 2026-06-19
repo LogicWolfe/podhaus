@@ -32,14 +32,17 @@ Confirmed Caddy 2.11.3 has `http.handlers.intercept` compiled in
 directive exists at the JSON level — it just isn't accepted in the
 Caddyfile subhandler contexts we tried.
 
-### Current production state
+### FIXED (2026-06-19)
 
-The Caddyfile uses the `handle_errors 404 + error 404` structure
-without `replace_status`. Status is still 200 for missing paths.
-Functionally equivalent to the original handler — the rewrite has
-moved into the error path, no other change. Crawlers and uptime
-monitors will continue to see 200s for genuine misses until this is
-solved.
+Resolved by placing `replace_status 404` **inside** the
+`handle_errors 404` block's `reverse_proxy minio:9000 { … }` — not as a
+standalone subhandler directive (the earlier "unrecognized directive"
+attempts). The inner proxy still fetches the styled `404.html` body from
+the bucket; `replace_status` overrides the 200 it returns so the client
+sees a real `404`. Validated against the running image (Caddy 2.11.4 —
+the 2.11.3 notes below predate the working syntax) and confirmed live on
+both `sky.pod.haus` and `nathanbaxter.com`. The "Things still to try"
+options (vars-matcher, JSON config, local `file_server`) are now moot.
 
 ### Things still to try
 

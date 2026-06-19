@@ -118,12 +118,14 @@ Old singular forms 404. Fix with two Caddy redirects:
 `/tag/*` → `/tags/*`, `/author/*` → `/authors/*` (before the bucket
 rewrites). Server-side, trivial.
 
-### G5 — 404s return HTTP 200 (MEDIUM · SEO/correctness · Caddy, known)
-Missing URLs serve the styled 404 page with status **200** (soft 404) —
-the same Caddy 2.11 `replace_status`-in-`handle_errors` limitation
-documented for nathanbaxter.com
-(`docs/plans/caddy-404-status-and-komodo-ifchanged.md`). Search engines
-treat broken links as live pages. Pre-existing; track with that plan.
+### G5 — 404s return HTTP 200 (FIXED)
+Missing URLs used to serve the styled 404 page with status 200 (soft
+404). Fixed by adding `replace_status 404` **inside** the
+`handle_errors` `reverse_proxy` block (the earlier attempt placed it as
+a standalone directive, which Caddy rejects). Now a genuine miss returns
+the styled body with a real `404`. Applied to both `sky.pod.haus` and
+`nathanbaxter.com`. See
+`docs/plans/caddy-404-status-and-komodo-ifchanged.md`.
 
 ### G6 — Theme-credit cruft (LOW · extra content · Publii)
 Homepage footer carries Terminal-theme credit links:

@@ -51,18 +51,19 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 	@www host www.nathanbaxter.com
 	redir @www https://nathanbaxter.com{uri} permanent
 
-	# Missing-object handling — known limitation, status stays 200.
-	# The route's reverse_proxy detects MinIO's NoSuchKey 404, raises
-	# `error 404`, handle_errors here fetches the styled 404.html and
-	# serves it as the body. We CANNOT yet pin the final status back
-	# to 404: Caddy 2.11.3's `replace_status` directive is rejected
-	# inside both `handle_response` and `handle_errors` subhandler
-	# contexts, and the inner reverse_proxy here overwrites the
-	# original 404 with the 200 it gets from fetching 404.html. See
+	# Missing-object handling: the route's reverse_proxy detects MinIO's
+	# NoSuchKey 404, raises `error 404`, and this handler serves the
+	# styled 404.html body from the bucket with a real 404 status.
+	# `replace_status` overrides the 200 the inner reverse_proxy gets
+	# for the (existing) 404.html object — and it must sit INSIDE the
+	# reverse_proxy block, not as a standalone handle_errors directive
+	# (the placement an earlier attempt got wrong). See
 	# docs/plans/caddy-404-status-and-komodo-ifchanged.md.
 	handle_errors 404 {
 		rewrite * /nathanbaxter-com/404.html
-		reverse_proxy minio:9000
+		reverse_proxy minio:9000 {
+			replace_status 404
+		}
 	}
 
 	# Mutually-exclusive handle blocks, each mapping one URL class to
@@ -110,12 +111,14 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 # `http://` = the internal cloudflared→Caddy hop only (Cloudflare owns
 # the edge cert); the deliberate signal that Caddy must NOT ACME it.
 http://sky.pod.haus {
-	# Styled 404 — same status caveat as nathanbaxter.com (stays 200
-	# until Caddy can replace_status inside handle_errors). Verify the
-	# Terminal theme emits 404.html; otherwise this itself 404s.
+	# Styled 404 served from the bucket with a real 404 status (same
+	# pattern as nathanbaxter.com above — replace_status inside the
+	# reverse_proxy block). Terminal theme emits 404.html.
 	handle_errors 404 {
 		rewrite * /skycroeser-net/404.html
-		reverse_proxy minio:9000
+		reverse_proxy minio:9000 {
+			replace_status 404
+		}
 	}
 
 	route {
