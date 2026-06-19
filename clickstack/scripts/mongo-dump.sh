@@ -6,7 +6,7 @@
 #
 # Run via ofelia on the clickstack-mongo container at 03:50 AWST. Was an
 # inline `bash -c` ofelia label; promoted to a script so it can push a
-# dead-man's-switch heartbeat to Gatus (see heartbeat_clickstack-mongo-dump).
+# dead-man's-switch heartbeat to Gatus (see observability_clickstack-mongo-dump).
 # The mongo image ships neither wget nor curl, so the push uses a bash
 # /dev/tcp raw HTTP request.
 set -euo pipefail
@@ -22,7 +22,7 @@ push_heartbeat() {
     local token="${GATUS_OFELIA_PUSH_TOKEN:-}"
     [ -n "$token" ] || return 0
     exec 3<>/dev/tcp/gatus/8080 || return 0
-    printf 'POST /api/v1/endpoints/heartbeat_clickstack-mongo-dump/external?success=true HTTP/1.0\r\nHost: gatus:8080\r\nAuthorization: Bearer %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n' "$token" >&3
+    printf 'POST /api/v1/endpoints/observability_clickstack-mongo-dump/external?success=true HTTP/1.0\r\nHost: gatus:8080\r\nAuthorization: Bearer %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n' "$token" >&3
     cat <&3 >/dev/null
     exec 3>&-
 }

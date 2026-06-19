@@ -27,7 +27,15 @@ storage:
   type: sqlite
   path: /data/gatus.db
   # Keep ~90 days of results per endpoint (at 2m intervals ≈ 65k checks).
-  capping: 65000
+  # The key is maximum-number-of-results — Gatus's only result-retention
+  # knob. `capping` (used here previously) is not a real key; Gatus's
+  # lenient YAML parser silently ignored it, leaving retention at the
+  # default 100 results (~3h at 2m) despite the comment's intent.
+  maximum-number-of-results: 65000
+  # The endpoint-detail page renders an Events timeline (status
+  # transitions) capped by this; default 50 truncates the incident
+  # history on flappy endpoints. One tiny row per transition.
+  maximum-number-of-events: 10000
 
 ui:
   title: PodHaus Status
@@ -79,7 +87,6 @@ _alerts: &alerts
   - type: custom
 
 _defaults: &defaults
-  group: services
   interval: 2m
   conditions:
     - "[STATUS] >= 200"
@@ -92,6 +99,7 @@ endpoints:
   - name: HyperDX (ClickStack)
     url: http://hyperdx:8080/
     <<: *defaults
+    group: Observability
 
   # home-assistant runs in network_mode: host, so it's reachable from
   # dockernet via the bridge gateway (same address Cloudflare Tunnel uses).
@@ -99,6 +107,7 @@ endpoints:
   - name: Home Assistant
     url: http://172.18.0.1:8123/manifest.json
     <<: *defaults
+    group: Home Assistant
 
   # Probe the QNAP web UI directly on the LAN — gatus is on dockernet,
   # which NATs out to the LAN gateway. Self-signed cert, hence insecure.
@@ -106,6 +115,7 @@ endpoints:
   - name: Kangaroo (NAS)
     url: https://10.0.0.25/
     <<: *defaults
+    group: Kangaroo
     client:
       insecure: true
 
@@ -115,6 +125,7 @@ endpoints:
   - name: Komodo
     url: http://komodo-core:9120/version
     <<: *defaults
+    group: Komodo
 
   # Mumble is non-HTTP — tcp:// proves DNS (DDNS-updated A) +
   # UDM forward (terraform/unifi.tf) + Murmur control channel are
@@ -123,7 +134,7 @@ endpoints:
   # docs/plans/mumble-voice-pod-haus.md.
   - name: Mumble (Voice)
     url: "tcp://voice.pod.haus:64738"
-    group: services
+    group: Mumble
     interval: 2m
     alerts: *alerts
     conditions:
@@ -135,6 +146,7 @@ endpoints:
   - name: Paperless
     url: http://paperless:8000/
     <<: *defaults
+    group: Paperless
     headers:
       Host: paperless.pod.haus
 
@@ -143,6 +155,7 @@ endpoints:
   - name: Plex
     url: http://172.18.0.1:32400/identity
     <<: *defaults
+    group: Plex
 
   # Syncthing lives on kangaroo (network_mode: host). gatus can't reach
   # it directly, so we use the same Komodo InspectDockerContainer pattern
@@ -150,7 +163,7 @@ endpoints:
   - name: Syncthing (kangaroo, via Komodo)
     url: http://komodo-core:9120/read
     method: POST
-    group: services
+    group: Syncthing
     interval: 60s
     alerts: *alerts
     headers:
@@ -165,20 +178,24 @@ endpoints:
   - name: Flood (Torrent)
     url: http://flood:3000/
     <<: *defaults
+    group: Torrents
 
   - name: UniFi
     url: https://unifi.pod.haus/
     <<: *defaults
+    group: UniFi
     client:
       insecure: true
 
   - name: Yiayia Board Frontend
     url: https://yiayia.pod.haus/health
     <<: *defaults
+    group: Yiayia
 
   - name: Yiayia Board Device
     url: https://yiayia.pod.haus/boards/health
     <<: *defaults
+    group: Yiayia
 
   # --- storage.pod.haus paths ---
   # On-bilby probe (LAN/split-horizon resolves to bilby:443 directly):
@@ -187,6 +204,7 @@ endpoints:
   - name: MinIO S3 (storage.pod.haus, on-bilby)
     url: https://storage.pod.haus/minio/health/live
     <<: *defaults
+    group: Storage
 
   # THE GAP-CLOSER: external-path probe via the kookaburra relay.
   # gatus/compose.yaml `extra_hosts` pins kookaburra-probe.storage.pod.haus
@@ -198,12 +216,14 @@ endpoints:
   - name: MinIO S3 (via kookaburra relay — external path)
     url: https://kookaburra-probe.storage.pod.haus/minio/health/live
     <<: *defaults
+    group: Storage
 
   # nathanbaxter.com: Cloudflare-proxied → pod_haus tunnel → Caddy →
   # nathanbaxter-com bucket. Catches a tunnel/Caddy/bucket break.
   - name: nathanbaxter.com
     url: https://nathanbaxter.com/
     <<: *defaults
+    group: nathanbaxter.com
 
   # pets.indigopod.au: Cloudflare-proxied → pod_haus tunnel → the pets
   # engine container. /api/content exercises the whole stack (tunnel →
@@ -212,6 +232,7 @@ endpoints:
   - name: pets.indigopod.au
     url: https://pets.indigopod.au/api/content
     <<: *defaults
+    group: Pets
 
   # Surfaces "Komodo Core can't reach <Periphery>" as a Gatus alert.
   # Periphery's :8120 isn't on dockernet so we check via Komodo Core's API:
@@ -222,7 +243,7 @@ endpoints:
   - name: Bilby Periphery (via Komodo)
     url: http://komodo-core:9120/read
     method: POST
-    group: services
+    group: Komodo
     interval: 60s
     alerts: *alerts
     headers:
@@ -237,7 +258,7 @@ endpoints:
   - name: Kangaroo Periphery (via Komodo)
     url: http://komodo-core:9120/read
     method: POST
-    group: services
+    group: Komodo
     interval: 60s
     alerts: *alerts
     headers:
@@ -245,6 +266,27 @@ endpoints:
       X-Api-Secret: ${KOMODO_API_SECRET}
       Content-Type: application/json
     body: '{"type":"GetServerState","params":{"server":"kangaroo"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == Ok"
+
+  # kookaburra is the off-LAN relay; its Periphery dials Core OUTBOUND over
+  # the tailnet (no inbound :8120). Server-state Ok = the noise handshake is
+  # live, the authoritative "periphery reachable" signal for an outbound
+  # periphery — the container's own :8120 healthcheck is local-only and not
+  # surfaced here. Closes the gap that hid a 5-week-stale periphery
+  # (2026-06-19): there was no kookaburra periphery check at all.
+  - name: Kookaburra Periphery (via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Komodo
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"GetServerState","params":{"server":"kookaburra"}}'
     conditions:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
@@ -262,7 +304,7 @@ endpoints:
   - name: Komodo Alerts
     url: http://komodo-core:9120/read
     method: POST
-    group: services
+    group: Komodo
     interval: 60s
     headers:
       X-Api-Key: ${KOMODO_API_KEY}
@@ -289,7 +331,7 @@ endpoints:
   - name: Kangaroo Log Ingest (staleness)
     url: http://clickstack-clickhouse:8123/
     method: POST
-    group: services
+    group: Observability
     interval: 5m
     headers:
       X-ClickHouse-User: default
@@ -325,7 +367,7 @@ endpoints:
   - name: Pipeline Log Ingest (bilby / total)
     url: http://clickstack-clickhouse:8123/
     method: POST
-    group: services
+    group: Observability
     interval: 5m
     headers:
       X-ClickHouse-User: default
@@ -343,6 +385,31 @@ endpoints:
         success-threshold: 2
         send-on-resolved: true
 
+  - name: Kookaburra Log Ingest (staleness)
+    url: http://clickstack-clickhouse:8123/
+    method: POST
+    group: Observability
+    interval: 5m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    # 30-minute window: kookaburra ships a steady ~250 lines/hour (~4/min)
+    # over the cross-tailnet Alloy->collector path — never organically empty
+    # (unlike low-volume kangaroo, which needs 60), so a tighter window gives
+    # faster detection of a wedged exporter / dead bilby<->kookaburra tailnet
+    # path with no false-positive risk. See Kangaroo check for the count()
+    # windowed-scan rationale.
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 30 MINUTE AND LogAttributes['host']='kookaburra'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: custom
+        description: "No kookaburra logs reached ClickHouse in 30+ min — the cross-tailnet Alloy->collector pipeline from the relay is down (exporter wedge or a broken bilby<->kookaburra tailnet path). `RestartStack kookaburra-logging` clears an exporter wedge. Runbook: docs/monitoring.html#known-issues."
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
   # Active probes for Backrest. The push-style heartbeats below only fire
   # on SNAPSHOT_SUCCESS — they catch "snapshot ran but a hook failed" but
   # cannot detect "backrest never ran" without `heartbeat.interval` set
@@ -350,7 +417,7 @@ endpoints:
   # Bilby backrest exposes :9898 on dockernet (gatus is on dockernet too).
   - name: Backrest (bilby)
     url: http://backrest:9898/
-    group: services
+    group: Backup
     interval: 60s
     alerts:
       - type: custom
@@ -366,7 +433,7 @@ endpoints:
   - name: Backrest (kangaroo, via Komodo)
     url: http://komodo-core:9120/read
     method: POST
-    group: services
+    group: Backup
     interval: 60s
     alerts: *alerts
     headers:
@@ -389,7 +456,7 @@ external-endpoints:
   # received-but-failed push, never on missing pushes. See Gatus README
   # → External Endpoints.
   - name: Backrest Nightly
-    group: heartbeat
+    group: Backup
     token: ${GATUS_BACKREST_PUSH_TOKEN}
     heartbeat:
       interval: 25h
@@ -406,7 +473,7 @@ external-endpoints:
   # Failures still also surface immediately on "Backrest Nightly" (the
   # repo-level any-error hook names the failing plan).
   - name: Backrest Pets
-    group: heartbeat
+    group: Backup
     token: ${GATUS_BACKREST_PUSH_TOKEN}
     heartbeat:
       interval: 3h
@@ -426,7 +493,7 @@ external-endpoints:
   # Postmark alerts via the shared default-alert config. 25h staleness
   # threshold tolerates one missed firing.
   - name: RAR Extraction
-    group: heartbeat
+    group: Torrents
     token: ${GATUS_OFELIA_PUSH_TOKEN}
     heartbeat:
       interval: 25h
@@ -443,7 +510,7 @@ external-endpoints:
   # LAN). The kangaroo Backrest pipeline schedules at 06:00 — 25h interval
   # tolerates one missed firing before alerting.
   - name: Backrest Kangaroo Nightly
-    group: heartbeat
+    group: Backup
     token: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
     heartbeat:
       interval: 25h
@@ -466,7 +533,7 @@ external-endpoints:
   # The mongo image has no wget/curl, so /scripts/mongo-dump.sh pushes via
   # a bash /dev/tcp request. 25h tolerates one missed firing.
   - name: ClickStack Mongo Dump
-    group: heartbeat
+    group: Observability
     token: ${GATUS_OFELIA_PUSH_TOKEN}
     heartbeat:
       interval: 25h
@@ -482,7 +549,7 @@ external-endpoints:
   # storage persists last-seen across restarts so this won't false-red on
   # a deploy.
   - name: Plex Stats Cleanup
-    group: heartbeat
+    group: Plex
     token: ${GATUS_OFELIA_PUSH_TOKEN}
     heartbeat:
       interval: 768h
@@ -497,7 +564,7 @@ external-endpoints:
   # pinelake-tagged finished torrents; ofelia ticks every 5 min (plus the
   # rtorrent event hook). 30m tolerates a few missed ticks.
   - name: Pinelake Stignore
-    group: heartbeat
+    group: Torrents
     token: ${GATUS_OFELIA_PUSH_TOKEN}
     heartbeat:
       interval: 30m

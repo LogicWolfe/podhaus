@@ -32,13 +32,13 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] $*"; }
 
 # Dead-man's-switch heartbeat — push on any clean exit so a missing push
 # means ofelia stopped ticking this job (see gatus
-# heartbeat_pinelake-stignore). Pushing on the flock-contention exit too
+# torrents_pinelake-stignore). Pushing on the flock-contention exit too
 # is fine: it still proves ofelia ran us.
 heartbeat() {
     [ -n "${GATUS_OFELIA_PUSH_TOKEN:-}" ] || return 0
     wget -qO- --timeout=10 --post-data='' \
         --header="Authorization: Bearer ${GATUS_OFELIA_PUSH_TOKEN}" \
-        "http://gatus:8080/api/v1/endpoints/heartbeat_pinelake-stignore/external?success=true" \
+        "http://gatus:8080/api/v1/endpoints/torrents_pinelake-stignore/external?success=true" \
         >/dev/null 2>&1 || log "WARN: gatus heartbeat push failed"
 }
 trap 'rc=$?; [ "$rc" -eq 0 ] && heartbeat' EXIT

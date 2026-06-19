@@ -56,8 +56,8 @@ services:
       GID: "44"
       TZ: ${TZ}
       # Shared Gatus heartbeat push token for this container's ofelia jobs:
-      # /scripts/rar-backlog.sh (heartbeat_rar-extraction) and
-      # /scripts/pinelake-stignore.sh (heartbeat_pinelake-stignore).
+      # /scripts/rar-backlog.sh (torrents_rar-extraction) and
+      # /scripts/pinelake-stignore.sh (torrents_pinelake-stignore).
       # Shared-secret bearer token; Gatus rejects pushes with any other value.
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
     volumes:

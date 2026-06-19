@@ -84,7 +84,7 @@ services:
     environment:
       TZ: ${TZ}
       # Heartbeat push token for /scripts/mongo-dump.sh → Gatus
-      # heartbeat_clickstack-mongo-dump. Shared ofelia push token.
+      # observability_clickstack-mongo-dump. Shared ofelia push token.
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
     volumes:
       # Local NVMe. Holds HyperDX app state only (dashboards, alerts,

@@ -54,7 +54,7 @@ services:
       PLEX_GID: "100"
       CHANGE_CONFIG_DIR_OWNERSHIP: "false"
       # Heartbeat push token for /scripts/stats-cleanup.sh → Gatus
-      # heartbeat_plex-stats-cleanup. Shared ofelia push token.
+      # plex_plex-stats-cleanup. Shared ofelia push token.
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
     volumes:
       # All Plex state on local NVMe (DB, config, metadata)

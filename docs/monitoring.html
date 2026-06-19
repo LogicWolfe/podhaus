@@ -137,9 +137,14 @@ Gatus endpoint/heartbeat checks ──► Postmark webhook ──► alerts@pod.
       <h3 id="adding-monitor">Adding a Gatus monitor</h3>
       <p>
         Edit <code>gatus/conf/config.yaml</code> — YAML anchors at the top define common
-        defaults (interval, alert config, conditions). Append a new endpoint to the
-        appropriate group (services / heartbeats / docker). Save. Gatus reloads config
-        automatically on file change — no restart.
+        defaults (interval, alert config, conditions). Set the endpoint's
+        <code>group:</code> to the service it belongs to (Komodo, Backup, Observability,
+        Torrents, Plex, Storage, …) — grouping is service-primary, so a check lands with
+        its service regardless of which host runs it. Note that for <em>push</em>
+        (external) endpoints the group is part of the push key
+        (<code>&lt;group&gt;_&lt;name&gt;</code>, lowercased, spaces→hyphens), so the
+        sender's target URL must match. Save. Gatus reloads config automatically on file
+        change — no restart.
       </p>
 
       <h2 id="ingest-staleness">Ingest-staleness alerts</h2>

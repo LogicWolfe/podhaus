@@ -21,7 +21,7 @@
 set -u
 
 AGE_MINUTES=120  # 2 hours — RARs younger than this may still be extracting
-GATUS_URL="http://gatus:8080/api/v1/endpoints/heartbeat_rar-extraction/external"
+GATUS_URL="http://gatus:8080/api/v1/endpoints/torrents_rar-extraction/external"
 TOKEN="${GATUS_OFELIA_PUSH_TOKEN:-}"
 
 if [ -z "$TOKEN" ]; then
