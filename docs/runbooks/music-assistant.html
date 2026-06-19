@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Service runbooks">
+  <meta name="doc-order" content="7">
+  <meta name="doc-title" content="Music Assistant">
+  <title>Music Assistant — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>Music Assistant</h1>
+      <p class="lead text-lg text-text-muted">
+        Music Assistant (the <code>music-assistant</code> stack on bilby) is a
+        media bridge: it drives AirPlay-2 / Sonos speakers and exposes them to
+        Home Assistant as <code>media_player</code> entities that support
+        announcements. Its sole job today is the <strong>doorbell chime</strong>
+        — a UniFi Protect ring plays a sound on the living-room
+        <strong>Bowers &amp; Wilkins Formation</strong>, which has no
+        first-class Home Assistant path of its own (AirPlay-2 only, no
+        Cast/DLNA). Most of this page is the non-obvious wiring that made that
+        work.
+      </p>
+
+      <aside class="callout note">
+        <span class="callout-title">The doorbell is additive</span>
+        The chime plays on the Formation <em>in addition to</em> the three
+        physical UniFi chimes (Kitchen / Garage / Studio). It does not replace
+        them.
+      </aside>
+
+      <h2 id="topology">Topology</h2>
+      <ul>
+        <li><strong>MA server</strong> — <code>ghcr.io/music-assistant/server</code>,
+          <code>network_mode: host</code> on bilby (mandatory: it needs L2 /
+          mDNS access to discover and stream to the Formation). Claims TCP
+          <code>8095</code> (web UI + websocket API) and <code>8097</code>
+          (audio streamserver). State lives in the named volume
+          <code>music-assistant-data</code> → <code>/data</code> (provider
+          config, players, instance id, library). No init container.</li>
+        <li><strong>AirPlay provider</strong> (enabled in MA's UI) discovers the
+          Formation and registers it as the universal player
+          <em>"Living Room"</em> → surfaced in HA as
+          <code>media_player.living_room</code>.</li>
+        <li><strong>HA integration</strong> — the Home Assistant "Music
+          Assistant" integration connects to the MA server and exposes its
+          players + the <code>music_assistant.*</code> services. This is the
+          link the doorbell automation rides.</li>
+        <li><strong>Ingress</strong> — <code>music.pod.haus</code> via the
+          <code>music</code> module in <code>terraform/services_pod_haus.tf</code>
+          (CF tunnel + Access for off-LAN) <em>and</em> a Caddy vhost +
+          split-horizon for on-LAN. See
+          <a href="#access-tension">base_url ↔ Access</a>.</li>
+      </ul>
+
+      <h2 id="doorbell">The doorbell chime</h2>
+      <p>
+        Trigger → action chain, all on bilby:
+      </p>
+      <ol>
+        <li><code>event.g4_doorbell_doorbell</code> (UniFi Protect) fires on a
+          ring.</li>
+        <li>HA automation <code>doorbell_living_room_chime</code> (alias
+          "Doorbell chime — living room", in
+          <code>/var/lib/home-assistant/automations.yaml</code>):
+          <strong>snapshot</strong> the player volume →
+          <code>media_player.volume_set</code> to <code>0.6</code> → 0.5s
+          settle → <code>music_assistant.play_announcement</code> →
+          <strong>restore</strong> the snapshot volume.</li>
+        <li>MA fetches the chime, ducks/streams it to the Formation over
+          AirPlay, and resumes prior MA playback if any.</li>
+      </ol>
+      <p>
+        The chime is <code>/var/lib/home-assistant/www/doorbell.wav</code>
+        (served unauthenticated at <code>/local/doorbell.wav</code>, which MA
+        fetches at <code>http://10.0.0.119:8123/local/doorbell.wav</code>). It
+        carries a deliberate <strong>~0.8s of leading silence</strong> — AirPlay
+        clips the first fraction of a second establishing the stream, so the
+        glitch lands on silence instead of the bells — and the trailing
+        near-silent reverb tail is trimmed off.
+      </p>
+
+      <aside class="callout warn">
+        <span class="callout-title">The Formation ignores <code>announce_volume</code></span>
+        MA's <code>announce_volume</code> parameter has no audible effect on
+        this speaker (10 / 80 / 100 all sound identical). Its <em>base</em>
+        volume <em>is</em> controllable via <code>media_player.volume_set</code>
+        (with a read-back lag — set commands take, but an immediate state read
+        can return the stale value). That's why the automation does an explicit
+        snapshot → set <code>0.6</code> → restore rather than passing
+        <code>announce_volume</code>.
+      </aside>
+
+      <h2 id="access-tension">base_url ↔ Cloudflare Access</h2>
+      <p>
+        MA announces a single <code>base_url</code> that <em>every</em> client
+        (browsers and the HA integration alike) uses for its websocket. The
+        wrinkle: Home Assistant runs on bilby and its connection to MA is
+        <strong>server-to-server</strong> — it carries no Cloudflare Access
+        cookie, so if <code>base_url</code> resolves to the CF edge, Access
+        blocks it (<code>wss://music.pod.haus/ws → 302 cloudflareaccess.com</code>,
+        integration dead).
+      </p>
+      <p>
+        The resolution lets <code>base_url = https://music.pod.haus</code> work
+        for everyone:
+      </p>
+      <ul>
+        <li><strong>Off-LAN browser</strong> → public CF record → tunnel → MA
+          (Access cookie lets it in).</li>
+        <li><strong>On-LAN, IPv4</strong> → UniFi split-horizon A record
+          (<code>music.pod.haus → 10.0.0.119</code>, in
+          <code>terraform/dns_unifi_split_horizon.tf</code>) → Caddy vhost
+          (<code>caddy/Caddyfile</code>, real LE cert via DNS-01) → MA. No
+          edge, no Access.</li>
+        <li><strong>Home Assistant</strong> → <code>extra_hosts</code> in
+          <code>home-assistant/compose.yaml</code> pins
+          <code>music.pod.haus → 10.0.0.119</code> <em>IPv4-only</em> inside the
+          container → Caddy → MA.</li>
+      </ul>
+
+      <aside class="callout warn">
+        <span class="callout-title">Why <code>extra_hosts</code> and not just split-horizon</span>
+        <code>music.pod.haus</code> is a <em>proxied</em> Cloudflare record, so
+        CF advertises an <strong>AAAA</strong> (IPv6) alongside the A. Dual-stack
+        resolvers prefer the IPv6 → they reach the CF edge and bypass the
+        split-horizon A. The clean fix would be Cloudflare's per-record
+        <code>ipv4_only</code> setting, but the pod.haus zone's plan rejects it
+        (<code>API error 9227: "not available to this zone"</code>). So HA — the
+        one consumer that must never see the AAAA — gets an
+        <code>/etc/hosts</code> pin (A only) via <code>extra_hosts</code>;
+        <code>nsswitch</code> is <code>files dns</code>, so the pin wins.
+        Dual-stack LAN <em>browsers</em> still hairpin to MA's UI via the
+        tunnel — harmless (Access admits them), just not LAN-direct.
+      </aside>
+
+      <h2 id="firewall">Firewall (AirPlay)</h2>
+      <p>
+        AirPlay playback needs the speaker to send UDP timing/control back to MA
+        on <em>dynamic</em> ports; conntrack doesn't see those as RELATED, so
+        bilby's default-drop zone killed the handshake
+        (<code>"Playback failed to start"</code> after a 10s timeout). The
+        firewall is declarative config-as-code under
+        <code>bilby/firewalld/</code> (installed by
+        <code>bilby/host-systemd/install.sh</code>):
+      </p>
+      <ul>
+        <li><code>services/music-assistant.xml</code> — TCP <code>8095</code>
+          (web UI/API, needed on the LAN for the HA integration's browser OAuth
+          redirect) + <code>8097</code> (stream).</li>
+        <li><code>zones/public.xml</code> — a <strong>LAN-trust rich rule</strong>
+          (<code>accept from 10.0.0.0/24</code>) so AirPlay's dynamic return UDP
+          reaches MA. The home LAN is trusted; non-LAN sources still hit the
+          filtered service list.</li>
+      </ul>
+
+      <h2 id="state-dr">State &amp; DR</h2>
+      <p>
+        MA's <code>/data</code> volume is in the backup set (the
+        <code>music-assistant</code> plan in <code>backup/bilby/</code>, daily
+        04:35). Two pieces of this setup are <strong>runtime config, not in the
+        repo</strong> — same config-as-code gap as every HA integration:
+      </p>
+      <ul>
+        <li>MA's <code>base_url = https://music.pod.haus</code> and the AirPlay
+          provider live in MA's <code>/data</code> (settings) — backed up, so
+          DR restores them.</li>
+        <li>The HA-side UniFi Protect + Music Assistant integrations live in
+          <code>/var/lib/home-assistant/.storage</code> (UI-configured). The
+          doorbell automation and the chime file <em>are</em> plain files under
+          <code>/var/lib/home-assistant/</code>, which is backed up by the
+          <code>home-assistant</code> plan.</li>
+      </ul>
+      <p>
+        On a from-scratch rebuild: restore both volumes, then re-confirm MA's
+        <code>base_url</code> and the AirPlay provider, and that HA's
+        integration reconnects (MA logs <code>WebSocket client authenticated</code>
+        and <code>media_player.living_room</code> leaves <code>unavailable</code>).
+      </p>
+
+      <h2 id="files">Key files</h2>
+      <ul>
+        <li><code>music-assistant/{compose.yaml,stack.toml}</code> — the MA
+          stack (host-network, named volume, autoheal).</li>
+        <li><code>bilby/firewalld/</code> — declarative firewall (MA ports +
+          LAN-trust), installed by <code>bilby/host-systemd/install.sh</code>.</li>
+        <li><code>caddy/Caddyfile</code> — the <code>music.pod.haus</code> vhost
+          (LAN-direct TLS front for MA).</li>
+        <li><code>terraform/services_pod_haus.tf</code> — the <code>music</code>
+          module (CF tunnel + Access);
+          <code>terraform/dns_unifi_split_horizon.tf</code> — the LAN A record.</li>
+        <li><code>home-assistant/compose.yaml</code> — the
+          <code>extra_hosts</code> pin.</li>
+        <li><code>backup/bilby/{compose.yaml,config.json.tmpl}</code> — the MA
+          backup plan + read-only volume mount.</li>
+        <li>Host-side (not in repo, but backed up):
+          <code>/var/lib/home-assistant/automations.yaml</code> (the chime
+          automation) and <code>/var/lib/home-assistant/www/doorbell.wav</code>
+          (the sound).</li>
+      </ul>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

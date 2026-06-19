@@ -578,6 +578,7 @@ The full set of pages on `docs.pod.haus`:
 - [Syncthing](docs/runbooks/syncthing.html)
 - [Flood + RAR pipeline](docs/runbooks/flood.html)
 - [Bugsink](docs/runbooks/bugsink.html)
+- [Music Assistant + doorbell](docs/runbooks/music-assistant.html)
 
 **Plans**
 - [All plans](docs/plans/)
