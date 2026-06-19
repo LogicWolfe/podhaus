@@ -134,8 +134,10 @@ http://sky.pod.haus {
 		redir /category/uncategorized/ / 301
 		redir /category/uncategorized / 301
 
-		# G3 — renamed pages (old WP page slug → current Publii slug)
-		redir /about/ /my-research-and-teaching/ 301
+		# G3 — old WP page URLs. "My research and teaching" (was /about/)
+		# is now the Publii frontpage, so /about/ → / (the old site
+		# served that content at both / and /about/ too).
+		redir /about/ / 301
 		redir /sketchmapforresearch/ /new-research-students/ 301
 		# G4 — WordPress tag/author archive prefix changed (singular → plural)
 		@wp_tag path_regexp wp_tag ^/tag/(.+)$
