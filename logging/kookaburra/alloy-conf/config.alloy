@@ -113,12 +113,21 @@ otelcol.exporter.otlphttp "clickstack" {
     headers  = {
       "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
     }
+    // No keepalive — same root cause as kangaroo: cross-network push to a
+    // fixed endpoint behind bilby's published :4318 + NAT. A collector
+    // recreate leaves the old keepalive TCP connection mapped to the dead
+    // container, so the next send hangs silently. kookaburra's steadier
+    // volume made it less prone than kangaroo, but it's susceptible to the
+    // same wedge; a fresh connection per batch always hits the current
+    // collector. See kangaroo/config.alloy for the full rationale.
+    disable_keep_alives = true
   }
 
-  // Same resilience as kangaroo — retry forever + large buffer so a
-  // bilby collector outage doesn't wedge this pipeline.
+  // Bounded retry (was `0s`/forever — the infinite-retry footgun that
+  // turned a hung connection into a permanent silent wedge). See
+  // kangaroo/config.alloy.
   retry_on_failure {
-    max_elapsed_time = "0s"
+    max_elapsed_time = "30m"
   }
   sending_queue {
     queue_size = 100000

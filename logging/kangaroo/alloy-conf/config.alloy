@@ -192,16 +192,28 @@ otelcol.exporter.otlphttp "clickstack" {
       // data — loud failure, no silent fallback.
       "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
     }
+    // No keepalive: kangaroo pushes cross-LAN to a FIXED IP behind
+    // bilby's published :4318 + NAT. When the collector container
+    // recreates, the IP is unchanged but the backend isn't — an existing
+    // keepalive TCP connection stays mapped (conntrack) to the dead old
+    // container, so the next send blackholes and HANGS silently (no RST).
+    // A fresh connection per batch always reaches the current collector.
+    // bilby ships in-network by container name (DNS re-resolves) and
+    // needs no equivalent. Low volume makes the per-batch connection cost
+    // negligible (the docs' overhead caveat is for high-throughput
+    // exporters). Root cause of the recurring kangaroo wedge, 2026-06-19.
+    disable_keep_alives = true
   }
 
-  // Resilience (clickstack-migration issue ①) — THE fix for kangaroo's
-  // recurring silent death. Cross-LAN to bilby's collector: any bilby
-  // collector outage >5min made OTel's default retry give up and the
-  // in-memory queue wedge, with the :12345 port healthcheck blind to
-  // it. Retry forever + large buffer → kangaroo rides out outages and
-  // resumes on its own; no more RestartStack needed.
+  // Retry across a collector outage, but BOUNDED. `0s` (retry forever)
+  // was the OTel infinite-retry footgun: combined with the hung stale
+  // connection that disable_keep_alives now prevents, consumers retried
+  // a request that never returned — never failing, never giving up — so
+  // the exporter went permanently silent (the wedge). 30m rides out any
+  // realistic collector restart while still letting a genuinely stuck
+  // batch fail and free the queue instead of wedging forever.
   retry_on_failure {
-    max_elapsed_time = "0s"
+    max_elapsed_time = "30m"
   }
   sending_queue {
     queue_size = 100000
