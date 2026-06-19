@@ -327,9 +327,21 @@ WHERE LogAttributes['host']='&lt;host&gt;'</code></pre>
           stays open, so the container reads healthy and autoheal ignores it). Read the alloy
           log to tell them apart — <code>GetContainerLog kangaroo alloy</code>:
           <ul>
-            <li><strong>Exporter wedge</strong> — the exporter stops shipping but the network
-              path is fine (no connection errors in the log, just silence). Fix:
-              <code>RestartStack kangaroo-logging</code>.</li>
+            <li><strong>Exporter wedge (root cause fixed 2026-06-19)</strong> — the exporter
+              would stop shipping silently (no errors, just silence) and not recover without a
+              restart. <strong>Root cause:</strong> kangaroo/kookaburra push cross-network to a
+              fixed endpoint behind bilby's published <code>:4318</code> + NAT; when the
+              <code>clickstack-otel</code> collector container recreates (e.g. on any
+              <code>clickstack/</code> edit, via the content hash), the old keepalive TCP
+              connection stays mapped through conntrack to the dead container, so the next send
+              blackholes and hangs silently — and <code>retry_on_failure
+              max_elapsed_time = "0s"</code> (retry forever) made it permanent. <strong>Fixed</strong>
+              by <code>disable_keep_alives = true</code> + a bounded 30m retry on both
+              cross-network exporters' <code>config.alloy</code>: a fresh connection per batch
+              always reaches the current collector. (bilby ships in-network by container name —
+              DNS re-resolves — and never hit this.) Validated by recreating the collector and
+              confirming kangaroo shipped straight across it. If a wedge somehow recurs despite
+              this, <code>RestartStack kangaroo-logging</code> remains the fallback.</li>
             <li><strong>dockernet detach / phantom network</strong> — the log shows
               <code>dial tcp 10.0.0.119:4318: connect: network is unreachable</code>. alloy
               has lost its dockernet attachment (<code>NetworkSettings.Networks</code> empty),
