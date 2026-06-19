@@ -97,3 +97,63 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 		}
 	}
 }
+
+# sky.pod.haus — Sky Croeser's site (skycroeser.net), TEMPORARY demo
+# host. Same serving shape as nathanbaxter.com above (Publii static
+# output in the `skycroeser-net` bucket, anonymous GetObject), with the
+# WordPress.com legacy-URL redirects Sky's archive needs. The bucket is
+# named for the real domain even while demoed here. At cutover,
+# skycroeser.net (+ www) joins this site line — the redirects below are
+# already in place for it and are harmless no-ops on sky.pod.haus (no
+# dated inbound links resolve here yet).
+#
+# `http://` = the internal cloudflared→Caddy hop only (Cloudflare owns
+# the edge cert); the deliberate signal that Caddy must NOT ACME it.
+http://sky.pod.haus {
+	# Styled 404 — same status caveat as nathanbaxter.com (stays 200
+	# until Caddy can replace_status inside handle_errors). Verify the
+	# Terminal theme emits 404.html; otherwise this itself 404s.
+	handle_errors 404 {
+		rewrite * /skycroeser-net/404.html
+		reverse_proxy minio:9000
+	}
+
+	route {
+		# (1) WordPress.com legacy URL preservation — `route` evaluates
+		# in written order, so these fire before the bucket rewrites.
+		# Posts were /YYYY/MM/DD/slug/ ; Publii serves /slug/. The
+		# single-segment capture deliberately skips nested attachment
+		# pages (/Y/M/D/post/image/) — they fall through to a 404.
+		@wp_dated path_regexp wp_dated ^/\d{4}/\d{2}/\d{2}/([^/]+)/?$
+		redir @wp_dated /{re.wp_dated.1}/ 301
+		redir /feed/ /feed.xml 301
+		redir /feed /feed.xml 301
+		redir /category/uncategorized/ / 301
+		redir /category/uncategorized / 301
+
+		# (2) pretty URL → COMPLETE bucket key in one rewrite per class
+		# (no rewrite chaining — Caddy won't reliably chain them here).
+		@dirslash path_regexp dirslash ^(/.+)/$
+		@noext path_regexp noext ^(/[^.]+)$
+
+		handle / {
+			rewrite * /skycroeser-net/index.html
+		}
+		handle @dirslash {
+			rewrite * /skycroeser-net{re.dirslash.1}/index.html
+		}
+		handle @noext {
+			rewrite * /skycroeser-net{re.noext.1}/index.html
+		}
+		handle {
+			rewrite * /skycroeser-net{path}
+		}
+
+		reverse_proxy minio:9000 {
+			@missing status 404
+			handle_response @missing {
+				error 404
+			}
+		}
+	}
+}

@@ -85,6 +85,18 @@ resource "cloudflare_zero_trust_access_policy" "unifi_bypass" {
   include    = [{ everyone = {} }]
 }
 
+# Public bypass — everyone, no auth. Reusable across genuinely public
+# hostnames that override the *.pod.haus wildcard's Family gate (e.g.
+# sky.pod.haus static site; future public sites/endpoints share it).
+# The site itself carries no secrets; MinIO SigV4 guards the publish
+# path separately on storage.pod.haus.
+resource "cloudflare_zero_trust_access_policy" "public_bypass" {
+  account_id = var.account_id
+  name       = "Bypass — public (everyone)"
+  decision   = "bypass"
+  include    = [{ everyone = {} }]
+}
+
 # Pod Haus wildcard — the default deny-by-default gate for everything
 # not covered by a more-specific Application.
 resource "cloudflare_zero_trust_access_application" "pod_haus_wildcard" {
