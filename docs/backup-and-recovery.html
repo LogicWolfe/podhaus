@@ -172,7 +172,8 @@ restic repo                restic repo
 
       <h2 id="alerts">Alerting</h2>
       <p>
-        Two failure surfaces, both go through Gatus → Postmark email:
+        Two failure surfaces, both go through Gatus → Fenwick (Signal) — the default
+        service-alert path; see <a href="/monitoring.html#alerting-flow">Monitoring</a>:
       </p>
       <ul>
         <li><strong>Per-plan error</strong>: Backrest's <code>CONDITION_ANY_ERROR</code> hook

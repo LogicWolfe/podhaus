@@ -21,7 +21,10 @@
 
       <h1>Monitoring</h1>
       <p class="lead text-lg text-text-muted">
-        Gatus does endpoint monitoring and pushes alerts to Postmark email. ClickStack
+        Gatus does endpoint monitoring and routes alerts to Fenwick (the Signal
+        home-helper), which triages each alert with an agent turn and notifies over
+        Signal under household guidance; the Fenwick-health checks fall back to Postmark
+        email so the watcher of Fenwick never routes through Fenwick. ClickStack
         (ClickHouse + HyperDX) is the observability backend; Alloy on both hosts ships
         container logs and Gatus metrics to it over OTLP. Autoheal restarts unhealthy
         containers locally on each host.
@@ -34,7 +37,8 @@
         </thead>
         <tbody>
           <tr><td>Gatus</td><td><code>gatus/</code> (bilby)</td>
-            <td>Endpoint + heartbeat monitoring, Postmark email alerts, Prometheus
+            <td>Endpoint + heartbeat monitoring, alerts → Fenwick (Signal) with a
+              Postmark-email backstop for fenwick-health, Prometheus
               <code>/metrics</code></td></tr>
           <tr><td>ClickStack</td><td><code>clickstack/</code> (bilby)</td>
             <td>Observability backend — ClickHouse store, HyperDX UI, bundled OTel
@@ -68,14 +72,16 @@ kangaroo ─────────────► 10.0.0.119:4318       (cross
 
 Gatus /metrics ──► bilby Alloy prometheus.scrape ──► same OTLP pipeline ──► ClickHouse
 
-Gatus endpoint/heartbeat checks ──► Postmark webhook ──► alerts@pod.haus</code></pre>
+Gatus service checks    ──► Fenwick /events ──► agent triage ──► Signal (Nathan)
+Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.com (backstop)</code></pre>
 
       <h2 id="gatus">Gatus</h2>
       <p>
         Config-as-code endpoint monitoring, defined entirely in
         <code>gatus/conf/config.yaml</code>. Monitors HTTP endpoints, pushed heartbeats, and
-        downstream-service-state checks. Stores results in SQLite with a 90-day cap. Alerts via
-        Postmark webhook. Unchanged by the ClickStack migration.
+        downstream-service-state checks. Stores results in SQLite with a 90-day cap. Service
+        alerts route to Fenwick (the default <code>custom</code> alerter); the Fenwick-health
+        checks use Postmark email. Unchanged by the ClickStack migration.
       </p>
       <p>
         Three monitor types in use:
@@ -111,15 +117,18 @@ Gatus endpoint/heartbeat checks ──► Postmark webhook ──► alerts@pod.
         shows the live status page.
       </p>
       <p>
-        Email alerting is wired into the shared <code>*defaults</code> anchor:
+        Alerting is wired into the shared <code>*defaults</code> anchor:
         every endpoint that spreads <code>&lt;&lt;: *defaults</code> inherits
         <code>alerts: *alerts</code> (which is just <code>[{type: custom}]</code>,
         picking up <code>failure-threshold: 3</code> / <code>send-on-resolved: true</code>
-        from <code>alerting.custom.default-alert</code>). Non-anchor endpoints declare
-        <code>alerts: *alerts</code> explicitly. Adding a new monitor without alerts
-        is a deliberate act now, not the default — the inverse of the pre-2026-05-30
-        behaviour where opting-in to alerts required hand-rolling an <code>alerts:</code>
-        block on every endpoint.
+        from <code>alerting.custom.default-alert</code>). The <code>custom</code> alerter
+        now POSTs each alert to Fenwick (<code>fenwick:8088/events/async</code>) as a
+        <code>service_alert</code> event; Fenwick's agent decides how to notify. The
+        <strong>Fenwick-health</strong> checks deliberately opt out of the anchor with
+        <code>alerts: [{type: email}]</code> (Postmark SMTP) — a check must never route
+        through the thing it watches. Non-anchor endpoints declare their <code>alerts:</code>
+        list explicitly. Adding a new monitor without alerts is a deliberate act, not the
+        default.
       </p>
 
       <h3 id="gatus-metrics">Gatus metrics</h3>
@@ -131,7 +140,8 @@ Gatus endpoint/heartbeat checks ──► Postmark webhook ──► alerts@pod.
         a ~60s cadence and bridges Prometheus → OTLP through the same authenticated exporter
         as the logs. The series land in ClickHouse's <code>otel_metrics_*</code> tables and
         are queryable and dashboardable in HyperDX. Gatus's own endpoint/heartbeat monitoring
-        and the Postmark alert chain are unaffected by this.
+        and the alert chain (Gatus → Fenwick, with the Postmark backstop) are unaffected by
+        this.
       </p>
 
       <h3 id="adding-monitor">Adding a Gatus monitor</h3>
@@ -175,7 +185,8 @@ WHERE LogAttributes['host']='&lt;host&gt;'</code></pre>
           detecting total pipeline failure (collector / ClickHouse / Alloy down).</li>
       </ul>
       <p>
-        Alerts ride the existing Postmark chain. <code>CLICKHOUSE_PASSWORD</code> must be
+        These are service checks, so their alerts ride the default Gatus → Fenwick chain.
+        <code>CLICKHOUSE_PASSWORD</code> must be
         available to gatus — set in <strong>both</strong> the <code>gatus/stack.toml</code>
         env block <em>and</em> the <code>gatus/compose.yaml</code> service
         <code>environment:</code> (see the
@@ -437,16 +448,25 @@ $DK restart alloy backrest                           # reattach by name + rebuil
 
       <h2 id="alerting-flow">Alerting flow</h2>
       <p>
-        Alerting is owned entirely by Gatus and Postmark — ClickStack/HyperDX is for query and
-        dashboards, not the email alert path.
+        Alerting is owned by Gatus; ClickStack/HyperDX is for query and dashboards, not the
+        alert path. Service alerts route to Fenwick (Signal); the Fenwick-health checks fall
+        back to Postmark email.
       </p>
       <ol>
         <li>Endpoint check fails (HTTP non-2xx, body assertion fails, push missing, etc.).</li>
         <li>After <code>failure-threshold</code> consecutive failures (typically 3), Gatus fires
-          the alert chain.</li>
-        <li>Postmark webhook sends email from <code>alerts@pod.haus</code> with the rich
-          body.</li>
-        <li>Recovery (3 consecutive successes) sends a resolution email.</li>
+          the alert.</li>
+        <li><strong>Service checks</strong> (the default <code>custom</code> alerter): Gatus
+          POSTs a <code>service_alert</code> to <code>fenwick:8088/events/async</code> with a
+          bearer token + <code>X-Fenwick-User: Nathan</code>. Fenwick runs an agent turn and
+          notifies over Signal under guidance — so notification behaviour (notify, dedup,
+          aggregate) is shaped by guidance, not config.</li>
+        <li><strong>Fenwick-health checks</strong> (the <code>Fenwick</code> group: liveness +
+          the 24h Signal-delivery check): the <code>email</code> alerter sends from
+          <code>uptime@nathanbaxter.com</code> via Postmark SMTP. This path is deliberately
+          independent of Fenwick, so a Fenwick/signal-cli outage still reaches you.</li>
+        <li>Recovery (per <code>success-threshold</code>) sends a resolution notice on the same
+          channel.</li>
       </ol>
 
       <h2 id="see-also">See also</h2>
