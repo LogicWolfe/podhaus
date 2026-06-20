@@ -180,22 +180,33 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         is the guard for the recurring kangaroo cross-LAN exporter failure class.
       </p>
       <p>
-        Implemented as Gatus endpoints that POST a ClickHouse query and assert the newest
-        log row per host is recent. Gatus is on dockernet, so it reaches ClickHouse directly
+        Implemented as Gatus endpoints that POST a ClickHouse query and assert recent
+        telemetry per host. Gatus is on dockernet, so it reaches ClickHouse directly
         at <code>http://clickstack-clickhouse:8123/</code> with headers
         <code>X-ClickHouse-User: default</code> and
         <code>X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}</code>. Conditions:
-        <code>[STATUS] == 200</code> and <code>[BODY] == 1</code>. The body query:
+        <code>[STATUS] == 200</code> and <code>[BODY] == 1</code>. Use
+        <code>count() &gt; 0</code> over an explicitly time-windowed scan, not
+        <code>max(Timestamp) &gt; now() - INTERVAL N</code> over an unbounded one — the Map
+        predicate (<code>...['host']=…</code>) defeats primary-key pruning, so without the
+        time filter the query scans every active part and times out at gatus's 10 s budget:
       </p>
-      <pre><code>SELECT toUInt8(max(Timestamp) &gt; now() - INTERVAL &lt;N&gt; MINUTE)
-FROM default.otel_logs
-WHERE LogAttributes['host']='&lt;host&gt;'</code></pre>
+      <pre><code>SELECT toUInt8(count() &gt; 0) FROM default.otel_logs
+WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']='&lt;host&gt;'</code></pre>
       <p>
         Two live endpoints in <code>gatus/conf/config.yaml</code>:
       </p>
       <ul>
-        <li><strong>Kangaroo Log Ingest (staleness)</strong> — 20-minute window, covering
-          kangaroo's recurring cross-LAN exporter risk.</li>
+        <li><strong>Kangaroo Log Ingest (staleness)</strong> — a <strong>heartbeat</strong>, not
+          an organic-volume check. kangaroo's Alloy scrapes its own self-metrics every 60 s and
+          ships them through the same cross-LAN exporter as the logs, so the query asserts a
+          fresh kangaroo Alloy metric in a 15-minute window
+          (<code>otel_metrics_gauge</code> where <code>ResourceAttributes['host']='kangaroo'</code>;
+          the <code>host</code> attribute is stamped by the <code>svc_alloy</code> transform in
+          <code>logging/kangaroo/alloy-conf/config.alloy</code>). This replaced the old
+          organic-log-volume proxy, whose staleness window was an ever-widening guess against
+          irregular chatter (60 → 150 min, still false-firing — organic gaps reached 152 and
+          170 min) and which now alerts on a genuine stall in ~10 min instead of 150.</li>
         <li><strong>Pipeline Log Ingest (bilby / total)</strong> — 10-minute window,
           detecting total pipeline failure (collector / ClickHouse / Alloy down).</li>
       </ul>
@@ -338,7 +349,9 @@ WHERE LogAttributes['host']='&lt;host&gt;'</code></pre>
       <ul>
         <li><strong>kangaroo Alloy log ingest can go stale — two distinct causes, two
           different fixes.</strong> The <em>Kangaroo Log Ingest (staleness)</em> Gatus check
-          fires for both; the port-only container healthcheck detects neither (the socket
+          fires for both — since 2026-06-20 it's a 60 s self-metric heartbeat (above), which
+          rides the same exporter as the logs, so a stall in either fails it within ~10 min.
+          The port-only container healthcheck detects neither (the socket
           stays open, so the container reads healthy and autoheal ignores it). Read the alloy
           log to tell them apart — <code>GetContainerLog kangaroo alloy</code>:
           <ul>

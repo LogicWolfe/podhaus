@@ -97,6 +97,21 @@ Three compounding defects:
   bounded retry frees the queue if a batch is ever genuinely stuck.
   Per-batch connection overhead is negligible at these hosts' volume.
   bilby is left as-is — DNS re-resolution already protects it.
+- [x] **2026-06-20**: replaced the kangaroo *Kangaroo Log Ingest
+  (staleness)* detector itself. The old check proxied pipeline liveness
+  off organic kangaroo log volume, but kangaroo is low-volume enough that
+  its quiet gaps drifted above any fixed window (60 → 150 min, still
+  false-firing — organic gaps reached 152 and 170 min within days). Fixed
+  by stamping a stable `host` resource attribute on Alloy's 60 s
+  self-metric scrape (`svc_alloy` transform, bilby + kangaroo
+  `config.alloy`) and repointing the Gatus check at a 15-min heartbeat
+  over `otel_metrics_gauge` where `host='kangaroo'`. The self-metric is a
+  fixed cadence on the same exporter as the logs, so it detects the wedge
+  / phantom-network classes in ~10 min instead of 150 with zero false
+  positives — and per-host pipeline metrics (queue depth, sent totals,
+  retries) are now queryable, the observability that was missing during
+  this investigation. (kookaburra has no self-metrics scrape, so it's
+  unchanged.)
 
 ### Documentation
 
@@ -139,7 +154,10 @@ Three compounding defects:
   `RestartStack`s a stale `<host>-logging`) was designed and **declined**:
   fixing the root cause removed the need, and a docker-healthcheck /
   autoheal path can't reliably detect this wedge on a low-volume host.
-  Reopen only if a *different*, unfixable wedge mode appears.
+  Reopen only if a *different*, unfixable wedge mode appears. (What did
+  land on 2026-06-20 was not auto-heal but a better *detector* — the
+  self-metric heartbeat above — which makes the staleness alert honest
+  on a low-volume host rather than trying to self-heal a symptom.)
 
 ## Related
 
