@@ -358,7 +358,12 @@ endpoints:
   # on dockernet) and assert recent log arrival per host — absence of
   # telemetry is itself the signal. ClickHouse always 200s; freshness is
   # in the body: `1` = a row within the window, `0` = stale.
-  - name: Kangaroo Log Ingest (staleness)
+  # These two per-host checks assert a fresh Alloy *self-metric* reached
+  # ClickHouse — i.e. the host's whole telemetry ship-path (Alloy →
+  # collector → ClickHouse) is alive. They are NOT log-volume checks
+  # (that's "Pipeline Log Ingest (bilby / total)" below, which counts
+  # otel_logs rows); named for what they measure.
+  - name: Kangaroo Telemetry Pipeline (heartbeat)
     url: http://clickstack-clickhouse:8123/
     method: POST
     group: Observability
@@ -397,6 +402,34 @@ endpoints:
     alerts:
       - type: custom
         description: "No kangaroo Alloy metrics reached ClickHouse in 15+ min — the cross-LAN Alloy->collector pipeline is down (the 60 s self-metric heartbeat stopped). Two causes, two fixes: an exporter wedge (no errors in alloy's log, just silence) clears with `RestartStack kangaroo-logging`; a dockernet detach / phantom network (alloy log shows 'network is unreachable') needs the disconnect/rm/create/restart repair. Full runbook: docs/monitoring.html#known-issues."
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
+  - name: Kookaburra Telemetry Pipeline (heartbeat)
+    url: http://clickstack-clickhouse:8123/
+    method: POST
+    group: Observability
+    interval: 5m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    # Symmetric with the kangaroo heartbeat above. kookaburra's Alloy
+    # scrapes its own self-metrics every 60 s and ships them cross-tailnet
+    # (MagicDNS → bilby-podnet:4318) through the same batch+exporter as the
+    # logs, so a fresh kookaburra Alloy metric proves that ship-path is
+    # alive on a fixed cadence. `host` is stamped by the svc_alloy
+    # transform in logging/kookaburra/alloy-conf/config.alloy. Same
+    # count()>0 / TimeUnix-windowed rationale as kangaroo (the Map
+    # predicate defeats PK pruning). 15-min window @ 60 s cadence; the
+    # 30 m bounded retry rides out a transient collector restart.
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='kookaburra'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: custom
+        description: "No kookaburra Alloy metrics reached ClickHouse in 15+ min — the cross-tailnet Alloy->collector pipeline is down (the 60 s self-metric heartbeat stopped). Check `GetContainerLog kookaburra alloy`: an exporter wedge (silence, no errors) clears with `RestartStack kookaburra-logging`; if the log shows the collector unreachable, confirm the podnet tailnet is up (MagicDNS to bilby-podnet) before restarting. Full runbook: docs/monitoring.html#known-issues."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true

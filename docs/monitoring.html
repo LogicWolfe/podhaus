@@ -194,21 +194,32 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
       <pre><code>SELECT toUInt8(count() &gt; 0) FROM default.otel_logs
 WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']='&lt;host&gt;'</code></pre>
       <p>
-        Two live endpoints in <code>gatus/conf/config.yaml</code>:
+        Four live endpoints in <code>gatus/conf/config.yaml</code>, of two kinds —
+        <em>heartbeats</em> (assert a fresh Alloy <strong>self-metric</strong> reached
+        ClickHouse, i.e. the host's whole telemetry ship-path Alloy → collector → ClickHouse
+        is alive) and <em>log-volume</em> checks (count <code>otel_logs</code> rows). Named for
+        what they measure:
       </p>
       <ul>
-        <li><strong>Kangaroo Log Ingest (staleness)</strong> — a <strong>heartbeat</strong>, not
-          an organic-volume check. kangaroo's Alloy scrapes its own self-metrics every 60 s and
-          ships them through the same cross-LAN exporter as the logs, so the query asserts a
-          fresh kangaroo Alloy metric in a 15-minute window
-          (<code>otel_metrics_gauge</code> where <code>ResourceAttributes['host']='kangaroo'</code>;
-          the <code>host</code> attribute is stamped by the <code>svc_alloy</code> transform in
-          <code>logging/kangaroo/alloy-conf/config.alloy</code>). This replaced the old
-          organic-log-volume proxy, whose staleness window was an ever-widening guess against
-          irregular chatter (60 → 150 min, still false-firing — organic gaps reached 152 and
-          170 min) and which now alerts on a genuine stall in ~10 min instead of 150.</li>
-        <li><strong>Pipeline Log Ingest (bilby / total)</strong> — 10-minute window,
-          detecting total pipeline failure (collector / ClickHouse / Alloy down).</li>
+        <li><strong>Kangaroo Telemetry Pipeline (heartbeat)</strong> and
+          <strong>Kookaburra Telemetry Pipeline (heartbeat)</strong> — each host's Alloy
+          scrapes its own self-metrics every 60 s and ships them through the same exporter as
+          the logs (kangaroo cross-LAN, kookaburra cross-tailnet), so the query asserts a fresh
+          per-host Alloy metric in a 15-minute window (<code>otel_metrics_gauge</code> where
+          <code>ResourceAttributes['host']='&lt;host&gt;'</code>; the <code>host</code>
+          attribute is stamped by the <code>svc_alloy</code> transform in each host's
+          <code>config.alloy</code>). A fixed 60 s cadence means a genuine stall alerts in
+          ~10 min. The kangaroo check replaced an old organic-log-volume proxy whose staleness
+          window was an ever-widening guess against irregular chatter (60 → 150 min, still
+          false-firing — organic gaps reached 152 and 170 min).</li>
+        <li><strong>Pipeline Log Ingest (bilby / total)</strong> (10-minute) and
+          <strong>Kookaburra Log Ingest (staleness)</strong> (30-minute) — log-volume
+          <code>count()</code> checks per host. These verify logs <em>specifically</em> flow,
+          which a heartbeat can't (it only proves the exporter moves data). bilby/total detects
+          total pipeline failure (collector / ClickHouse / Alloy down); kookaburra's steady
+          ~250 lines/hour make a log-volume window reliable there, so it keeps a log check
+          <em>in addition to</em> the heartbeat (low-volume kangaroo can't, which is why it uses
+          a heartbeat alone).</li>
       </ul>
       <p>
         These are service checks, so their alerts ride the default Gatus → Fenwick chain.
@@ -348,8 +359,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
       <h3 id="known-issues">Known issues</h3>
       <ul>
         <li><strong>kangaroo Alloy log ingest can go stale — two distinct causes, two
-          different fixes.</strong> The <em>Kangaroo Log Ingest (staleness)</em> Gatus check
-          fires for both — since 2026-06-20 it's a 60 s self-metric heartbeat (above), which
+          different fixes.</strong> The <em>Kangaroo Telemetry Pipeline (heartbeat)</em> Gatus
+          check fires for both — since 2026-06-20 it's a 60 s self-metric heartbeat (above), which
           rides the same exporter as the logs, so a stall in either fails it within ~10 min.
           The port-only container healthcheck detects neither (the socket
           stays open, so the container reads healthy and autoheal ignores it). Read the alloy
