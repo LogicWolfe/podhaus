@@ -6,6 +6,7 @@ ALIAS=sky
 BUCKET="$ALIAS/skycroeser-net"
 SITE=/tmp/site
 STATE=/state/last-index.hash
+mkdir -p "$(dirname "$STATE")"
 
 mc alias set "$ALIAS" "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
 
@@ -19,7 +20,7 @@ fi
 
 rm -rf "$SITE"; mkdir -p "$SITE"
 mc mirror --overwrite --remove --exclude "_pagefind/*" --exclude "media/*" "$BUCKET" "$SITE" >/dev/null
-pagefind --site "$SITE"
+pagefind --site "$SITE" --output-subdir _pagefind
 mc mirror --overwrite --remove "$SITE/_pagefind" "$BUCKET/_pagefind" >/dev/null
 echo "$cur" > "$STATE"
 echo "[search-index] reindexed; uploaded $(find "$SITE/_pagefind" -type f | wc -l) index files"
