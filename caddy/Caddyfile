@@ -128,11 +128,11 @@ http://sky.pod.haus {
 		# single-segment capture deliberately skips nested attachment
 		# pages (/Y/M/D/post/image/) — they fall through to a 404.
 		@wp_dated path_regexp wp_dated ^/\d{4}/\d{2}/\d{2}/([^/]+)/?$
-		redir @wp_dated /{re.wp_dated.1}/ 301
+		redir @wp_dated /blog/{re.wp_dated.1}/ 301
 		redir /feed/ /feed.xml 301
 		redir /feed /feed.xml 301
-		redir /category/uncategorized/ / 301
-		redir /category/uncategorized / 301
+		redir /category/uncategorized/ /blog/ 301
+		redir /category/uncategorized /blog/ 301
 
 		# G3 — old WP page URLs. "My research and teaching" (was /about/)
 		# is now the Publii frontpage, so /about/ → / (the old site
@@ -146,39 +146,39 @@ http://sky.pod.haus {
 		redir @wp_author /authors/{re.wp_author.1} 301
 		# G2 — posts Publii re-slugged on import (old WP slug → current slug).
 		# Reached either directly or after the @wp_dated date-strip above.
-		redir /activism-and-play/ /come-brother-come-sister-look-at-this-software-activism-and-play/ 301
-		redir /aies-ai-for-social-good/ /aies-ai-for-social-good-human-machine-interactions-and-trustworthy-ai/ 301
-		redir /aies-day-1-artificial-agency-autonomy-and-lethality/ /aies-day-1-artificial-agency-autonomy-and-lethality-rights-and-principles/ 301
-		redir /blueprint-for-the-future/ /blueprints-for-the-future/ 301
-		redir /burning-man-individuality-and_community/ /burning-man-individuality-and-community/ 301
-		redir /burning-man-reaching-ou/ /burning-man-reaching-out/ 301
-		redir /citizen-lab-summer-institute-day-1/ /citizen-lab-summer-institute-on-monitoring-internet-openness-and-rights-day-1/ 301
-		redir /compromised-data-day-one/ /compromised-data-social-media-research-methodological-challenges-unexamined-niches-and-the-politics-of-big-data/ 301
-		redir /compromised-data-day-two/ /compromised-data-the-social-life-of-data-new-tools-audience-engagement-and-social-movements/ 301
-		redir /contradictoryfeelings/ /quandaries-of-apparently-contradictory-feelings/ 301
-		redir /creating-change-adshel-live-animal-exports-the-quick-and-easy-campaign/ /creating-change-adshel-live-animal-exports-and-the-quick-and-easy-campaign/ 301
-		redir /ica18-day-3-activism-subalterns-more-activism-post-colonial-imaginations-and-cultural-symbols/ /ica18-day-3-activism-subalterns-more-activism-postcolonial-imaginations-and-cultural-symbols/ 301
-		redir /ica18-day-4-labour-in-the-gig-economy-resistant-media-feminist-peer-review-love-sex-and-friendship/ /ica18-day-4-labour-in-the-gig-economy-resistant-media-feminist-peer-review-love-sex-and-friendship-illiberal-democracy-in-eastern-and-central-europe/ 301
-		redir /identity-humanity-affective-news-and-the-department-of-shameless-studies/ /ir13-plenaries-identity-humanity-affective-news-and-the-department-of-shameless-studies/ 301
-		redir /ir13-epic-saturday/ /ir13-saturday-highlights-jedward-peppa-pig-occupy-occupy-more-occupy-twitter-twitter-and-more-twitter/ 301
-		redir /ir13-sessions-protest-and-online-activism-online-activism-with-some-extra-online-activism/ /ir13-friday-session-protest-and-online-activism/ 301
-		redir /ir13-sunday-highlights-mobile-ecologies-instagram-disruptive-spaces-teaching-on-facebook-and-a-bit-more-activism/ /ir13-sunday-highlights-mobile-ecologies-instagram-disruptive-spaces-teaching-on-facebookand-a-bit-more-activism/ 301
-		redir /linux-conference-australia-disaster-response-activism-copyrigh/ /linux-conference-australia-disaster-response-activism-and-copyright/ 301
-		redir /maintenance-creation/ /maintenancecreation/ 301
-		redir /national-identity-scheme/ /national-identity-schemes/ 301
-		redir /occupy-together-who-is-the-99-percent/ /occupy-together-whos-the-99-percent/ 301
-		redir /opening-activism/ /opening-activismsyzitisi-kai-ergastiri-anoihtoy-aktivismoy/ 301
-		redir /post-arab-spring-tunisia-local-government-in-indonesia-a-start-up-democracy/ /post-arab-spring-tunisia-local-government-in-indonesia-a-start-up-democracy-and-the-youth/ 301
-		redir /post-arab-spring-tunisia-session-3/ /post-arab-spring-tunisia-session-3-decentralisation-and-intercultural-practice/ 301
-		redir /racism-and-censorship-in-athen/ /racism-and-censorship-first-impressions-of-athens/ 301
-		redir /social-media-society-2014-wrap-up-part-1-gender-and-moments-of-grunching/ /social-media-andamp-society-2014-wrap-up-part-1-gender-and-moments-of-grunching/ 301
-		redir /social-media-society-2014-wrap-up-part-2-cultural-acceptance-and-activism/ /social-media-andamp-society-2014-wrap-up-part-2-cultural-acceptance-and-activism/ 301
-		redir /theorizing-the-web-day-1-cache-flow-code-queering-racial-standpoints-magic-music-concrete-dust/ /theorizing-the-web-day-1-cache-flow-andamp-code-queering-andamp-racial-standpoints-andamp-magic-andamp-music-andamp-concrete-dust/ 301
-		redir /twitter-revolution-connections/ /connecting-to-the-twitter-revolution/ 301
-		redir /udc2015-circuits-of-struggle-day-2-journalism-and-climate-change-cultureappropriation-struggles-over-digital-technologies/ /udc2015-circuits-of-struggle-day-2-journalism-and-climate-change-cultureappropriation-struggles-over-digital-technologies-and-femtechnet/ 301
-		redir /upcomingooactivism/ /upcoming-oo-activism/ 301
-		redir /web-presence-workshop-1/ /web-presence-workshop-1-activism-support-and-volcano-sacrifices/ 301
-		redir /why-im-ending-my-short-experiment-with-gittip-or-why-we-cant-have-nice-things-part-2039/ /why-im-ending-my-short-experiment-with-gittip-now-gratipay-or-why-we-cant-have-nice-things-part-2039/ 301
+		redir /blog/activism-and-play/ /blog/come-brother-come-sister-look-at-this-software-activism-and-play/ 301
+		redir /blog/aies-ai-for-social-good/ /blog/aies-ai-for-social-good-human-machine-interactions-and-trustworthy-ai/ 301
+		redir /blog/aies-day-1-artificial-agency-autonomy-and-lethality/ /blog/aies-day-1-artificial-agency-autonomy-and-lethality-rights-and-principles/ 301
+		redir /blog/blueprint-for-the-future/ /blog/blueprints-for-the-future/ 301
+		redir /blog/burning-man-individuality-and_community/ /blog/burning-man-individuality-and-community/ 301
+		redir /blog/burning-man-reaching-ou/ /blog/burning-man-reaching-out/ 301
+		redir /blog/citizen-lab-summer-institute-day-1/ /blog/citizen-lab-summer-institute-on-monitoring-internet-openness-and-rights-day-1/ 301
+		redir /blog/compromised-data-day-one/ /blog/compromised-data-social-media-research-methodological-challenges-unexamined-niches-and-the-politics-of-big-data/ 301
+		redir /blog/compromised-data-day-two/ /blog/compromised-data-the-social-life-of-data-new-tools-audience-engagement-and-social-movements/ 301
+		redir /blog/contradictoryfeelings/ /blog/quandaries-of-apparently-contradictory-feelings/ 301
+		redir /blog/creating-change-adshel-live-animal-exports-the-quick-and-easy-campaign/ /blog/creating-change-adshel-live-animal-exports-and-the-quick-and-easy-campaign/ 301
+		redir /blog/ica18-day-3-activism-subalterns-more-activism-post-colonial-imaginations-and-cultural-symbols/ /blog/ica18-day-3-activism-subalterns-more-activism-postcolonial-imaginations-and-cultural-symbols/ 301
+		redir /blog/ica18-day-4-labour-in-the-gig-economy-resistant-media-feminist-peer-review-love-sex-and-friendship/ /blog/ica18-day-4-labour-in-the-gig-economy-resistant-media-feminist-peer-review-love-sex-and-friendship-illiberal-democracy-in-eastern-and-central-europe/ 301
+		redir /blog/identity-humanity-affective-news-and-the-department-of-shameless-studies/ /blog/ir13-plenaries-identity-humanity-affective-news-and-the-department-of-shameless-studies/ 301
+		redir /blog/ir13-epic-saturday/ /blog/ir13-saturday-highlights-jedward-peppa-pig-occupy-occupy-more-occupy-twitter-twitter-and-more-twitter/ 301
+		redir /blog/ir13-sessions-protest-and-online-activism-online-activism-with-some-extra-online-activism/ /blog/ir13-friday-session-protest-and-online-activism/ 301
+		redir /blog/ir13-sunday-highlights-mobile-ecologies-instagram-disruptive-spaces-teaching-on-facebook-and-a-bit-more-activism/ /blog/ir13-sunday-highlights-mobile-ecologies-instagram-disruptive-spaces-teaching-on-facebookand-a-bit-more-activism/ 301
+		redir /blog/linux-conference-australia-disaster-response-activism-copyrigh/ /blog/linux-conference-australia-disaster-response-activism-and-copyright/ 301
+		redir /blog/maintenance-creation/ /blog/maintenancecreation/ 301
+		redir /blog/national-identity-scheme/ /blog/national-identity-schemes/ 301
+		redir /blog/occupy-together-who-is-the-99-percent/ /blog/occupy-together-whos-the-99-percent/ 301
+		redir /blog/opening-activism/ /blog/opening-activismsyzitisi-kai-ergastiri-anoihtoy-aktivismoy/ 301
+		redir /blog/post-arab-spring-tunisia-local-government-in-indonesia-a-start-up-democracy/ /blog/post-arab-spring-tunisia-local-government-in-indonesia-a-start-up-democracy-and-the-youth/ 301
+		redir /blog/post-arab-spring-tunisia-session-3/ /blog/post-arab-spring-tunisia-session-3-decentralisation-and-intercultural-practice/ 301
+		redir /blog/racism-and-censorship-in-athen/ /blog/racism-and-censorship-first-impressions-of-athens/ 301
+		redir /blog/social-media-society-2014-wrap-up-part-1-gender-and-moments-of-grunching/ /blog/social-media-andamp-society-2014-wrap-up-part-1-gender-and-moments-of-grunching/ 301
+		redir /blog/social-media-society-2014-wrap-up-part-2-cultural-acceptance-and-activism/ /blog/social-media-andamp-society-2014-wrap-up-part-2-cultural-acceptance-and-activism/ 301
+		redir /blog/theorizing-the-web-day-1-cache-flow-code-queering-racial-standpoints-magic-music-concrete-dust/ /blog/theorizing-the-web-day-1-cache-flow-andamp-code-queering-andamp-racial-standpoints-andamp-magic-andamp-music-andamp-concrete-dust/ 301
+		redir /blog/twitter-revolution-connections/ /blog/connecting-to-the-twitter-revolution/ 301
+		redir /blog/udc2015-circuits-of-struggle-day-2-journalism-and-climate-change-cultureappropriation-struggles-over-digital-technologies/ /blog/udc2015-circuits-of-struggle-day-2-journalism-and-climate-change-cultureappropriation-struggles-over-digital-technologies-and-femtechnet/ 301
+		redir /blog/upcomingooactivism/ /blog/upcoming-oo-activism/ 301
+		redir /blog/web-presence-workshop-1/ /blog/web-presence-workshop-1-activism-support-and-volcano-sacrifices/ 301
+		redir /blog/why-im-ending-my-short-experiment-with-gittip-or-why-we-cant-have-nice-things-part-2039/ /blog/why-im-ending-my-short-experiment-with-gittip-now-gratipay-or-why-we-cant-have-nice-things-part-2039/ 301
 
 		# (2) pretty URL → COMPLETE bucket key in one rewrite per class
 		# (no rewrite chaining — Caddy won't reliably chain them here).
