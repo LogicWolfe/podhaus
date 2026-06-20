@@ -1,0 +1,19 @@
+[[stack]]
+name = "search-indexer"
+description = "Pagefind search-index builder for skycroeser-net; ofelia-scheduled, rebuilds /_pagefind/ on bucket change"
+tags = ["podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/search-indexer"
+# Builds the node+mc+pagefind image inline (Dockerfile). Long-running
+# service (sleep infinity) that ofelia execs into — no one-shot service,
+# so no ignore_services.
+run_build = true
+
+environment = """
+PODHAUS_REPO=[[PODHAUS_REPO]]
+MINIO_ACCESS_KEY=[[OP__KOMODO__MINIO_SKYCROESER_NET_DEPLOY__ACCESS_KEY_ID]]
+MINIO_SECRET_KEY=[[OP__KOMODO__MINIO_SKYCROESER_NET_DEPLOY__SECRET_ACCESS_KEY]]
+"""
