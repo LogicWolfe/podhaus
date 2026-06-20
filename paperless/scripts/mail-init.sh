@@ -100,18 +100,17 @@ upsert_rule "Paperless ingest" "$(jq -n \
     attachment_type:2, pdf_layout:2, action:1, assign_title_from:1,
     assign_tags:[$tag]}')"
 
-# Attachments only (paperless+attach…@pod.haus):
+# Attachments only (paperless+attachments@pod.haus):
 #   consumption_scope 1 = just the attached files, email body discarded
 #   attachment_type   1 = real attachments only (skip inline signature images)
 #   assign_title_from 2 = title from the attachment filename
-#   filter_to is the bare "paperless+attach" substring (no suffix, no domain)
-#   so the IMAP TO match catches attach / attachment / attachments and most
-#   accidental spellings of the alias. Still disjoint from the bare-address
-#   rule ("paperless@pod.haus" shares no substring with "paperless+attach…").
+#   filter_to is the exact plus-alias. Matched server-side as an IMAP TO
+#   search; disjoint from the bare-address rule above (neither address is a
+#   substring of the other), so each mail hits exactly one rule.
 upsert_rule "Paperless attachments" "$(jq -n \
   --argjson acct "$ACCT_ID" --argjson tag "$TAG_ATTACH_ID" \
   '{name:"Paperless attachments", account:$acct, enabled:true, folder:"Paperless",
-    order:1, filter_to:"paperless+attach", consumption_scope:1,
+    order:1, filter_to:"paperless+attachments@pod.haus", consumption_scope:1,
     attachment_type:1, action:1, assign_title_from:2, assign_tags:[$tag]}')"
 
 echo "[mail-init] ok: account=$ACCT_ID tags=$TAG_ID,$TAG_ATTACH_ID rules=ingest+attachments"
