@@ -40,11 +40,15 @@ while [ "$i" -lt 30 ]; do
 done
 [ -n "$TOKEN" ] || { echo "[mail-init] ERROR: no API token after retries" >&2; exit 1; }
 
-# 2. Tag email-ingest (name filter is reliable across the ~120-tag corpus).
-TAG_ID=$(auth_get "/tags/?name__iexact=email-ingest" | jq -r '.results[0].id // empty')
-if [ -z "$TAG_ID" ]; then
-  TAG_ID=$(auth_send POST "/tags/" "$(jq -n '{name:"email-ingest"}')" | jq -r '.id')
-fi
+# 2. Tags (name filter is reliable across the ~120-tag corpus). One per mail
+#    pathway so ingested docs are filterable by which rule produced them.
+ensure_tag() {
+  id=$(auth_get "/tags/?name__iexact=$1" | jq -r '.results[0].id // empty')
+  [ -n "$id" ] || id=$(auth_send POST "/tags/" "$(jq -n --arg n "$1" '{name:$n}')" | jq -r '.id')
+  printf '%s' "$id"
+}
+TAG_ID=$(ensure_tag email-ingest)
+TAG_ATTACH_ID=$(ensure_tag email-attachments)
 
 # 3. Mail account Fastmail. imap_security 2=SSL, account_type 1=IMAP.
 # Strip the injected port to digits so a stray newline can't break --argjson.
@@ -64,23 +68,50 @@ else
   auth_send PATCH "/mail_accounts/$ACCT_ID/" "$ACCT" > /dev/null
 fi
 
-# 4. Mail rule. Full-email-for-everything:
-#    consumption_scope 2 = process full mail as one .eml document
-#    attachment_type   2 = include inline attachments (note use case's image)
-#    pdf_layout        2 = HTML then text (toweosp: use HTML if present)
-#    action            1 = DELETE source mail (only after a successful parse)
-#    assign_title_from 1 = use subject as document title
-RULE=$(jq -n \
-  --argjson acct "$ACCT_ID" \
-  --argjson tag "$TAG_ID" \
-  '{name:"Paperless ingest", account:$acct, enabled:true, folder:"Paperless",
-    order:0, consumption_scope:2, attachment_type:2, pdf_layout:2,
-    action:1, assign_title_from:1, assign_tags:[$tag]}')
-RULE_ID=$(auth_get "/mail_rules/" | jq -r '.results[] | select(.name=="Paperless ingest") | .id' | head -n1)
-if [ -z "$RULE_ID" ]; then
-  auth_send POST "/mail_rules/" "$RULE" > /dev/null
-else
-  auth_send PATCH "/mail_rules/$RULE_ID/" "$RULE" > /dev/null
-fi
+# 4. Mail rules. Two pathways on the same Paperless folder, split by recipient
+#    address (filter_to) so each mail matches exactly one — no order/action
+#    coupling needed for mutual exclusion (the substrings don't overlap:
+#    "paperless@pod.haus" is not contained in "paperless+attachments@pod.haus").
+#    Fastmail plus-addressing delivers both to the same mailbox; a Fastmail
+#    rule must file both into the Paperless folder for these to see them.
+#    Common to both: account, enabled, folder Paperless, action 1 = DELETE
+#    source mail (only after a successful parse), assign a pathway tag.
+upsert_rule() {
+  # name json
+  rid=$(auth_get "/mail_rules/" | jq -r --arg n "$1" '.results[] | select(.name==$n) | .id' | head -n1)
+  if [ -z "$rid" ]; then
+    auth_send POST "/mail_rules/" "$2" > /dev/null
+  else
+    auth_send PATCH "/mail_rules/$rid/" "$2" > /dev/null
+  fi
+}
 
-echo "[mail-init] ok: tag=$TAG_ID account=$ACCT_ID rule=${RULE_ID:-new}"
+# Full-email render (paperless@pod.haus):
+#   consumption_scope 2 = full mail as one .eml document
+#   attachment_type   2 = include inline attachments (note use case's image)
+#   pdf_layout        2 = HTML then text (toweosp: use HTML if present)
+#   assign_title_from 1 = subject as title
+#   filter_to pins it to the bare address so it no longer also swallows
+#   the +attachments variant.
+upsert_rule "Paperless ingest" "$(jq -n \
+  --argjson acct "$ACCT_ID" --argjson tag "$TAG_ID" \
+  '{name:"Paperless ingest", account:$acct, enabled:true, folder:"Paperless",
+    order:0, filter_to:"paperless@pod.haus", consumption_scope:2,
+    attachment_type:2, pdf_layout:2, action:1, assign_title_from:1,
+    assign_tags:[$tag]}')"
+
+# Attachments only (paperless+attach…@pod.haus):
+#   consumption_scope 1 = just the attached files, email body discarded
+#   attachment_type   1 = real attachments only (skip inline signature images)
+#   assign_title_from 2 = title from the attachment filename
+#   filter_to is the bare "paperless+attach" substring (no suffix, no domain)
+#   so the IMAP TO match catches attach / attachment / attachments and most
+#   accidental spellings of the alias. Still disjoint from the bare-address
+#   rule ("paperless@pod.haus" shares no substring with "paperless+attach…").
+upsert_rule "Paperless attachments" "$(jq -n \
+  --argjson acct "$ACCT_ID" --argjson tag "$TAG_ATTACH_ID" \
+  '{name:"Paperless attachments", account:$acct, enabled:true, folder:"Paperless",
+    order:1, filter_to:"paperless+attach", consumption_scope:1,
+    attachment_type:1, action:1, assign_title_from:2, assign_tags:[$tag]}')"
+
+echo "[mail-init] ok: account=$ACCT_ID tags=$TAG_ID,$TAG_ATTACH_ID rules=ingest+attachments"
