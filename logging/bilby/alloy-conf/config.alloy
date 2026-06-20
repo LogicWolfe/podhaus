@@ -260,6 +260,9 @@ otelcol.receiver.prometheus "alloy_self" {
 // Same service.name stamping as svc_gatus. "alloy" matches both this
 // host's Alloy container logs (via enrich) and the tracing block's
 // service name, so all three signals unify under one `alloy` service.
+// `host` mirrors the logs path's loki label so each host's Alloy
+// self-metrics are distinguishable (the unified `alloy` service is set
+// by service.name, not host, so adding the dimension costs nothing).
 otelcol.processor.transform "svc_alloy" {
   error_mode = "ignore"
 
@@ -267,6 +270,7 @@ otelcol.processor.transform "svc_alloy" {
     context = "metric"
     statements = [
       `set(resource.attributes["service.name"], "alloy")`,
+      `set(resource.attributes["host"], "bilby")`,
     ]
   }
 

@@ -366,32 +366,37 @@ endpoints:
     headers:
       X-ClickHouse-User: default
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    # `count() > 0` over a Timestamp-windowed scan, NOT `max(Timestamp)
-    # > now() - X` over an unbounded scan. The Map predicate
-    # (`LogAttributes['host']=…`) defeats primary-key pruning, so
-    # without an explicit Timestamp filter the query scans every
-    # active part (489M rows / 112 parts at the time of writing) and
-    # times out at gatus's 10 s budget. count() also matches the
-    # check criterion directly — one threshold, not two.
+    # Heartbeat, not organic volume. kangaroo's Alloy scrapes its own
+    # self-metrics every 60 s (`prometheus.scrape "alloy_self"`) and
+    # ships them through the SAME batch+exporter as the logs. So a fresh
+    # kangaroo Alloy metric in ClickHouse proves the cross-LAN pipeline
+    # is moving data on a FIXED cadence — independent of whether any
+    # container happened to log. This replaces the old organic-log-volume
+    # proxy, whose window was an ever-widening guess against irregular
+    # chatter (60→150 min, still false-firing: organic gaps hit 152 and
+    # 170 min in the days before this change). The `host` resource
+    # attribute that makes kangaroo's metrics selectable is stamped by
+    # the `svc_alloy` transform in logging/kangaroo/alloy-conf/config.alloy.
     #
-    # 150-minute window: kangaroo is a low-volume host — its containers
-    # organically emit only a few log lines per HOUR when healthy, in
-    # periodic bursts. Sized from 49 days of ingest history: the
-    # steady-state organic gap ceiling is ~121 min (a recurring ~90-min
-    # quiet cadence, tailing to 121 min on ordinary days), so a 60-min
-    # window false-reds ~twice a day. 150 min sits ~24% above that
-    # ceiling — zero steady-state false positives across the 49-day
-    # window — while still catching a genuinely dead pipeline within the
-    # 2-fail (10-min) debounce. Detection latency is acceptable here:
-    # logging-only, no service impact. See 2026-06-19 in the
-    # alloy-exporter-keepalive-wedge postmortem.
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 150 MINUTE AND LogAttributes['host']='kangaroo'"
+    # `count() > 0` over a TimeUnix-windowed scan (not `max(TimeUnix) >
+    # now() - X` unbounded): the Map predicate (`ResourceAttributes
+    # ['host']=…`) defeats primary-key pruning, so without the explicit
+    # TimeUnix filter the query scans every active part and times out at
+    # gatus's 10 s budget. count() also matches the criterion directly.
+    #
+    # 15-min window @ 60 s cadence = ~15 expected scrapes; the 30 m
+    # bounded exporter retry rides out a transient collector restart
+    # (metrics queue and flush), so only a genuine stall empties the
+    # window. With the 2-fail debounce a real stoppage alerts in ~10 min
+    # instead of 150. See 2026-06-20 in the alloy-exporter-keepalive-
+    # wedge postmortem.
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='kangaroo'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
     alerts:
       - type: custom
-        description: "No kangaroo logs reached ClickHouse in 150+ min — the cross-LAN Alloy->collector pipeline is down. Two causes, two fixes: an exporter wedge (no errors in alloy's log, just silence) clears with `RestartStack kangaroo-logging`; a dockernet detach / phantom network (alloy log shows 'network is unreachable') needs the disconnect/rm/create/restart repair. Full runbook: docs/monitoring.html#known-issues."
+        description: "No kangaroo Alloy metrics reached ClickHouse in 15+ min — the cross-LAN Alloy->collector pipeline is down (the 60 s self-metric heartbeat stopped). Two causes, two fixes: an exporter wedge (no errors in alloy's log, just silence) clears with `RestartStack kangaroo-logging`; a dockernet detach / phantom network (alloy log shows 'network is unreachable') needs the disconnect/rm/create/restart repair. Full runbook: docs/monitoring.html#known-issues."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true

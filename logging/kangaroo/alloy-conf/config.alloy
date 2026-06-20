@@ -159,7 +159,11 @@ otelcol.receiver.prometheus "alloy_self" {
 // attribute. Stamp a constant (mirrors bilby's svc_alloy and the
 // enrich logs idiom). "alloy" matches this host's Alloy container
 // logs and the tracing block, unifying all three signals under one
-// `alloy` service — both hosts' Alloy collapse into it by design.
+// `alloy` service. `host` mirrors the logs path's loki label so each
+// host's Alloy self-metrics are distinguishable — without it the only
+// per-host key is the ephemeral container ID (service.instance.id),
+// useless for a durable query. The 60 s self-scrape on this stable
+// `host` key is the kangaroo log-pipeline liveness heartbeat (Gatus).
 otelcol.processor.transform "svc_alloy" {
   error_mode = "ignore"
 
@@ -167,6 +171,7 @@ otelcol.processor.transform "svc_alloy" {
     context = "metric"
     statements = [
       `set(resource.attributes["service.name"], "alloy")`,
+      `set(resource.attributes["host"], "kangaroo")`,
     ]
   }
 
