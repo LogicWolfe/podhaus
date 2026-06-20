@@ -97,10 +97,52 @@ otelcol.processor.transform "enrich" {
   }
 }
 
+// Alloy self metrics — Prometheus→OTLP bridge (mirrors kangaroo). The
+// 60 s self-scrape rides the same cross-tailnet exporter as the logs, so
+// a fresh kookaburra Alloy metric in ClickHouse is the log-pipeline
+// liveness heartbeat (symmetric with kangaroo). Surfaces this host's
+// pipeline throughput, queue depth and exporter-retry counters too.
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy_self" {
+  targets         = prometheus.exporter.self.alloy.targets
+  scrape_interval = "60s"
+  forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
+}
+
+otelcol.receiver.prometheus "alloy_self" {
+  output {
+    metrics = [otelcol.processor.transform.svc_alloy.input]
+  }
+}
+
+// The Prometheus→OTLP bridge carries no service.name resource attribute.
+// Stamp a constant (mirrors kangaroo/bilby). `host` makes each host's
+// Alloy self-metrics distinguishable — without it the only per-host key
+// is the ephemeral container ID (service.instance.id). The unified
+// `alloy` service view is set by service.name, not host, so adding the
+// dimension costs nothing.
+otelcol.processor.transform "svc_alloy" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context = "metric"
+    statements = [
+      `set(resource.attributes["service.name"], "alloy")`,
+      `set(resource.attributes["host"], "kookaburra")`,
+    ]
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
 otelcol.processor.batch "clickstack" {
   output {
-    logs   = [otelcol.exporter.otlphttp.clickstack.input]
-    traces = [otelcol.exporter.otlphttp.clickstack.input]
+    logs    = [otelcol.exporter.otlphttp.clickstack.input]
+    metrics = [otelcol.exporter.otlphttp.clickstack.input]
+    traces  = [otelcol.exporter.otlphttp.clickstack.input]
   }
 }
 

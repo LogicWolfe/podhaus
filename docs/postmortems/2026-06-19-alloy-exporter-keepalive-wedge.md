@@ -110,8 +110,9 @@ Three compounding defects:
   / phantom-network classes in ~10 min instead of 150 with zero false
   positives — and per-host pipeline metrics (queue depth, sent totals,
   retries) are now queryable, the observability that was missing during
-  this investigation. (kookaburra has no self-metrics scrape, so it's
-  unchanged.)
+  this investigation. kookaburra was given the same `host`-stamped 60 s
+  self-metric scrape for symmetry (it previously had none), so all three
+  Alloy hosts now expose per-host pipeline metrics on the same key.
 
 ### Documentation
 
