@@ -25,7 +25,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     labels:
       ofelia.enabled: "true"
-      ofelia.job-exec.search-index.schedule: "0 */10 * * * *"
+      ofelia.job-exec.search-index.schedule: "0 * * * * *"
       ofelia.job-exec.search-index.command: "/scripts/index.sh"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
