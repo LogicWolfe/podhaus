@@ -402,15 +402,17 @@ $DK restart alloy backrest                           # reattach by name + rebuil
               silent and ships nothing, a green-but-dead trap that bit this repair on
               2026-06-18. <code>restart</code> reattaches by network name and rebuilds the
               process. <strong>Verify with the data, not the container:</strong> rerun the
-              staleness query
+              log-rows query
               (<code>SELECT count() FROM default.otel_logs WHERE Timestamp &gt; now() -
               INTERVAL 5 MINUTE AND LogAttributes['host']='kangaroo'</code> on
               <code>clickstack-clickhouse</code>) and confirm rows resume — a passing egress
               test or a healthy container is not proof of ingest. The kangaroo
               <code>autorun.sh</code> reconcile heals both the phantom network and
               running-but-detached containers (via restart) <em>at boot</em>, but a mid-life
-              detach (no reboot) still needs this manual repair — the staleness alert is the
-              detection net for that case. See
+              detach (no reboot) still needs this manual repair — the
+              <em>Kangaroo Telemetry Pipeline (heartbeat)</em> check is the detection net for
+              that case (its 60 s self-metric rides the same exporter, so a detach trips it
+              within ~15 min). See
               <a href="/postmortems/postmortem-viewer.html?file=2026-06-16-firmware-reboot-recovery.md">the
               firmware-reboot postmortem</a>.</li>
           </ul></li>

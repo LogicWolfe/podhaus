@@ -230,8 +230,10 @@ All landed in commit `6b9bcb6` unless noted.
   and to an `exited`-only reconcile. The boot reconcile now also acts on
   "running, restart-managed, but missing the network its `NetworkMode`
   names." A mid-life detach (no reboot) still escapes the boot hook; the
-  `Kangaroo Log Ingest` staleness alert is the detection net there, and
-  the repair is runbooked in `docs/monitoring.html#known-issues`.
+  `Kangaroo Telemetry Pipeline (heartbeat)` check (renamed 2026-06-20
+  from `Kangaroo Log Ingest`, now a 60 s self-metric heartbeat) is the
+  detection net there, and the repair is runbooked in
+  `docs/monitoring.html#known-issues`.
 
 ## Out of scope
 
