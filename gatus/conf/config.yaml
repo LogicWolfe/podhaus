@@ -321,12 +321,13 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
 
-  # Komodo alert pipeline → Gatus. Komodo emits an alert any time a stack
-  # deploy fails, a state transitions to Down/Restarting unexpectedly, a
-  # build fails, or a procedure/action errors. This poll asserts zero
-  # unresolved CRITICAL alerts, so Postmark fires whenever the homelab
-  # has a deploy-grade failure that Komodo itself recognised. (WARNING-
-  # level alerts — image-update-available, etc. — don't trip this.)
+  # Komodo alert pipeline → Gatus. Komodo emits an alert for a range of
+  # conditions: a stack deploy/build/procedure/action failure, a server
+  # going unreachable, a host CPU/mem threshold breach, or an unexpected
+  # state transition (Down/Restarting). This poll asserts zero unresolved
+  # CRITICAL alerts, so Postmark fires whenever Komodo itself flags a
+  # CRITICAL-grade problem. (WARNING-level alerts — image-update-
+  # available, elevated-but-not-pegged CPU, etc. — don't trip this.)
   #
   # We poll instead of using Komodo's webhook Alerter because the Custom
   # alerter only POSTs JSON to a URL; it can't add the Authorization
@@ -346,7 +347,7 @@ endpoints:
       - "len([BODY].alerts) == 0"
     alerts:
       - type: custom
-        description: "Komodo has unresolved CRITICAL alerts. A stack deploy, build, procedure, or action failed. Check komodo.pod.haus → Alerts for the specific resource + failure reason."
+        description: "Komodo has an unresolved CRITICAL alert (deploy/build/procedure failure, server unreachable, CPU/mem threshold, or unexpected state change). Check komodo.pod.haus → Alerts for the specific resource + failure reason."
         failure-threshold: 3
         success-threshold: 2
         send-on-resolved: true
