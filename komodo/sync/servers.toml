@@ -25,6 +25,14 @@ tags = ["kangaroo"]
 # kangaroo.
 address = ""
 enabled = true
+# kangaroo is a NAS — saturating CPU on downloads, Plex transcodes, and RAID
+# scrubs is normal, healthy behaviour, not a fault. Komodo's CPU alert is an
+# instantaneous threshold with no sustained-duration window, and these jobs hit
+# a genuine 100%, so no threshold can distinguish them from a real runaway.
+# Disable CPU alerts here; real kangaroo failures still surface via
+# ServerUnreachable, the Gatus Periphery check, disk thresholds, and
+# StackStateChange.
+send_cpu_alerts = false
 disk_warning = 85.0
 disk_critical = 95.0
 
