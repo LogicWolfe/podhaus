@@ -112,15 +112,38 @@ def publish_file(src, dest):
     return "linked"
 
 
-def process_torrent(thash, directory, publishdir):
-    """Publish every complete media file under one torrent.
+def _iter_files(base_path):
+    if os.path.isfile(base_path):  # single-file torrent
+        yield base_path
+        return
+    for root, _dirs, files in os.walk(base_path):
+        for name in files:
+            yield os.path.join(root, name)
 
-    Returns (pending, published): pending is media that can't be published
-    yet (incomplete, awaiting extraction, or link conflict); published is
-    media files now present in the library.
+
+def _dest_for(src, base_path, publishdir):
+    # Single-file torrent: base_path is the file itself and publishdir is its
+    # parent directory, so append the filename.
+    if os.path.isfile(base_path):
+        return os.path.join(publishdir, os.path.basename(base_path))
+    # Multi-file: publishdir and base_path are parallel per-torrent roots —
+    # rtorrent appends the torrent name to both the user's chosen destination
+    # (captured as publishdir) and our /data/torrents reset (base_path) — so
+    # map the file's path within base_path directly under publishdir.
+    return os.path.join(publishdir, os.path.relpath(src, base_path))
+
+
+def process_torrent(thash, base_path, publishdir):
+    """Publish every complete media file under one torrent into publishdir.
+
+    Keyed off base_path (unique per torrent) because all redirected
+    downloads share /data/torrents as their directory. Returns
+    (pending, published): pending is media that can't publish yet
+    (incomplete, awaiting extraction, or link conflict); published is media
+    files now present in the library.
     """
-    # Per-file completion for torrent members, keyed by normalised path so
-    # a loose .mkv member is never misclassified as extracted output.
+    # Per-file completion for torrent members, keyed by normalised path so a
+    # loose .mkv member is never misclassified as extracted output.
     members = {}
     for path, completed, size_chunks in rpc(
         "f.multicall", thash, "", "f.path=", "f.completed_chunks=", "f.size_chunks="
@@ -128,24 +151,21 @@ def process_torrent(thash, directory, publishdir):
         members[os.path.normpath(path)] = (int(completed) == int(size_chunks))
 
     pending = published = 0
-    for root, _dirs, files in os.walk(directory):
-        for name in files:
-            src = os.path.join(root, name)
-            if not is_media(src):
-                continue
-            key = os.path.normpath(src)
-            if key in members:
-                complete = members[key]
-            else:
-                complete = has_extract_marker(root)  # extracted output
-            if not complete:
-                pending += 1
-                continue
-            result = publish_file(src, os.path.join(publishdir, os.path.relpath(src, directory)))
-            if result == "conflict":
-                pending += 1
-            else:
-                published += 1
+    for src in _iter_files(base_path):
+        if not is_media(src):
+            continue
+        key = os.path.normpath(src)
+        if key in members:
+            complete = members[key]
+        else:
+            complete = has_extract_marker(os.path.dirname(src))  # extracted output
+        if not complete:
+            pending += 1
+            continue
+        if publish_file(src, _dest_for(src, base_path, publishdir)) == "conflict":
+            pending += 1
+        else:
+            published += 1
     return pending, published
 
 
@@ -158,15 +178,14 @@ def main():
 
     rows = rpc(
         "d.multicall2", "", "main",
-        "d.hash=", "d.directory=", "d.custom=publishdir",
+        "d.hash=", "d.base_path=", "d.custom=publishdir",
         "d.complete=", "d.custom=pubdone",
     )
-    for thash, directory, publishdir, complete, pubdone in rows:
-        # Only act on our redirected torrents (download dir under
-        # /data/torrents). Grandfathered torrents that still live directly
-        # in the library have a non-/data/torrents directory and are left
-        # alone.
-        if not directory.startswith(DOWNLOAD_ROOT):
+    for thash, base_path, publishdir, complete, pubdone in rows:
+        # Only act on redirected torrents — their data lives under
+        # /data/torrents/<name>. Grandfathered torrents still in the library
+        # have a non-/data/torrents base_path and are left alone.
+        if not base_path.startswith(DOWNLOAD_ROOT + "/"):
             continue
         # No destination, or the bare default: left in the working dir by
         # design (nothing to publish).
@@ -182,7 +201,7 @@ def main():
         if pubdone == "1":
             continue
         try:
-            pending, published = process_torrent(thash, directory, publishdir)
+            pending, published = process_torrent(thash, base_path, publishdir)
         except Exception as exc:  # one bad torrent must not abort the pass
             log("ERROR processing %s: %s" % (thash, exc))
             continue
@@ -195,25 +214,6 @@ def main():
         if int(complete) == 1 and pending == 0 and published > 0:
             rpc("d.custom.set", thash, "pubdone", "1")
             rpc("d.save_full_session", thash)
-
-
-def redirect(thash):
-    """Redirect a freshly-added torrent's download into /data/torrents/<hash>
-    and stash the user's chosen library path as the publishdir custom.
-
-    Invoked synchronously from rtorrent's event.download.inserted_new hook,
-    before data is written. Done in Python rather than an inline rtorrent.rc
-    substitution because the latter's nested-$cat parsing is unreliable.
-    """
-    directory = rpc("d.directory", thash)
-    # No destination chosen (bare default), or already redirected: nothing
-    # to capture, leave it in the working dir.
-    if directory == DOWNLOAD_ROOT or directory.startswith(DOWNLOAD_ROOT + "/"):
-        return
-    rpc("d.custom.set", thash, "publishdir", directory)
-    rpc("d.directory.set", thash, DOWNLOAD_ROOT + "/" + thash)
-    rpc("d.save_full_session", thash)
-    log("redirected %s: publishdir=%s -> %s/%s" % (thash, directory, DOWNLOAD_ROOT, thash))
 
 
 def check_gaps():
@@ -255,10 +255,7 @@ if __name__ == "__main__":
         except OSError:
             pass
         try:
-            if "--redirect" in sys.argv:
-                redirect(sys.argv[sys.argv.index("--redirect") + 1])
-            else:
-                main()
+            main()
         except Exception as exc:
             log("FATAL: %s" % exc)
             sys.exit(1)

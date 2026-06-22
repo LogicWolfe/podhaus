@@ -24,6 +24,10 @@ network.xmlrpc.size_limit.set = 10000000
 schedule = watch_directory,1,1,"load.start=/data/.watch/*.torrent"
 schedule = untied_directory,5,5,"stop_untied=/data/.watch/*.torrent"
 schedule = scgi_permission,0,0,"execute.nothrow=chmod,\"g+w,o=\",/tmp/rtorrent.sock"
+# Ensure the redirected download root exists at startup. rtorrent won't
+# create a download's parent dir, so a missing /data/torrents silently
+# stalls every redirected torrent at 0 bytes despite seeds. Idempotent.
+schedule = mkdir_download_root,0,0,"execute.nothrow=mkdir,-p,/data/torrents"
 schedule = insufficient_disk_space,1,30,close_low_diskspace=500M
 
 # pinelake-tag → Pouch .stignore sync. On finish, kick a full reconciler
@@ -53,10 +57,12 @@ method.set_key=event.download.finished,flood_publish,"execute.nothrow.bg={python
 
 method.set_key=event.download.inserted_new,loaded_time,"d.custom.set=addtime,$cat=$system.time=;d.save_full_session="
 
-# Redirect every new download into a per-torrent dir under /data/torrents
-# (Plex-invisible) and stash the user's chosen destination as `publishdir`
-# so flood-publish.py knows where to hardlink completed media. Done in the
-# Python helper (synchronous, before any data lands) rather than an inline
-# rtorrent.rc substitution — the nested-$cat form is unreliable. Uses the
-# same execute.nothrow={…,$d.hash=} pattern as the other hooks.
-method.set_key=event.download.inserted_new,redirect_dl,"execute.nothrow={python3,/scripts/flood-publish.py,--redirect,$d.hash=}"
+# Redirect every new download into /data/torrents (Plex-invisible) and stash
+# the user's chosen destination as `publishdir` so flood-publish.py knows
+# where to hardlink completed media. INLINE rtorrent commands only: an
+# external helper that calls back over XML-RPC from here would DEADLOCK
+# rtorrent — a synchronous hook blocks the main loop that the RPC needs to
+# answer. Capture must precede the directory reset. New torrents have no data
+# at inserted_new, so relocating the directory is safe. The download lands in
+# /data/torrents/<torrent-name>; flood-publish.py keys off d.base_path.
+method.set_key=event.download.inserted_new,redirect_dl,"d.custom.set=publishdir,$d.directory=;d.directory.set=/data/torrents;d.save_full_session="
