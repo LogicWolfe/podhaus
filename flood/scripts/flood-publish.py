@@ -170,11 +170,17 @@ def process_torrent(thash, base_path, publishdir):
 
 
 def main():
-    lock = open(LOCK_FILE, "w")
+    lock = None
     try:
+        lock = open(LOCK_FILE, "w")
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        return  # another pass is running; it sees the same state
+    except BlockingIOError:
+        return  # another pass holds the lock; it sees the same state
+    except OSError as exc:
+        # Lock unopenable (e.g. stale cross-uid ownership). Publishing is
+        # idempotent via inode dedup, so run without single-flight rather
+        # than abort the whole pass.
+        log("WARN: single-flight lock unavailable (%s); continuing" % exc)
 
     rows = rpc(
         "d.multicall2", "", "main",

@@ -19,13 +19,15 @@ services:
         set -e
         install -o 1000 -g 1001 -m 0644 /conf/rtorrent.rc /flood-db/.rtorrent.rc
         echo "rtorrent.rc installed at /flood-db/.rtorrent.rc"
-        # flood-publish.log is written by both the ofelia tick and rtorrent's
-        # uid-1000 execute hooks (redirect, finish-publish). Pre-own it 1000
-        # so neither path hits a cross-uid permission error (an ofelia-first
-        # run would otherwise create it root-owned and lock out the hooks).
-        touch /flood-db/flood-publish.log
-        chown 1000:1001 /flood-db/flood-publish.log
-        chmod 0664 /flood-db/flood-publish.log
+        # flood-publish's log + single-flight lock are touched by both the
+        # ofelia tick and rtorrent's uid-1000 execute hooks. Pre-own them
+        # 1000 so neither path hits a cross-uid permission error (a root-first
+        # run would otherwise create them root-owned and lock out the hooks).
+        for f in flood-publish.log flood-publish.lock; do
+          touch "/flood-db/$f"
+          chown 1000:1001 "/flood-db/$f"
+          chmod 0664 "/flood-db/$f"
+        done
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
