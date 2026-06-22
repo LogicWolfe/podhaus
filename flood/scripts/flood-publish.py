@@ -142,13 +142,16 @@ def process_torrent(thash, base_path, publishdir):
     (incomplete, awaiting extraction, or link conflict); published is media
     files now present in the library.
     """
-    # Per-file completion for torrent members, keyed by normalised path so a
-    # loose .mkv member is never misclassified as extracted output.
+    # Per-file completion for torrent members, keyed by absolute path so a
+    # loose .mkv member is matched against the filesystem walk and never
+    # misclassified as extracted output. f.frozen_path is the absolute path;
+    # f.path is only the path *relative* to base_path (the bug that made every
+    # non-RAR member look like a non-member and never publish).
     members = {}
-    for path, completed, size_chunks in rpc(
-        "f.multicall", thash, "", "f.path=", "f.completed_chunks=", "f.size_chunks="
+    for frozen, completed, size_chunks in rpc(
+        "f.multicall", thash, "", "f.frozen_path=", "f.completed_chunks=", "f.size_chunks="
     ):
-        members[os.path.normpath(path)] = (int(completed) == int(size_chunks))
+        members[os.path.normpath(frozen)] = (int(completed) == int(size_chunks))
 
     pending = published = 0
     for src in _iter_files(base_path):
