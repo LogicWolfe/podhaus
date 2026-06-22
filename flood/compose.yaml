@@ -19,6 +19,13 @@ services:
         set -e
         install -o 1000 -g 1001 -m 0644 /conf/rtorrent.rc /flood-db/.rtorrent.rc
         echo "rtorrent.rc installed at /flood-db/.rtorrent.rc"
+        # flood-publish.log is written by both the ofelia tick and rtorrent's
+        # uid-1000 execute hooks (redirect, finish-publish). Pre-own it 1000
+        # so neither path hits a cross-uid permission error (an ofelia-first
+        # run would otherwise create it root-owned and lock out the hooks).
+        touch /flood-db/flood-publish.log
+        chown 1000:1001 /flood-db/flood-publish.log
+        chmod 0664 /flood-db/flood-publish.log
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -101,6 +108,10 @@ services:
       # custom flag and are skipped. See flood/scripts/flood-publish.py.
       ofelia.job-exec.flood-publish.schedule: "0 * * * * *"
       ofelia.job-exec.flood-publish.command: "python3 /scripts/flood-publish.py"
+      # Run as uid 1000 (same as rtorrent's execute hooks) so the log and any
+      # intermediate library dirs created by the tick are owned consistently
+      # with the rest of the download/library tree.
+      ofelia.job-exec.flood-publish.user: "1000:1001"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # Stall-proof + stub-proof: prove the service via loopback wget,

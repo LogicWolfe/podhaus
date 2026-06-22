@@ -245,8 +245,15 @@ if __name__ == "__main__":
     if "--gaps" in sys.argv:
         check_gaps()
     else:
-        sys.stdout = open(LOG_FILE, "a")
-        sys.stderr = sys.stdout
+        # Log to the file, but never let a log-open failure (e.g. a
+        # cross-uid permission error) abort the run — the redirect/publish
+        # work matters more than the log line. execute hooks discard the
+        # fallback stdout anyway.
+        try:
+            sys.stdout = open(LOG_FILE, "a")
+            sys.stderr = sys.stdout
+        except OSError:
+            pass
         try:
             if "--redirect" in sys.argv:
                 redirect(sys.argv[sys.argv.index("--redirect") + 1])
