@@ -17,7 +17,9 @@
 #   - flock on a sidecar lock; periodic + event triggers can't race.
 #   - .stignore writes use tempfile + atomic rename; group inherited via
 #     setgid on /mnt/pouch.
-#   - Skips entries whose base_path doesn't sit under /data/.
+#   - Emits the publish target (library path) from the `publishdir` named
+#     custom, falling back to `directory` for grandfathered torrents.
+#     Skips the /data/torrents working tree and anything outside /data/.
 
 set -u
 
@@ -69,6 +71,7 @@ candidates=$(awk '
         complete = 0
         custom1 = ""
         directory = ""
+        publishdir = ""
         pos = 2          # skip leading "d"
         while (pos <= n) {
             c = substr(s, pos, 1)
@@ -94,6 +97,27 @@ candidates=$(awk '
                 if (key == "custom1") custom1 = val
                 else if (key == "directory") directory = val
                 pos += colon + slen
+            } else if (c == "d" && key == "custom") {
+                # The named-custom dict; pull out publishdir (the library
+                # target stashed at insert by rtorrent.rc redirect_dl).
+                # Named custom values are strings.
+                pos++
+                while (pos <= n) {
+                    cc = substr(s, pos, 1)
+                    if (cc == "e") { pos++; break }
+                    colon = index(substr(s, pos), ":")
+                    if (colon == 0) break
+                    klen = substr(s, pos, colon - 1) + 0
+                    ikey = substr(s, pos + colon, klen)
+                    pos += colon + klen
+                    cv = substr(s, pos, 1)
+                    if (cv >= "0" && cv <= "9") {
+                        colon = index(substr(s, pos), ":")
+                        slen  = substr(s, pos, colon - 1) + 0
+                        if (ikey == "publishdir") publishdir = substr(s, pos + colon, slen)
+                        pos += colon + slen
+                    } else { break }
+                }
             } else if (c == "d" || c == "l") {
                 # Skip nested dict/list with depth tracking.
                 depth = 1; pos++
@@ -114,14 +138,17 @@ candidates=$(awk '
         }
 
         if (complete != 1) next
-        if (directory == "") next
+        # Prefer the publish target (library path); fall back to directory
+        # for grandfathered torrents added before the redirect_dl model.
+        path = (publishdir != "") ? publishdir : directory
+        if (path == "") next
 
         # custom1 is URL-encoded comma-separated; "pinelake" survives the
         # encoding as itself, so exact CSV-element match is safe.
         m = split(custom1, tags, ",")
         for (i = 1; i <= m; i++) {
             if (tags[i] == "pinelake") {
-                print directory
+                print path
                 next
             }
         }
@@ -141,6 +168,7 @@ trap 'rm -f "$new_lines" "$pending"' EXIT
 
 echo "$candidates" | while IFS= read -r dir; do
     case "$dir" in
+        /data/torrents|/data/torrents/*) ;;  # working dir, never allowlist the download tree
         /data/*) printf '!%s\n' "${dir#/data/}" >> "$new_lines" ;;
     esac
 done

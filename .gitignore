@@ -13,3 +13,5 @@ dns/.env
 # (komodo/core.config.toml.tmpl); the rendered file is bilby-host
 # state and must never be committed.
 komodo/.runtime/
+__pycache__/
+*.pyc

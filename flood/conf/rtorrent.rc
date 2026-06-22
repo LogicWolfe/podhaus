@@ -26,22 +26,6 @@ schedule = untied_directory,5,5,"stop_untied=/data/.watch/*.torrent"
 schedule = scgi_permission,0,0,"execute.nothrow=chmod,\"g+w,o=\",/tmp/rtorrent.sock"
 schedule = insufficient_disk_space,1,30,close_low_diskspace=500M
 
-# Auto-cleanup on torrent erase. Fires when a torrent is removed from
-# rtorrent (Flood "Remove", not "Remove and delete data"). The script
-# inspects the base_path, confirms the torrent was RAR-based AND that
-# extracted content exists, then deletes only RAR pieces + scene
-# detritus — preserving the extracted video, subtitles, and anything
-# else. Non-RAR torrents are a silent no-op. See
-# flood/rtorrent-cleanup.sh for the full logic.
-#
-# `execute.nothrow.bg` — backgrounded so it doesn't block rtorrent's
-# event loop, and exec/script errors don't abort the erase chain.
-# (Earlier this line read `execute2.nothrow`, which is not a real
-# rtorrent method — the call silently failed for every erase, so the
-# script never ran. `execute2` exists; `execute.nothrow` exists; the
-# combined form does not.)
-method.set_key=event.download.erased,rar_cleanup,"execute.nothrow.bg={/scripts/rtorrent-cleanup.sh,$d.base_path=}"
-
 # pinelake-tag → Pouch .stignore sync. On finish, kick a full reconciler
 # pass over /flood-db/*.torrent.rtorrent that inserts the base_path of
 # every complete + pinelake-tagged torrent into .stignore (alphabetically
@@ -59,4 +43,19 @@ method.set_key=event.download.finished,pinelake_stignore,"execute.nothrow.bg={/s
 # safety-net catches stuck folders. See flood/scripts/rtorrent-extract.sh.
 method.set_key=event.download.finished,rar_extract,"execute.nothrow.bg={/scripts/rtorrent-extract.sh,$d.base_path=}"
 
+# Hardlink-publish completed media into the Plex library. flood-publish.py
+# queries rtorrent for per-file completion and links each done file from
+# /data/torrents into the publishdir captured below. This finish-hook pass
+# makes a freshly-completed torrent publish near-instantly; the ofelia tick
+# (every minute) is the steady-state driver and the backstop if this pass
+# runs before rar_extract. See docs/plans/flood-atomic-publish.md.
+method.set_key=event.download.finished,flood_publish,"execute.nothrow.bg={python3,/scripts/flood-publish.py}"
+
 method.set_key=event.download.inserted_new,loaded_time,"d.custom.set=addtime,$cat=$system.time=;d.save_full_session="
+
+# Redirect every new download into a per-torrent dir under /data/torrents
+# (Plex-invisible) and stash the user's chosen destination as `publishdir`
+# so flood-publish.py knows where to hardlink completed media. The capture
+# must run before the directory is rewritten. New torrents have no data on
+# disk yet at inserted_new, so relocating the directory is safe.
+method.set_key=event.download.inserted_new,redirect_dl,"d.custom.set=publishdir,$d.directory=;d.directory.set=$cat=/data/torrents/,$d.hash=;d.save_full_session="

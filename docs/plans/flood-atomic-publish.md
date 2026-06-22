@@ -124,9 +124,11 @@ completion is *live* state; reading it from `.libtorrent_resume` would
 mean reimplementing chunk-boundary math in shell against the bitfield +
 piece length + file sizes — fragile, and rtorrent already computes it.
 So this queries rtorrent directly over the existing `/tmp/rtorrent.sock`
-SCGI socket via a vendored `xmlrpc2scgi.py`. Cost: add `python3` to
-`flood/Dockerfile` (one apk layer; Python is already a repo dependency
-via `init-tools`).
+SCGI socket. The transport is inlined in `flood-publish.py` (stdlib
+`xmlrpc.client` for marshalling + ~15 lines of SCGI netstring framing,
+since no stdlib speaks SCGI) — self-contained, nothing third-party to
+vendor. Cost: add `python3` to `flood/Dockerfile` (one apk layer; Python
+is already a repo dependency via `init-tools`).
 
 ### 3. `event.download.finished` — extract then publish
 
@@ -206,9 +208,8 @@ trigger would be required.
 - `flood/conf/rtorrent.rc` — `inserted_new` redirect + capture;
   finish-hook ordering.
 - `flood/Dockerfile` — add `python3`.
-- `flood/scripts/xmlrpc2scgi.py` — vendored SCGI client (new).
-- `flood/scripts/flood-publish.sh` — the publish tick + the shared
-  hardlink helper (new).
+- `flood/scripts/flood-publish.py` — the publish tick, inlined SCGI/XML-RPC
+  transport, and the `--gaps` publish-gap reporter (new).
 - `flood/scripts/rtorrent-extract.sh` — multi-archive fix; path root →
   `/data/torrents`.
 - `flood/scripts/rtorrent-cleanup.sh` — **delete**; remove its
@@ -222,19 +223,27 @@ trigger would be required.
 
 ---
 
-## Open decisions
+## Decisions (resolved as built)
 
-- **Publish path shape:** `target/<torrent-folder>/E01.mkv` (preserve
-  the release-folder layout) vs flatten to `target/E01.mkv`. Lean
-  preserve — Plex handles both and it matches current behavior.
-- **Media filter + samples:** which extensions count; skip `*sample*`
-  ourselves vs rely on Plex's built-in sample filter.
-- **Tick interval:** 1 min (snappier) vs 2 min (lighter). Either fits
-  the minutes-not-seconds goal.
+- **Publish path shape:** preserve the release-folder layout —
+  `publishdir/<relpath under d.directory>`, computed from rtorrent's own
+  `d.directory` + `f.path` so it's correct regardless of single- vs
+  multi-file directory semantics.
+- **Media filter + samples:** video (`.mkv .mp4 .avi .m4v .ts .m2ts .mov
+  .wmv .mpg .mpeg`) + subtitles (`.srt .ass .ssa .sub .idx .vtt`); skip
+  any name containing `sample` ourselves.
+- **Tick interval:** 1 minute (`0 * * * * *`), backed by the
+  finish-hook for near-instant publish on completion.
+- **Publish-gap monitor:** folded into the existing daily `rar-backlog`
+  Gatus heartbeat via `flood-publish.py --gaps`, not a separate endpoint.
+
+Still open:
+
 - **Existing in-library content:** today's downloads already live in
   `/data/{TV,Movies,Kids}` as the torrent `base_path` (rtorrent seeding
   from there). The new model doesn't require moving them — grandfather
-  them as-is and apply the model only to new torrents.
+  them as-is and apply the model only to new torrents. pinelake-stignore
+  falls back to `directory` for these.
 
 ---
 

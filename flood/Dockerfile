@@ -21,8 +21,12 @@
 #     rather than trusting the exit code.
 FROM jesec/rtorrent-flood:latest
 
+# libarchive-tools → bsdtar for the RAR extract hook.
+# python3 → flood-publish.py, which queries rtorrent over the SCGI socket
+#   for per-file completion and hardlinks completed media into the library
+#   (see flood/scripts/flood-publish.py + docs/plans/flood-atomic-publish.md).
 USER root
-RUN apk add --no-cache libarchive-tools
+RUN apk add --no-cache libarchive-tools python3
 
 # Content-hash build arg from the podhaus mechanism (see AGENTS.md
 # "Content-hash change detection"). Declared here purely for cache

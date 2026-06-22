@@ -1,40 +1,28 @@
 #!/bin/sh
 # Called by rtorrent's event.download.finished hook with $d.base_path= as $1.
 #
-# Real-time in-place RAR extraction for completed torrents. Replaces the
-# previous unpackerr stack: rtorrent already knows the exact base_path
-# each torrent landed under, so we walk that subtree at any depth for
-# the archive entry-point, run bsdtar against it in place, and drop a
-# `_unpackerred.<dir>.txt` marker matching unpackerr's convention so
-# the daily rar-backlog scanner doesn't re-flag it.
+# Real-time in-place RAR extraction for completed torrents. Torrents now
+# download under /data/torrents (see docs/plans/flood-atomic-publish.md);
+# rtorrent passes the exact base_path the torrent landed under, so we walk
+# that subtree, extract every RAR set found via bsdtar in place, and drop a
+# `_unpackerred.<dir>.txt` marker per extracted dir. flood-publish.py then
+# hardlinks the extracted media into the Plex library.
 #
-# Depth-agnostic by design: rtorrent gives us the exact path the files
-# landed under, so paths like /data/TV/<Show>/Season 1/<release>/foo.rar
-# work the same as /data/Movies/<release>/foo.rar — no watch-path
-# enumeration to maintain.
+# Every RAR set under base_path, not just the first: a season-pack torrent
+# can carry one release subfolder per episode, each with its own RAR set.
+# (The previous `find … | head -n 1` extracted only the first and silently
+# skipped the rest, with the marker fooling rar-backlog into thinking the
+# folder was handled.)
 #
-# Idempotent: re-invocation on an already-processed directory is a
-# no-op (marker present). On extraction failure we leave no marker,
-# so flood/scripts/rar-backlog.sh catches the stuck folder on its
-# next daily run and Gatus alerts.
+# Idempotent: a dir with its marker already present is skipped. On
+# extraction failure we leave no marker, so flood/scripts/rar-backlog.sh
+# catches the stuck folder on its next daily run and Gatus alerts.
 #
-# Why bsdtar (libarchive) — see flood/Dockerfile for the full rationale
-# (short version: alpine dropped unrar, alpine's p7zip resolves to a
-# slim 7zip without the RAR codec, libarchive ships permissive RAR
-# read + multi-volume support).
-#
-# Why we don't trust bsdtar's exit code: libarchive emits "Truncated
-# RAR file data" at the last-volume boundary on legacy multi-volume
-# RAR sets (.rar + .r00, .r01, …) even after extracting the contents
-# successfully. We verify by comparing the count of non-archive
-# "keeper" files in the target dir before vs after — same heuristic
-# the rtorrent-cleanup.sh ABORT guard uses, run in reverse.
-#
-# Safety layers (mirroring rtorrent-cleanup.sh):
-#   1. Path guard — only operate under /data/{Movies,TV,Kids}.
-#   2. Marker check — never re-extract an already-processed dir.
-#   3. Post-extract verification — only drop the marker if extraction
-#      actually produced new content.
+# Why bsdtar (libarchive) — see flood/Dockerfile. Why we don't trust its
+# exit code: libarchive emits "Truncated RAR file data" at the last-volume
+# boundary on legacy multi-volume sets even after a full extraction, so we
+# verify by comparing the count of non-archive "keeper" files before vs
+# after.
 
 set -u
 
@@ -46,10 +34,8 @@ BASE="${1:-}"
 
 log() { echo "[rtorrent-extract] $*"; }
 
-# Count files that are NOT RAR pieces, NOT scene metadata, and NOT
-# sample artifacts. Same set the rtorrent-cleanup.sh keeper check uses,
-# plus the _unpackerred.* marker so re-runs don't see "themselves" as
-# new keepers.
+# Count files that are NOT RAR pieces, NOT scene metadata, and NOT sample
+# artifacts (plus the marker itself, so re-runs don't see it as a keeper).
 count_keepers() {
     find "$1" -maxdepth 1 -type f \
         ! -iname '*.rar' \
@@ -65,87 +51,85 @@ count_keepers() {
 }
 
 # --- Path guard ------------------------------------------------------
+# Downloads live under /data/torrents now (rtorrent-redirected at insert).
 case "$BASE" in
-    /data/Movies/*|/data/TV/*|/data/Kids/*) ;;
+    /data/torrents/*) ;;
     *)
-        log "skip: base_path outside watched roots: $BASE"
+        log "skip: base_path outside /data/torrents: $BASE"
         exit 0
         ;;
 esac
 
 if [ ! -d "$BASE" ]; then
-    # Single-file torrent (base_path is the file itself). The only
-    # interesting case would be a bare .rar download — vanishingly rare
-    # in practice, so not handled here.
+    # Single-file torrent (base_path is the file itself). A bare .rar
+    # download is vanishingly rare; not handled here.
     log "skip: base_path is not a directory (single-file torrent?): $BASE"
     exit 0
 fi
 
-# --- Locate the entry-point archive ---------------------------------
-# Recursive walk at any depth. Precedence (mirrors golift/xtractr's
-# getCompressedFiles):
-#   1. *.rar that is NOT *.part*.rar — modern single-volume, OR legacy
-#      multi-volume where the first volume is .rar and continuations
-#      are .r00, .r01, …
+# --- Pick the entry-point archive in one directory -------------------
+# Precedence (mirrors golift/xtractr's getCompressedFiles), scoped to a
+# single dir so each release subfolder is handled independently:
+#   1. *.rar that is NOT *.part*.rar — modern single-volume, or legacy
+#      multi-volume first volume (.rar + .r00, .r01, …)
 #   2. *.part01.rar / *.part001.rar — RAR5 multi-volume.
 #   3. *.r00 only if no .rar coexists in the same directory.
-#
-# `head -n 1` is fine — bsdtar handles multi-volume given any first
-# volume in the same directory.
-
-archive=$(find "$BASE" -type f -iname '*.rar' ! -iname '*.part*.rar' 2>/dev/null | head -n 1)
-
-if [ -z "$archive" ]; then
-    archive=$(find "$BASE" -type f \( -iname '*.part01.rar' -o -iname '*.part001.rar' \) 2>/dev/null | head -n 1)
-fi
-
-if [ -z "$archive" ]; then
-    candidate=$(find "$BASE" -type f -iname '*.r00' 2>/dev/null | head -n 1)
-    if [ -n "$candidate" ]; then
-        cdir=$(dirname "$candidate")
-        # Only accept .r00 as entry when no .rar coexists in the same
-        # directory (some legacy releases name the first volume .rar
-        # and we don't want to start mid-stream).
-        if [ -z "$(find "$cdir" -maxdepth 1 -type f -iname '*.rar' 2>/dev/null | head -n 1)" ]; then
-            archive="$candidate"
+entry_archive() {
+    d="$1"
+    a=$(find "$d" -maxdepth 1 -type f -iname '*.rar' ! -iname '*.part*.rar' 2>/dev/null | head -n 1)
+    [ -z "$a" ] && a=$(find "$d" -maxdepth 1 -type f \( -iname '*.part01.rar' -o -iname '*.part001.rar' \) 2>/dev/null | head -n 1)
+    if [ -z "$a" ]; then
+        c=$(find "$d" -maxdepth 1 -type f -iname '*.r00' 2>/dev/null | head -n 1)
+        if [ -n "$c" ] && [ -z "$(find "$d" -maxdepth 1 -type f -iname '*.rar' 2>/dev/null | head -n 1)" ]; then
+            a="$c"
         fi
     fi
-fi
+    printf '%s' "$a"
+}
 
-if [ -z "$archive" ]; then
-    log "no archive found in $BASE — non-rar torrent, nothing to do"
+# --- Extract one directory's RAR set --------------------------------
+extract_dir() {
+    e_dir="$1"
+    e_archive=$(entry_archive "$e_dir")
+    [ -z "$e_archive" ] && { log "no entry-point archive in $e_dir"; return 0; }
+
+    e_marker="$e_dir/_unpackerred.$(basename "$e_dir").txt"
+    if [ -e "$e_marker" ]; then
+        log "skip: marker already present in $e_dir"
+        return 0
+    fi
+
+    pre=$(count_keepers "$e_dir")
+    log "extracting $e_archive into $e_dir (pre-extract keepers: $pre)"
+    ( cd "$e_dir" && bsdtar -xf "$e_archive" ) || true
+    post=$(count_keepers "$e_dir")
+
+    if [ "$post" -gt "$pre" ]; then
+        printf 'Extracted %s on %s by rtorrent-extract.sh (keepers %d → %d)\n' \
+            "$(basename "$e_archive")" "$(date -Iseconds)" "$pre" "$post" > "$e_marker"
+        log "done: $e_dir ($pre → $post keepers)"
+        return 0
+    fi
+    log "ERROR: bsdtar produced no new keepers in $e_dir — leaving stuck for rar-backlog to alert"
+    return 1
+}
+
+# --- Walk every directory under BASE that holds a RAR set -----------
+dir_list=$(mktemp)
+find "$BASE" -type f \
+    \( -iname '*.rar' -o -iname '*.r[0-9][0-9]' -o -iname '*.part[0-9]*.rar' \) \
+    -exec dirname {} \; 2>/dev/null | sort -u > "$dir_list"
+
+if [ ! -s "$dir_list" ]; then
+    log "no archive found under $BASE — non-rar torrent, nothing to do"
+    rm -f "$dir_list"
     exit 0
 fi
 
-# --- Marker check ---------------------------------------------------
-dir=$(dirname "$archive")
-marker_name="_unpackerred.$(basename "$dir").txt"
-marker="$dir/$marker_name"
+rc=0
+while IFS= read -r d; do
+    extract_dir "$d" || rc=1
+done < "$dir_list"
+rm -f "$dir_list"
 
-if [ -e "$marker" ]; then
-    log "skip: $marker_name already present in $dir"
-    exit 0
-fi
-
-# --- Extract --------------------------------------------------------
-pre=$(count_keepers "$dir")
-log "extracting $archive into $dir (pre-extract keepers: $pre)"
-
-# bsdtar -x extracts; -f names the archive file; -C sets target dir.
-# stdout/stderr already redirected to $LOG_FILE via exec above. We
-# intentionally don't check $? — libarchive's "Truncated RAR file
-# data" exit code can fire on a full successful extraction. Verify
-# below by comparing keeper counts.
-( cd "$dir" && bsdtar -xf "$archive" ) || true
-
-post=$(count_keepers "$dir")
-
-if [ "$post" -gt "$pre" ]; then
-    printf 'Extracted %s on %s by rtorrent-extract.sh (keepers %d → %d)\n' \
-        "$(basename "$archive")" "$(date -Iseconds)" "$pre" "$post" > "$marker"
-    log "done: $dir ($pre → $post keepers)"
-    exit 0
-else
-    log "ERROR: bsdtar produced no new keepers in $dir — leaving stuck for rar-backlog to alert"
-    exit 1
-fi
+exit "$rc"

@@ -3,12 +3,15 @@
 #
 # Primary extraction happens in real time via the rtorrent-extract.sh
 # event.download.finished hook (in flood/conf/rtorrent.rc). This script
-# is the cron-driven backstop: it scans /data/Movies, /data/TV, /data/Kids
-# for folders containing RAR pieces >= AGE_THRESHOLD old where no
-# non-RAR/non-detritus content exists alongside them — i.e., RARs present
-# but no extracted content. That's the exact failure shape the
-# rtorrent-cleanup.sh ABORT guard is also protecting against, caught
-# proactively.
+# is the cron-driven backstop for the whole download pipeline, two checks:
+#   1. Extraction: scans /data/torrents for folders containing RAR pieces
+#      >= AGE_THRESHOLD old with no non-RAR/non-detritus content alongside
+#      them — RARs present but nothing extracted.
+#   2. Publish: completed torrents whose media never hardlinked into the
+#      Plex library (flood-publish.py --gaps). This is the safety net for
+#      the no-delete-time-guard model — a publish gap surfaces here before
+#      the user would ever "Remove and delete data". See
+#      docs/plans/flood-atomic-publish.md.
 #
 # Pushes result to Gatus heartbeat endpoint:
 #   0 unhealthy → success=true
@@ -38,7 +41,7 @@ dir_list=/tmp/rar-backlog-dirs.$$
 # in paths are assumed to not occur (would break newline-separated list).
 # busybox find's -printf doesn't support \0 reliably, so we newline-
 # separate and quote carefully via `while IFS= read -r`.
-find /data/Movies /data/TV /data/Kids \
+find /data/torrents \
     -type f -mmin +$AGE_MINUTES \
     \( -iname '*.rar' -o -iname '*.r[0-9][0-9]' -o -iname '*.part[0-9]*.rar' \) \
     2>/dev/null \
@@ -66,10 +69,22 @@ while IFS= read -r dir; do
 done < "$dir_list"
 rm -f "$dir_list"
 
+# --- Publish-gap check ----------------------------------------------
+# Completed torrents whose media never hardlinked into the library.
+# flood-publish.py --gaps reports them from rtorrent's own completion
+# state (one torrent name per line); fold into the same heartbeat.
+if gaps=$(python3 /scripts/flood-publish.py --gaps 2>>/flood-db/flood-publish.log); then
+    printf '%s\n' "$gaps" | while IFS= read -r name; do
+        [ -n "$name" ] && printf 'unpublished: %s\n' "$name" >> "$unhealthy_list"
+    done
+else
+    printf 'unpublished: gap-check-failed (rtorrent unreachable?)\n' >> "$unhealthy_list"
+fi
+
 unhealthy_count=$(wc -l < "$unhealthy_list" | tr -d ' ')
 
 if [ "$unhealthy_count" -eq 0 ]; then
-    echo "[rar-backlog] healthy: no unextracted RAR folders older than ${AGE_MINUTES}m"
+    echo "[rar-backlog] healthy: no unextracted RAR folders or publish gaps"
     wget -qO- --post-data='' \
         --header="Authorization: Bearer ${TOKEN}" \
         "${GATUS_URL}?success=true" > /dev/null
@@ -77,14 +92,14 @@ if [ "$unhealthy_count" -eq 0 ]; then
     exit 0
 fi
 
-echo "[rar-backlog] UNHEALTHY: ${unhealthy_count} folders have RARs but no extracted content"
+echo "[rar-backlog] UNHEALTHY: ${unhealthy_count} extraction/publish issues"
 sed 's/^/  /' "$unhealthy_list"
 
-# Build a short URL-safe error string: count + first 3 folder basenames.
+# Build a short URL-safe error string: count + first 3 item basenames.
 # Gatus renders this in [RESULT_ERRORS] in the alert email. Full list
 # remains in the stdout above (→ Alloy → Victoria Logs).
 sample=$(head -3 "$unhealthy_list" | awk -F/ '{print $NF}' | tr '\n' ',' | sed 's/,$//')
-error_msg="${unhealthy_count} folders with unextracted RARs; sample: ${sample}"
+error_msg="${unhealthy_count} extraction/publish issues; sample: ${sample}"
 # Percent-encode spaces → +, plus the delimiters that break query parsing
 # (%, &, #, ?, ", ;, ,). Busybox has no `jq -r @uri`, so do it crudely.
 error_enc=$(printf '%s' "$error_msg" \

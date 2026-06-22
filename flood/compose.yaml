@@ -93,6 +93,14 @@ services:
       # grep -Fxq dedupe), so collisions with the event hook are harmless.
       ofelia.job-exec.pinelake-stignore.schedule: "0 */5 * * * *"
       ofelia.job-exec.pinelake-stignore.command: "/scripts/pinelake-stignore.sh"
+      # Hardlink-publish completed media from /data/torrents into the Plex
+      # library, file by file (every minute, at :00). Steady-state driver
+      # for file-at-a-time delivery; the event.download.finished hook gives
+      # near-instant publish on completion and this is the backstop. Cheap
+      # at steady state — fully-published completed torrents carry a pubdone
+      # custom flag and are skipped. See flood/scripts/flood-publish.py.
+      ofelia.job-exec.flood-publish.schedule: "0 * * * * *"
+      ofelia.job-exec.flood-publish.command: "python3 /scripts/flood-publish.py"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # Stall-proof + stub-proof: prove the service via loopback wget,
