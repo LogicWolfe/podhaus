@@ -23,11 +23,13 @@ services:
         # ofelia tick and rtorrent's uid-1000 execute hooks. Pre-own them
         # 1000 so neither path hits a cross-uid permission error (a root-first
         # run would otherwise create them root-owned and lock out the hooks).
-        for f in flood-publish.log flood-publish.lock; do
-          touch "/flood-db/$f"
-          chown 1000:1001 "/flood-db/$f"
-          chmod 0664 "/flood-db/$f"
-        done
+        # Explicit paths, no shell variables: docker compose interpolates
+        # bare shell variables in the command and would mangle them (an
+        # earlier loop variable expanded to empty and chmod'd /flood-db
+        # itself, stripping its execute bit and crash-looping flood).
+        touch /flood-db/flood-publish.log /flood-db/flood-publish.lock
+        chown 1000:1001 /flood-db/flood-publish.log /flood-db/flood-publish.lock
+        chmod 0664 /flood-db/flood-publish.log /flood-db/flood-publish.lock
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
