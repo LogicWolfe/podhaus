@@ -55,7 +55,8 @@ method.set_key=event.download.inserted_new,loaded_time,"d.custom.set=addtime,$ca
 
 # Redirect every new download into a per-torrent dir under /data/torrents
 # (Plex-invisible) and stash the user's chosen destination as `publishdir`
-# so flood-publish.py knows where to hardlink completed media. The capture
-# must run before the directory is rewritten. New torrents have no data on
-# disk yet at inserted_new, so relocating the directory is safe.
-method.set_key=event.download.inserted_new,redirect_dl,"d.custom.set=publishdir,$d.directory=;d.directory.set=$cat=/data/torrents/,$d.hash=;d.save_full_session="
+# so flood-publish.py knows where to hardlink completed media. Done in the
+# Python helper (synchronous, before any data lands) rather than an inline
+# rtorrent.rc substitution — the nested-$cat form is unreliable. Uses the
+# same execute.nothrow={…,$d.hash=} pattern as the other hooks.
+method.set_key=event.download.inserted_new,redirect_dl,"execute.nothrow={python3,/scripts/flood-publish.py,--redirect,$d.hash=}"

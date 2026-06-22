@@ -197,6 +197,25 @@ def main():
             rpc("d.save_full_session", thash)
 
 
+def redirect(thash):
+    """Redirect a freshly-added torrent's download into /data/torrents/<hash>
+    and stash the user's chosen library path as the publishdir custom.
+
+    Invoked synchronously from rtorrent's event.download.inserted_new hook,
+    before data is written. Done in Python rather than an inline rtorrent.rc
+    substitution because the latter's nested-$cat parsing is unreliable.
+    """
+    directory = rpc("d.directory", thash)
+    # No destination chosen (bare default), or already redirected: nothing
+    # to capture, leave it in the working dir.
+    if directory == DOWNLOAD_ROOT or directory.startswith(DOWNLOAD_ROOT + "/"):
+        return
+    rpc("d.custom.set", thash, "publishdir", directory)
+    rpc("d.directory.set", thash, DOWNLOAD_ROOT + "/" + thash)
+    rpc("d.save_full_session", thash)
+    log("redirected %s: publishdir=%s -> %s/%s" % (thash, directory, DOWNLOAD_ROOT, thash))
+
+
 def check_gaps():
     """Print one line per completed torrent whose media never published.
 
@@ -229,7 +248,10 @@ if __name__ == "__main__":
         sys.stdout = open(LOG_FILE, "a")
         sys.stderr = sys.stdout
         try:
-            main()
+            if "--redirect" in sys.argv:
+                redirect(sys.argv[sys.argv.index("--redirect") + 1])
+            else:
+                main()
         except Exception as exc:
             log("FATAL: %s" % exc)
             sys.exit(1)
