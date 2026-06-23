@@ -21,15 +21,14 @@
 
       <h1>Flood + RAR pipeline</h1>
       <p class="lead text-lg text-text-muted">
-        Flood (rtorrent + Flood web UI) is bilby-resident. The auto-extract pipeline is
-        rtorrent-native: an <code>event.download.finished</code> hook fires
-        <code>rtorrent-extract.sh</code> with the torrent's exact <code>base_path</code>,
-        the script walks that subtree at any depth and extracts in place via
-        <code>bsdtar</code>. Depth-agnostic by design — rtorrent passes the exact
-        path, so layouts like <code>/data/Kids/Movies/&lt;release&gt;</code> or
-        <code>/data/TV/&lt;Show&gt;/Season N/&lt;release&gt;</code> work without any
-        watcher configuration. Every config file lives in the repo and bind-mounts
-        into the container.
+        Flood (rtorrent + Flood web UI) is bilby-resident. Downloads land in
+        <code>/data/torrents</code> — a Plex-invisible working tree — never directly in
+        the library. RAR releases extract in place there, and completed media is
+        <strong>hardlinked file-by-file into the clean <code>/data/{TV,Movies,Kids}</code>
+        library</strong>. Plex therefore only ever sees complete files (the partial-file
+        scan race is gone), and a prioritized episode publishes the moment it finishes
+        rather than when the whole torrent does. Every config file lives in the repo and
+        bind-mounts into the container.
       </p>
 
       <h2 id="flood">Flood</h2>
@@ -38,12 +37,11 @@
         <code>flood/Dockerfile</code> to add <code>libarchive-tools</code> (provides
         <code>bsdtar</code> with permissive RAR-read + multi-volume support — the
         right primitive for alpine, where standalone <code>unrar</code> isn't
-        packaged and the <code>p7zip</code> package doesn't ship the RAR codec).
-        Built on each deploy via Compose <code>build:</code>; Periphery's compose
-        build is fast (single <code>apk add</code> layer over the cached upstream).
-        Runs as <code>1000:1001</code> so files created end up owned the same as
-        rtorrent's RAR files. UI on port 3000, reachable at
-        <code>torrent.pod.haus</code>.
+        packaged and the <code>p7zip</code> package doesn't ship the RAR codec) and
+        <code>python3</code> (runs <code>flood-publish.py</code>, which queries rtorrent
+        over its SCGI socket for per-file completion and hardlinks completed media into
+        the library). Runs as <code>1000:1001</code> so created files end up owned the
+        same as rtorrent's. UI on port 3000, reachable at <code>torrent.pod.haus</code>.
       </p>
       <aside class="callout note">
         <span class="callout-title">Build-stack content-hash convention</span>
@@ -55,38 +53,168 @@
         and the Dockerfile declares
         <code>ARG STACK_CONTENT_HASH=unset</code> + ENV-from-ARG so a new value
         busts the cache. <code>BUILD_HASH_FLOOD</code> is injected per-deploy
-        by Stage 1 of the push procedure (the per-service variant of the
-        content-hash injector — every <code>build:</code> service gets a
-        <code>BUILD_HASH_&lt;UPPER_SERVICE&gt;</code> covering its resolved
-        build context). The running container never reads the value; it's
-        purely a layer-cache invalidation lever.
+        by Stage 1 of the push procedure. The running container never reads the
+        value; it's purely a layer-cache invalidation lever.
       </aside>
-      <p>
-        Storage:
-      </p>
+      <p>Storage:</p>
       <ul>
         <li><code>/var/lib/flood-db</code> (local NVMe) — rtorrent session
-          (~16 MB of <code>.torrent</code> + <code>.libtorrent_resume</code> +
-          <code>.rtorrent</code> files for ~200 active torrents).</li>
-        <li><code>/mnt/pouch</code> (NFS) — actual data, mounted into the container as
-          <code>/data</code>.</li>
+          (<code>.torrent</code> + <code>.libtorrent_resume</code> +
+          <code>.rtorrent</code> files for ~200 active torrents) plus the script logs
+          and locks.</li>
+        <li><code>/data/torrents</code> (under <code>/mnt/pouch</code>, mounted as
+          <code>/data</code>) — the download/extract <strong>working tree</strong>: RAR
+          pieces, scene detritus, and the working copy of extracted media.</li>
+        <li><code>/data/{TV,Movies,Kids}</code> — the Plex library, a curated
+          <strong>hardlink farm</strong>. A published file shares its inode with the
+          working-tree copy, so it's a single copy on disk until the torrent is removed.</li>
       </ul>
+
+      <h2 id="atomic-publish">Atomic publish: redirect + hardlink</h2>
+      <p>
+        The core of the pipeline, and why Plex never sees a partial file:
+      </p>
+      <ol>
+        <li><strong>Redirect at add</strong> — the
+          <code>event.download.inserted_new</code> <code>redirect_dl</code> hook in
+          <code>rtorrent.rc</code> captures the destination you typed as the torrent's
+          <code>publishdir</code> custom and resets the download directory to
+          <code>/data/torrents</code>:
+          <code>d.custom.set=publishdir,$d.directory=;d.directory.set=/data/torrents;d.save_full_session=</code>.
+          These are <strong>inline rtorrent commands</strong> on purpose — an external
+          helper that called back over XML-RPC from a synchronous hook would deadlock
+          rtorrent's single event loop (it blocks waiting for the hook while the hook
+          blocks waiting for rtorrent to answer the RPC). A startup
+          <code>schedule = mkdir_download_root,0,0,"execute.nothrow=mkdir,-p,/data/torrents"</code>
+          ensures the root exists — rtorrent won't create a download's parent dir, and a
+          missing <code>/data/torrents</code> silently stalls every redirected torrent at
+          0 bytes despite seeds.</li>
+        <li><strong>Publish on completion</strong> —
+          <code>flood/scripts/flood-publish.py</code> queries rtorrent over
+          <code>/tmp/rtorrent.sock</code> (SCGI + XML-RPC, transport inlined; no
+          third-party client). For every torrent whose <code>base_path</code> is under
+          <code>/data/torrents</code> with a real <code>publishdir</code>, it hardlinks
+          each completed media file into <code>publishdir</code>, preserving the release
+          folder. A torrent-member file is complete when
+          <code>f.completed_chunks == f.size_chunks</code> — keyed by
+          <strong><code>f.frozen_path</code></strong> (the <em>absolute</em> path;
+          <code>f.path</code> is only relative to base_path, and using it silently broke
+          non-RAR publishing). Extracted RAR output isn't a torrent member, so it's gated
+          on the <code>_unpackerred</code> marker instead. Media-only (video + subtitle
+          extensions; <code>.rar</code>/<code>.nfo</code>/<code>sample</code> skipped),
+          idempotent via inode equality, and a torrent gets a <code>pubdone</code> custom
+          once fully published so steady-state ticks skip it.</li>
+        <li><strong>Two triggers, same code path</strong> — an ofelia minute tick
+          (<code>0 * * * * *</code>, the steady-state driver, run as uid
+          <code>1000:1001</code>) and the <code>event.download.finished</code>
+          <code>flood_publish</code> hook (<code>execute.nothrow.bg</code>, near-instant
+          on completion). Plex's own change-detection picks the new hardlink up because
+          flood and Plex share the <code>/mnt/pouch</code> client mount on bilby, so the
+          link is a local-VFS event (this guarantee evaporates if flood ever moves off
+          bilby).</li>
+      </ol>
+      <aside class="callout note">
+        <span class="callout-title">Hardlink, not move; library paths only</span>
+        A completed file is still a live torrent member, so it can't be moved out from
+        under rtorrent — a hardlink lets rtorrent keep seeding from
+        <code>/data/torrents</code> while Plex reads the library copy, single copy on
+        disk. Set destinations to library paths (<code>/data/TV</code>,
+        <code>/data/Movies</code>, <code>/data/Kids</code>) — never under
+        <code>/data/torrents</code>, which the publisher logs a WARN for and skips.
+      </aside>
+
+      <h2 id="rar-pipeline">RAR auto-extract</h2>
+      <p>
+        <strong><code>flood/scripts/rtorrent-extract.sh</code></strong> — invoked by
+        rtorrent's <code>event.download.finished</code> hook with the torrent's exact
+        <code>base_path</code> (now under <code>/data/torrents</code>). It extracts
+        <strong>every RAR set</strong> under base_path, not just the first — a season-pack
+        torrent can carry one release subfolder per episode, and the old
+        <code>find … | head -1</code> silently skipped the rest. For each set it picks the
+        entry-point archive (modern <code>.rar</code> &gt; <code>.partNN.rar</code> &gt;
+        <code>.r00</code> with .rar absence), runs <code>bsdtar -xf</code> in place, and
+        drops <code>_unpackerred.&lt;dir&gt;.txt</code> as the "extracted" marker.
+        Idempotent on the marker. Success is verified by comparing the
+        non-archive-keeper count before vs after — libarchive emits "Truncated RAR file
+        data" and exits non-zero at the last-volume boundary even on a full extraction,
+        so the exit code is unreliable; a failure leaves no marker for the daily
+        safety-net to catch. Path-guarded to <code>/data/torrents</code>. Log at
+        <code>/flood-db/rtorrent-extract.log</code>. The extracted <code>.mkv</code> is
+        then hardlinked into the library by <code>flood-publish.py</code> (marker-gated,
+        since it isn't a torrent member).
+      </p>
+
+      <h2 id="cleanup">Cleanup: native delete + refcount</h2>
+      <p>
+        There is no <code>event.download.erased</code> cleanup hook — the old
+        selective <code>rtorrent-cleanup.sh</code> (strip RAR pieces, preserve the
+        extracted video) existed only for the download-in-library model and is deleted.
+        In the hardlink model the <code>/data/torrents/&lt;name&gt;</code> tree is
+        disposable working state, so cleanup is just Flood's <strong>Remove and delete
+        data</strong>: rtorrent deletes the whole tree (RAR pieces + the working copy of
+        the media), and the library hardlink survives because the inode's link count
+        stays ≥ 1.
+      </p>
+      <ul>
+        <li><strong>Wrong torrent caught mid-download</strong> — nothing was published, so
+          the file is link-count 1; "Remove and delete data" correctly deletes it. (This
+          is the deliberate, no-guard behaviour.)</li>
+        <li><strong>Finished + published, done seeding</strong> — "Remove and delete data"
+          drops the working-tree link; the library copy survives via refcount.</li>
+        <li><strong>"Remove" without data</strong> — leaves an orphan working-tree folder
+          in <code>/data/torrents</code>, reclaimed manually (no auto-cleanup hook).</li>
+        <li><strong>The safety primitive is the inode link count</strong> — a published
+          media file is link-count ≥ 2, so a working-tree file can be reaped safely iff
+          its link count is ≥ 2 (anything at 1 is unpublished and must not be deleted
+          blind).</li>
+      </ul>
+
+      <h2 id="safety-monitoring">Safety net + monitoring</h2>
+      <p>
+        <strong><code>flood/scripts/rar-backlog.sh</code></strong> — daily ofelia job at
+        04:50 AWST, the cron-driven backstop for the whole pipeline, two checks folded
+        into one Gatus heartbeat (<code>torrents_rar-extraction</code>):
+      </p>
+      <ul>
+        <li><strong>Extraction</strong> — scans <code>/data/torrents</code> for folders
+          with RAR pieces ≥ 2h old and no extracted keeper (extraction failed/never ran).</li>
+        <li><strong>Publish</strong> — runs <code>flood-publish.py --gaps</code>, which
+          reports completed torrents whose media never hardlinked into the library. This is
+          the safety net for the no-delete-time-guard model: a publish gap surfaces here
+          before you'd ever "Remove and delete data".</li>
+      </ul>
+      <p>
+        Healthy → <code>success=true</code>; any issue → <code>success=false&amp;error=…</code>
+        with a count + sample. A missing 25h ping fires the dead-man's switch (ofelia
+        broken, flood dead, NFS unmounted).
+      </p>
+      <aside class="callout note">
+        <span class="callout-title">Cross-uid log/lock ownership</span>
+        <code>flood-publish</code>'s log and single-flight lock are touched by both the
+        ofelia tick and rtorrent's uid-1000 execute hooks. <code>flood-init</code>
+        pre-owns <code>/flood-db/flood-publish.{log,lock}</code> as
+        <code>1000:1001</code> (explicit paths, no shell variable — docker compose
+        interpolates a bare <code>$var</code> in the command, and an earlier loop
+        variable expanded to empty and <code>chmod</code>'d <code>/flood-db</code> itself,
+        crash-looping flood). The publish tick also tolerates an unopenable lock rather
+        than aborting.
+      </aside>
 
       <h2 id="config-as-code">Config-as-code overlays</h2>
       <p>
         Two bind mounts make Flood's behavior diff-able and survive volume rebuild:
       </p>
       <ul>
-        <li><code>${PODHAUS_REPO}/flood/rtorrent.rc</code> overlaid onto
-          <code>/flood-db/.rtorrent.rc</code> via the <code>flood-init</code>
-          one-shot init container — rtorrent reads the file once at startup
-          and the bind keeps it diff-able alongside the rest of the repo.</li>
+        <li><code>${PODHAUS_REPO}/flood/conf/rtorrent.rc</code> installed onto
+          <code>/flood-db/.rtorrent.rc</code> via the <code>flood-init</code> one-shot
+          init container — rtorrent reads it once at startup. flood-init also creates
+          <code>/data/torrents</code>-adjacent state and pre-owns the publish log/lock.</li>
         <li><code>${PODHAUS_REPO}/flood/scripts</code> overlaid onto <code>/scripts</code>
-          (directory bind, so host edits propagate without restart). Contains
-          <code>rtorrent-extract.sh</code> (event.download.finished hook; in-place extraction),
-          <code>rtorrent-cleanup.sh</code> (event.download.erased hook; rar piece deletion),
-          <code>rar-backlog.sh</code> (daily ofelia safety-net + Gatus heartbeat),
-          and <code>pinelake-stignore.sh</code>.</li>
+          (directory bind, so host edits propagate without restart):
+          <code>flood-publish.py</code> (per-file hardlink publisher + <code>--gaps</code>
+          reporter), <code>rtorrent-extract.sh</code> (finished-hook RAR extraction),
+          <code>rar-backlog.sh</code> (daily safety-net + Gatus heartbeat), and
+          <code>pinelake-stignore.sh</code>.</li>
       </ul>
       <aside class="callout note">
         <span class="callout-title">Directory bind, not file bind, for the scripts dir</span>
@@ -137,102 +265,37 @@
         bilby-side incident-response one-liner — covers every Pouch/Jump consumer.
       </p>
 
-      <h2 id="rar-pipeline">The RAR auto-extract pipeline</h2>
-      <p>
-        Three parts working in concert. The whole point is "extract RAR multi-volume torrents
-        automatically and clean up the RAR pieces afterwards, but never delete the only copy
-        of the content if extraction silently failed."
-      </p>
-      <ol>
-        <li><strong><code>flood/scripts/rtorrent-extract.sh</code></strong> — invoked by
-          rtorrent's <code>event.download.finished</code> hook with the torrent's exact
-          <code>base_path</code>. Walks the subtree at any depth for the archive entry-point
-          (modern <code>.rar</code> &gt; <code>.partNN.rar</code> &gt; <code>.r00</code> with
-          .rar absence), runs <code>bsdtar -xf</code> in place, drops
-          <code>_unpackerred.&lt;dir&gt;.txt</code> as the
-          "this folder has been extracted" marker so rar-backlog won't re-flag.
-          Idempotent on the marker. Verifies success by comparing the
-          non-archive-keeper count before vs after — libarchive emits "Truncated
-          RAR file data" at the last-volume boundary and exits non-zero on legacy
-          multi-volume sets even when extraction completed, so the exit code is
-          unreliable on its own. Fails loud: if no new keepers appeared the
-          marker isn't written, leaving the folder for the daily safety-net to
-          catch. Path-guarded to <code>/data/{Movies,TV,Kids}</code>. Log at
-          <code>/flood-db/rtorrent-extract.log</code>.</li>
-        <li><strong><code>flood/scripts/rtorrent-cleanup.sh</code></strong> — invoked by
-          rtorrent's <code>event.download.erased</code> hook. Deletes RAR pieces and scene
-          detritus (<code>.rar</code>, <code>.r[0-9][0-9]</code>, <code>.partN.rar</code>,
-          <code>.sfv</code>, <code>.srr</code>, <code>.srs</code>, <code>.nfo</code>, sample/
-          proof dirs) <strong>only after</strong> verifying at least one non-RAR/non-detritus
-          keeper file exists in the folder. Path-restricted to
-          <code>/data/{Movies,TV,Kids}</code>.</li>
-        <li><strong><code>flood/scripts/rar-backlog.sh</code></strong> — daily ofelia job at
-          04:50 AWST, cron-driven safety-net. Scans for folders containing RAR pieces ≥2h
-          old with no extracted keepers (same detection as the cleanup script's abort guard,
-          run proactively). Pushes <code>success=true</code> or
-          <code>success=false&amp;error=&lt;count+sample&gt;</code> to Gatus's
-          <code>heartbeat_rar-extraction</code> external endpoint with the bearer token. Catches
-          anything the rtorrent-extract hook missed — rtorrent crash mid-finished, files added
-          manually outside rtorrent, bsdtar extraction failures.</li>
-      </ol>
-
-      <h2 id="safety-layering">Safety layering</h2>
-      <p>
-        Extraction is real-time via the rtorrent event hook, defended by these layers:
-      </p>
-      <ul>
-        <li><strong>Extraction-presence guard in <code>rtorrent-cleanup.sh</code></strong> —
-          if the extract hook hasn't run (or failed) for a folder, the keeper count is zero
-          and the erase-cleanup aborts rather than deleting the only copy of the content.</li>
-        <li><strong>Keeper-count verification in <code>rtorrent-extract.sh</code></strong> —
-          the <code>_unpackerred.&lt;dir&gt;.txt</code> marker is only written when extraction
-          actually produced new non-archive files. A failure leaves no marker, so the daily
-          scanner picks it up.</li>
-        <li><strong>Daily Gatus heartbeat</strong> — if no successful ping arrives within 25
-          hours, the dead-man's-switch fires (catches ofelia broken, flood dead, NFS unmounted).</li>
-        <li><strong>Failure ping with context</strong> — if the proactive scan finds a stuck
-          folder, it pushes <code>success=false</code> with the count and a sample folder name
-          — Gatus alerts within minutes instead of waiting for the missing heartbeat.</li>
-      </ul>
-
       <h2 id="pinelake-stignore">Pinelake .stignore auto-sync</h2>
       <p>
         Tagging a torrent <code>pinelake</code> in Flood marks it as "I want this on the
-        pinelake household Mac." On completion, its <code>base_path</code> is inserted as a
-        <code>!&lt;rel&gt;</code> allow-list line into Pouch's <code>.stignore</code>
-        (alphabetically into the matching <code>!&lt;TopLevel&gt;/</code> block, case-insensitive
-        sort to match the file's existing convention). Receive-only peers like pinelake's
-        syncthing then pick the file up via the next folder rescan.
+        pinelake household Mac." On completion its <strong>publish target</strong> (the
+        library path) is inserted as a <code>!&lt;rel&gt;</code> allow-list line into
+        Pouch's <code>.stignore</code> (alphabetically into the matching
+        <code>!&lt;TopLevel&gt;/</code> block, case-insensitive sort). Receive-only peers
+        like pinelake's syncthing then pick the file up on the next folder rescan.
       </p>
       <p>
-        Source of truth is rtorrent's own session state — Flood persists tags into
-        <code>d.custom1</code> in each torrent's <code>.torrent.rtorrent</code> file under
-        <code>/flood-db</code>. The reconciler bencode-walks the session files; no XMLRPC, no
-        Flood API dependency.
+        Source of truth is rtorrent's own session state — the reconciler bencode-walks the
+        <code>.torrent.rtorrent</code> files under <code>/flood-db</code>; no XMLRPC, no
+        Flood API dependency. It emits the <code>publishdir</code> named custom (the
+        library path) rather than the <code>base_path</code> (which now points at the
+        <code>/data/torrents</code> working tree, not what syncthing serves), falling back
+        to <code>directory</code> for grandfathered torrents added before the redirect
+        model, and skips the working tree itself.
       </p>
       <ul>
-        <li><strong><code>flood/scripts/pinelake-stignore.sh</code></strong> — the reconciler.
-          Filters <code>complete=1 &amp;&amp; "pinelake" ∈ split(custom1, ",")</code>, computes
-          <code>!${base_path#/data/}</code>, idempotent insert with <code>grep -Fxq</code>
-          dedupe and <code>flock</code> single-flight.</li>
-        <li><strong>Triggers</strong> — two, same code path:
-          <ul>
-            <li>rtorrent <code>event.download.finished</code> hook in <code>rtorrent.rc</code>
-              (zero-latency on a fresh completion).</li>
-            <li>ofelia <code>*/5min</code> tick on the flood container (catches the
-              tag-applied-after-completion case).</li>
-          </ul>
-        </li>
-        <li><strong>Writes</strong> — to <code>/data/.stignore</code> (= <code>/mnt/pouch/.stignore</code>
-          on bilby, NFS-backed by kangaroo). Tempfile-then-atomic-rename in the same dir;
-          <code>/mnt/pouch</code>'s setgid bit preserves group ownership across the swap.</li>
-        <li><strong>Insert-only by design</strong> — untagging or deleting a torrent does
-          <em>not</em> remove its <code>.stignore</code> line. Manual removal is the user's
-          call; this avoids the "managed vs hand-curated entries" distinction the
-          <code>.stignore</code> mixes (see <a href="/runbooks/syncthing.html#stignore">syncthing
-          runbook</a>).</li>
-        <li><strong>Log</strong> — append-only at <code>/flood-db/pinelake-stignore.log</code>,
-          one timestamped line per inserted entry. Quiet on no-op runs.</li>
+        <li><strong><code>flood/scripts/pinelake-stignore.sh</code></strong> — filters
+          <code>complete=1 &amp;&amp; "pinelake" ∈ split(custom1, ",")</code>, idempotent
+          insert with <code>grep -Fxq</code> dedupe and <code>flock</code> single-flight.</li>
+        <li><strong>Triggers</strong> — the rtorrent
+          <code>event.download.finished</code> hook (zero-latency) and an ofelia
+          <code>*/5min</code> tick (catches tag-applied-after-completion).</li>
+        <li><strong>Writes</strong> — to <code>/data/.stignore</code>
+          (= <code>/mnt/pouch/.stignore</code>), tempfile-then-atomic-rename in the same
+          dir; <code>/mnt/pouch</code>'s setgid bit preserves group ownership.</li>
+        <li><strong>Insert-only by design</strong> — untagging/deleting a torrent does
+          <em>not</em> remove its line; manual removal is the user's call (see
+          <a href="/runbooks/syncthing.html#stignore">syncthing runbook</a>).</li>
       </ul>
 
       <h2 id="bulk-cleanup">Bulk RAR-backlog cleanup tooling</h2>
@@ -250,13 +313,12 @@
       <h2 id="see-also">See also</h2>
       <ul>
         <li><a href="/scheduling.html">Scheduling</a> — the ofelia labels that schedule
-          <code>rar-backlog.sh</code> and <code>pinelake-stignore.sh</code>.</li>
+          the publish tick, <code>rar-backlog.sh</code>, and
+          <code>pinelake-stignore.sh</code>.</li>
         <li><a href="/monitoring.html">Monitoring</a> — the Gatus push endpoint that receives
           the heartbeat.</li>
         <li><a href="/runbooks/syncthing.html#stignore">Syncthing → .stignore</a> — the file
           this stack writes into, and how hand-curated and auto-injected entries co-exist.</li>
-        <li><a href="/plans/index.html">Plans</a> — Phase 7.5 of the migration plan documents
-          the pipeline's design end-to-end.</li>
       </ul>
 
     </main>
