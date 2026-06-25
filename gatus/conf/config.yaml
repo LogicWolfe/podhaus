@@ -718,3 +718,18 @@ external-endpoints:
         failure-threshold: 2
         success-threshold: 1
         send-on-resolved: true
+
+  # plex-label-sync — mirrors Flood tags onto the matching Plex show/movie
+  # as Labels (per-managed-user content restrictions); ofelia ticks every
+  # 5 min (plus the rtorrent event hook). 30m tolerates a few missed ticks.
+  - name: Plex Label Sync
+    group: Torrents
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
+    heartbeat:
+      interval: 30m
+    alerts:
+      - type: custom
+        description: "The Plex label sync hasn't ticked in 30 min — newly-tagged torrents won't have their kid-access labels applied in Plex until it resumes. Check ofelia + `docker exec flood python3 /scripts/plex-label-sync.py` (then `/flood-db/plex-label-sync.log`). A FATAL there usually means Plex is unreachable at 172.18.0.1:32400 or the token is stale."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true

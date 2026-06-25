@@ -298,6 +298,52 @@
           <a href="/runbooks/syncthing.html#stignore">syncthing runbook</a>).</li>
       </ul>
 
+      <h2 id="plex-label-sync">Tag → Plex label sync</h2>
+      <p>
+        Tags do double duty: any tag you put on a torrent in Flood is also mirrored onto the
+        matching Plex <strong>show</strong> (or movie) as a Plex <strong>Label</strong>. This
+        drives Plex's per-managed-user content restrictions — tag a torrent <code>indigo</code>
+        and the show it belongs to becomes accessible to the <code>indigo</code> managed user;
+        <code>rowan</code> likewise. Multiple tags → multiple labels → access for multiple kids.
+      </p>
+      <p>
+        <strong>Generic by design.</strong> Every tag becomes a label — there is no hardcoded
+        list. Adding a new kid or category later is zero code change: tag the torrents, then add
+        that label to the user's allow-list in Plex. <code>pinelake</code> rides along as a
+        harmless label too.
+      </p>
+      <ul>
+        <li><strong><code>flood/scripts/plex-label-sync.py</code></strong> — reuses
+          <code>flood-publish.py</code>'s rtorrent transport + publish-path logic (loaded by
+          path) to find each tagged torrent's published video files, looks each up in Plex by
+          file path, and walks to the owning show/movie. Reaches host-network Plex over the
+          dockernet gateway at <code>172.18.0.1:32400</code>; the token is the same plex.tv
+          account credential <code>plex/</code> uses.</li>
+        <li><strong>Triggers</strong> — the rtorrent <code>event.download.finished</code> hook
+          (zero-latency) and an ofelia <code>*/5min</code> tick. The tick is the workhorse:
+          Plex's own library scan lags the publish, so the finish-hook pass usually finds the
+          file not-yet-indexed and no-ops, and the tick picks it up once Plex has scanned.</li>
+        <li><strong>Label granularity is the show/movie</strong> — the only level Plex's
+          sharing label restrictions filter on. A tagged episode labels its whole show.</li>
+        <li><strong>Additive-only</strong> — removing a tag never strips the label (won't fight
+          labels set by hand in Plex). Revoke access manually.</li>
+        <li><strong>Cheap at steady state</strong> — each torrent's applied tag-set is stashed
+          in the <code>labelsync</code> named custom; a tick whose current tags already match
+          skips the torrent with no Plex round-trip. Plex is contacted only when a torrent's
+          tags actually changed. A torrent is only marked done once <em>every</em> published
+          video resolves to a Plex item, so a file Plex hasn't scanned yet is retried, never
+          silently skipped.</li>
+      </ul>
+      <p>
+        <strong>One-time manual Plex setup (not codeable here).</strong> Label filtering only
+        applies when a managed user's <em>restriction profile is set to <code>None</code></em>
+        (a Plex Pass feature). For each kid: in Plex → Settings → Users → (kid) → set restriction
+        profile to None, then under the shared library's restrictions add their label to "allow
+        content tagged with the following labels." podhaus doesn't manage Plex sharing config, so
+        this lives in Plex's account UI. Note Plex disables folder-browse for a label-restricted
+        user — expected.
+      </p>
+
       <h2 id="bulk-cleanup">Bulk RAR-backlog cleanup tooling</h2>
       <p>
         <code>rar-cleanup-scripts/</code> (Dockerfile +

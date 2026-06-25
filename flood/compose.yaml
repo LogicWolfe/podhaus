@@ -27,9 +27,12 @@ services:
         # bare shell variables in the command and would mangle them (an
         # earlier loop variable expanded to empty and chmod'd /flood-db
         # itself, stripping its execute bit and crash-looping flood).
-        touch /flood-db/flood-publish.log /flood-db/flood-publish.lock
-        chown 1000:1001 /flood-db/flood-publish.log /flood-db/flood-publish.lock
-        chmod 0664 /flood-db/flood-publish.log /flood-db/flood-publish.lock
+        touch /flood-db/flood-publish.log /flood-db/flood-publish.lock \
+              /flood-db/plex-label-sync.log /flood-db/plex-label-sync.lock
+        chown 1000:1001 /flood-db/flood-publish.log /flood-db/flood-publish.lock \
+              /flood-db/plex-label-sync.log /flood-db/plex-label-sync.lock
+        chmod 0664 /flood-db/flood-publish.log /flood-db/flood-publish.lock \
+              /flood-db/plex-label-sync.log /flood-db/plex-label-sync.lock
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -66,6 +69,12 @@ services:
       FLOOD_SECRET: ${FLOOD_SECRET}
       GID: "44"
       TZ: ${TZ}
+      # plex-label-sync.py reaches host-network Plex over the dockernet
+      # bridge gateway (same path Cloudflare Tunnel uses). The plex.tv
+      # account token authorizes admin access to your own server's local
+      # API. Sourced from the same 1Password item plex/ uses.
+      PLEX_URL: http://172.18.0.1:32400
+      PLEX_TOKEN: ${PLEX_ONLINE_TOKEN}
       # Shared Gatus heartbeat push token for this container's ofelia jobs:
       # /scripts/rar-backlog.sh (torrents_rar-extraction) and
       # /scripts/pinelake-stignore.sh (torrents_pinelake-stignore).
@@ -116,6 +125,14 @@ services:
       # intermediate library dirs created by the tick are owned consistently
       # with the rest of the download/library tree.
       ofelia.job-exec.flood-publish.user: "1000:1001"
+      # Flood tag → Plex label mirror. 5min tick is the workhorse (Plex's own
+      # library scan lags publish, so the finish-hook pass usually no-ops);
+      # this catches tag-applied-after-completion and is idempotent + cheap at
+      # steady state (skips torrents whose tags already match the labelsync
+      # custom). See flood/scripts/plex-label-sync.py.
+      ofelia.job-exec.plex-label-sync.schedule: "0 */5 * * * *"
+      ofelia.job-exec.plex-label-sync.command: "python3 /scripts/plex-label-sync.py"
+      ofelia.job-exec.plex-label-sync.user: "1000:1001"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # Stall-proof + stub-proof: prove the service via loopback wget,

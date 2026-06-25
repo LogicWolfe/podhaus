@@ -55,6 +55,14 @@ method.set_key=event.download.finished,rar_extract,"execute.nothrow.bg={/scripts
 # runs before rar_extract. See docs/plans/flood-atomic-publish.md.
 method.set_key=event.download.finished,flood_publish,"execute.nothrow.bg={python3,/scripts/flood-publish.py}"
 
+# Flood tag → Plex label mirror. On finish, kick a reconciler pass that
+# mirrors each tagged torrent's tags onto its Plex show/movie as Labels
+# (used for per-managed-user content restrictions). The hook is the
+# zero-latency trigger; the ofelia 5min tick is the workhorse since Plex's
+# library scan usually lags the publish. Idempotent + cheap at steady
+# state. See flood/scripts/plex-label-sync.py.
+method.set_key=event.download.finished,plex_label_sync,"execute.nothrow.bg={python3,/scripts/plex-label-sync.py}"
+
 method.set_key=event.download.inserted_new,loaded_time,"d.custom.set=addtime,$cat=$system.time=;d.save_full_session="
 
 # Redirect every new download into /data/torrents (Plex-invisible) and stash

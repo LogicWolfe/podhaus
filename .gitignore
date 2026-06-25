@@ -15,3 +15,6 @@ dns/.env
 komodo/.runtime/
 __pycache__/
 *.pyc
+
+# Unrelated WIP, kept local
+docs/plans/orijin/
