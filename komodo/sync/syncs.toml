@@ -41,20 +41,3 @@ include_variables = true
 include_resources = true
 delete = false
 managed = false
-
-# The docs sync walks the docs-server engine repo for its [[stack]]
-# block + the [[variable]] (DOCS_REPOS_HOST_PATH) in stack.toml at the
-# repo root. Mirrors the fenwick/pets syncs; Stage 0 of
-# docs-push-deploy runs it explicitly.
-[[sync]]
-name = "docs"
-description = "ResourceSync for the stack def that lives in the docs-server repo (the central docs.pod.haus service)."
-tags = ["docs", "podhaus"]
-
-[sync.config]
-linked_repo = "docs-server"
-resource_path = ["./"]
-include_variables = true
-include_resources = true
-delete = false
-managed = false

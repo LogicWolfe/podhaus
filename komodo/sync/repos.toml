@@ -73,19 +73,3 @@ git_provider = "github.com"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/pets"
 branch = "main"
-
-# Bilby clone of the docs-server repo (the central docs.pod.haus
-# service). Standalone private repo, same linked_repo + run_build
-# pattern as fenwick/pets — Komodo builds the image on bilby. The
-# shared LogicWolfe PAT already covers this private repo.
-[[repo]]
-name = "docs-server"
-description = "Komodo-managed clone of the docs-server repo on bilby's Periphery"
-tags = ["podhaus", "bilby", "docs"]
-
-[repo.config]
-server = "podhaus"             # = bilby
-git_provider = "github.com"
-git_account = "LogicWolfe"
-repo = "LogicWolfe/docs-server"
-branch = "main"
