@@ -312,6 +312,16 @@
         that label to the user's allow-list in Plex. <code>pinelake</code> rides along as a
         harmless label too.
       </p>
+      <p>
+        <strong>Tag casing doesn't matter.</strong> Plex matches label tags case-insensitively
+        and keeps the canonical casing of the label that already exists. The kid labels in Plex
+        are <code>Indigo</code> / <code>Rowan</code> / <code>Pippin</code> (capitalised), so a
+        lowercase Flood tag (<code>indigo</code>) merges onto the existing <code>Indigo</code>
+        label rather than creating a duplicate — the show ends up tagged with the exact label
+        object the managed-user restrictions key off. The one caveat: a tag for a label that
+        does <em>not</em> yet exist in Plex is created with whatever casing you typed, so
+        first-use sets the canonical form for a brand-new category.
+      </p>
       <ul>
         <li><strong><code>flood/scripts/plex-label-sync.py</code></strong> — reuses
           <code>flood-publish.py</code>'s rtorrent transport + publish-path logic (loaded by
