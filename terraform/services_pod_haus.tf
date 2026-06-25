@@ -222,8 +222,12 @@ module "docs" {
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
+  # The central docs service (FastAPI/Granian, repo LogicWolfe/docs-server),
+  # replacing the legacy static-nginx docs-server. Cut over by repointing this
+  # backend once the new `docs` stack is verified up; revert this one line to
+  # roll back to nginx.
   hostname = "docs"
-  backend  = "http://docs-server:80"
+  backend  = "http://docs:8000"
 }
 
 module "minio" {

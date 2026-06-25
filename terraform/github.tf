@@ -116,3 +116,23 @@ resource "github_repository_webhook" "pets_deploy" {
     secret       = var.komodo_webhook_secret
   }
 }
+
+# Sibling webhook for the docs-server repo (the central docs.pod.haus
+# service). Same global secret + Access bypass (path-scoped
+# /listener/github app in access.tf). Fires docs-push-deploy
+# (komodo/sync/procedures.toml): RunSync(docs) then a force
+# BatchDeployStack "docs" — linked_repo + run_build, so Komodo builds
+# the image on bilby; the layer cache makes an unchanged push a
+# container-level no-op. /main is the branch filter.
+resource "github_repository_webhook" "docs_deploy" {
+  repository = "docs-server"
+  events     = ["push"]
+  active     = true
+
+  configuration {
+    url          = "https://komodo.pod.haus/listener/github/procedure/docs-push-deploy/main"
+    content_type = "json"
+    insecure_ssl = false
+    secret       = var.komodo_webhook_secret
+  }
+}
