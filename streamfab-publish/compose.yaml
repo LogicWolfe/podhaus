@@ -1,0 +1,41 @@
+services:
+  # Idle container that exists only to host the ofelia-driven mover tick.
+  # No web service, no network — it walks /data/Downloads and moves finished
+  # StreamFab captures into the Plex library once a minute. Stock python
+  # image (the script is pure stdlib), so nothing to build.
+  streamfab-publish:
+    container_name: streamfab-publish
+    image: python:3.12-alpine
+    restart: unless-stopped
+    # uid 1000 so moved files and any created library dirs are owned like the
+    # rest of the Pouch download/library tree (nathan:users).
+    user: "1000:1001"
+    command: ["sleep", "infinity"]
+    volumes:
+      - ${MEDIA_DIR}:/data
+      # Script as a directory bind (not a file bind — file binds pin the
+      # inode and break atomic-rename editor saves; see
+      # docs/stack-conventions.html#bind-mounts).
+      - ${PODHAUS_REPO}/streamfab-publish/scripts:/scripts:ro,z
+    labels:
+      # Sweep /data/Downloads -> /data/Kids/{TV,Movies} every minute at :00. The
+      # tick re-walks the whole tree, so it clears any backlog on first run
+      # and cheaply no-ops once everything is published. See
+      # streamfab-publish/scripts/streamfab-publish.py.
+      ofelia.enabled: "true"
+      ofelia.job-exec.streamfab-publish.schedule: "0 * * * * *"
+      ofelia.job-exec.streamfab-publish.command: "python3 /scripts/streamfab-publish.py"
+      ofelia.job-exec.streamfab-publish.user: "1000:1001"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      # Stub-proof: prove /data is the real Pouch NFS via the
+      # .podhaus-share-mounted sentinel. A bare-stub /mnt/pouch (NFS
+      # unmounted, host btrfs showing through the bind) lacks it and goes
+      # red. timeout envelopes any soft-NFS stall. retries 15 (~15-min
+      # patience) rides out a QNAP-firmware-reboot NFS blip without
+      # flapping. The mover itself also refuses to run without the sentinel.
+      test: ["CMD-SHELL", "timeout 10 sh -c '[ -e /data/.podhaus-share-mounted ]'"]
+      interval: 60s
+      timeout: 15s
+      retries: 15
+      start_period: 30s

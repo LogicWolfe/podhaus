@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="doc-group" content="Service runbooks">
+  <meta name="doc-order" content="8">
+  <title>StreamFab publish — podhaus docs</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/tailwind.js"></script>
+  <script src="/assets/tailwind.config.js"></script>
+</head>
+<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
+  <div id="topbar"></div>
+  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
+    <aside id="sidebar"
+      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+    </aside>
+    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+
+      <h1>StreamFab publish</h1>
+      <p class="lead text-lg text-text-muted">
+        StreamFab (a desktop app on a Mac laptop) captures kids' shows and movies to
+        Pouch at <code>/mnt/pouch/Downloads</code>, nested by streaming service. Plex
+        doesn't see that tree. The <code>streamfab-publish</code> stack is a once-a-minute
+        sweep that <strong>moves</strong> each finished capture into the Plex
+        <code>Kids</code> library — <code>Kids/TV</code> for episodes,
+        <code>Kids/Movies</code> for films — and leaves StreamFab's scratch alone. It is
+        the StreamFab analogue of <a href="/runbooks/flood.html">flood's publish step</a>,
+        but standalone and move-based (no seeding to keep, so no hardlink).
+      </p>
+
+      <h2 id="stack">The stack</h2>
+      <p>
+        A deliberately small standalone stack — <em>not</em> folded into flood, because
+        torrents and DRM captures are separate sources with separate failure domains.
+      </p>
+      <ul>
+        <li><code>streamfab-publish/compose.yaml</code> — an idle
+          <code>python:3.12-alpine</code> container (<code>sleep infinity</code>, no
+          network, nothing to build). It exists only to host the ofelia tick. Binds
+          <code>${MEDIA_DIR}</code> at <code>/data</code> and the scripts dir.</li>
+        <li><code>streamfab-publish/scripts/streamfab-publish.py</code> — the mover. Pure
+          stdlib; logs to stdout (ofelia/Alloy capture it); single-flight via
+          <code>flock</code> in <code>/tmp</code>. Runs as uid 1000 so moved files and
+          created library dirs match the rest of the Pouch tree.</li>
+        <li><code>streamfab-publish/stack.toml</code> — <code>files_on_host</code>, no
+          secrets, no build.</li>
+      </ul>
+      <p>
+        Scheduling is the shared host-wide ofelia instance reading the container's
+        <code>ofelia.job-exec.streamfab-publish</code> labels (schedule
+        <code>0 * * * * *</code>). The push procedure's Stage 3
+        <code>RestartStack ofelia</code> makes ofelia re-read the labels on deploy.
+      </p>
+
+      <h2 id="completion">Why no "is it finished?" wait</h2>
+      <p>
+        StreamFab muxes in a scratch directory, writes the final mp4 into the
+        <code>Downloads</code> tree under a <strong>numeric staging name</strong>
+        (e.g. <code>30633639.mp4</code>), then <strong>atomically renames</strong> it to
+        its real <code>&lt;Show&gt;_S01E01_&lt;Title&gt;.mp4</code> name. A non-numeric
+        <code>.mp4</code> is therefore complete by construction — so the mover needs no
+        quiescence/size-stable wait; it only has to <strong>skip the numeric staging
+        name</strong> (<code>^\d+\.mp4$</code>). This was verified by sampling the output
+        directory at 4 Hz through a real finalize: the numeric file grows, then the final
+        name appears at full size in a single step.
+      </p>
+      <div class="not-prose my-4 rounded border border-border bg-bg-subtle p-4 text-sm">
+        <p class="font-semibold mb-1">Atomicity depends on the staging-rename staying
+          same-filesystem.</p>
+        <p>
+          The staging file is written in the <em>output</em> tree (Pouch/NFS), so it holds
+          even with StreamFab's temp dir on the Mac's local SSD — the heavy mux scratch is
+          local, but the final rename is still NFS-internal and atomic. If the final file
+          ever starts arriving as a <em>growing</em> file under its real name (a cross-
+          filesystem copy), re-introduce a size-stable guard. Re-check with the 4 Hz
+          monitor after any change to StreamFab's temp/output directory settings.
+        </p>
+      </div>
+
+      <h2 id="routing">Routing &amp; layout</h2>
+      <p>
+        Each tick re-walks <code>/data/Downloads</code> (so it clears any backlog on the
+        first run and cheaply no-ops afterward). For every candidate <code>.mp4</code> the
+        leading streaming-service component is dropped and the rest of the path is kept
+        <strong>verbatim</strong>:
+      </p>
+      <ul>
+        <li><strong>TV</strong> (filename contains <code>SxxExx</code>) →
+          <code>/data/Kids/TV/&lt;Show&gt;/…</code></li>
+        <li><strong>Movie</strong> (no <code>SxxExx</code>) →
+          <code>/data/Kids/Movies/&lt;Title&gt;/…</code></li>
+      </ul>
+      <p>
+        StreamFab is used <strong>only for kids' content</strong> here, hence both
+        destinations live under <code>Kids</code>. Plex parses StreamFab's underscored
+        names natively, so no renaming is done. Anything that doesn't fit the
+        <code>&lt;Service&gt;/&lt;Show-or-Title&gt;/…/&lt;file&gt;</code> shape is
+        <strong>left in place and logged</strong> rather than guessed at.
+      </p>
+      <p>The move is an <code>os.rename</code> within the single Pouch filesystem —
+        atomic and instant. If the destination already exists: identical size ⇒ a
+        re-download, source dropped; different size ⇒ a conflict, both left for a human.</p>
+
+      <h2 id="skips">What it leaves alone</h2>
+      <p>
+        It is a publisher, not a janitor. It only moves video (<code>.mp4</code>,
+        <code>.mkv</code>, <code>.m4v</code>) and never deletes anything it doesn't
+        understand:
+      </p>
+      <ul>
+        <li>StreamFab scratch — <code>outputTemp</code>, <code>mpd</code>,
+          <code>picture</code>, <code>MetaPicture</code>, <code>mp4header.dat</code>
+          (these follow StreamFab's temp dir; on the Mac now, but stale copies may linger
+          on the NAS).</li>
+        <li><code>YouTube/</code> — deliberately out of scope.</li>
+        <li>macOS <code>._</code> AppleDouble sidecars — skipped, and they keep emptied
+          dirs from being pruned.</li>
+      </ul>
+
+      <h2 id="safety">Mount safety</h2>
+      <p>
+        Like every Pouch-binding stack, the container healthchecks on the
+        <code>/data/.podhaus-share-mounted</code> sentinel (with a <code>timeout</code>
+        envelope and 15 retries to ride out a QNAP-firmware-reboot NFS blip). The mover
+        <em>also</em> refuses to run if the sentinel is absent — without it, <code>/data</code>
+        is a bare local-disk stub and a move would scatter media onto bilby's NVMe. See
+        <a href="/stack-conventions.html#nfs-bind-healthcheck">stack conventions</a>.
+      </p>
+
+      <h2 id="deploy">Deploy &amp; observe</h2>
+      <p>
+        Push to <code>main</code> → the <code>podhaus-push-deploy</code> procedure
+        first-deploys the stack (Stage 2 <code>FullDeploy</code> for a new stack) and
+        restarts ofelia (Stage 3). Confirm via the job's stdout in ofelia's container
+        logs (<code>moved … -&gt; /data/Kids/TV/…</code>) and by the files appearing in
+        the Plex Kids library. There is no Gatus heartbeat on this job today; add one if
+        silent-stall detection becomes worth the wiring.
+      </p>
+
+    </main>
+    <aside id="toc"
+      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
+    </aside>
+  </div>
+  <script src="/assets/vendor/marked.min.js"></script>
+  <script src="/assets/nav.js"></script>
+</body>
+</html>

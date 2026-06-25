@@ -1,0 +1,14 @@
+[[stack]]
+name = "streamfab-publish"
+description = "Move finished StreamFab captures from Pouch/Downloads into the Plex Kids library"
+tags = ["podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/streamfab-publish"
+
+environment = """
+MEDIA_DIR=[[MEDIA_DIR]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
+"""
