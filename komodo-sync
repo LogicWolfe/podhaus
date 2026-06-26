@@ -92,3 +92,4 @@ run_sync podhaus
 run_procedure podhaus-push-deploy
 run_procedure fenwick-push-deploy
 run_procedure pets-push-deploy
+run_procedure docs-push-deploy

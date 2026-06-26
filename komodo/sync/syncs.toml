@@ -2,7 +2,7 @@
 #
 # The podhaus sync is *bootstrap-created* by `komodo-start` — it
 # exists before this file is read, so it's not declared here.
-# Subsequent syncs live as [[sync]] blocks the podhaus sync picks
+# Subsequent syncs live as [[resource_sync]] blocks the podhaus sync picks
 # up via its resource_path=["."] scan.
 #
 # The fenwick sync (below) walks the fenwick repo for [[stack]] /
@@ -12,12 +12,12 @@
 # picks up FENWICK_SIGNAL_CLI_URL et al that moved out of
 # podhaus/fenwick/stack.toml in the v0.3 cutover.
 
-[[sync]]
+[[resource_sync]]
 name = "fenwick"
 description = "ResourceSync for stack defs that live in the fenwick repo (the bot + the credential-redactor service)."
 tags = ["fenwick", "podhaus"]
 
-[sync.config]
+[resource_sync.config]
 linked_repo = "fenwick"             # same Komodo Repo as repos.toml
 # Walk the whole fenwick repo for stack.toml / variable.toml.
 resource_path = ["./"]
@@ -29,13 +29,30 @@ managed = false                     # Stage 0 of fenwick-push-deploy runs this e
 # The pets sync walks the pets engine repo for its
 # [[stack]] block (stack.toml at the repo root). Mirrors the fenwick
 # sync; Stage 0 of pets-push-deploy runs it explicitly.
-[[sync]]
+[[resource_sync]]
 name = "pets"
 description = "ResourceSync for the stack def that lives in the pets engine repo."
 tags = ["pets", "podhaus"]
 
-[sync.config]
+[resource_sync.config]
 linked_repo = "pets"
+resource_path = ["./"]
+include_variables = true
+include_resources = true
+delete = false
+managed = false
+
+# The docs sync walks the docs-server engine repo for its [[stack]]
+# block + the [[variable]] (DOCS_REPOS_HOST_PATH) in stack.toml at the
+# repo root. Mirrors the fenwick/pets syncs; Stage 0 of
+# docs-push-deploy runs it explicitly.
+[[resource_sync]]
+name = "docs"
+description = "ResourceSync for the stack def that lives in the docs-server repo (the central docs.pod.haus service)."
+tags = ["docs", "podhaus"]
+
+[resource_sync.config]
+linked_repo = "docs-server"
 resource_path = ["./"]
 include_variables = true
 include_resources = true
