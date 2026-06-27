@@ -262,7 +262,29 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           <code>STACK_CONTENT_HASH</code> into the stored env so
           Stage 2's IfChanged sees full stack-directory change
           detection (not just compose-file changes).</li>
+        <li><code>komodo/sync/syncs.toml</code> — child ResourceSyncs for the
+          separate-repo services (<code>fenwick</code>, <code>pets</code>,
+          <code>docs</code>), each a <code>[[resource_sync]]</code> block with its
+          own <code>linked_repo</code> + dedicated push-deploy procedure. The
+          podhaus sync picks them up via its <code>resource_path</code> scan.</li>
       </ul>
+      <aside class="callout note">
+        <span class="callout-title">Declare a ResourceSync with [[resource_sync]], never [[sync]]</span>
+        The synced-TOML key for a ResourceSync is <code>[[resource_sync]]</code> /
+        <code>[resource_sync.config]</code> — Komodo's <code>ResourcesToml</code>
+        field is <code>resource_syncs</code> (alias <code>resource_sync</code>);
+        there is no <code>sync</code> alias in any version. Serde silently drops
+        unknown top-level keys, so a <code>[[sync]]</code> block parses without
+        error but creates <strong>nothing</strong> — the sync never appears.
+        It bites opaquely: a correctly-keyed <code>[[procedure]]</code> (which
+        <em>does</em> get created) that <code>RunSync</code>s the missing sync
+        makes the reconcile loop bail with <code>procedure sync loop exited
+        after max iterations</code> and fail the whole <code>RunSync</code> —
+        and Komodo discards the underlying error on that path, so the message is
+        misleading. The fenwick/pets <code>[[sync]]</code> blocks had been inert
+        the whole time (their syncs existed only from earlier manual creation);
+        all three were migrated to <code>[[resource_sync]]</code> on 2026-06-26.
+      </aside>
       <aside class="callout note">
         <span class="callout-title">Auto-deploy on push (one webhook → one procedure)</span>
         Komodo's webhook contract is per-resource:
