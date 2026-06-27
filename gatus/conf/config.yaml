@@ -255,6 +255,15 @@ endpoints:
     <<: *defaults
     group: nathanbaxter.com
 
+  # Umami analytics — internal probe of the shared container's heartbeat
+  # (the public stats.* hosts are Access-locked except /script.js +
+  # /api/send, so an external probe of /api/heartbeat would 302). Returns
+  # 200 when the app + its Postgres are up.
+  - name: Umami
+    url: http://umami:3000/api/heartbeat
+    <<: *defaults
+    group: Analytics
+
   # pets.indigopod.au: Cloudflare-proxied → pod_haus tunnel → the pets
   # engine container. /api/content exercises the whole stack (tunnel →
   # container → SQLite → published content), so it catches a tunnel,

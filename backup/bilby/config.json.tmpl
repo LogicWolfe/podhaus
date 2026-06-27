@@ -148,6 +148,24 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "umami",
+      "repo": "podhaus",
+      "paths": ["/userdata/umami"],
+      "schedule": {
+        "cron": "45 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "onepassword",
       "repo": "podhaus",
       "paths": ["/userdata/onepassword"],

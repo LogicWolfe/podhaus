@@ -327,6 +327,24 @@ module "sky" {
   ]
 }
 
+# stats.pod.haus — the Umami analytics DASHBOARD. Default locked chain
+# (Homelab service-token bypass → Family allow), so viewing analytics is
+# gated by Cloudflare Access. The public tracker endpoints live on the
+# per-site `stats.<site>` hosts (umami_analytics.tf), never here — this
+# host has no public route at all. backend is the shared umami container.
+module "stats" {
+  source = "./modules/pod_haus_service"
+
+  account_id               = local.pod_haus_service_defaults.account_id
+  zone_id                  = local.pod_haus_service_defaults.zone_id
+  tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
+  default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
+
+  hostname = "stats"
+  backend  = "http://umami:3000"
+}
+
 # storage.pod.haus is NOT a Cloudflare-proxied service. Its S3 API is
 # served via its own Caddy + LE wildcard behind a UniFi port-forward,
 # with grey-cloud (DNS-only) records in dns_storage.tf — Cloudflare's

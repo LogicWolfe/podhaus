@@ -69,6 +69,10 @@ services:
       - /var/lib/paperless-pgdata:/userdata/paperless/pgdata:ro
       - /var/lib/paperless-data:/userdata/paperless/data:ro
       - /mnt/jump/paperless/documents:/userdata/paperless/documents:ro
+      # Umami analytics Postgres — live datadir snapshot (same crash-
+      # consistent restic-on-pgdata pattern as paperless/komodo above;
+      # Postgres WAL-replays on restore). Local NVMe, not reproducible.
+      - /var/lib/umami-pgdata:/userdata/umami/pgdata:ro
       - /var/lib/minio:/userdata/minio:ro
       # Pets engine: its SQLite DB + the MinIO bucket holding the art the DB
       # references, mounted together so one plan snapshots a consistent set

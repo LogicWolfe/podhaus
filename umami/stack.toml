@@ -1,0 +1,19 @@
+# Komodo stack — umami. Shared self-hosted analytics (see compose.yaml).
+# No init / one-shot service, so no ignore_services. No build, so no
+# run_build. Rides Stage 2 of podhaus-push-deploy like any plain stack.
+
+[[stack]]
+name = "umami"
+description = "Self-hosted cookieless web analytics (shared across podhaus-hosted sites)."
+tags = ["bilby", "podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/umami"
+file_paths = ["compose.yaml"]
+
+environment = """
+UMAMI_POSTGRES_PASSWORD=[[OP__KOMODO__UMAMI__POSTGRES_PASSWORD]]
+UMAMI_APP_SECRET=[[OP__KOMODO__UMAMI__APP_SECRET]]
+"""

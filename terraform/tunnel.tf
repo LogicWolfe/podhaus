@@ -36,6 +36,7 @@ locals {
     module.paperless.ingress_rule,
     module.unifi.ingress_rule,
     module.sky.ingress_rule,
+    module.stats.ingress_rule,
   ]
 }
 
@@ -72,6 +73,11 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pod_haus" {
         { hostname = "nathanbaxter.com", service = "http://caddy:80", path = null, origin_request = null },
         { hostname = "www.nathanbaxter.com", service = "http://caddy:80", path = null, origin_request = null },
         { hostname = "dev.nathanbaxter.com", service = "http://nathanbaxter-dev:4321", path = null, origin_request = null },
+        # stats.nathanbaxter.com → shared umami container. Same-site
+        # tracker host (dodges third-party-cookie/adblock heuristics).
+        # Cloudflare Access locks the host to Family and opens only
+        # /script.js + /api/send to the public (see umami_analytics.tf).
+        { hostname = "stats.nathanbaxter.com", service = "http://umami:3000", path = null, origin_request = null },
       ],
       # pets.indigopod.au public game → the pets engine
       # container. NOT Access-gated (her friends sign in to the game

@@ -435,127 +435,113 @@ applied until every line passes.
 
 ---
 
-## Analytics — Umami
+## Analytics — Umami (shared instance)
 
-Sky wants visitor analytics. Use **Umami** (self-hosted, open source,
-cookieless, GDPR-friendly — no consent banner needed), injected into the
-Publii site via Publii's Umami plugin. Aligns with the Low Tech
-Magazine ethos and the hard "no AI" requirement (see caveat below).
+Visitor analytics via **Umami** (self-hosted, open source, cookieless,
+GDPR-friendly — no consent banner; the self-hosted OSS image ships no
+AI). **One shared `umami/` stack** serves every podhaus-hosted site;
+each site only registers a website (→ UUID) and injects a snippet.
 
-### Postgres: dedicated container, NOT shared — decided
+**Rollout order: nathanbaxter.com first as the verification site, Sky
+second.** Everything below except the per-site snippet is built and
+shared; for Sky, only the `stats.skycroeser.net` tracker host + the
+Publii plugin remain (see "Sky rollout — pending").
 
-Umami requires Postgres (or MySQL). **It gets its own dedicated
-`postgres:16` container, not a shared instance.** Rationale, from the
-two Postgres containers actually in the fleet:
+### Stack shape — built
 
-| Existing container | Why sharing it is wrong |
-|---|---|
-| `komodo-postgres` (`ghcr.io/ferretdb/postgres-documentdb`) | Orchestration-layer FerretDB backend. Critical infra, *deliberately not autohealed* to avoid interrupting in-flight deploys, non-standard DocumentDB image. Pointing a public analytics ingestion endpoint's writes at Komodo Core's own DB couples a tenant app to the control plane — an anti-pattern with a blast radius that includes the whole fleet's orchestration. |
-| `paperless-postgres` (`postgres:16`) | App-private by design — own DB, own volume, own healthcheck/autoheal. This **is** the podhaus pattern: every app ships its own DB container. There is no shared multi-tenant Postgres and one should not be introduced for this. |
+`umami/compose.yaml` + `umami/stack.toml`:
 
-So: `umami-postgres` (`postgres:16`), own named volume on **local
-NVMe** (same sizing rule paperless follows — DB on local disk, not the
-NFS Jump tier which `all_squash`-breaks the postgres chown), own
-healthcheck (`pg_isready`), `autoheal: "true"`, `dockernet`. Mirror
-`paperless/compose.yaml`'s db service almost verbatim.
-
-### Separate `umami/` stack (recommended) vs folding into `skycroeser`
-
-Recommend a **separate `umami/` stack**, not bolting Umami onto the
-static `skycroeser` stack:
-
-- Keeps the `skycroeser` stack pure (Caddy + repo Caddyfile, no
-  volume) — no dynamic runtime, no DB in a config-as-code edge proxy.
-- Umami's deploy/backup/lifecycle is independent of Sky's publish
-  cadence.
-- Reusable: a future second site can register in the same Umami.
-
-Trade-off: one more stack to operate. Acceptable — it's the cleaner
-boundary. (If strongly preferred, it *can* live in `skycroeser/`; the
-Postgres decision above is unaffected.)
-
-Stack shape (`umami/compose.yaml` + `umami/stack.toml`):
-
-- `umami` — `ghcr.io/umami-software/umami:postgresql-latest`,
-  `dockernet`, `autoheal: "true"`, healthcheck on
-  `/api/heartbeat`, `depends_on` umami-postgres `service_healthy`.
-- `umami-postgres` — as above.
-- `stack.toml`: `server = "podhaus"` (bilby), `files_on_host = true`,
-  `run_directory = "/etc/komodo/repo/umami"`. **No init container → no
-  `ignore_services`.** Rides Stage 2 of `podhaus-push-deploy`.
+- `umami` — `docker.io/umamisoftware/umami:3.2.0`. v3 is the current
+  major; GHCR only ships v3 as an unpinned `latest`, so we pin the
+  arm64 `3.2.0` on Docker Hub's official `umamisoftware` org instead of
+  riding a moving tag. v3 is Postgres-only (no `DATABASE_TYPE`); tracker
+  at `/script.js`, ingest at `/api/send`, liveness at `/api/heartbeat`;
+  migrations auto-run on start. `dockernet`, `autoheal: "true"`,
+  `curl`-based healthcheck, `depends_on` umami-postgres `service_healthy`.
+- `umami-postgres` — dedicated `postgres:16` (NOT shared with
+  `komodo-postgres` — control-plane DB — or `paperless-postgres` —
+  app-private; the podhaus pattern is one DB container per app).
+  Host-bind datadir `/var/lib/umami-pgdata` on local NVMe (the Jump
+  `all_squash` breaks the postgres chown), `pg_isready` healthcheck.
+- `stack.toml`: `server = "podhaus"`, `files_on_host = true`,
+  `run_directory = "/etc/komodo/repo/umami"`. No init/one-shot service →
+  no `ignore_services`; no build → no `run_build`. Rides Stage 2 of
+  `podhaus-push-deploy`.
 
 ### Secrets (1Password → komodo-op contract)
 
-Create a 1Password **Homelab** item `Umami` with fields
-`postgres_password` and `app_secret` (Umami's hash salt). `komodo-op`
-syncs them as `OP__KOMODO__UMAMI__POSTGRES_PASSWORD` /
-`OP__KOMODO__UMAMI__APP_SECRET`. In `umami/stack.toml`'s `environment`:
+Homelab item `Umami` with top-level fields `postgres_password` +
+`app_secret` (URL-safe alphanumeric — a `@`/`/` in the password breaks
+`DATABASE_URL`). `komodo-op` syncs the whole Homelab vault every 1m →
+`OP__KOMODO__UMAMI__POSTGRES_PASSWORD` / `OP__KOMODO__UMAMI__APP_SECRET`.
+`umami/stack.toml` references both; `DATABASE_URL` is assembled inline in
+compose. Keep custom fields **top-level, not in a section** (matches the
+Paperless items komodo-op already maps cleanly).
 
-- `umami-postgres`: `POSTGRES_PASSWORD=[[OP__KOMODO__UMAMI__POSTGRES_PASSWORD]]`,
-  `POSTGRES_DB=umami`, `POSTGRES_USER=umami`.
-- `umami`: `DATABASE_URL=postgresql://umami:[[OP__KOMODO__UMAMI__POSTGRES_PASSWORD]]@umami-postgres:5432/umami`,
-  `APP_SECRET=[[OP__KOMODO__UMAMI__APP_SECRET]]`,
-  `DATABASE_TYPE=postgresql`.
+### Auth — lock the host, open two subroutes
 
-Keep the `[[…]]` refs coupled to the 1P field layout (one var per
-field); validate the stack on redeploy after any 1P item edit — a
-split/renamed field silently breaks `DATABASE_URL`.
+The dashboard is **never publicly reachable on any hostname.** Two
+hostname roles front the one container:
 
-### Cloudflare: public hostname via the bypass-everyone override
+- **`stats.pod.haus` — the dashboard.** Default locked module chain
+  (Homelab service-token bypass → Family allow), so viewing analytics is
+  gated by Cloudflare Access. `module "stats"` in
+  `services_pod_haus.tf`, `backend = "http://umami:3000"`. No public
+  route here at all.
+- **`stats.<site>` — per-site tracker host** (same-site with the content
+  domain to dodge third-party-cookie / adblock heuristics). Locked to
+  Family at the host level, with the two collection routes punched
+  public via path-scoped Cloudflare Access **bypass** apps — the same
+  most-specific-app-wins mechanism as the Komodo webhook bypass:
+  - `stats.<site>/script.js` → public bypass (the tracker script)
+  - `stats.<site>/api/send` → public bypass (the event endpoint)
 
-The Umami app serves **both** the dashboard *and* the public collection
-endpoints (`/script.js`, `/api/send`) from one instance. Visitor
-browsers must `POST` to `/api/send`, so the host **must be publicly
-reachable** — a Family-gated `*.pod.haus` host would 302 visitors to an
-Access login and tracking would silently fail.
+  Everything else on the tracker host (dashboard, admin API) stays
+  Family-gated. nathanbaxter.com's three apps + DNS live in
+  `terraform/umami_analytics.tf`.
 
-Use the **same mechanism as §1**: a `module "stats"` block with
-`access_policy_ids = [cloudflare_zero_trust_access_policy.public_bypass.id]`
-(the shared bypass-everyone policy), creating a more-specific public
-`stats.pod.haus` Access app that overrides the wildcard.
-`backend = "http://umami:3000"`.
+Because the dashboard reaches the browser only through Cloudflare
+Access, **Umami's own login sits behind the edge gate, not in front of
+the public internet** — it's defense-in-depth, not the boundary.
 
-- **Initial build**: `stats.pod.haus`.
-- **After Phase 6**: optionally also expose `stats.skycroeser.net`
-  (same-site host dodges third-party-cookie/adblock heuristics better).
-  Keeping `stats.pod.haus` working in parallel is fine.
+### Backup — live-datadir restic snapshot (NOT pg_dump)
 
-The dashboard is protected by **Umami's own username/password login**,
-sufficient at personal scale — do **not** add a Cloudflare Access
-path-policy split (over-engineering for a household site; Umami auth is
-the right layer).
-
-### "No AI" caveat — verify
-
-Umami's AI/chat assist is an **Umami Cloud-only** feature; the
-self-hosted OSS image does not ship it. Still, before go-live: confirm
-the deployed image has no AI calling-home and disable any telemetry /
-"send usage data" toggle. If a future Umami release bundles an
-AI-enabled default in the self-hosted image, that is a **hard-stop**
-re-evaluation per the non-negotiable "no AI" requirement.
-
-### Backup — this *is* data worth keeping
-
-Unlike the static site (versioned MinIO objects, re-publishable from
-Sky's laptop), the `umami-postgres` volume holds analytics history that
-is **not reproducible**. Add it to the bilby Backrest source binds as
-real data. Postgres can't be safely file-copied live — back up via
-`pg_dump` to a dump file that Backrest then picks up (mirror whatever
-paperless does for its DB), not a raw datadir copy.
+`umami-postgres` holds analytics history that is not reproducible, so it
+**is** backed up — reusing the fleet's existing Postgres pattern, which
+is **not** `pg_dump`: paperless and komodo both restic-snapshot the live
+Postgres datadir read-only and rely on WAL crash-recovery on restore.
+So: `backup/bilby/compose.yaml` binds `/var/lib/umami-pgdata` read-only,
+and `config.json.tmpl` adds a `umami` plan pointing at `/userdata/umami`
+(daily, bucketed retention, `skipIfUnchanged`). Rides the nightly restic
+repo + OneDrive off-site sync automatically. No dump container.
 
 ### Gatus
 
-Add a public-endpoint check for `https://stats.skycroeser.net/api/heartbeat`
-(unauthenticated, returns 200 when alive) in `gatus/conf/config.yaml`.
+Internal probe `http://umami:3000/api/heartbeat` (group Analytics) — the
+public `stats.*` hosts are Access-locked except the two collection
+routes, so an external `/api/heartbeat` probe would 302. Returns 200
+when the app + Postgres are up.
 
-### Publii side (Sky)
+### nathanbaxter.com snippet — the test site
 
-After Umami is live: in the Umami dashboard, add a website for
-`skycroeser.net` → get the website UUID. Install the **Umami plugin**
-in Publii (or paste the tracking snippet into Publii's custom-head
-settings); configure it with the Umami host (`stats.skycroeser.net`)
-and the website UUID. Rebuild + publish. Verify events land in the
-Umami dashboard. GUI-only on her side — no terminal.
+nathanbaxter.com is an Astro static site (`LogicWolfe/nathanbaxter` →
+`nathanbaxter-deploy` builds + mirrors to the `nathanbaxter-com` bucket),
+not Publii — so no plugin. After Umami is live: register
+`nathanbaxter.com` in the dashboard → UUID; add the Umami `<script>` to
+the site `<head>` (`BaseHead.astro`), `src=https://stats.nathanbaxter.com/script.js`,
+`data-website-id=<uuid>`, production-only; commit + push → the deploy
+stack rebuilds. Verify events land in the dashboard.
+
+### Sky rollout — pending (do after nathanbaxter.com is verified)
+
+1. Add a `stats.skycroeser.net` tracker host: DNS + the three Access
+   apps (host Family + `/script.js` & `/api/send` bypass) — clone
+   `umami_analytics.tf`'s nathanbaxter block — plus a
+   `stats.skycroeser.net → umami:3000` tunnel ingress entry.
+2. Register `skycroeser.net` in the Umami dashboard → UUID.
+3. Publii side (Sky, GUI-only): install the **Umami plugin** (or paste
+   the snippet into custom-head), host `stats.skycroeser.net` + the
+   UUID. Rebuild + publish. Verify events land.
 
 ---
 

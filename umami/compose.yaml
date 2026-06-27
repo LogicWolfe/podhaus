@@ -1,0 +1,78 @@
+# umami — self-hosted, cookieless web analytics. Shared instance behind
+# every podhaus-hosted site (nathanbaxter.com first; skycroeser.net
+# later). One container + a dedicated Postgres.
+#
+# Access model (see umami_analytics.tf): the dashboard is NEVER public.
+#   - stats.pod.haus           — Family-gated dashboard (where you log in).
+#   - stats.<site>             — per-site tracker host; the host is
+#     Family-gated too, with only /script.js + /api/send opened to
+#     everyone via path-scoped Cloudflare Access bypass apps. Same-site
+#     tracker host dodges third-party-cookie / adblock heuristics.
+# Because the dashboard reaches the browser only through Cloudflare
+# Access, Umami's own login is a formality, not the boundary.
+
+services:
+  umami-postgres:
+    container_name: umami-postgres
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: ${UMAMI_POSTGRES_PASSWORD}
+    volumes:
+      # Postgres data on local NVMe (same sizing rule as paperless —
+      # DB off the NFS Jump tier whose all_squash breaks the postgres
+      # chown). Container chowns to uid 999; :Z lets SELinux relabel.
+      - /var/lib/umami-pgdata:/var/lib/postgresql/data:Z
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami && ls /var/lib/postgresql/data > /dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - dockernet
+
+  umami:
+    container_name: umami
+    # v3.2.0 — current major. GHCR only ships v3 as the unpinned
+    # `latest`; Docker Hub's official umamisoftware org (same account
+    # that publishes their cloud-* SaaS builds) carries a real arm64
+    # `3.2.0` pin, so we pin there rather than ride a moving `latest`.
+    # v3 is Postgres-only (no DATABASE_TYPE); serves the tracker at
+    # /script.js, ingests at /api/send, liveness at /api/heartbeat.
+    # Migrations run automatically on start.
+    image: docker.io/umamisoftware/umami:3.2.0
+    restart: unless-stopped
+    depends_on:
+      umami-postgres:
+        condition: service_healthy
+    environment:
+      # postgres_password is generated URL-safe (alphanumeric) so it
+      # needs no escaping inside DATABASE_URL. Keep it that way on
+      # rotation — a '@' or '/' in the password silently breaks this URL.
+      DATABASE_URL: postgresql://umami:${UMAMI_POSTGRES_PASSWORD}@umami-postgres:5432/umami
+      APP_SECRET: ${UMAMI_APP_SECRET}
+      # No phone-home. (The self-hosted image ships no AI; this also
+      # silences anonymous usage pings.)
+      DISABLE_TELEMETRY: "1"
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      # curl is bundled in the v3 image (upstream's own compose uses it).
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/heartbeat > /dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - dockernet
+
+networks:
+  dockernet:
+    external: true
