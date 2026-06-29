@@ -504,6 +504,25 @@ Because the dashboard reaches the browser only through Cloudflare
 Access, **Umami's own login sits behind the edge gate, not in front of
 the public internet** — it's defense-in-depth, not the boundary.
 
+**Day-to-day viewing has no Umami login prompt: each `stats.<site>`
+root redirects to that site's Umami Share view.** Umami's
+`/share/<shareId>/<domain>` path is unauthenticated (it self-fetches a
+read-only scoped token), and a Cloudflare dynamic-redirect rule
+(`http_request_dynamic_redirect`, match `path eq "/"` only — so
+`/script.js` + `/api/send` + the share page are untouched) sends the
+bare tracker-host root there. Net flow for a Family member (Nathan or
+Sky): visit `stats.nathanbaxter.com` → redirect to
+`/share/<id>/nathanbaxter.com` → one Cloudflare Access login (their own
+identity) → read-only overview (visitors, pages, referrers, events), no
+Umami credential. The redirect ruleset lives in
+`terraform/umami_analytics.tf`. **`stats.pod.haus` is deliberately NOT
+redirected — it stays the admin dashboard** (Umami login, Nathan-only,
+1P), used only for management (registering sites, settings). **shareId +
+website UUID are Umami DB state** (set via API, backed up in pgdata; a
+from-scratch rebuild without restore regenerates them and would need the
+snippet UUID + the redirect's share URL refreshed — same property the
+hardcoded website UUID already has).
+
 ### Backup — live-datadir restic snapshot (NOT pg_dump)
 
 `umami-postgres` holds analytics history that is not reproducible, so it

@@ -103,3 +103,43 @@ resource "cloudflare_zero_trust_access_application" "stats_nathanbaxter_send" {
     { precedence = 1, id = cloudflare_zero_trust_access_policy.public_bypass.id },
   ]
 }
+
+# --- Make stats.<site> the no-login viewing entry: redirect ONLY the
+# bare root to that site's Umami Share URL. Umami's /share/<id>/<domain>
+# page is unauthenticated (self-fetches a read-only scoped token), so
+# behind the Family-gated host it gives "Cloudflare login → stats, no
+# Umami prompt". The match is path == "/" exactly, so the tracker
+# (/script.js, /api/send) and the share page itself (/share/*, /api/*,
+# /_next/*) are untouched. stats.pod.haus is deliberately NOT redirected
+# — it stays the admin dashboard (Umami login for management).
+#
+# The shareId is Umami DB state (set via the API, backed up in pgdata).
+# If it's ever regenerated, update this value + the site's snippet.
+resource "cloudflare_ruleset" "nathanbaxter_stats_redirect" {
+  zone_id = local.zones["nathanbaxter.com"]
+  name    = "stats.nathanbaxter.com root → share view"
+  kind    = "zone"
+  phase   = "http_request_dynamic_redirect"
+
+  rules = [{
+    ref         = "stats_nathanbaxter_root_to_share"
+    description = "Bare root of the tracker host → the read-only share dashboard"
+    expression  = "(http.host eq \"stats.nathanbaxter.com\" and http.request.uri.path eq \"/\")"
+    action      = "redirect"
+    enabled     = true
+    action_parameters = {
+      from_value = {
+        status_code           = 302
+        preserve_query_string = false
+        target_url = {
+          value = "https://stats.nathanbaxter.com/share/BRudfaqCQRTlnGYa/nathanbaxter.com"
+        }
+      }
+    }
+  }]
+}
+
+# skycroeser.net's equivalent is deliberately NOT built yet (Sky rolls
+# out after nathanbaxter.com is verified). When stats.skycroeser.net
+# exists, add the same three Access apps + a sibling ruleset here
+# redirecting its root to the skycroeser.net share URL.
