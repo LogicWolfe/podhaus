@@ -7,8 +7,16 @@
 #   - stats.<site>         — a per-site TRACKER host. Same-site with the
 #     content domain so the tracker request isn't third-party (dodges
 #     adblock / third-party-cookie heuristics). This file wires the
-#     nathanbaxter.com tracker; skycroeser.net's is deliberately NOT here
-#     yet (Sky rolls out after nathanbaxter.com is verified).
+#     nathanbaxter.com and pets.indigopod.au trackers; skycroeser.net's
+#     is deliberately NOT here yet (Sky rolls out after verification).
+#
+# Per-site pattern (repeated inline per site below): DNS CNAME → tunnel,
+# a host-level Family Access app, two path-scoped public-bypass apps
+# (/script.js + /api/send), and a root → share-view redirect ruleset.
+# The tracker host is one level under the registrable domain so it stays
+# inside Cloudflare's single-level Universal SSL wildcard — pets uses
+# stats.indigopod.au (not stats.pets.indigopod.au, which the *.indigopod.au
+# cert wouldn't cover); it's still same-site with pets.indigopod.au.
 #
 # Lock-the-host / open-the-subroutes, the same mechanism as the Komodo
 # webhook bypass (access.tf): Cloudflare Access matches the most-specific
@@ -133,6 +141,114 @@ resource "cloudflare_ruleset" "nathanbaxter_stats_redirect" {
         preserve_query_string = false
         target_url = {
           value = "https://stats.nathanbaxter.com/share/BRudfaqCQRTlnGYa/nathanbaxter.com"
+        }
+      }
+    }
+  }]
+}
+
+# =============================================================================
+# pets.indigopod.au — Indigo's pet game (public, no Access on the game
+# itself). Tracker host is stats.indigopod.au (second-level, Universal-SSL
+# covered; same registrable domain as pets.indigopod.au so still same-site).
+# =============================================================================
+
+resource "cloudflare_dns_record" "stats_indigopod_au" {
+  zone_id = local.zones["indigopod.au"]
+  name    = "stats.indigopod.au"
+  type    = "CNAME"
+  content = local.tunnels.pod_haus
+  proxied = true
+  ttl     = 1
+  settings = {
+    flatten_cname = false
+    ipv4_only     = false
+    ipv6_only     = false
+  }
+}
+
+# Host-level lock: dashboard/admin on stats.indigopod.au gated to Family.
+resource "cloudflare_zero_trust_access_application" "stats_indigopod_host" {
+  account_id          = var.account_id
+  name                = "stats.indigopod.au (dashboard)"
+  type                = "self_hosted"
+  domain              = "stats.indigopod.au"
+  self_hosted_domains = ["stats.indigopod.au"]
+  session_duration    = "730h"
+
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = false
+  app_launcher_visible       = false
+  http_only_cookie_attribute = true
+
+  policies = [
+    { precedence = 1, id = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id },
+    { precedence = 2, id = cloudflare_zero_trust_access_policy.pod_haus_family_allow.id },
+  ]
+}
+
+# Public hole 1: the tracker script the player's browser loads.
+resource "cloudflare_zero_trust_access_application" "stats_indigopod_script" {
+  account_id          = var.account_id
+  name                = "stats.indigopod.au /script.js (public)"
+  type                = "self_hosted"
+  domain              = "stats.indigopod.au/script.js"
+  self_hosted_domains = ["stats.indigopod.au/script.js"]
+  session_duration    = "730h"
+
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = true
+  app_launcher_visible       = false
+  http_only_cookie_attribute = true
+
+  policies = [
+    { precedence = 1, id = cloudflare_zero_trust_access_policy.public_bypass.id },
+  ]
+}
+
+# Public hole 2: the event-collection endpoint the script POSTs to.
+resource "cloudflare_zero_trust_access_application" "stats_indigopod_send" {
+  account_id          = var.account_id
+  name                = "stats.indigopod.au /api/send (public)"
+  type                = "self_hosted"
+  domain              = "stats.indigopod.au/api/send"
+  self_hosted_domains = ["stats.indigopod.au/api/send"]
+  session_duration    = "730h"
+
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = true
+  app_launcher_visible       = false
+  http_only_cookie_attribute = true
+
+  policies = [
+    { precedence = 1, id = cloudflare_zero_trust_access_policy.public_bypass.id },
+  ]
+}
+
+# Root → the pets share view (read-only, Family-gated). shareId is Umami
+# DB state (set via API, backed up in pgdata); regenerating it means
+# updating this value + the game's snippet.
+resource "cloudflare_ruleset" "indigopod_stats_redirect" {
+  zone_id = local.zones["indigopod.au"]
+  name    = "stats.indigopod.au root → share view"
+  kind    = "zone"
+  phase   = "http_request_dynamic_redirect"
+
+  rules = [{
+    ref         = "stats_indigopod_root_to_share"
+    description = "Bare root of the tracker host → the read-only share dashboard"
+    expression  = "(http.host eq \"stats.indigopod.au\" and http.request.uri.path eq \"/\")"
+    action      = "redirect"
+    enabled     = true
+    action_parameters = {
+      from_value = {
+        status_code           = 302
+        preserve_query_string = false
+        target_url = {
+          value = "https://stats.indigopod.au/share/xc2sfWOKuH3EbeXy/pets.indigopod.au"
         }
       }
     }

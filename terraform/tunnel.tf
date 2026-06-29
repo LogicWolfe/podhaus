@@ -85,6 +85,11 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pod_haus" {
       # in dns_indigopod_au.tf.
       [
         { hostname = "pets.indigopod.au", service = "http://pets:8000", path = null, origin_request = null },
+        # stats.indigopod.au → shared umami container. Same-site tracker
+        # host for the pet game; Access locks it to Family except
+        # /script.js + /api/send, and the root redirects to the share
+        # view (umami_analytics.tf).
+        { hostname = "stats.indigopod.au", service = "http://umami:3000", path = null, origin_request = null },
       ],
       [
         { service = "http_status:404" },
