@@ -14,7 +14,7 @@ resource "unifi_dns_record" "unifi_pod_haus" {
   name        = "unifi.pod.haus"
   record_type = "A"
   value       = "10.0.0.1"
-  ttl         = 300
+  ttl         = "5m0s"
   enabled     = true
 }
 
@@ -22,7 +22,7 @@ resource "unifi_dns_record" "bilby_pod_haus" {
   name        = "bilby.pod.haus"
   record_type = "A"
   value       = "10.0.0.119"
-  ttl         = 300
+  ttl         = "5m0s"
   enabled     = true
 }
 
@@ -36,7 +36,7 @@ resource "unifi_dns_record" "storage_pod_haus" {
   name        = "storage.pod.haus"
   record_type = "A"
   value       = "10.0.0.119"
-  ttl         = 300
+  ttl         = "5m0s"
   enabled     = true
 }
 
@@ -47,7 +47,7 @@ resource "unifi_dns_record" "nathanbaxter_com_storage" {
   name        = "nathanbaxter-com.storage.pod.haus"
   record_type = "A"
   value       = "10.0.0.119"
-  ttl         = 300
+  ttl         = "5m0s"
   enabled     = true
 }
 
@@ -59,7 +59,7 @@ resource "unifi_dns_record" "voice_pod_haus" {
   name        = "voice.pod.haus"
   record_type = "A"
   value       = "10.0.0.119"
-  ttl         = 300
+  ttl         = "5m0s"
   enabled     = true
 }
 
@@ -74,7 +74,7 @@ resource "unifi_dns_record" "music_pod_haus" {
   name        = "music.pod.haus"
   record_type = "A"
   value       = "10.0.0.119"
-  ttl         = 300
+  ttl         = "5m0s"
   enabled     = true
 }
 
@@ -89,6 +89,6 @@ resource "unifi_dns_record" "kookaburra_probe_storage" {
   name        = "kookaburra-probe.storage.pod.haus"
   record_type = "A"
   value       = digitalocean_reserved_ip.kookaburra.ip_address
-  ttl         = 300
+  ttl         = "5m0s"
   enabled     = true
 }

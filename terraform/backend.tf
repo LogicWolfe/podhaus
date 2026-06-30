@@ -21,7 +21,11 @@ terraform {
       # recently.
       # Docs: https://registry.terraform.io/providers/ubiquiti-community/unifi/latest/docs
       source  = "ubiquiti-community/unifi"
-      version = "~> 0.41"
+      # Pin to the MINOR (~> 0.53.0 = >=0.53.0 <0.54.0). This is a 0.x
+      # provider, so minor bumps carry breaking changes (0.41 → 0.53 moved
+      # dns_record.ttl from an int to a Go duration string). A two-segment
+      # ~> 0.53 would still allow those breaks; bump deliberately + test.
+      version = "~> 0.53.0"
     }
     github = {
       # Used only for the Komodo deploy webhook on LogicWolfe/podhaus.
