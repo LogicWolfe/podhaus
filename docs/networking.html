@@ -195,6 +195,16 @@ networks:
         by browser-side Cloudflare Access login automatically.
       </p>
       <p>
+        <strong>Identity providers.</strong> Two login methods are offered and the
+        Access login page shows a chooser: <strong>GitHub</strong> (dashboard-managed)
+        and <strong>Pocket ID</strong> — a self-hosted passkey OIDC provider at
+        <code>id.pod.haus</code>, registered as a generic-OIDC IdP in
+        <code>access.tf</code>. The IdP only authenticates; the Family group still
+        decides who is allowed, and <code>allowed_idps</code> is left unset on every app
+        so both methods stay available (no lockout). See the
+        <a href="/runbooks/pocket-id.md">Pocket ID runbook</a>.
+      </p>
+      <p>
         Implication for hostname design: prefer single-label names like <code>backup.pod.haus</code>
         over multi-label like <code>backup.kangaroo.pod.haus</code> — the wildcard only covers
         one label. Host-distinguishing names use a hyphen prefix instead
@@ -212,6 +222,10 @@ networks:
       </p>
       <ul>
         <li><strong>UniFi</strong> — single Bypass-everyone policy (UniFi has its own LAN login).</li>
+        <li><strong>Pocket ID</strong> (<code>id.pod.haus</code>) — Bypass-everyone, so
+          Cloudflare can fetch the IdP's OIDC token + JWKS endpoints server-side; Pocket
+          ID's own passkey login guards the admin UI. See the
+          <a href="/runbooks/pocket-id.md">runbook</a>.</li>
         <li><strong>Syncthing</strong> — Homelab bypass + Nathan-only reusable policy
           (cross-household concern, household share is private).</li>
         <li><strong>Paperless</strong> — Paperless-iOS service-token bypass at
