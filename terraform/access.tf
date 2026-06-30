@@ -266,3 +266,51 @@ resource "cloudflare_zero_trust_access_policy" "komodo_webhook_bypass" {
   decision   = "bypass"
   include    = [{ everyone = {} }]
 }
+
+# ============================================================================
+# Pocket ID — passkey OIDC identity provider (id.pod.haus)
+# ============================================================================
+#
+# ADDED alongside the dashboard-managed GitHub IdP. `allowed_idps` is
+# intentionally NOT set on any Access app, so both stay selectable (Access
+# shows a chooser) and Cloudflare remains the authority on who's allowed
+# (the Family group is unchanged). Going passkey-only later means setting
+# allowed_idps=[this] + auto_redirect on the target app(s) — a separate
+# gated change. The id.pod.haus Access app itself (public bypass, so
+# Cloudflare can reach the OIDC endpoints) is module.pocket_id in
+# services_pod_haus.tf. See docs/plans/pocket-id.md.
+
+# First data-source consumer of the declared onepassword provider. The
+# "Pocket ID OIDC" Homelab item has an "OIDC" section with CONCEALED
+# "client id" / "client secret" fields (populated when the OIDC client is
+# created in Pocket ID). section_map/field_map keys are the exact,
+# case-sensitive labels; a missing item/label is a hard plan-time error.
+data "onepassword_vault" "homelab" {
+  name = "Homelab"
+}
+
+data "onepassword_item" "pocket_id_oidc" {
+  vault = data.onepassword_vault.homelab.uuid # data source takes the vault UUID, not the name
+  title = "Pocket ID OIDC"
+}
+
+resource "cloudflare_zero_trust_access_identity_provider" "pocket_id" {
+  account_id = var.account_id
+  name       = "Pocket ID"
+  type       = "oidc"
+
+  config = {
+    client_id     = data.onepassword_item.pocket_id_oidc.section_map["OIDC"].field_map["client id"].value
+    client_secret = data.onepassword_item.pocket_id_oidc.section_map["OIDC"].field_map["client secret"].value
+    auth_url      = "https://id.pod.haus/authorize"
+    token_url     = "https://id.pod.haus/api/oidc/token"
+    certs_url     = "https://id.pod.haus/.well-known/jwks.json"
+    scopes        = ["openid", "email", "profile"]
+    pkce_enabled  = true
+  }
+
+  # Cloudflare returns the secret as CONCEALED_STRING → perpetual drift.
+  lifecycle {
+    ignore_changes = [config.client_secret]
+  }
+}

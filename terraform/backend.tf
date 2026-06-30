@@ -66,7 +66,7 @@ terraform {
       # custom fields like "credential", "client id"/"client secret").
       # Docs: https://registry.terraform.io/providers/1Password/onepassword/latest/docs
       source  = "1Password/onepassword"
-      version = "~> 3.0"
+      version = "~> 3.1" # section_map/field_map (v3.1.0+) for the access.tf Pocket ID OIDC data source
     }
   }
 

@@ -110,6 +110,10 @@ services:
       # settings, instance id HA pairs against, library metadata). Named
       # volume from the music-assistant stack.
       - music-assistant_music-assistant-data:/userdata/music-assistant:ro
+      # Pocket ID: SQLite db (pocket-id.db) + uploads under /app/data.
+      # The IdP's ENCRYPTION_KEY lives in 1Password, not here — a restore
+      # needs it (see docs/plans/pocket-id.md).
+      - pocket-id_pocket-id-data:/userdata/pocket-id:ro
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -139,4 +143,6 @@ volumes:
   mumble_mumble-data:
     external: true
   music-assistant_music-assistant-data:
+    external: true
+  pocket-id_pocket-id-data:
     external: true
