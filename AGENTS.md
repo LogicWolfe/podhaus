@@ -10,9 +10,12 @@ Read the **Required reading** section below before making any changes.
 
 ## Required reading
 
-Live docs: <https://docs.pod.haus>. Local fallback: open
-`docs/index.html` directly in a browser (everything except the plans
-auto-listing works on `file://`).
+Live docs: <https://docs.pod.haus>, served by the central **docs-server**
+(`~/repos/docs`), which renders every repo's `docs/` into one shell.
+Edits are live — no build, no restart. Authoring conventions:
+`~/repos/docs/docs/authoring.md` (served at
+<https://docs.pod.haus/docs/authoring.md>). Locally, just read the
+Markdown/HTML under `docs/`.
 
 Consult these pages before acting:
 
@@ -170,8 +173,7 @@ devices (blast-radius containment).
 | `tailscale/` | Tailscale management-plane nodes. `tailscale/bilby/` and `tailscale/kookaburra/` are both Komodo-managed (Komodo Core on bilby, `kookaburra-tailscale` linked-repo stack on kookaburra). kookaburra's tailscale is bootstrap-launched (via `kookaburra_bootstrap`) so Periphery can join the tailnet, then Komodo adopts the running container — bootstrap and Komodo use the same compose project name + container name (`kookaburra-podnet`) so the named state volume and tailnet identity survive the handoff. `tailscale/compose.shared.yaml` has a `tailscale-cleanup` init service (built from the shared `init-tools:local` image — `curl + jq` baked in) that calls the Tailscale API before tailscaled starts to prune offline devices matching `${TS_HOSTNAME}` — claims the bare hostname back when the state volume is regenerated (rebuild, accidental volume nuke). The auth key it would re-enrol with is **TF-managed** by `terraform/tailscale.tf` (mints a reusable `tag:podnet` key, 80-day rotation via `time_rotating`, writes back to the same 1P item via `op item edit`). Requires `Tailscale OAuth Client` 1P item scopes `auth_keys:write` + `devices:core:write`. |
 | `kookaburra/periphery/` | kookaburra Komodo Periphery compose. Bootstrap-managed (parallels `kangaroo/periphery/`). v2 outbound mode — Periphery dials Core at `ws://bilby-podnet.tail9ceb.ts.net:9120` over tailnet via dockernet+MagicDNS. No inbound :8120 listener; auth is the noise handshake. |
 | `logging/kookaburra/` | Alloy on kookaburra — ships container logs cross-tailnet to bilby's ClickStack at `bilby-podnet.tail9ceb.ts.net:4318` via MagicDNS. kookaburra's `/etc/docker/daemon.json` forwards container DNS to `100.100.100.100` + `1.1.1.1` (mirrors bilby's setup; daemon.json is system-level on the droplet, not in this repo). |
-| `docs/` | The published docs (served at `docs.pod.haus`) |
-| `docs-server/` | nginx stack serving `docs/` |
+| `docs/` | This repo's docs, served by the central docs-server at `docs.pod.haus`. Author as Markdown (HTML for layout); conventions in `~/repos/docs/docs/authoring.md`. |
 | `AGENTS.md` | This file |
 | `CLAUDE.md` | One-line `@AGENTS.md` re-export |
 
@@ -616,18 +618,24 @@ follow-up postmortems. Conventions:
 
 ## Editing docs
 
-Every page under `docs/` is a static HTML file or `.md` plan. Edit it,
-save, refresh the browser — changes appear immediately, no rebuild or
-container restart (the nginx server is bind-mount-backed with no-cache
-headers on HTML / JSON / Markdown / site JS+CSS). Adding a new doc:
+`docs/` is served by the central **docs-server** (`~/repos/docs`) at
+`docs.pod.haus` — it scans every repo's `docs/` and renders Markdown
+(GFM) or HTML into one server-generated shell + sidebar. Edits are live:
+save, reload, no rebuild (it bind-mounts `~/repos` read-only).
 
-1. Copy `docs/_template.html`.
-2. Set `<title>` and the `<meta name="doc-group">` /
-   `<meta name="doc-order">` / optional `<meta name="doc-title">` tags.
-3. Save — the sidebar discovers it automatically on next page load.
+Adding a doc: **write a Markdown `.md`** under `docs/` (preferred — the
+first `# H1` is the title). HTML works for layout, but only its `<main>`
+is used and the shell is injected, so write no `<head>`, topbar/sidebar,
+or `<script>`. There are **no** per-file metadata tags, no `nav.js`, and
+no per-repo `docs/assets/` — that old `_template.html` machinery is gone.
 
-Adding a new plan: drop a `.md` or `.html` into `docs/plans/`, or create
-a subdirectory with `index.md` for a multi-page plan.
+Ordering is filesystem-based (directories + alphabetical; a leading
+number in a filename sorts it). To pin order or label a directory, add a
+`_nav.toml` (see `docs/_nav.toml`). Underscore/dotfiles are never served.
+
+Adding a plan: drop a `.md` into `docs/plans/`, or a subdirectory with an
+`index.md` for a multi-page plan. Full authoring guide:
+`~/repos/docs/docs/authoring.md`.
 
 ---
 
