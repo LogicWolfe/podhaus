@@ -157,6 +157,15 @@ endpoints:
     <<: *defaults
     group: Komodo
 
+  # Pocket ID OIDC provider — internal probe of the app's /healthz
+  # (returns 200 when up). The public id.pod.haus is a bypass app so a
+  # public probe would work, but the internal one is the convention and
+  # avoids the edge. See docs/plans/pocket-id.md.
+  - name: Pocket ID
+    url: http://pocket-id:1411/healthz
+    <<: *defaults
+    group: Identity
+
   # Mumble is non-HTTP — tcp:// proves DNS (DDNS-updated A) +
   # UDM forward (terraform/unifi.tf) + Murmur control channel are
   # all healthy. UDP/voice quality is not synthetically probed; ear-

@@ -327,6 +327,28 @@ module "sky" {
   ]
 }
 
+# id.pod.haus — the Pocket ID OIDC identity provider itself. MUST be
+# publicly reachable so Cloudflare's servers can fetch the OIDC token/JWKS
+# endpoints during login (a Family-gated id.pod.haus would deadlock the
+# "fresh keys" verification). A bypass-everyone policy overrides the
+# *.pod.haus wildcard's Family gate — same mechanism as module.sky /
+# module.unifi. Pocket ID's own passkey login protects the admin UI.
+# See docs/plans/pocket-id.md.
+module "pocket_id" {
+  source = "./modules/pod_haus_service"
+
+  account_id    = local.pod_haus_service_defaults.account_id
+  zone_id       = local.pod_haus_service_defaults.zone_id
+  tunnel_target = local.pod_haus_service_defaults.tunnel_target
+
+  hostname = "id"
+  backend  = "http://pocket-id:1411"
+
+  access_policy_ids = [
+    cloudflare_zero_trust_access_policy.public_bypass.id,
+  ]
+}
+
 # stats.pod.haus — the Umami analytics DASHBOARD. Default locked chain
 # (Homelab service-token bypass → Family allow), so viewing analytics is
 # gated by Cloudflare Access. The public tracker endpoints live on the

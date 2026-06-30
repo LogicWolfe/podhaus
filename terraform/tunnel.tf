@@ -37,6 +37,7 @@ locals {
     module.unifi.ingress_rule,
     module.sky.ingress_rule,
     module.stats.ingress_rule,
+    module.pocket_id.ingress_rule,
   ]
 }
 

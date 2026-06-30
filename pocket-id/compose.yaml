@@ -1,0 +1,57 @@
+# Pocket ID — passkey-first OIDC identity provider for Cloudflare Access.
+# Single-service stack, SQLite on a local named volume (never NFS).
+# Exposed at id.pod.haus via the tunnel with a PUBLIC-BYPASS Access app:
+# Cloudflare's servers fetch this IdP's OIDC token/JWKS endpoints
+# server-side, so they must not be Access-gated. See
+# docs/plans/pocket-id.md for the full design + failure modes.
+#
+# APP_URL is also the WebAuthn relying-party ID. It must stay exactly the
+# public origin (https://id.pod.haus) — changing it invalidates every
+# enrolled passkey.
+services:
+  pocket-id:
+    container_name: pocket-id
+    # Multi-arch image (linux/arm64 present — bilby is Apple M1). Pinned to
+    # the v2.9.0 multi-arch index digest; bump deliberately for a new
+    # release. DB_PROVIDER was removed in v2 (SQLite is auto-detected from
+    # the default data/pocket-id.db connection string) — do not set it.
+    image: ghcr.io/pocket-id/pocket-id:v2.9.0@sha256:a2a38a96699d7483d65b5849b015d954f294938306a03a9c0699bc5b79554e86
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      APP_URL: https://id.pod.haus
+      ENCRYPTION_KEY: ${POCKET_ID_ENCRYPTION_KEY}
+      # Behind cloudflared (TLS terminates at the Cloudflare edge).
+      # TRUSTED_PLATFORM gives correct client IPs from CF-Connecting-IP in
+      # the audit log.
+      TRUST_PROXY: "true"
+      TRUSTED_PLATFORM: cf-connecting-ip
+      PUID: "1000"
+      PGID: "1000"
+      # Structured logs for the Alloy → ClickStack pipeline; no outbound
+      # calls from a homelab IdP.
+      LOG_JSON: "true"
+      ANALYTICS_DISABLED: "true"
+      VERSION_CHECK_DISABLED: "true"
+      TZ: ${TZ}
+    volumes:
+      - pocket-id-data:/app/data
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      # Built-in CLI healthcheck (hits localhost:1411). No shell needed.
+      test: ["CMD", "/app/pocket-id", "healthcheck"]
+      interval: 90s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  pocket-id-data:

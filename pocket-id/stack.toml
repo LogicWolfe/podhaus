@@ -1,0 +1,19 @@
+[[stack]]
+name = "pocket-id"
+description = "Pocket ID — passkey-first OIDC identity provider for Cloudflare Access"
+tags = ["podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/pocket-id"
+
+# ENCRYPTION_KEY comes from the 1Password Homelab item "Pocket ID
+# Encryption Key" (field `credential` = `openssl rand -base64 32`),
+# auto-synced by komodo-op. It encrypts secrets + signing keys at rest;
+# a backup restore needs the SAME key. The OIDC client id/secret are NOT
+# here — they're read directly by Terraform from 1Password (access.tf).
+environment = """
+TZ=[[TZ]]
+POCKET_ID_ENCRYPTION_KEY=[[OP__KOMODO__POCKET_ID_ENCRYPTION_KEY__CREDENTIAL]]
+"""
