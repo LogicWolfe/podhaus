@@ -1,34 +1,39 @@
 # HomeKit Bridge, loaded as a package (see ../homeassistant.yaml -> packages).
 # To add another integration, drop a new *.yaml in this dir — no edit to the
-# host-side /config/configuration.yaml is needed.
+# host-side /config/configuration.yaml is needed. A package file is a dict of
+# <domain>: <config>, so the bridge list lives under a top-level `homekit:` key.
 #
 # Publishes selected HA entities to Apple Home so Siri can control them. HA
-# stays the controller: Siri -> Apple Home -> this bridge -> HA -> Hue.
+# stays the controller: Siri -> Apple Home -> this bridge -> HA -> device.
 # advertise_ip pins bilby's LAN address so the bridge is announced on end0
 # (10.0.0.119), not a docker interface. Pairing state lives in host .storage.
 #
-# Scope: Hue lights only. Add BAF fans/lights, Nanoleaf, or scenes by
-# appending their entity_ids below.
+# Exposed:
+#   - Hue INDIVIDUAL bulbs only. The Hue Room/Zone group lights
+#     (light.living_room, light.grasshopper, ...) are deliberately NOT exposed
+#     — they overlap their member bulbs and duplicate Apple Home's own rooms.
+#     Group by placing bulbs in Apple Home rooms instead.
+#   - Big Ass Fans: the 6 Haiku ceiling fans + their downlights. The "Haiku
+#     Switch" wall-control devices are NOT exposed (their fan/light entities
+#     duplicate the fans; their presence sensors are for automations, not
+#     voice). entity_config gives each a room-based HomeKit name because every
+#     BAF entity is otherwise just "Haiku Fan".
 homekit:
   - name: Home Assistant Bridge
     port: 21063
     advertise_ip: 10.0.0.119
     filter:
       include_entities:
-        - light.bathroom
+        # --- Hue bulbs (individual, no room groups) ---
         - light.bookshelf_lamp
-        - light.burrow
         - light.burrow_bloom
         - light.change_table_1
         - light.change_table_2
         - light.cupboard_strip
         - light.front_entry
-        - light.grasshopper
-        - light.grove
         - light.grove_door
         - light.grove_windows
         - light.hallway
-        - light.hallway_2
         - light.hue_outdoor_pedestal_1
         - light.hue_outdoor_pedestal_2
         - light.hue_outdoor_pedestal_3
@@ -37,15 +42,37 @@ homekit:
         - light.hue_outdoor_pedestal_6
         - light.hue_outdoor_spot_1
         - light.hue_outdoor_spot_2
-        - light.ladybug
         - light.ladybug_bloom
-        - light.living_room
-        - light.outside
         - light.standing_lamp_bottom
         - light.standing_lamp_top
-        - light.studio
         - light.studio_outside
         - light.studio_standing_lamp
         - light.toilet_1
         - light.toilet_2
         - light.window_strip
+        # --- Big Ass Fans: fans + downlights ---
+        - fan.haiku_fan
+        - fan.haiku_fan_2
+        - fan.haiku_fan_3
+        - fan.haiku_fan_4
+        - fan.haiku_fan_5
+        - fan.haiku_fan_6
+        - light.haiku_fan
+        - light.haiku_fan_2
+        - light.haiku_fan_3
+        - light.haiku_fan_4
+        - light.haiku_fan_5
+        - light.haiku_fan_6
+    entity_config:
+      fan.haiku_fan: { name: Grove Fan }
+      fan.haiku_fan_2: { name: Kitchen Fan }
+      fan.haiku_fan_3: { name: Grasshopper Fan }
+      fan.haiku_fan_4: { name: Burrow Fan }
+      fan.haiku_fan_5: { name: Ladybug Fan }
+      fan.haiku_fan_6: { name: Kitchen Fan 2 }
+      light.haiku_fan: { name: Grove Fan Light }
+      light.haiku_fan_2: { name: Kitchen Fan Light }
+      light.haiku_fan_3: { name: Grasshopper Fan Light }
+      light.haiku_fan_4: { name: Burrow Fan Light }
+      light.haiku_fan_5: { name: Ladybug Fan Light }
+      light.haiku_fan_6: { name: Kitchen Fan 2 Light }
