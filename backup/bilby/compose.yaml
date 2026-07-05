@@ -74,6 +74,15 @@ services:
       # Postgres WAL-replays on restore). Local NVMe, not reproducible.
       - /var/lib/umami-pgdata:/userdata/umami/pgdata:ro
       - /var/lib/minio:/userdata/minio:ro
+      # Fenwick: the bot's SQLite (identity, activity log, guidance,
+      # schedules) + the Signal device link (signal-cli account store).
+      # Both irrecoverable if lost — the link additionally means a
+      # human-only re-registration (fenwick docs/signal.html). Live-file
+      # crash-consistent snapshots, same acceptance as the pgdata binds
+      # above (SQLite recovers from db+wal at open); the 04:15 slot is
+      # a quiet hour for the bot.
+      - /var/lib/fenwick:/userdata/fenwick:ro
+      - /var/lib/signal-cli:/userdata/signal-cli:ro
       # Pets engine: its SQLite DB + the MinIO bucket holding the art the DB
       # references, mounted together so one plan snapshots a consistent set
       # (the app writes an asset before the DB references it, so a combined

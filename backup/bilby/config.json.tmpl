@@ -130,6 +130,24 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "fenwick",
+      "repo": "podhaus",
+      "paths": ["/userdata/fenwick", "/userdata/signal-cli"],
+      "schedule": {
+        "cron": "15 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "komodo",
       "repo": "podhaus",
       "paths": ["/userdata/komodo"],

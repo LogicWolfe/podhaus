@@ -54,22 +54,31 @@ restic repo                restic repo
 
       <h2 id="bilby-plans">Bilby plans</h2>
       <p>
-        Configured in <code>backup/bilby/config.json.tmpl</code>. Nine plans, staggered 04:00 to
-        05:20 AWST so the rolling write load doesn't pile up:
+        Configured in <code>backup/bilby/config.json.tmpl</code> (the config is the source of
+        truth — keep this table matching it). Nightly plans staggered 04:00 to 05:35 AWST so the
+        rolling write load doesn't pile up, plus one hourly plan:
       </p>
       <table>
         <thead><tr><th>Plan</th><th>Source</th><th>Schedule</th></tr></thead>
         <tbody>
-          <tr><td><code>komodo</code></td><td>Komodo Core volumes (postgres, FerretDB)</td><td>04:00</td></tr>
-          <tr><td><code>onepassword</code></td><td>1Password Connect API state</td><td>04:10</td></tr>
+          <tr><td><code>plex</code></td><td><code>/var/lib/plex-local</code></td><td>04:00</td></tr>
+          <tr><td><code>flood</code></td><td><code>/var/lib/flood-db</code></td><td>04:10</td></tr>
+          <tr><td><code>fenwick</code></td><td><code>/var/lib/fenwick</code> (the bot's SQLite: identity, activity log, guidance, schedules) + <code>/var/lib/signal-cli</code> (the Signal device link — irrecoverable; loss means human-only re-registration)</td><td>04:15</td></tr>
+          <tr><td><code>home-assistant</code></td><td><code>/var/lib/home-assistant</code></td><td>04:20</td></tr>
+          <tr><td><code>paperless</code></td><td><code>/var/lib/paperless-data</code> + <code>/var/lib/paperless-pgdata</code> + Jump documents</td><td>04:30</td></tr>
+          <tr><td><code>music-assistant</code></td><td>server state volume</td><td>04:35</td></tr>
+          <tr><td><code>komodo</code></td><td>Komodo Core volumes (postgres, FerretDB)</td><td>04:40</td></tr>
+          <tr><td><code>umami</code></td><td><code>/var/lib/umami-pgdata</code></td><td>04:45</td></tr>
+          <tr><td><code>onepassword</code></td><td>1Password Connect API state</td><td>04:50</td></tr>
+          <tr><td><code>mumble</code></td><td>Murmur SQLite + server TLS cert</td><td>04:55</td></tr>
           <tr><td><code>logging</code></td><td>Alloy runtime state (<code>logging_alloy-data</code>) — config-as-code parsers live in git, so this is just WAL/positions</td><td>05:00</td></tr>
           <tr><td><code>clickstack</code></td><td>HyperDX app-state via nightly <code>mongodump</code> (dashboards/alerts/users/sources/ingestion-key). ClickHouse telemetry is deliberately <em>not</em> backed up — regenerable.</td><td>05:05</td></tr>
-          <tr><td><code>flood</code></td><td><code>/var/lib/flood-db</code></td><td>04:30</td></tr>
-          <tr><td><code>plex</code></td><td><code>/var/lib/plex-local</code></td><td>04:40</td></tr>
-          <tr><td><code>paperless</code></td><td><code>/var/lib/paperless-data</code> + <code>/var/lib/paperless-pgdata</code></td><td>04:50</td></tr>
-          <tr><td><code>home-assistant</code></td><td><code>/var/lib/home-assistant</code></td><td>05:00</td></tr>
-          <tr><td><code>uptime-kuma</code></td><td>(legacy, kept for the Kuma rollback window)</td><td>05:10</td></tr>
+          <tr><td><code>gatus</code></td><td><code>gatus_gatus-data</code></td><td>05:10</td></tr>
+          <tr><td><code>minio</code></td><td><code>/var/lib/minio</code></td><td>05:15</td></tr>
           <tr><td><code>backrest-state</code></td><td>Backrest's own DB</td><td>05:20</td></tr>
+          <tr><td><code>bugsink</code></td><td>Bugsink SQLite + event store</td><td>05:25</td></tr>
+          <tr><td><code>pocket-id</code></td><td>Pocket ID SQLite + uploads (restore also needs <code>ENCRYPTION_KEY</code> from 1Password)</td><td>05:35</td></tr>
+          <tr><td><code>pets</code></td><td><code>/var/lib/pets-alive</code> + the MinIO assets bucket</td><td>hourly</td></tr>
         </tbody>
       </table>
       <p>
