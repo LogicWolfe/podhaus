@@ -116,6 +116,15 @@ devices (blast-radius containment).
 - **`dockernet`**: bridge network at `172.18.0.0/16` for cross-stack
   communication. Containers join via `networks: [dockernet]` plus a
   top-level `networks: { dockernet: { external: true } }` block.
+- **External networks are host-provisioned in `komodo-start`**
+  (`ensure_network`, idempotent inspect-or-create) — the only
+  config-as-code path, since Komodo has no `CreateNetwork` execution and
+  Compose won't adopt a pre-existing external network. Bilby provisions
+  `dockernet` (Komodo Core itself attaches to it) plus the two
+  Fenwick-private nets `fenwick-net` and `fenwick-webagent-net` (the
+  browser-quarantine link); per-container membership stays config-as-code
+  in each stack's `compose.yaml`. Fenwick's topology + rationale live in
+  the fenwick repo's `docs/networking.html`.
 - Containers reach each other by **container name** (Docker DNS), never
   by static IP.
 - Static IPs are for LAN devices (e.g. UniFi gateway at `10.0.0.1`) or
