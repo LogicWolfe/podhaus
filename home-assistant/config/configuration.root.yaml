@@ -16,6 +16,7 @@ frontend:
 
 homeassistant: !include podhaus/homeassistant.yaml
 http: !include podhaus/http.yaml
+homekit: !include podhaus/homekit.yaml
 
 automation: !include podhaus/automations.yaml
 script: !include podhaus/scripts.yaml

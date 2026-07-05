@@ -1,0 +1,49 @@
+# HA HomeKit Bridge — publishes selected HA entities to Apple Home so Siri
+# can control them. HA stays the controller: Siri -> Apple Home -> this bridge
+# -> HA -> Hue. Pairing state lives in the host .storage (runtime, not
+# version-controlled). advertise_ip pins bilby's LAN address so the bridge is
+# advertised on end0 (10.0.0.119) and not one of the docker bridge interfaces.
+#
+# Scope: Hue lights only. To expose more (BAF fans/lights, Nanoleaf, scenes),
+# add their entity_ids below. Accessories inherit their Apple Home room from
+# the entity's HA area, so Siri room commands ("turn on the living room
+# lights") work once paired.
+- name: Home Assistant Bridge
+  port: 21063
+  advertise_ip: 10.0.0.119
+  filter:
+    include_entities:
+      - light.bathroom
+      - light.bookshelf_lamp
+      - light.burrow
+      - light.burrow_bloom
+      - light.change_table_1
+      - light.change_table_2
+      - light.cupboard_strip
+      - light.front_entry
+      - light.grasshopper
+      - light.grove
+      - light.grove_door
+      - light.grove_windows
+      - light.hallway
+      - light.hallway_2
+      - light.hue_outdoor_pedestal_1
+      - light.hue_outdoor_pedestal_2
+      - light.hue_outdoor_pedestal_3
+      - light.hue_outdoor_pedestal_4
+      - light.hue_outdoor_pedestal_5
+      - light.hue_outdoor_pedestal_6
+      - light.hue_outdoor_spot_1
+      - light.hue_outdoor_spot_2
+      - light.ladybug
+      - light.ladybug_bloom
+      - light.living_room
+      - light.outside
+      - light.standing_lamp_bottom
+      - light.standing_lamp_top
+      - light.studio
+      - light.studio_outside
+      - light.studio_standing_lamp
+      - light.toilet_1
+      - light.toilet_2
+      - light.window_strip
