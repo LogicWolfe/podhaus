@@ -105,6 +105,46 @@
         the canonical list; add a row when you install a new tool.
       </p>
 
+      <h3 id="bilby-firewall">Firewall (firewalld)</h3>
+      <p>
+        bilby runs <strong>firewalld</strong>. The source of truth is
+        <code>bilby/firewalld/</code> in the repo —
+        <code>zones/public.xml</code> (the LAN-facing <code>end0</code> zone) plus
+        <code>services/*.xml</code> (custom port groups). It is staged onto the host
+        by <code>bilby/host-systemd/install.sh</code>, which installs the service XML
+        first, then the zone, runs <code>firewall-cmd --check-config</code>, and only
+        then reloads. To change the firewall: edit the XML under
+        <code>bilby/firewalld/</code> and run
+        <code>sudo ./bilby/host-systemd/install.sh</code>.
+      </p>
+      <aside class="callout warn">
+        <span class="callout-title">Never edit the firewall imperatively</span>
+        Do <em>not</em> use <code>firewall-cmd --add-port</code>/<code>--add-service</code>
+        (even <code>--permanent</code>). That writes straight to
+        <code>/etc/firewalld/</code> and diverges from <code>bilby/firewalld/</code>;
+        the next <code>install.sh</code> silently overwrites and reverts it. Change the
+        XML, re-run <code>install.sh</code>.
+      </aside>
+      <p>
+        The <code>public</code> zone allows <code>ssh</code>, <code>mdns</code>,
+        <code>dhcpv6-client</code>, <code>plex</code>, and <code>music-assistant</code>,
+        plus a rich rule that <strong>trusts the entire home LAN</strong>
+        (<code>10.0.0.0/24 → accept</code>). Two patterns follow from that:
+      </p>
+      <ul>
+        <li><strong>LAN-only service → no explicit rule.</strong> Anything reached only
+          by devices on <code>10.0.0.0/24</code> is already covered by the LAN trust
+          rule. Example: Home Assistant's HomeKit bridge on <code>tcp/21063</code>,
+          reached only by the LAN Apple hubs (its <code>advertise_ip</code> is pinned to
+          the IPv4 LAN address). Adding an explicit service for it would needlessly
+          expose the port to the tailnet and dockernet.</li>
+        <li><strong>Service needing non-LAN reach → explicit service XML.</strong>
+          <code>plex</code> and <code>music-assistant</code> get their own XML because
+          cloudflared reaches them via the dockernet gateway
+          (<code>172.18.0.1</code>, not in <code>10.0.0.0/24</code>). That inbound flow
+          isn't covered by the LAN rule, so the port must be named explicitly.</li>
+      </ul>
+
       <h2 id="kangaroo">kangaroo</h2>
       <p>
         QNAP NAS, AMD GX-420MC, 16 GB RAM, QTS 5.x with Container Station, ext4. Secondary host.
