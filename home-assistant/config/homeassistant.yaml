@@ -1,2 +1,9 @@
 external_url: "https://home.pod.haus"
 internal_url: "https://home.pod.haus"
+
+# Load every integration package from packages/. Adding a new integration is
+# then just dropping a *.yaml there (e.g. packages/homekit.yaml) — no edit to
+# the host-side /config/configuration.yaml required. The path is relative to
+# THIS file's directory (/config/podhaus), so it resolves to
+# /config/podhaus/packages.
+packages: !include_dir_named packages

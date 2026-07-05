@@ -5,7 +5,9 @@
 # repo under home-assistant/config/, bind-mounted to /config/podhaus.
 #
 # If you change this file, apply the same change to the host copy (and vice
-# versa). Keep them in sync.
+# versa). Keep them in sync. In practice this file rarely changes: new
+# integrations are added as drop-in files under podhaus/packages/ (loaded via
+# homeassistant.yaml -> packages), not by editing this bootstrap.
 
 # Loads default set of integrations. Do not remove.
 default_config:
@@ -14,9 +16,10 @@ default_config:
 frontend:
   themes: !include_dir_merge_named themes
 
+# homeassistant.yaml also declares `packages: !include_dir_named packages`, so
+# every integration in podhaus/packages/ (e.g. the HomeKit bridge) loads here.
 homeassistant: !include podhaus/homeassistant.yaml
 http: !include podhaus/http.yaml
-homekit: !include podhaus/homekit.yaml
 
 automation: !include podhaus/automations.yaml
 script: !include podhaus/scripts.yaml
