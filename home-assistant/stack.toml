@@ -10,4 +10,5 @@ run_directory = "/etc/komodo/repo/home-assistant"
 
 environment = """
 TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
 """
