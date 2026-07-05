@@ -22,6 +22,11 @@ services:
       # matches exactly what's on the host; :z lets SELinux relabel
       # the content for container access.
       - /var/lib/home-assistant:/config:z
+      # Version-controlled HA config (automations/scripts/scenes + the
+      # homeassistant/http blocks). Directory bind so atomic-rename saves
+      # from the UI editor land correctly. The host /config/configuration.yaml
+      # !includes from podhaus/ — see config/configuration.root.yaml.
+      - ${PODHAUS_REPO}/home-assistant/config:/config/podhaus:z
       - /run/dbus:/run/dbus:ro
     labels:
       autoheal: "true"

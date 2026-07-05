@@ -1,0 +1,74 @@
+- id: '1730344253420'
+  alias: Mouse trap notifications
+  description: ''
+  triggers:
+  - type: occupied
+    device_id: 01dcb66971873f1e916b9f49aa6ed901
+    entity_id: a6daa5f2b898ae82ea575f38987f80d6
+    domain: binary_sensor
+    metadata:
+      secondary: false
+    trigger: device
+  - type: occupied
+    device_id: c13cdbd16fe45b5ef5eef7f0346c6693
+    entity_id: 1309bc83f53ade7385d92edf4dc78276
+    domain: binary_sensor
+    trigger: device
+  - type: occupied
+    device_id: b2121a05108f87e213a613cc6c4f9ba4
+    entity_id: 170713970479a3ac84655dc7d30c55ca
+    domain: binary_sensor
+    trigger: device
+  - type: occupied
+    device_id: 30adc0743e9ac4d87c05a776a629d43c
+    entity_id: 43f9b2a5a74f2a467446b2c19156616f
+    domain: binary_sensor
+    trigger: device
+  conditions: []
+  actions:
+  - action: notify.notify
+    data:
+      message: '{{ trigger.to_state.attributes.friendly_name }}d a mouse!'
+      title: Victor Smart Kill
+      data:
+        push:
+          interruption-level: time-sensitive
+  mode: single
+
+- id: doorbell_living_room_chime
+  alias: Doorbell chime — living room
+  description: >-
+    Play a doorbell chime on the living-room Bowers & Wilkins Formation
+    (via Music Assistant) when the front G4 doorbell is pressed. Additive
+    to the UniFi chimes. The Formation ignores MA's announce_volume, so we
+    snapshot the player volume, set a fixed chime level, play, then restore.
+  triggers:
+    - trigger: state
+      entity_id: event.g4_doorbell_doorbell
+  conditions:
+    - condition: template
+      value_template: >-
+        {{ trigger.to_state.state not in ['unknown', 'unavailable']
+           and as_datetime(trigger.to_state.state) > now() - timedelta(seconds=30) }}
+  actions:
+    - variables:
+        prev_volume: "{{ state_attr('media_player.living_room', 'volume_level') | float(0.32) }}"
+    - action: media_player.volume_set
+      target:
+        entity_id: media_player.living_room
+      data:
+        volume_level: 0.6
+    - delay:
+        milliseconds: 500
+    - action: music_assistant.play_announcement
+      target:
+        entity_id: media_player.living_room
+      data:
+        url: "http://10.0.0.119:8123/local/doorbell.wav"
+        use_pre_announce: false
+    - action: media_player.volume_set
+      target:
+        entity_id: media_player.living_room
+      data:
+        volume_level: "{{ prev_volume }}"
+  mode: single

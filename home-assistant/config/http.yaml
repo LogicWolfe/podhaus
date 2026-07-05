@@ -1,0 +1,5 @@
+# Trust the cloudflared/dockernet gateway so HA sees real client IPs
+# behind the Cloudflare Tunnel.
+use_x_forwarded_for: true
+trusted_proxies:
+  - 172.18.0.0/16

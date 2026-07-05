@@ -1,0 +1,22 @@
+# Reference copy of /config/configuration.yaml (the one file Home Assistant
+# requires at the config root and cannot be relocated). It stays on the host
+# at /var/lib/home-assistant/configuration.yaml; this copy exists so the root
+# config is captured for disaster recovery. Everything editable lives in this
+# repo under home-assistant/config/, bind-mounted to /config/podhaus.
+#
+# If you change this file, apply the same change to the host copy (and vice
+# versa). Keep them in sync.
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder (host-side /config/themes)
+frontend:
+  themes: !include_dir_merge_named themes
+
+homeassistant: !include podhaus/homeassistant.yaml
+http: !include podhaus/http.yaml
+
+automation: !include podhaus/automations.yaml
+script: !include podhaus/scripts.yaml
+scene: !include podhaus/scenes.yaml
