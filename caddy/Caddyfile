@@ -110,7 +110,11 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 #
 # `http://` = the internal cloudflared→Caddy hop only (Cloudflare owns
 # the edge cert); the deliberate signal that Caddy must NOT ACME it.
-http://sky.pod.haus {
+#
+# skycroeser.net shares this block (the real domain; sky.pod.haus stays
+# as a staging mirror). www.skycroeser.net 301s to the apex from its own
+# block below, so only the bare apex serves content (canonical URL).
+http://sky.pod.haus, http://skycroeser.net {
 	# Styled 404 served from the bucket with a real 404 status (same
 	# pattern as nathanbaxter.com above — replace_status inside the
 	# reverse_proxy block). Terminal theme emits 404.html.
@@ -202,4 +206,11 @@ http://sky.pod.haus {
 			}
 		}
 	}
+}
+
+# www.skycroeser.net → 301 to the bare apex (canonical). Kept as a
+# dedicated block rather than joining the site line above so www never
+# serves duplicate content. Reaches Caddy via its own tunnel ingress rule.
+http://www.skycroeser.net {
+	redir https://skycroeser.net{uri} 301
 }

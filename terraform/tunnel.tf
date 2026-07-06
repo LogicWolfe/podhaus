@@ -80,6 +80,14 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pod_haus" {
         # /script.js + /api/send to the public (see umami_analytics.tf).
         { hostname = "stats.nathanbaxter.com", service = "http://umami:3000", path = null, origin_request = null },
       ],
+      # skycroeser.net public static site → Caddy (NOT a pod.haus module /
+      # NOT Access-gated; cloudflared serves any zone). Caddy host-matches
+      # it to the skycroeser-net bucket (same block as sky.pod.haus);
+      # www.skycroeser.net gets its own Caddy block that 301s to the apex.
+      [
+        { hostname = "skycroeser.net", service = "http://caddy:80", path = null, origin_request = null },
+        { hostname = "www.skycroeser.net", service = "http://caddy:80", path = null, origin_request = null },
+      ],
       # pets.indigopod.au public game → the pets engine
       # container. NOT Access-gated (her friends sign in to the game
       # itself, not at the edge); cloudflared serves any zone. DNS CNAME
