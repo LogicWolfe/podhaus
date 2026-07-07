@@ -99,22 +99,17 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 	}
 }
 
-# sky.pod.haus — Sky Croeser's site (skycroeser.net), TEMPORARY demo
-# host. Same serving shape as nathanbaxter.com above (Publii static
-# output in the `skycroeser-net` bucket, anonymous GetObject), with the
-# WordPress.com legacy-URL redirects Sky's archive needs. The bucket is
-# named for the real domain even while demoed here. At cutover,
-# skycroeser.net (+ www) joins this site line — the redirects below are
-# already in place for it and are harmless no-ops on sky.pod.haus (no
-# dated inbound links resolve here yet).
+# skycroeser.net — Sky Croeser's site. Same serving shape as
+# nathanbaxter.com above (Publii static output in the `skycroeser-net`
+# bucket, anonymous GetObject), with the WordPress.com legacy-URL
+# redirects Sky's archive needs.
 #
 # `http://` = the internal cloudflared→Caddy hop only (Cloudflare owns
 # the edge cert); the deliberate signal that Caddy must NOT ACME it.
 #
-# skycroeser.net shares this block (the real domain; sky.pod.haus stays
-# as a staging mirror). www.skycroeser.net 301s to the apex from its own
-# block below, so only the bare apex serves content (canonical URL).
-http://sky.pod.haus, http://skycroeser.net {
+# www.skycroeser.net 301s to the apex from its own block below, so only
+# the bare apex serves content (canonical URL).
+http://skycroeser.net {
 	# Styled 404 served from the bucket with a real 404 status (same
 	# pattern as nathanbaxter.com above — replace_status inside the
 	# reverse_proxy block). Terminal theme emits 404.html.

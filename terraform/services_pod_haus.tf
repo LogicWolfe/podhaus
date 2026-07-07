@@ -304,35 +304,12 @@ module "unifi" {
   ]
 }
 
-# sky.pod.haus — Sky Croeser's static site (skycroeser.net), TEMPORARY
-# demo host. Fully public: a bypass-everyone policy overrides the
-# *.pod.haus wildcard's Family gate (same mechanism as unifi). Backend
-# is the shared Caddy front, which host-matches sky.pod.haus and rewrites
-# to the skycroeser-net MinIO bucket (caddy/Caddyfile). No App Launcher
-# entry — it's a public website, not an internal tool. skycroeser.net
-# cutover is a later, separate operation (new zone + DNS swap).
-module "sky" {
-  source = "./modules/pod_haus_service"
-
-  account_id    = local.pod_haus_service_defaults.account_id
-  zone_id       = local.pod_haus_service_defaults.zone_id
-  tunnel_target = local.pod_haus_service_defaults.tunnel_target
-
-  hostname             = "sky"
-  backend              = "http://caddy:80"
-  app_launcher_visible = false
-
-  access_policy_ids = [
-    cloudflare_zero_trust_access_policy.public_bypass.id,
-  ]
-}
-
 # id.pod.haus — the Pocket ID OIDC identity provider itself. MUST be
 # publicly reachable so Cloudflare's servers can fetch the OIDC token/JWKS
 # endpoints during login (a Family-gated id.pod.haus would deadlock the
 # "fresh keys" verification). A bypass-everyone policy overrides the
-# *.pod.haus wildcard's Family gate — same mechanism as module.sky /
-# module.unifi. Pocket ID's own passkey login protects the admin UI.
+# *.pod.haus wildcard's Family gate — same mechanism as module.unifi.
+# Pocket ID's own passkey login protects the admin UI.
 # See docs/plans/pocket-id.md.
 module "pocket_id" {
   source = "./modules/pod_haus_service"

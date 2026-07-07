@@ -22,20 +22,27 @@ DNS change exists for this. Deliberately deferred; see *Status*.
 
 ## Status
 
-**NOT STARTED.** Parked behind current work. Locked decisions: Publii +
-Terminal theme; redirect strategy; **dedicated Umami Postgres (not
-shared)**; **initial build to `sky.pod.haus` public, skycroeser.net
-cutover deferred to Phase 6**; **MinIO-backed deployment — Publii
-pushes S3 → `skycroeser-net` bucket, Caddy reverse-proxies it (no SFTP,
-no site volume)**. The skycroeser.net domain-control question (open #3)
-blocks *only* Phase 6. **New work the MinIO switch introduces: a public
-S3-API tunnel ingress — MinIO's S3 API is loopback-only today (§4
-blocker).** Exposing the **whole** S3 API is decided; the access-control
-model (SigV4 + least-priv scoped key + private-by-default other buckets
-+ edge WAF admin-path block (no rate-limit — Free plan; see §4a) + a
-pre-apply verification gate) is specified in **§4a** and is mandatory
-because the same MinIO holds `terraform-state`. Sky's authoring open questions remain before
-building.
+**LIVE — cutover done (2026-07-07).** The site is built and serving at
+<https://skycroeser.net> (Publii static output → `skycroeser-net` MinIO
+bucket, Caddy reverse-proxies it, Cloudflare Tunnel ingress). Phase 6
+domain cutover is complete: DNS + tunnel ingress (`dns_skycroeser_net.tf`,
+`tunnel.tf`), the Caddy site block, and the WordPress legacy-URL redirects
+are all in place and live-validated. The `sky.pod.haus` staging mirror has
+been **retired** (module + tunnel ingress + Caddy host removed). Publii's
+Site URL is set to the real domain, so canonical/og:url/sitemap/feed all
+emit `skycroeser.net`.
+
+**Remaining — Publii-side polish (Sky's side, non-blocking):** the
+`skycroeser-validation-gaps` items still open — **G1** rebuild the nav
+menu (Publii's WP importer dropped it), **G6** remove Terminal-theme
+footer credit cruft, **G7** tag pages absent from sitemap. G2/G3/G4
+(URL/slug/prefix preservation) are handled by the live Caddy redirect
+block; G5 (soft-404) is fixed. See
+[skycroeser-validation-gaps](skycroeser-validation-gaps.md).
+
+Everything below is the original planning/decision record, retained for
+context; the as-built serving architecture lives in the Caddyfile +
+`terraform/` comments and [/terraform.html](../terraform.html).
 
 ---
 

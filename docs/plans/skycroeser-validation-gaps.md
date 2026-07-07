@@ -1,9 +1,18 @@
-# skycroeser.net → Publii — `sky.pod.haus` validation gaps
+# skycroeser.net → Publii — validation gaps
 
-Validation of the first full Publii publish at `https://sky.pod.haus`
-against the old WordPress site (source of truth:
-`leftoverwords.WordPress.2026-05-19.xml`). Goal: restore the **old site
-structure + all content/images**; styling change is accepted.
+> **Status (2026-07-07):** the site is now live at
+> <https://skycroeser.net> (the `sky.pod.haus` staging host this
+> validation first ran against has been retired). **G2/G3/G4** URL
+> preservation is handled by the live Caddy redirect block and was
+> validated end-to-end at cutover (dated-post, `/tag/` → `/tags/`,
+> `/feed/` → `/feed.xml`). **G5** soft-404 is fixed. Still open, all
+> Publii-side (Sky's side, non-blocking): **G1** nav menu, **G6** footer
+> cruft, **G7** tag pages in sitemap.
+
+Validation of the first full Publii publish against the old WordPress
+site (source of truth: `leftoverwords.WordPress.2026-05-19.xml`). Goal:
+restore the **old site structure + all content/images**; styling change
+is accepted.
 
 Method: crawled the live site (sitemap = 200 URLs), diffed against the
 WXR (165 published posts, 6 published pages, 373 tags, 196 image
