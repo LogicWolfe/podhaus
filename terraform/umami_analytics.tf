@@ -7,8 +7,7 @@
 #   - stats.<site>         — a per-site TRACKER host. Same-site with the
 #     content domain so the tracker request isn't third-party (dodges
 #     adblock / third-party-cookie heuristics). This file wires the
-#     nathanbaxter.com and pets.indigopod.au trackers; skycroeser.net's
-#     is deliberately NOT here yet (Sky rolls out after verification).
+#     nathanbaxter.com, pets.indigopod.au, and skycroeser.net trackers.
 #
 # Per-site pattern (repeated inline per site below): DNS CNAME → tunnel,
 # a host-level Family Access app, two path-scoped public-bypass apps
@@ -255,7 +254,112 @@ resource "cloudflare_ruleset" "indigopod_stats_redirect" {
   }]
 }
 
-# skycroeser.net's equivalent is deliberately NOT built yet (Sky rolls
-# out after nathanbaxter.com is verified). When stats.skycroeser.net
-# exists, add the same three Access apps + a sibling ruleset here
-# redirecting its root to the skycroeser.net share URL.
+# =============================================================================
+# skycroeser.net — Sky's academic site (public Publii static site; see
+# dns_skycroeser_net.tf). Tracker host stats.skycroeser.net is same-site
+# with the content domain and one level under the registrable domain, so
+# Universal SSL covers it. Sky views her stats via the root → share-view
+# redirect (she's in the Family Access group).
+# =============================================================================
+
+resource "cloudflare_dns_record" "stats_skycroeser_net" {
+  zone_id = local.zones["skycroeser.net"]
+  name    = "stats.skycroeser.net"
+  type    = "CNAME"
+  content = local.tunnels.pod_haus
+  proxied = true
+  ttl     = 1
+  settings = {
+    flatten_cname = false
+    ipv4_only     = false
+    ipv6_only     = false
+  }
+}
+
+# Host-level lock: dashboard/admin on stats.skycroeser.net gated to Family.
+resource "cloudflare_zero_trust_access_application" "stats_skycroeser_host" {
+  account_id          = var.account_id
+  name                = "stats.skycroeser.net (dashboard)"
+  type                = "self_hosted"
+  domain              = "stats.skycroeser.net"
+  self_hosted_domains = ["stats.skycroeser.net"]
+  session_duration    = "730h"
+
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = false
+  app_launcher_visible       = false
+  http_only_cookie_attribute = true
+
+  policies = [
+    { precedence = 1, id = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id },
+    { precedence = 2, id = cloudflare_zero_trust_access_policy.pod_haus_family_allow.id },
+  ]
+}
+
+# Public hole 1: the tracker script the visitor's browser loads.
+resource "cloudflare_zero_trust_access_application" "stats_skycroeser_script" {
+  account_id          = var.account_id
+  name                = "stats.skycroeser.net /script.js (public)"
+  type                = "self_hosted"
+  domain              = "stats.skycroeser.net/script.js"
+  self_hosted_domains = ["stats.skycroeser.net/script.js"]
+  session_duration    = "730h"
+
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = true
+  app_launcher_visible       = false
+  http_only_cookie_attribute = true
+
+  policies = [
+    { precedence = 1, id = cloudflare_zero_trust_access_policy.public_bypass.id },
+  ]
+}
+
+# Public hole 2: the event-collection endpoint the script POSTs to.
+resource "cloudflare_zero_trust_access_application" "stats_skycroeser_send" {
+  account_id          = var.account_id
+  name                = "stats.skycroeser.net /api/send (public)"
+  type                = "self_hosted"
+  domain              = "stats.skycroeser.net/api/send"
+  self_hosted_domains = ["stats.skycroeser.net/api/send"]
+  session_duration    = "730h"
+
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = true
+  app_launcher_visible       = false
+  http_only_cookie_attribute = true
+
+  policies = [
+    { precedence = 1, id = cloudflare_zero_trust_access_policy.public_bypass.id },
+  ]
+}
+
+# Root → the skycroeser.net share view (read-only, Family-gated). shareId
+# is Umami DB state (set via API, backed up in pgdata); regenerating it
+# means updating this value + the site's snippet.
+resource "cloudflare_ruleset" "skycroeser_stats_redirect" {
+  zone_id = local.zones["skycroeser.net"]
+  name    = "stats.skycroeser.net root → share view"
+  kind    = "zone"
+  phase   = "http_request_dynamic_redirect"
+
+  rules = [{
+    ref         = "stats_skycroeser_root_to_share"
+    description = "Bare root of the tracker host → the read-only share dashboard"
+    expression  = "(http.host eq \"stats.skycroeser.net\" and http.request.uri.path eq \"/\")"
+    action      = "redirect"
+    enabled     = true
+    action_parameters = {
+      from_value = {
+        status_code           = 302
+        preserve_query_string = false
+        target_url = {
+          value = "https://stats.skycroeser.net/share/akYfaxpJqfylsF7D/skycroeser.net"
+        }
+      }
+    }
+  }]
+}

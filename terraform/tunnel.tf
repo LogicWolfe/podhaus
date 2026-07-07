@@ -87,6 +87,11 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pod_haus" {
       [
         { hostname = "skycroeser.net", service = "http://caddy:80", path = null, origin_request = null },
         { hostname = "www.skycroeser.net", service = "http://caddy:80", path = null, origin_request = null },
+        # stats.skycroeser.net → shared umami container. Same-site tracker
+        # host for Sky's site; Access locks it to Family except /script.js
+        # + /api/send, and the root redirects to the share view
+        # (umami_analytics.tf).
+        { hostname = "stats.skycroeser.net", service = "http://umami:3000", path = null, origin_request = null },
       ],
       # pets.indigopod.au public game → the pets engine
       # container. NOT Access-gated (her friends sign in to the game

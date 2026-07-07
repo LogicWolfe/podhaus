@@ -551,16 +551,19 @@ the site `<head>` (`BaseHead.astro`), `src=https://stats.nathanbaxter.com/script
 `data-website-id=<uuid>`, production-only; commit + push → the deploy
 stack rebuilds. Verify events land in the dashboard.
 
-### Sky rollout — pending (do after nathanbaxter.com is verified)
+### Sky rollout — server side DONE (2026-07-07), snippet pending
 
-1. Add a `stats.skycroeser.net` tracker host: DNS + the three Access
-   apps (host Family + `/script.js` & `/api/send` bypass) — clone
-   `umami_analytics.tf`'s nathanbaxter block — plus a
-   `stats.skycroeser.net → umami:3000` tunnel ingress entry.
-2. Register `skycroeser.net` in the Umami dashboard → UUID.
-3. Publii side (Sky, GUI-only): install the **Umami plugin** (or paste
-   the snippet into custom-head), host `stats.skycroeser.net` + the
-   UUID. Rebuild + publish. Verify events land.
+- ✅ `stats.skycroeser.net` tracker host: DNS + three Access apps +
+  root → share-view redirect (`terraform/umami_analytics.tf`) + tunnel
+  ingress entry — applied and verified (script public, root redirects,
+  dashboard Access-gated, /api/send open).
+- ✅ `skycroeser.net` registered in Umami: website UUID
+  `c6ae1c0e-be58-4dac-ab9b-11d1a6002b6c`, share URL
+  `https://stats.skycroeser.net/share/akYfaxpJqfylsF7D/skycroeser.net`.
+- ⬜ Publii side (GUI-only): add the snippet to the site `<head>`
+  (Umami plugin or custom-head):
+  `<script defer src="https://stats.skycroeser.net/script.js" data-website-id="c6ae1c0e-be58-4dac-ab9b-11d1a6002b6c"></script>`
+  then rebuild + publish. Verify events land at the share URL.
 
 ---
 
