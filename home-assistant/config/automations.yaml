@@ -151,39 +151,90 @@
               - light.shapes_4108
   mode: restart
 
-- id: living_room_switch_night_mode
-  alias: 'Living room switch: night mode'
+- id: living_room_switch_extras
+  alias: 'Living room switch: fan lights and night mode'
   description: >-
-    Button 4 on the living room tap is night mode for the open-plan end of the
-    house. The Hue bridge already recalls the Living room 'Nightlight' scene on
-    this press, dropping both standing lamps to brightness 1 in warm orange;
-    those two bulbs are bridge-owned and so are deliberately absent below.
+    The living room tap's two standing lamps are bridge-owned (Hue rules recall
+    Bright, Relax and Nightlight for buttons 2, 3 and 4), so they are
+    deliberately absent below. This automation adds the two Kitchen fan
+    downlights, which are the Big Ass Fans covering this space -- the Living
+    Room area itself has no fan.
 
-    HA adds what a bridge rule cannot reach across a room boundary. The Hallway
-    is a separate Hue room, so nothing a living room button does will ever move
-    its bulbs on its own. Hallway goes to brightness 1 rather than off on
-    purpose: that is the kids' nightlight level, not a mistake. Front entry
-    shares the Hallway room but is a colour bulb and goes fully off.
-
-    The two Kitchen fan downlights are the Big Ass Fans covering this space;
-    the Living Room area itself has no fan.
+    Button 4 is night mode and is the only button that reaches out of the room:
+    it also shuts the front entry and drops the Hallway to brightness 1. The
+    Hallway is a separate Hue room, so no living room button touches it without
+    this automation, and buttons 1 to 3 deliberately leave it and the front
+    entry alone. Hallway goes to brightness 1 rather than off on purpose: that
+    is the kids' nightlight level, not a mistake.
   triggers:
+    - trigger: state
+      entity_id: event.living_room_switch_button_2
+      not_from:
+        - unknown
+        - unavailable
+      id: full
+    - trigger: state
+      entity_id: event.living_room_switch_button_3
+      not_from:
+        - unknown
+        - unavailable
+      id: dim
     - trigger: state
       entity_id: event.living_room_switch_button_4
       not_from:
         - unknown
         - unavailable
+      id: night
+    - trigger: state
+      entity_id: event.living_room_switch_button_1
+      not_from:
+        - unknown
+        - unavailable
+      id: fans_off
   conditions: []
   actions:
-    - action: light.turn_off
-      target:
-        entity_id:
-          - light.front_entry
-          - light.haiku_fan_2
-          - light.haiku_fan_6
-    - action: light.turn_on
-      target:
-        entity_id: light.hallway
-      data:
-        brightness: 1
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: full
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id:
+                  - light.haiku_fan_2
+                  - light.haiku_fan_6
+              data:
+                brightness_pct: 100
+        - conditions:
+            - condition: trigger
+              id: dim
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id:
+                  - light.haiku_fan_2
+                  - light.haiku_fan_6
+              data:
+                brightness_pct: 60
+        - conditions:
+            - condition: trigger
+              id: night
+          sequence:
+            - action: light.turn_off
+              target:
+                entity_id:
+                  - light.front_entry
+                  - light.haiku_fan_2
+                  - light.haiku_fan_6
+            - action: light.turn_on
+              target:
+                entity_id: light.hallway
+              data:
+                brightness: 1
+      default:
+        - action: light.turn_off
+          target:
+            entity_id:
+              - light.haiku_fan_2
+              - light.haiku_fan_6
   mode: single

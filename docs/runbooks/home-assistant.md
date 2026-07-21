@@ -86,6 +86,16 @@ HA needs a different integration, and the choice matters:
   because this HA is a plain container rather than HAOS, it would need a
   separate `matter-server` stack, not just a config entry.
 
+**The door locks are Level Lock Touch, and they cannot do Matter.** Level
+shipped the Matter-over-Thread firmware only for the Lock+ and later the Bolt;
+the original Lock and the Lock Touch were excluded, and the upgrade promotion
+closed in January 2025. The Thread radio is present in the hardware but has no
+Matter firmware. So the locks stay Apple-Home-owned and invisible to HA, and
+that is a hardware constraint, not something to fix in config. If HA ever needs
+lock *state*, the non-destructive route is an Apple Home automation calling an
+HA webhook; genuine HA-native locks mean replacing the hardware with a
+Matter-capable model.
+
 - **Exposed:** Hue **individual bulbs** (not the Hue Room/Zone group lights —
   those overlap their member bulbs and Apple Home's own rooms), plus the six
   Big Ass Fans and their downlights. `entity_config` gives each fan/light a
