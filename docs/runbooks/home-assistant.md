@@ -132,9 +132,19 @@ prompt. Be aware this deliberately routes around a safety interlock: anything
 that can flip `front_door_unlock_request` can open the front door with no
 confirmation.
 
-**Consumer:** living room tap button 4 (night mode) raises all five
-`*_lock_request` booleans. Only the lock direction is ever wired to an
-automation; nothing should unlock a door unattended.
+**Consumers:**
+
+- **Night mode** (living room tap button 4) raises all five `*_lock_request`
+  booleans.
+- **Morning unlock** (living room tap button 2 or 3, 06:00-08:00 Australia/Perth)
+  raises the living room and pantry unlock requests.
+
+Morning unlock is the only automated *unlock* in the repo. It is acceptable
+because a tap press means a person is physically standing in the living room,
+so it is attended by definition, and because both doors are interior — the
+front door is deliberately excluded. Keep that bar: an unlock wired to
+anything unattended (presence, time alone, a sensor) is a different and much
+worse proposition. Locking has no such constraint.
 
 ### The unversioned half
 

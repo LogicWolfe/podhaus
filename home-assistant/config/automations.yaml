@@ -254,6 +254,43 @@
               - light.haiku_fan_6
   mode: single
 
+- id: living_room_switch_morning_unlock
+  alias: 'Living room switch: morning unlock'
+  description: >-
+    Pressing button 2 or 3 on the living room tap between 06:00 and 08:00
+    unlocks the living room and pantry doors. Deliberately kept out of the
+    lighting automation for this switch: those buttons' lighting behaviour is
+    unconditional, this is a narrow time-boxed exception, and folding a lock
+    action into two lighting branches would bury it.
+
+    Unlocking from a light switch is safe here in a way night mode's locking is
+    not reversible: a press is a person physically standing in the living room,
+    so it is attended by definition. It is still the only unlock in this repo
+    that fires without someone explicitly asking for a door -- both doors are
+    interior, and the front door is deliberately not included.
+
+    Times are Australia/Perth, HA's configured zone. As with every lock action
+    here, HA only raises a request and never learns whether the door moved.
+  triggers:
+    - trigger: state
+      entity_id:
+        - event.living_room_switch_button_2
+        - event.living_room_switch_button_3
+      not_from:
+        - unknown
+        - unavailable
+  conditions:
+    - condition: time
+      after: "06:00:00"
+      before: "08:00:00"
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id:
+          - input_boolean.living_room_unlock_request
+          - input_boolean.pantry_unlock_request
+  mode: single
+
 - id: door_lock_request_reset
   alias: 'Door locks: reset request buttons'
   description: >-
