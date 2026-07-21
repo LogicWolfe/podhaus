@@ -82,7 +82,10 @@
     rules can only reach Hue devices, so this automation adds the room's other
     two lights: the Nanoleaf Shapes and the Big Ass Fan downlight. Buttons 2
     and 3 light the Shapes alongside the Hue scene they fire; buttons 1 and 4
-    turn both off.
+    turn both off. Button 3 picks its effect at random from three, so the
+    effect names must stay in sync with what is actually loaded on the
+    controller: effects live on the Nanoleaf itself and HA matches the name
+    exactly, so a renamed or missing effect fails silently.
 
     The tap is kinetic, so every button emits a bare initial_press with no
     hold or long-press. not_from guards the restore transitions, which would
@@ -138,7 +141,8 @@
                 entity_id: light.shapes_4108
               data:
                 brightness_pct: 15
-                effect: Aquarium
+                effect: >-
+                  {{ ['Aquarium', 'Retro Future', 'Vintage Modern'] | random }}
       default:
         - action: light.turn_off
           target:
