@@ -99,6 +99,61 @@ direction). HA areas and Apple Home rooms are independent; Siri room commands
 ("turn on the kitchen lights") resolve against Apple Home rooms, so accessories
 must be placed into rooms in the Home app.
 
+## Hue tap switches: split ownership
+
+The four Hue Tap switches (Burrow, Bathroom, Living room, Studio) are **not**
+bound in HA. Each is driven by **rules stored on the Hue bridge itself**
+(`10.0.0.37`, the v1 API's `rules` collection), written by the Hue app when the
+tap was paired to a room. They execute on the bridge over Zigbee, so they keep
+working with HA down. They are **invisible in the Hue app UI** — the only way to
+see them is `GET https://10.0.0.37/api/<key>/rules`, filtering for the tap's
+`ZGPSwitch` sensor. Button events map `34 → 1`, `16 → 2`, `17 → 3`, `18 → 4`.
+
+The taps are kinetic, so every button emits a bare `initial_press` — no hold, no
+long-press. Four discrete actions, no dimming.
+
+**A bridge rule can only reach Hue devices.** Where a room has non-Hue lights,
+the pattern is to leave the bridge owning its own bulbs and add an HA automation
+on the `event.<room>_switch_button_N` entities for everything else. Burrow is the
+worked example (`automations.yaml`, `burrow_switch_extras`): the bridge drives
+the bloom and both light strips; HA adds the Nanoleaf Shapes and the Big Ass Fan
+downlight.
+
+The consequence to remember when editing either half: **a button's behaviour is
+defined in two places.** Changing what button 3 does to the Hue bulbs is a Hue
+app / bridge-rule edit and is *not* captured in this repo; changing what it does
+to the Shapes is a git edit here.
+
+One bridge-side gotcha: the Hue app writes button 1 as a **toggle pair** — one
+rule turning the group off when any light is on, a second turning it on when
+none are. If you want a button to be off-only, the turn-on rule has to be
+deleted, or HA and the bridge will disagree about the room's state.
+
+## Nanoleaf
+
+Nanoleaf controllers pair with a token stored **on the controller**, so
+**replacing the hardware invalidates the old token and changes the entity ID**
+(it is derived from the serial, e.g. `light.shapes_4108`). Replacing a
+controller means: delete the old config entry, re-pair, and fix up every
+automation that referenced the old entity.
+
+Two traps:
+
+- **Effects live on the controller, not in the cloud or your account.** A
+  replacement unit ships with only its stock set; custom and downloaded effects
+  must be re-downloaded from the Nanoleaf app. HA matches effect names exactly,
+  so an automation naming a missing effect fails silently. Check the entity's
+  `effect_list` before writing a name into YAML — the stock effect is
+  `Sunlight through trees`, *not* "Sunlight through the trees".
+- **Pin the host to IPv4 with a DHCP reservation.** The integration accepts a
+  raw IPv6 address, but a SLAAC address is derived from the delegated prefix and
+  dies whenever the ISP rotates it.
+
+To pair without the UI, drive the config flow over REST against
+`/api/config/config_entries/flow` (handler `nanoleaf`, then `{"host": ...}`,
+then an empty body to complete the `link` step). It returns
+`not_allowing_new_tokens` until the controller's power button is held 5-7s.
+
 ## Deploy
 
 Config changes ship like any stack: commit + push → the `podhaus-push-deploy`

@@ -72,3 +72,77 @@
       data:
         volume_level: "{{ prev_volume }}"
   mode: single
+
+- id: burrow_switch_extras
+  alias: 'Burrow switch: Shapes and fan downlight'
+  description: >-
+    The Burrow Hue tap switch drives the room's three Hue bulbs (bloom,
+    cupboard strip, window strip) through rules stored on the Hue bridge
+    itself, so they keep working over local Zigbee with no HA involved. Those
+    rules can only reach Hue devices, so this automation adds the room's other
+    two lights: the Nanoleaf Shapes and the Big Ass Fan downlight. Buttons 2
+    and 3 light the Shapes alongside the Hue scene they fire; buttons 1 and 4
+    turn both off.
+
+    The tap is kinetic, so every button emits a bare initial_press with no
+    hold or long-press. not_from guards the restore transitions, which would
+    otherwise fire the automation on restart or integration reload.
+  triggers:
+    - trigger: state
+      entity_id: event.burrow_switch_button_2
+      not_from:
+        - unknown
+        - unavailable
+      id: bright
+    - trigger: state
+      entity_id: event.burrow_switch_button_3
+      not_from:
+        - unknown
+        - unavailable
+      id: orange
+    - trigger: state
+      entity_id:
+        - event.burrow_switch_button_1
+        - event.burrow_switch_button_4
+      not_from:
+        - unknown
+        - unavailable
+      id: extras_off
+  conditions: []
+  actions:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: bright
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id: light.haiku_fan_4
+              data:
+                brightness_pct: 70
+            - action: light.turn_on
+              target:
+                entity_id: light.shapes_4108
+              data:
+                brightness_pct: 40
+                effect: Sunlight through trees
+        - conditions:
+            - condition: trigger
+              id: orange
+          sequence:
+            - action: light.turn_off
+              target:
+                entity_id: light.haiku_fan_4
+            - action: light.turn_on
+              target:
+                entity_id: light.shapes_4108
+              data:
+                brightness_pct: 15
+                effect: Aquarium
+      default:
+        - action: light.turn_off
+          target:
+            entity_id:
+              - light.haiku_fan_4
+              - light.shapes_4108
+  mode: restart
