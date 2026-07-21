@@ -129,6 +129,35 @@ rule turning the group off when any light is on, a second turning it on when
 none are. If you want a button to be off-only, the turn-on rule has to be
 deleted, or HA and the bridge will disagree about the room's state.
 
+## Hue bridge automation lives in four separate places
+
+When hunting "what is changing this light", checking the rules collection is
+**not** enough. The bridge stores automation across four unrelated resources,
+and a search of one will cleanly report "nothing found" while another drives the
+light:
+
+| Resource | API | What it is |
+|---|---|---|
+| `rules` | v1 | Switch bindings, written by the Hue app on pairing |
+| `schedules` | v1 | Timed one-shots and recurring commands |
+| `behavior_instance` | v2 | The Hue app's "Automations" tab (wake up, go to sleep, coming home) |
+| `smart_scene` | v2 | **Day cycles** — a room walking through scenes on clock and sunrise/sunset anchors |
+
+`smart_scene` is the easiest to miss and the most likely answer when a light
+"changes itself through the day". Enumerate all four before concluding a light
+is driven from outside the bridge.
+
+**Colour scenes on a mixed room degrade badly.** A room holding both a colour
+bulb and a dimmable-white bulb will apply a colour scene to the white bulb as a
+brightness approximation, which routinely lands at `bri: 1` — indistinguishable
+from a fault. If a white bulb keeps ending up almost-off on a schedule, look for
+a day cycle on a room it shares with a colour bulb, and split the room.
+
+Anything genuinely outside the bridge and HA is most likely an **Apple HomeKit
+automation** or Apple's **Adaptive Lighting**, both of which live in Apple's
+closed database that neither system can read. Check the Home app's Automation
+tab, and Adaptive Lighting per-accessory.
+
 ## Nanoleaf
 
 Nanoleaf controllers pair with a token stored **on the controller**, so
