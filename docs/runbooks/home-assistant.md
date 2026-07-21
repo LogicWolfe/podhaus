@@ -72,6 +72,20 @@ curl -s -H "Authorization: Bearer $TOK" http://localhost:8123/api/states
 Siri controls them **through HA** (Siri → Apple Home → bridge → HA → device).
 HA stays the controller.
 
+**The bridge is export-only.** It has no import path, so it will never surface
+an Apple Home accessory in HA — a HomeKit-native device (e.g. a smart lock)
+stays invisible here no matter how the bridge is configured. Pulling one *into*
+HA needs a different integration, and the choice matters:
+
+- **`homekit_controller`** pairs HA to the accessory directly. A HomeKit
+  accessory holds **one pairing at a time**, so this means unpairing it from
+  Apple Home and losing Siri, Home app, Home Key and Apple automations.
+- **Matter** is multi-admin, so Apple Home and HA can hold the device at once.
+  This is the only non-destructive option. `thread` is already configured here
+  (border routers via the Apple TVs/HomePods), but **`matter` is not** — and
+  because this HA is a plain container rather than HAOS, it would need a
+  separate `matter-server` stack, not just a config entry.
+
 - **Exposed:** Hue **individual bulbs** (not the Hue Room/Zone group lights —
   those overlap their member bulbs and Apple Home's own rooms), plus the six
   Big Ass Fans and their downlights. `entity_config` gives each fan/light a

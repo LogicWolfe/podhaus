@@ -150,3 +150,40 @@
               - light.haiku_fan_4
               - light.shapes_4108
   mode: restart
+
+- id: living_room_switch_night_mode
+  alias: 'Living room switch: night mode'
+  description: >-
+    Button 4 on the living room tap is night mode for the open-plan end of the
+    house. The Hue bridge already recalls the Living room 'Nightlight' scene on
+    this press, dropping both standing lamps to brightness 1 in warm orange;
+    those two bulbs are bridge-owned and so are deliberately absent below.
+
+    HA adds what a bridge rule cannot reach across a room boundary. The Hallway
+    is a separate Hue room, so nothing a living room button does will ever move
+    its bulbs on its own. Hallway goes to brightness 1 rather than off on
+    purpose: that is the kids' nightlight level, not a mistake. Front entry
+    shares the Hallway room but is a colour bulb and goes fully off.
+
+    The two Kitchen fan downlights are the Big Ass Fans covering this space;
+    the Living Room area itself has no fan.
+  triggers:
+    - trigger: state
+      entity_id: event.living_room_switch_button_4
+      not_from:
+        - unknown
+        - unavailable
+  conditions: []
+  actions:
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.front_entry
+          - light.haiku_fan_2
+          - light.haiku_fan_6
+    - action: light.turn_on
+      target:
+        entity_id: light.hallway
+      data:
+        brightness: 1
+  mode: single
