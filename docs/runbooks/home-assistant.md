@@ -147,11 +147,16 @@ light:
 "changes itself through the day". Enumerate all four before concluding a light
 is driven from outside the bridge.
 
-**Colour scenes on a mixed room degrade badly.** A room holding both a colour
-bulb and a dimmable-white bulb will apply a colour scene to the white bulb as a
-brightness approximation, which routinely lands at `bri: 1` — indistinguishable
-from a fault. If a white bulb keeps ending up almost-off on a schedule, look for
-a day cycle on a room it shares with a colour bulb, and split the room.
+**Colour scenes on a mixed room apply unevenly.** A room holding both a colour
+bulb and a dimmable-white bulb renders a colour scene faithfully on the colour
+bulb and as a brightness-only approximation on the white one, so the two diverge
+across a day cycle's timeslots.
+
+**Don't read a low brightness as a fault.** A white bulb sitting at `bri: 1`
+looks broken and is not: in this house it is the deliberate hallway nightlight
+level for the kids. The complaint that leads here is almost never the level
+itself but a schedule *moving* it — ask what the light should do and when,
+rather than inferring intent from a value that looks wrong.
 
 Anything genuinely outside the bridge and HA is most likely an **Apple HomeKit
 automation** or Apple's **Adaptive Lighting**, both of which live in Apple's
