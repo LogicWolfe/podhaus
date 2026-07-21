@@ -136,15 +136,33 @@ confirmation.
 
 - **Night mode** (living room tap button 4) raises all five `*_lock_request`
   booleans.
-- **Morning unlock** (living room tap button 2 or 3, 06:00-08:00 Australia/Perth)
-  raises the living room and pantry unlock requests.
+- **Morning unlock**, 06:00-08:00 Australia/Perth, raising the living room and
+  pantry unlock requests, from either physical control:
+  - living room Hue tap, button 2 or 3
+  - Kitchen fan **Haiku wall control** (`light.haiku_switch`), brightness
+    increased
 
 Morning unlock is the only automated *unlock* in the repo. It is acceptable
-because a tap press means a person is physically standing in the living room,
-so it is attended by definition, and because both doors are interior — the
-front door is deliberately excluded. Keep that bar: an unlock wired to
+because both triggers require a person physically pressing something in the
+room, so it is attended by definition, and because both doors are interior —
+the front door is deliberately excluded. Keep that bar: an unlock wired to
 anything unattended (presence, time alone, a sensor) is a different and much
-worse proposition. Locking has no such constraint.
+worse proposition. In particular the Haiku wall plates expose
+`binary_sensor.haiku_switch_occupancy_*`, which must never trigger an unlock.
+Locking has no such constraint.
+
+**Two guards on the wall-control trigger, both load-bearing.** *Direction*: only
+an increase unlocks, so dimming never does. *Availability*: these lights drop to
+`unavailable` and return, and a recovery presents as brightness `None -> 255`,
+which a naive numeric comparison reads as a large increase — that alone would
+unlock the doors on a network blip. Both states must be real before the
+comparison is trusted. If you touch this template, re-test the
+`unavailable -> on` case specifically.
+
+`light.haiku_switch`, `light.haiku_fan_2` and `light.haiku_fan_6` mirror each
+other exactly (verified by watching a real press), so a wall press and an
+HA-driven change are indistinguishable by entity. No attempt is made to tell
+them apart; the tap buttons already unlock in this window, so both paths agree.
 
 ### The unversioned half
 

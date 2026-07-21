@@ -291,6 +291,52 @@
           - input_boolean.pantry_unlock_request
   mode: single
 
+- id: fan_wall_control_morning_unlock
+  alias: 'Kitchen fan wall control: morning unlock'
+  description: >-
+    Turning the Kitchen fan lights UP on the Haiku wall control between 06:00
+    and 08:00 unlocks the living room and pantry, matching what the Hue tap's
+    buttons 2 and 3 already do in the same window. Two physical controls, same
+    morning routine.
+
+    light.haiku_switch is the wall control at 10.0.0.134. It, light.haiku_fan_2
+    and light.haiku_fan_6 all mirror each other exactly -- verified by watching
+    a real press -- so there is no way to tell a wall press from an HA-driven
+    change by entity, and no attempt is made to. The overlap is harmless: the
+    tap's buttons already unlock in this window, so both paths agree.
+
+    Two guards, both load-bearing:
+
+    Direction. Only an increase unlocks, so dimming or switching off never
+    does. Old brightness defaults to 0 so off -> on counts as up.
+
+    Availability. Lights in this house drop to unavailable and come back
+    (observed on light.grove_door mid-capture). An unavailable -> on recovery
+    presents as brightness None -> 255, which a naive numeric comparison reads
+    as a large increase -- that would unlock the doors on a network blip. So
+    both the old and new state must be real before the comparison is trusted.
+  triggers:
+    - trigger: state
+      entity_id: light.haiku_switch
+      attribute: brightness
+  conditions:
+    - condition: time
+      after: "06:00:00"
+      before: "08:00:00"
+    - condition: template
+      value_template: >-
+        {{ trigger.from_state.state not in ['unknown', 'unavailable']
+           and trigger.to_state.state not in ['unknown', 'unavailable']
+           and (trigger.to_state.attributes.brightness | int(0))
+               > (trigger.from_state.attributes.brightness | int(0)) }}
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id:
+          - input_boolean.living_room_unlock_request
+          - input_boolean.pantry_unlock_request
+  mode: single
+
 - id: door_lock_request_reset
   alias: 'Door locks: reset request buttons'
   description: >-
