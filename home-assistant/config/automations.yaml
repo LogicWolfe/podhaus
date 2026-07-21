@@ -161,11 +161,18 @@
     Room area itself has no fan.
 
     Button 4 is night mode and is the only button that reaches out of the room:
-    it also shuts the front entry and drops the Hallway to brightness 1. The
-    Hallway is a separate Hue room, so no living room button touches it without
-    this automation, and buttons 1 to 3 deliberately leave it and the front
-    entry alone. Hallway goes to brightness 1 rather than off on purpose: that
-    is the kids' nightlight level, not a mistake.
+    it also shuts the front entry, drops the Hallway to brightness 1, and locks
+    all five doors. The Hallway is a separate Hue room, so no living room button
+    touches it without this automation, and buttons 1 to 3 deliberately leave it
+    and the front entry alone. Hallway goes to brightness 1 rather than off on
+    purpose: that is the kids' nightlight level, not a mistake.
+
+    The locks are driven through the request booleans in packages/door_locks.yaml
+    rather than directly, because HA cannot command these locks at all -- Apple
+    Home does the actual locking. Consequences worth knowing: the doors lock a
+    second or two after the lights, and HA gets no confirmation that any of them
+    moved. Only the lock direction is wired here; night mode must never unlock
+    anything.
   triggers:
     - trigger: state
       entity_id: event.living_room_switch_button_2
@@ -231,6 +238,14 @@
                 entity_id: light.hallway
               data:
                 brightness: 1
+            - action: input_boolean.turn_on
+              target:
+                entity_id:
+                  - input_boolean.pantry_lock_request
+                  - input_boolean.living_room_lock_request
+                  - input_boolean.grasshopper_lock_request
+                  - input_boolean.front_door_lock_request
+                  - input_boolean.burrow_lock_request
       default:
         - action: light.turn_off
           target:

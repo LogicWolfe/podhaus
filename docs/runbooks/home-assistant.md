@@ -127,8 +127,14 @@ accessories and blocks an automation or scene from unlocking a door without
 authentication. The documented way around it is to have a **non-secure** device
 trigger the lock. An HA-published `input_boolean` is exactly that, which is why
 only one Apple automation per direction is needed rather than a two-hop chain.
-Be aware this deliberately routes around a safety interlock: anything that can
-flip `front_door_unlock_request` can open the front door with no confirmation.
+**Verified working in both directions** — unlock fires without a confirmation
+prompt. Be aware this deliberately routes around a safety interlock: anything
+that can flip `front_door_unlock_request` can open the front door with no
+confirmation.
+
+**Consumer:** living room tap button 4 (night mode) raises all five
+`*_lock_request` booleans. Only the lock direction is ever wired to an
+automation; nothing should unlock a door unattended.
 
 ### The unversioned half
 
