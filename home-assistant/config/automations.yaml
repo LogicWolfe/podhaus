@@ -167,12 +167,10 @@
     and the front entry alone. Hallway goes to brightness 1 rather than off on
     purpose: that is the kids' nightlight level, not a mistake.
 
-    The locks are driven through the request booleans in packages/door_locks.yaml
-    rather than directly, because HA cannot command these locks at all -- Apple
-    Home does the actual locking. Consequences worth knowing: the doors lock a
-    second or two after the lights, and HA gets no confirmation that any of them
-    moved. Only the lock direction is wired here; night mode must never unlock
-    anything.
+    The locks go through the request booleans in packages/door_locks.yaml
+    because HA cannot command them directly -- Apple Home does the actual
+    locking. So the doors lock a second or two after the lights, and HA gets no
+    confirmation that any of them moved.
   triggers:
     - trigger: state
       entity_id: event.living_room_switch_button_2
@@ -258,16 +256,10 @@
   alias: 'Living room switch: morning unlock'
   description: >-
     Pressing button 2 or 3 on the living room tap between 06:00 and 08:00
-    unlocks the living room and pantry doors. Deliberately kept out of the
-    lighting automation for this switch: those buttons' lighting behaviour is
-    unconditional, this is a narrow time-boxed exception, and folding a lock
-    action into two lighting branches would bury it.
-
-    Unlocking from a light switch is safe here in a way night mode's locking is
-    not reversible: a press is a person physically standing in the living room,
-    so it is attended by definition. It is still the only unlock in this repo
-    that fires without someone explicitly asking for a door -- both doors are
-    interior, and the front door is deliberately not included.
+    unlocks the living room and pantry doors. Kept out of the lighting
+    automation for this switch because those buttons' lighting behaviour is
+    unconditional and this is a narrow time-boxed exception, so folding it into
+    two lighting branches would bury it.
 
     Times are Australia/Perth, HA's configured zone. As with every lock action
     here, HA only raises a request and never learns whether the door moved.
@@ -300,21 +292,12 @@
     morning routine.
 
     light.haiku_switch is the wall control at 10.0.0.134. It, light.haiku_fan_2
-    and light.haiku_fan_6 all mirror each other exactly -- verified by watching
-    a real press -- so there is no way to tell a wall press from an HA-driven
-    change by entity, and no attempt is made to. The overlap is harmless: the
-    tap's buttons already unlock in this window, so both paths agree.
+    and light.haiku_fan_6 mirror each other exactly, so a wall press and an
+    HA-driven change are indistinguishable by entity.
 
-    Two guards, both load-bearing:
-
-    Direction. Only an increase unlocks, so dimming or switching off never
-    does. Old brightness defaults to 0 so off -> on counts as up.
-
-    Availability. Lights in this house drop to unavailable and come back
-    (observed on light.grove_door mid-capture). An unavailable -> on recovery
-    presents as brightness None -> 255, which a naive numeric comparison reads
-    as a large increase -- that would unlock the doors on a network blip. So
-    both the old and new state must be real before the comparison is trusted.
+    Brightness must go up. Old brightness defaults to 0, so off -> on and
+    unavailable -> on both count as up; these lights go unavailable when their
+    power is cut at the wall, so power returning is someone turning them on.
   triggers:
     - trigger: state
       entity_id: light.haiku_switch
@@ -325,10 +308,8 @@
       before: "08:00:00"
     - condition: template
       value_template: >-
-        {{ trigger.from_state.state not in ['unknown', 'unavailable']
-           and trigger.to_state.state not in ['unknown', 'unavailable']
-           and (trigger.to_state.attributes.brightness | int(0))
-               > (trigger.from_state.attributes.brightness | int(0)) }}
+        {{ (trigger.to_state.attributes.brightness | int(0))
+           > (trigger.from_state.attributes.brightness | int(0)) }}
   actions:
     - action: input_boolean.turn_on
       target:

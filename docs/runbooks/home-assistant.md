@@ -118,9 +118,8 @@ triggers on the edge, so a boolean left on would make the next identical
 request a silent no-op.
 
 **These are requests, not state.** HA never learns whether a lock actually
-moved. A toggle would masquerade as lock state and drift the instant someone
-turned a knob by hand, so the `_request` suffix is load-bearing naming. Do not
-"improve" these into lock entities.
+moved, so these are not modelled as lock entities — a toggle would read as lock
+state and drift the instant someone turned a knob by hand.
 
 **Why an ordinary switch works at all:** Apple treats locks as *secure*
 accessories and blocks an automation or scene from unlocking a door without
@@ -128,9 +127,7 @@ authentication. The documented way around it is to have a **non-secure** device
 trigger the lock. An HA-published `input_boolean` is exactly that, which is why
 only one Apple automation per direction is needed rather than a two-hop chain.
 **Verified working in both directions** — unlock fires without a confirmation
-prompt. Be aware this deliberately routes around a safety interlock: anything
-that can flip `front_door_unlock_request` can open the front door with no
-confirmation.
+prompt.
 
 **Consumers:**
 
@@ -142,27 +139,14 @@ confirmation.
   - Kitchen fan **Haiku wall control** (`light.haiku_switch`), brightness
     increased
 
-Morning unlock is the only automated *unlock* in the repo. It is acceptable
-because both triggers require a person physically pressing something in the
-room, so it is attended by definition, and because both doors are interior —
-the front door is deliberately excluded. Keep that bar: an unlock wired to
-anything unattended (presence, time alone, a sensor) is a different and much
-worse proposition. In particular the Haiku wall plates expose
-`binary_sensor.haiku_switch_occupancy_*`, which must never trigger an unlock.
-Locking has no such constraint.
-
-**Two guards on the wall-control trigger, both load-bearing.** *Direction*: only
-an increase unlocks, so dimming never does. *Availability*: these lights drop to
-`unavailable` and return, and a recovery presents as brightness `None -> 255`,
-which a naive numeric comparison reads as a large increase — that alone would
-unlock the doors on a network blip. Both states must be real before the
-comparison is trusted. If you touch this template, re-test the
-`unavailable -> on` case specifically.
+The wall-control trigger fires only when brightness *increases*, so dimming
+never unlocks. `unavailable -> on` counts as an increase: these lights go
+unavailable when their power is cut at the wall, so power returning means
+someone turned them on.
 
 `light.haiku_switch`, `light.haiku_fan_2` and `light.haiku_fan_6` mirror each
-other exactly (verified by watching a real press), so a wall press and an
-HA-driven change are indistinguishable by entity. No attempt is made to tell
-them apart; the tap buttons already unlock in this window, so both paths agree.
+other exactly, so a wall press and an HA-driven change are indistinguishable by
+entity.
 
 ### The unversioned half
 

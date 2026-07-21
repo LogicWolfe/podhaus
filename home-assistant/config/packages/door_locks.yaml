@@ -13,11 +13,10 @@
 # IS the message; there is no direct call.
 #
 # These are REQUESTS, not state. HA never learns whether a lock actually moved,
-# so a toggle here would masquerade as lock state and drift the moment someone
-# turns a knob by hand. The `_request` suffix and the momentary reset in
-# automations.yaml (door_lock_request_reset) keep that honest: each boolean
-# falls back to off shortly after firing, so the next request is a fresh edge
-# for Apple to trigger on rather than a no-op write of an already-on value.
+# so they are not modelled as locks -- a toggle would read as lock state and
+# drift the moment someone turns a knob by hand. door_lock_request_reset in
+# automations.yaml returns each boolean to off shortly after it fires, so the
+# next request is a fresh edge rather than a no-op write of an already-on value.
 #
 # The matching Apple Home automations live in Apple's closed database and are
 # NOT captured in this repo. Rebuilding this house from git means recreating
