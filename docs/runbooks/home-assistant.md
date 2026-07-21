@@ -86,15 +86,70 @@ HA needs a different integration, and the choice matters:
   because this HA is a plain container rather than HAOS, it would need a
   separate `matter-server` stack, not just a config entry.
 
-**The door locks are Level Lock Touch, and they cannot do Matter.** Level
-shipped the Matter-over-Thread firmware only for the Lock+ and later the Bolt;
-the original Lock and the Lock Touch were excluded, and the upgrade promotion
-closed in January 2025. The Thread radio is present in the hardware but has no
-Matter firmware. So the locks stay Apple-Home-owned and invisible to HA, and
-that is a hardware constraint, not something to fix in config. If HA ever needs
-lock *state*, the non-destructive route is an Apple Home automation calling an
-HA webhook; genuine HA-native locks mean replacing the hardware with a
-Matter-capable model.
+## Door locks: the request-signal shim
+
+**The five Level Lock Touch locks cannot be integrated into HA.** Two
+independent reasons, either sufficient:
+
+- **No Matter.** Level shipped the Matter-over-Thread firmware only for the
+  Lock+ and later the Bolt; the original Lock and the Lock Touch were excluded,
+  and the upgrade promotion closed in January 2025. The Thread radio is in the
+  hardware but has no Matter firmware.
+- **No range.** That leaves Bluetooth, and bilby is out of BLE range of every
+  door. Apple's hubs (Apple TVs, HomePods) are the only controllers with range.
+  `homekit_controller` is therefore impossible regardless of its other costs.
+
+So HA cannot command a lock, and never will with this hardware. What it *can*
+do is change an entity Apple Home is watching:
+
+```
+HA input_boolean -> HomeKit bridge -> Apple Home automation -> hub -> BLE -> lock
+```
+
+There is no direct call — HomeKit exposes no inbound API. **The state change is
+the message.**
+
+`config/packages/door_locks.yaml` defines ten `input_boolean`s, a lock and an
+unlock request for each of Pantry, Living room, Grasshopper, Front door and
+Burrow. They are published to Apple Home via `packages/homekit.yaml`.
+`door_lock_request_reset` in `automations.yaml` returns each to `off` ten
+seconds after it fires, so every request is a fresh `off -> on` edge; Apple
+triggers on the edge, so a boolean left on would make the next identical
+request a silent no-op.
+
+**These are requests, not state.** HA never learns whether a lock actually
+moved. A toggle would masquerade as lock state and drift the instant someone
+turned a knob by hand, so the `_request` suffix is load-bearing naming. Do not
+"improve" these into lock entities.
+
+**Why an ordinary switch works at all:** Apple treats locks as *secure*
+accessories and blocks an automation or scene from unlocking a door without
+authentication. The documented way around it is to have a **non-secure** device
+trigger the lock. An HA-published `input_boolean` is exactly that, which is why
+only one Apple automation per direction is needed rather than a two-hop chain.
+Be aware this deliberately routes around a safety interlock: anything that can
+flip `front_door_unlock_request` can open the front door with no confirmation.
+
+### The unversioned half
+
+**The Apple Home automations are not config-as-code.** They live in Apple's
+closed database — HA can neither read nor write it. Rebuilding this house from
+git restores the ten booleans and leaves them inert. Someone must then recreate,
+by hand in the Home app, ten automations of the form:
+
+> When `Front door unlock request` turns On, Set Front door to Unlocked.
+
+This is the accepted cost of the shim; there is no way to version it. Adding a
+sixth lock means a new pair of booleans here **and** two more hand-built Apple
+automations, or the new door silently does nothing.
+
+Adding entities to the bridge needs a **full HA restart**, not a reload — the
+accessory list is built at bridge startup.
+
+Genuine HA-native locks mean replacing hardware with a Matter-capable model
+(e.g. Level Lock Pro). Thread is a mesh and the border routers already sit near
+the doors, so Matter solves the range problem BLE cannot, and multi-admin keeps
+Apple Home working at the same time.
 
 - **Exposed:** Hue **individual bulbs** (not the Hue Room/Zone group lights —
   those overlap their member bulbs and Apple Home's own rooms), plus the six

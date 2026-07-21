@@ -238,3 +238,41 @@
               - light.haiku_fan_2
               - light.haiku_fan_6
   mode: single
+
+- id: door_lock_request_reset
+  alias: 'Door locks: reset request buttons'
+  description: >-
+    Makes the door lock request booleans (packages/door_locks.yaml) behave as
+    momentary buttons. Apple Home automations trigger on an off->on edge, so a
+    boolean left on would make the next identical request a no-op. Resetting it
+    shortly after firing means every request is a fresh edge.
+
+    The delay is generous because the signal has to cross the HomeKit bridge,
+    reach a hub and then the lock over Bluetooth. Resetting too eagerly risks
+    Apple missing the change entirely.
+
+    Parallel mode so simultaneous requests on different doors do not queue
+    behind each other; each run resets only the boolean that triggered it.
+  triggers:
+    - trigger: state
+      entity_id:
+        - input_boolean.pantry_lock_request
+        - input_boolean.pantry_unlock_request
+        - input_boolean.living_room_lock_request
+        - input_boolean.living_room_unlock_request
+        - input_boolean.grasshopper_lock_request
+        - input_boolean.grasshopper_unlock_request
+        - input_boolean.front_door_lock_request
+        - input_boolean.front_door_unlock_request
+        - input_boolean.burrow_lock_request
+        - input_boolean.burrow_unlock_request
+      to: "on"
+  conditions: []
+  actions:
+    - delay:
+        seconds: 10
+    - action: input_boolean.turn_off
+      target:
+        entity_id: "{{ trigger.entity_id }}"
+  mode: parallel
+  max: 10

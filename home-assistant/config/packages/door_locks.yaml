@@ -1,0 +1,60 @@
+# Door lock request signals, loaded as a package (see ../homeassistant.yaml).
+#
+# The five Level Lock Touch locks cannot be integrated into HA at all. They are
+# Bluetooth-only (Level never shipped the Matter firmware for the Touch), and
+# bilby is out of Bluetooth range of every door, so homekit_controller is not an
+# option either. Apple's hubs are the only controllers with range. See
+# docs/runbooks/home-assistant.md for the full reasoning.
+#
+# HA therefore cannot command a lock. What it can do is change an entity that
+# Apple Home is watching: these booleans are published through the HomeKit
+# bridge (packages/homekit.yaml), and one Apple Home automation per door per
+# direction turns an off->on edge into the actual lock command. The state change
+# IS the message; there is no direct call.
+#
+# These are REQUESTS, not state. HA never learns whether a lock actually moved,
+# so a toggle here would masquerade as lock state and drift the moment someone
+# turns a knob by hand. The `_request` suffix and the momentary reset in
+# automations.yaml (door_lock_request_reset) keep that honest: each boolean
+# falls back to off shortly after firing, so the next request is a fresh edge
+# for Apple to trigger on rather than a no-op write of an already-on value.
+#
+# The matching Apple Home automations live in Apple's closed database and are
+# NOT captured in this repo. Rebuilding this house from git means recreating
+# them by hand in the Home app, ten of them, one per boolean.
+
+input_boolean:
+  pantry_lock_request:
+    name: Pantry lock request
+    icon: mdi:lock
+  pantry_unlock_request:
+    name: Pantry unlock request
+    icon: mdi:lock-open-variant
+
+  living_room_lock_request:
+    name: Living room lock request
+    icon: mdi:lock
+  living_room_unlock_request:
+    name: Living room unlock request
+    icon: mdi:lock-open-variant
+
+  grasshopper_lock_request:
+    name: Grasshopper lock request
+    icon: mdi:lock
+  grasshopper_unlock_request:
+    name: Grasshopper unlock request
+    icon: mdi:lock-open-variant
+
+  front_door_lock_request:
+    name: Front door lock request
+    icon: mdi:lock
+  front_door_unlock_request:
+    name: Front door unlock request
+    icon: mdi:lock-open-variant
+
+  burrow_lock_request:
+    name: Burrow lock request
+    icon: mdi:lock
+  burrow_unlock_request:
+    name: Burrow unlock request
+    icon: mdi:lock-open-variant

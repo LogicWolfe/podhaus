@@ -63,6 +63,21 @@ homekit:
         - light.haiku_fan_4
         - light.haiku_fan_5
         - light.haiku_fan_6
+        # --- Door lock request signals (see packages/door_locks.yaml) ---
+        # Published so Apple Home can watch them. HA cannot command a HomeKit
+        # lock, so an Apple Home automation per entry turns an off->on edge into
+        # the real lock command via a hub that has Bluetooth range. These are
+        # signals, not lock state; HA never learns whether the lock moved.
+        - input_boolean.pantry_lock_request
+        - input_boolean.pantry_unlock_request
+        - input_boolean.living_room_lock_request
+        - input_boolean.living_room_unlock_request
+        - input_boolean.grasshopper_lock_request
+        - input_boolean.grasshopper_unlock_request
+        - input_boolean.front_door_lock_request
+        - input_boolean.front_door_unlock_request
+        - input_boolean.burrow_lock_request
+        - input_boolean.burrow_unlock_request
     entity_config:
       fan.haiku_fan: { name: Grove Fan }
       fan.haiku_fan_2: { name: Kitchen Fan }
