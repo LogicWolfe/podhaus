@@ -18,6 +18,11 @@
 #     duplicate the fans; their presence sensors are for automations, not
 #     voice). entity_config gives each a room-based HomeKit name because every
 #     BAF entity is otherwise just "Haiku Fan".
+#   - Sensibo Sky IR blasters: all 7, one per air conditioner. These are
+#     cloud-only devices with no local API and no native HomeKit (that is the
+#     Air, not the Sky), so the bridge is the only route to Siri. entity_config
+#     appends "Aircon" to each room name so an accessory is never named
+#     identically to the Apple Home room it sits in.
 homekit:
   - name: Home Assistant Bridge
     port: 21063
@@ -63,6 +68,19 @@ homekit:
         - light.haiku_fan_4
         - light.haiku_fan_5
         - light.haiku_fan_6
+        # --- Sensibo Sky aircon controllers (one per room) ---
+        # The doubled entity IDs are as generated: the Sensibo device and its
+        # climate entity are both named for the room. Deliberately NOT renamed
+        # in the entity registry — registry renames live in host .storage, which
+        # is not in git, so a DR rebuild would regenerate these IDs and break
+        # any reference to a prettier one.
+        - climate.burrow_burrow
+        - climate.garage_garage
+        - climate.grasshopper_grasshopper
+        - climate.grove_grove
+        - climate.ladybug_ladybug
+        - climate.living_room_living_room
+        - climate.studio_studio
         # --- Door lock request signals (see packages/door_locks.yaml) ---
         # Published so Apple Home can watch them. HA cannot command a HomeKit
         # lock, so an Apple Home automation per entry turns an off->on edge into
@@ -91,3 +109,10 @@ homekit:
       light.haiku_fan_4: { name: Burrow Fan Light }
       light.haiku_fan_5: { name: Ladybug Fan Light }
       light.haiku_fan_6: { name: Kitchen Fan 2 Light }
+      climate.burrow_burrow: { name: Burrow Aircon }
+      climate.garage_garage: { name: Garage Aircon }
+      climate.grasshopper_grasshopper: { name: Grasshopper Aircon }
+      climate.grove_grove: { name: Grove Aircon }
+      climate.ladybug_ladybug: { name: Ladybug Aircon }
+      climate.living_room_living_room: { name: Living Room Aircon }
+      climate.studio_studio: { name: Studio Aircon }

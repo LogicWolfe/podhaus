@@ -170,8 +170,9 @@ the doors, so Matter solves the range problem BLE cannot, and multi-admin keeps
 Apple Home working at the same time.
 
 - **Exposed:** Hue **individual bulbs** (not the Hue Room/Zone group lights —
-  those overlap their member bulbs and Apple Home's own rooms), plus the six
-  Big Ass Fans and their downlights. `entity_config` gives each fan/light a
+  those overlap their member bulbs and Apple Home's own rooms), the six
+  Big Ass Fans and their downlights, the ten door-lock request booleans, and
+  the seven Sensibo aircon controllers. `entity_config` gives each fan/light a
   room-based HomeKit name (every BAF entity is otherwise just "Haiku Fan").
   The "Haiku Switch" wall controls are excluded — their fan/light entities
   duplicate the fans; their presence sensors are for automations, not voice.
