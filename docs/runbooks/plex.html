@@ -120,6 +120,86 @@ curl -s "http://localhost:32400/myplex/account?X-Plex-Token=$TOKEN" \
         <code>PublishServerOnPlexOnlineKey</code>.
       </p>
 
+      <h2 id="webos-wrong-audio">LG webOS plays the wrong audio (multi-track files)</h2>
+      <p>
+        <strong>Symptom.</strong> On the LG TVs a title plays a non-English audio track, and
+        <em>no</em> track in the picker produces English. The same file is fine on iOS, web and
+        desktop. Forcing a transcode (turn off Direct Play, or drop quality off "Original")
+        plays English correctly. Only a small percentage of titles are affected.
+      </p>
+      <p>
+        <strong>Cause.</strong> Under Direct Play, Plex hands the TV the original file and the
+        <em>TV</em> does its own audio-track selection. webOS mishandles that selection on files
+        with a large number of audio tracks, so the client's choice never reaches the demuxer.
+        Transcoding works precisely because the server does the selection and emits one audio
+        stream. Affected files are typically Disney+ <code>MULTi</code> rips carrying 15–25
+        audio tracks.
+      </p>
+      <aside class="callout note">
+        <span class="callout-title">Two red herrings</span>
+        These releases often order <code>English [Audio Description]</code> <em>before</em> the
+        real English track, and often flag no audio track as default. Neither is the cause —
+        removing the AD track or fixing the default flag does not fix it. Nor is it the codec;
+        the AAC tracks decode fine. Track <em>count</em> is the trigger.
+      </aside>
+      <p>
+        <strong>Fix.</strong> Remux the file down to a single English audio track. There is then
+        nothing to select and no index to miscount. Block copy, no re-encode, seconds per file;
+        Dolby Vision RPU and HDR metadata ride in the HEVC bitstream and survive untouched.
+        Leave subtitles alone unless there's separate evidence they're involved.
+      </p>
+      <p>
+        Identify the real English track — <strong>not</strong> the
+        <code>[Audio Description]</code> one — and note its <code>id</code>:
+      </p>
+      <pre><code>mkvmerge -J file.mkv | jq -r '.tracks[] | select(.type=="audio")
+  | "\(.id) \(.properties.language) \(.properties.track_name)"'</code></pre>
+      <p>
+        Then remux in place, substituting that id in all four places. The
+        <code>.tmp</code> extension keeps Plex's scanner off the partial file:
+      </p>
+      <pre><code>mkvmerge -q -o "$f.tmp" \
+  --audio-tracks 4 \
+  --default-track-flag 4:yes \
+  --forced-display-flag 4:no \
+  --track-name 4:"English" \
+  "$f"
+mv -f "$f.tmp" "$f"</code></pre>
+      <p>
+        Verify each output <em>before</em> replacing the original — exactly one audio track,
+        language <code>eng</code>, video track present, DV state matching the source, and
+        duration matching the source. Abort the batch on any mismatch rather than continuing:
+      </p>
+      <pre><code>mkvmerge -J out.mkv | jq '[.tracks[] | select(.type=="audio")] | length'   # must be 1
+ffprobe -v error -select_streams v:0 \
+  -show_entries stream_side_data=dv_profile -of csv=p=0 out.mkv          # same as source</code></pre>
+      <aside class="callout note">
+        <span class="callout-title">Compare DV to the source, don't assert it</span>
+        Scene releases are not internally consistent: in the Maul season only E01, E08 and E10
+        carry a DOVI configuration record at all, the rest are plain HDR10, despite
+        <code>HDR DV</code> in the release name. A verify step that asserts "DV must be present"
+        will false-fail on the majority of the season. <code>mkvmerge</code> itself preserves DV
+        correctly (confirmed on E01) — assert <em>output DV == input DV</em>.
+      </aside>
+      <p>
+        To confirm the surviving track is the real English mix and not the AD one, decode the
+        same window from the source track and the remuxed track and compare
+        <code>volumedetect</code> histograms — identical buckets means the right track survived:
+      </p>
+      <pre><code>ffmpeg -nostdin -ss 300 -t 120 -i file.mkv -map 0:a:&lt;n&gt; -af volumedetect -f null - 2>&1 \
+  | grep -E 'histogram_[678]db|max_volume'</code></pre>
+      <p>
+        Afterwards run a library scan plus <strong>Analyze</strong> on the show so Plex re-reads
+        the stream list. Any stored per-item audio-stream selection becomes moot once there is
+        only one track.
+      </p>
+      <p>
+        <strong>Known affected.</strong> <code>Star Wars: Maul — Shadow Lord</code> S01 (17
+        audio tracks, remuxed 2026-07-25) and <code>DuckTales (1987)</code> (23 audio tracks).
+        Both under Pouch. If a third title turns up, the layout signature to look for is a
+        double-digit audio-track count on a <code>MULTi</code> release.
+      </p>
+
       <h2 id="maintenance">Monthly stats cleanup</h2>
       <p>
         Plex's <code>statistics_bandwidth</code> table grows indefinitely with no upstream
