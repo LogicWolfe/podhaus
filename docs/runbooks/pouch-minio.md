@@ -38,10 +38,10 @@ Sky never receives the MinIO root credential. Her policy grants object
 read/write/delete plus list and location operations on `sky-backups` only.
 
 The `Sky Backups` item is the Terraform-owned source of truth. Sky does not
-need 1Password. Bilby renders `pouch-minio/sky-backups.env.tpl` with
-`op inject` into `~/.config/restic/sky-backups.env`, then Sky fetches that
-file over SSH. Both deployed copies are owned by the account using them and
-have mode `0600`:
+need 1Password. `pouch-minio/sky-backups.env.tpl` contains only 1Password
+references. Bilby resolves it on demand and streams the result over SSH, so no
+plaintext handoff file lives on bilby's disk. The only long-lived plaintext
+copy is Sky's client file, owned by her account with mode `0600`:
 
 ```dotenv
 AWS_ACCESS_KEY_ID=...
@@ -51,24 +51,39 @@ RESTIC_PASSWORD=...
 AWS_DEFAULT_REGION=us-east-1
 ```
 
-Render or refresh bilby's handoff copy after the Terraform credential changes:
+Sky fetches or refreshes her client file with:
 
 ```sh
-install -d -m 0700 ~/.config/restic
-op inject -i pouch-minio/sky-backups.env.tpl \
-  -o ~/.config/restic/sky-backups.env --force
+mkdir -p ~/.config/restic
+chmod 0700 ~/.config/restic
+umask 077
+ssh bilby-backups \
+  'cd ~/repos/podhaus && ~/.local/bin/op-homelab inject -i pouch-minio/sky-backups.env.tpl' \
+  > ~/.config/restic/sky-backups.env
 chmod 0600 ~/.config/restic/sky-backups.env
 ```
 
-Transfer the rendered file over SSH rather than chat or email. Sky's complete
-setup guide lives at `~/restic-guide.md` on bilby. Load the file for an
-interactive terminal with:
+Sky's complete setup guide lives at `~/restic-guide.md` on bilby. Load the file
+for an interactive terminal with:
 
 ```sh
 set -a
 source ~/.config/restic/sky-backups.env
 set +a
 restic snapshots
+```
+
+For an administrative check on bilby, keep the credentials process-local in a
+subshell:
+
+```sh
+(
+  set -a
+  source <(~/.local/bin/op-homelab inject \
+    -i pouch-minio/sky-backups.env.tpl)
+  set +a
+  restic snapshots
+)
 ```
 
 The repository was initialized during deployment verification, so the client
