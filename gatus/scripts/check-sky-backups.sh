@@ -39,14 +39,14 @@ if ! mc alias set --quiet "$alias_name" "$SKY_BACKUPS_ENDPOINT" \
 fi
 
 # Start at the bucket root so the ListBucket-only identity doesn't need to stat
-# the prefix as an object. Depth three includes personal-laptop/config and
-# personal-laptop/snapshots/<id>, but skips data/<prefix>/<pack> at depth four.
-if ! objects=$(mc find "$target" --maxdepth 3 --print '{time} {}'); then
+# the prefix as an object. Depth four includes personal-laptop/config and
+# personal-laptop/snapshots/<id>, but skips data/<prefix>/<pack> at depth five.
+if ! objects=$(mc find "$target" --maxdepth 4 --print '{time} {}'); then
     echo "sky-backups monitor: couldn't list repository metadata objects" >&2
     exit 1
 fi
 
-if ! recent_objects=$(mc find "$target" --maxdepth 3 \
+if ! recent_objects=$(mc find "$target" --maxdepth 4 \
     --newer-than "$SKY_BACKUPS_MAX_AGE" --print '{time} {}'); then
     echo "sky-backups monitor: couldn't query recent repository metadata" >&2
     exit 1
