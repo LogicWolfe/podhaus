@@ -37,20 +37,44 @@ Terraform owns the whole identity chain:
 Sky never receives the MinIO root credential. Her policy grants object
 read/write/delete plus list and location operations on `sky-backups` only.
 
-Client configuration comes directly from the `Sky Backups` item:
+The `Sky Backups` item is the Terraform-owned source of truth. Sky does not
+need 1Password. Bilby renders `pouch-minio/sky-backups.env.tpl` with
+`op inject` into `~/.config/restic/sky-backups.env`, then Sky fetches that
+file over SSH. Both deployed copies are owned by the account using them and
+have mode `0600`:
 
-```sh
-export RESTIC_REPOSITORY='s3:https://pouch.pod.haus/sky-backups'
-export AWS_ACCESS_KEY_ID='...'
-export AWS_SECRET_ACCESS_KEY='...'
-export AWS_DEFAULT_REGION='us-east-1'
-export RESTIC_PASSWORD='...'
+```dotenv
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+RESTIC_REPOSITORY=s3:https://pouch.pod.haus/sky-backups
+RESTIC_PASSWORD=...
+AWS_DEFAULT_REGION=us-east-1
 ```
 
-Initialize the repository once with `restic init`, then configure the backup
-and retention schedule on Sky's client. Don't enable MinIO bucket versioning:
-restic owns snapshot retention, and S3 versions would retain packs that restic
-has pruned.
+Render or refresh bilby's handoff copy after the Terraform credential changes:
+
+```sh
+install -d -m 0700 ~/.config/restic
+op inject -i pouch-minio/sky-backups.env.tpl \
+  -o ~/.config/restic/sky-backups.env --force
+chmod 0600 ~/.config/restic/sky-backups.env
+```
+
+Transfer the rendered file over SSH rather than chat or email. Sky's complete
+setup guide lives at `~/restic-guide.md` on bilby. Load the file for an
+interactive terminal with:
+
+```sh
+set -a
+source ~/.config/restic/sky-backups.env
+set +a
+restic snapshots
+```
+
+The repository was initialized during deployment verification, so the client
+must not run `restic init` again. Configure the backup and retention schedule
+on Sky's client. Don't enable MinIO bucket versioning: restic owns snapshot
+retention, and S3 versions would retain packs that restic has pruned.
 
 ## Operation
 

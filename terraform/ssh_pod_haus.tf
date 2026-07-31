@@ -1,5 +1,5 @@
 # ssh.pod.haus — browser-rendered SSH to bilby's host sshd, gated by
-# Cloudflare Access (Nathan only). Lets a shell reach bilby from any
+# Cloudflare Access (Family). Lets a shell reach bilby from any
 # browser (e.g. iPad Safari) with no SSH client and no Cloudflare/
 # Tailscale app — the use case being able to run `op-unlock` remotely.
 #
@@ -10,16 +10,16 @@
 # via `destinations`; SSH apps use `domain`/`self_hosted_domains`).
 #
 # Auth is passwordless via a short-lived SSH certificate: Cloudflare
-# mints a cert whose principal is the user's email prefix (`nathan` ←
-# nathan@nathanbaxter.com), which matches the `nathan` unix account on
-# bilby, so no `Match`/AuthorizedPrincipals mapping is needed. bilby's
-# sshd trusts the CA via TrustedUserCAKeys (installed by
-# bilby/host-sshd/install.sh from the ssh_ca_public_key output below).
-# Password auth stays enabled on bilby as a fallback.
+# mints a cert whose principal is the user's email prefix. Nathan's browser
+# terminal therefore maps directly to the `nathan` unix account. Sky uses a
+# native SSH client through `cloudflared access ssh`, explicitly selects the
+# `nathan` account, and authenticates with her provisioned public key. bilby's
+# sshd trusts the CA via TrustedUserCAKeys and installs Sky's key via
+# bilby/host-sshd/install.sh. Password auth stays enabled as a fallback.
 #
 # Browser-rendered apps support only Allow/Block policies — service-
-# token bypass is unsupported — so this uses the Allow-only `nathan`
-# policy directly, not the default service-token-bypass chain.
+# token bypass is unsupported, so this uses the Allow-only Family policy
+# directly, not the default service-token-bypass chain.
 #
 # Reference docs:
 #   - zero_trust_access_application (type enum incl. "ssh"):
@@ -58,7 +58,7 @@ resource "cloudflare_zero_trust_access_application" "bilby_ssh" {
   http_only_cookie_attribute = false
 
   policies = [
-    { precedence = 1, id = cloudflare_zero_trust_access_policy.nathan.id },
+    { precedence = 1, id = cloudflare_zero_trust_access_policy.pod_haus_family_allow.id },
   ]
 }
 
