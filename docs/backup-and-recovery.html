@@ -128,6 +128,12 @@ restic repo                restic repo
         none of it lands on Jump. Pouch loss therefore loses this repository; Sky's source data
         is the rebuild source. See the <a href="/runbooks/pouch-minio">Pouch MinIO runbook</a>.
       </p>
+      <p>
+        Gatus has a <code>Backup / Sky Laptop</code> dead-man switch. The laptop reports only
+        after a successful restic backup; seven days without a success produces a Signal alert.
+        This complements the MinIO liveness check: a healthy S3 endpoint does not prove a recent
+        client snapshot exists.
+      </p>
 
       <h2 id="kookaburra-no-backup">Kookaburra — intentionally unbacked (conditional)</h2>
       <p>

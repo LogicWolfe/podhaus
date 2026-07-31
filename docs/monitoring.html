@@ -178,6 +178,15 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         <code>gatus:8080/api/v1/endpoints/timelapse_brinno/external?success=true</code> with
         that bearer.
       </p>
+      <p>
+        Sky's laptop uses the same pattern as a weekly backup dead-man switch:
+        <code>Backup / Sky Laptop</code> must receive a successful push within
+        <code>168h</code>. Its client-facing URL is
+        <code>https://gatus.pod.haus/api/v1/endpoints/backup_sky-laptop/external?success=true</code>.
+        Terraform exempts exactly that path from Cloudflare Access so an unattended laptop can
+        reach it; Gatus still requires the heartbeat bearer. The dashboard, status API, and all
+        other <code>gatus.pod.haus</code> paths remain behind the normal Family gate.
+      </p>
 
       <h2 id="ingest-staleness">Ingest-staleness alerts</h2>
       <p>
