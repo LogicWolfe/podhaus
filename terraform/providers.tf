@@ -54,6 +54,26 @@ provider "minio" {
   minio_password = var.minio_password
 }
 
+# Standard login fields make this newly-created root credential readable by
+# the 1Password data source. The aliased provider reaches the full admin API
+# through the public endpoint, preserving the from-any-machine TF contract.
+data "onepassword_item" "pouch_minio_root" {
+  vault = data.onepassword_vault.homelab.uuid
+  title = onepassword_item.pouch_minio_root.title
+
+  depends_on = [onepassword_item.pouch_minio_root]
+}
+
+provider "minio" {
+  alias = "pouch"
+
+  minio_server   = "pouch.pod.haus"
+  minio_ssl      = true
+  minio_region   = "us-east-1"
+  minio_user     = data.onepassword_item.pouch_minio_root.username
+  minio_password = data.onepassword_item.pouch_minio_root.password
+}
+
 # The 1Password TF provider was scaffolded here as part of the
 # foundation consolidation. It works, BUT the existing Homelab vault
 # items (Cloudflare API Token, UniFi API Key, MinIO Root, Komodo

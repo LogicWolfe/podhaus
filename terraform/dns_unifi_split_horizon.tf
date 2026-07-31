@@ -40,6 +40,16 @@ resource "unifi_dns_record" "storage_pod_haus" {
   enabled     = true
 }
 
+# Pouch MinIO follows the same split path as the primary storage endpoint.
+# LAN clients reach bilby's Caddy directly; remote clients use kookaburra.
+resource "unifi_dns_record" "pouch_pod_haus" {
+  name        = "pouch.pod.haus"
+  record_type = "A"
+  value       = "10.0.0.119"
+  ttl         = "5m0s"
+  enabled     = true
+}
+
 # Publii uploads to <bucket>.storage.pod.haus (virtual-host). Keep LAN
 # publishes off the WAN/hairpin path (was the cause of VPN-MTU TLS
 # handshake failures from a home laptop). One per Publii site.

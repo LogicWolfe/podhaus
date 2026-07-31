@@ -73,19 +73,20 @@ networks:
         Cloudflare Access, Tailscale, or custom client ports.
       </p>
       <aside class="callout warn">
-        <span class="callout-title">One deliberate exception: storage.pod.haus</span>
-        Every pod.haus hostname is tunnel-routed <strong>except
-        <code>storage.pod.haus</code></strong> (the public MinIO S3
-        endpoint). It is a grey-cloud DNS A → the <strong>kookaburra
+        <span class="callout-title">DNS-only S3 endpoints: storage.pod.haus and pouch.pod.haus</span>
+        The two public S3 endpoints are grey-cloud DNS A records to the <strong>kookaburra
         rathole relay</strong> (DigitalOcean droplet, public IP
         <code>170.64.241.136</code>) → rathole reverse tunnel → Caddy
-        on bilby (own LE wildcard) → MinIO. <strong>The home network
+        on bilby (own LE certificates) → MinIO. <code>storage.pod.haus</code> terminates at
+        bilby's primary MinIO; <code>pouch.pod.haus</code> crosses the LAN from Caddy to the
+        dedicated Pouch-backed MinIO on kangaroo. <strong>The home network
         has NO inbound WAN port</strong> — bilby dials out to
         kookaburra. The S3 data path <em>cannot</em> traverse
         Cloudflare's HTTP proxy (rewrites the SigV4-signed
         <code>Accept-Encoding</code>; single-level cert can't cover
         Publii vhost buckets); the rathole tunnel is raw TCP
-        passthrough so SigV4 + Host stay intact. See
+        passthrough so SigV4 + Host stay intact. Both hostnames share the existing rathole
+        <code>storage</code> service on public port 443; Caddy selects the backend by Host. See
         <a href="/hosts.html#kookaburra">hosts → kookaburra</a> for
         the relay host details and
         <a href="/terraform.html">Terraform</a> for the backend

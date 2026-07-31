@@ -95,6 +95,15 @@
         <code>/var/lib/minio</code>, which the nightly rclone hook ships to OneDrive.
         Restore drill steps are in <a href="/disaster-recovery.html">disaster recovery</a>.
       </p>
+      <p>
+        The same MinIO provider has a <code>pouch</code> alias for the separate instance at
+        <code>https://pouch.pod.haus</code>. Terraform generates its root credential in the
+        standard-field <code>Pouch MinIO Root</code> 1Password login, then owns the private
+        <code>sky-backups</code> bucket, scoped IAM service account, and the ready-to-use
+        <code>Sky Backups</code> credential handoff. The endpoint still satisfies the
+        from-any-machine rule: remote Terraform traffic traverses kookaburra and LAN traffic
+        reaches bilby's Caddy through split-horizon DNS.
+      </p>
 
       <h2 id="runner">Running Terraform (stock, from any machine)</h2>
       <p>
@@ -169,7 +178,8 @@ terraform apply</code></pre>
         binds WAN:443 itself, so direct port-forward is a dead path —
         see <a href="/hosts.html#kookaburra">kookaburra</a> and
         <a href="/networking.html">networking</a> for the relay
-        architecture. The UniFi provider talks to
+        architecture. <code>pouch.pod.haus</code> reuses the same raw port 443 relay and Caddy,
+        then proxies to kangaroo's MinIO over the LAN. The UniFi provider talks to
         <code>https://unifi.pod.haus</code> (not a LAN IP), so
         nothing here is host- or LAN-pinned.
       </p>

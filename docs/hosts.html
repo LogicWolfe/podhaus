@@ -149,14 +149,16 @@
       <p>
         QNAP NAS, AMD GX-420MC, 16 GB RAM, QTS 5.x with Container Station, ext4. Secondary host.
         Runs a Komodo Periphery agent + Syncthing + a second Backrest + autoheal + a logging
-        Alloy collector. LAN IP <code>10.0.0.232</code>.
+        Alloy collector + the Pouch-backed MinIO instance. The active 10GbE LAN IP is
+        <code>10.0.0.25</code>; <code>10.0.0.232</code> is the spare 1GbE path.
       </p>
       <p>
         Filesystem highlights:
       </p>
       <ul>
         <li><strong><code>/share/CACHEDEV1_DATA/Pouch</code></strong> — the bulk HDD volume. Same
-          content bilby sees as <code>/mnt/pouch</code>.</li>
+          content bilby sees as <code>/mnt/pouch</code>. The dedicated MinIO data root is
+          <code>/share/CACHEDEV1_DATA/Pouch/minio</code>.</li>
         <li><strong><code>/share/CACHEDEV2_DATA/Jump</code></strong> — the SSD volume. Kangaroo's
           Backrest restic repo lives at
           <code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo</code> — a separate repo from bilby's
@@ -178,7 +180,8 @@
       <p>
         DigitalOcean droplet, syd1 region, 1 vCPU / 1 GB RAM, 10 GB disk, Fedora 43 x86_64.
         <strong>Off-LAN public-ingress relay host.</strong> Its job is terminating raw TCP for
-        <code>storage.pod.haus</code> and <code>git.pod.haus</code> on its public reserved IP
+        <code>storage.pod.haus</code>, <code>pouch.pod.haus</code>, and
+        <code>git.pod.haus</code> on its public reserved IP
         <code>170.64.241.136</code>, then passing the bytes through rathole to bilby. HTTPS
         terminates at Caddy on bilby; the droplet only sees ciphertext. Forgejo SSH terminates
         in Forgejo itself. <strong>Stateless by design</strong> (see the AGENTS hard rule).

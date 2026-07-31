@@ -1,0 +1,27 @@
+services:
+  pouch-minio:
+    container_name: pouch-minio
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address :9001
+    environment:
+      TZ: ${TZ}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      # Direct QNAP path. MinIO must not run over bilby's /mnt/pouch NFS
+      # view because NFS can't provide the consistency MinIO requires.
+      - /share/CACHEDEV1_DATA/Pouch/minio:/data
+    ports:
+      # LAN only in practice: kookaburra reaches bilby's Caddy, and Caddy
+      # crosses the home LAN to this port. The console remains unpublished.
+      - 9000:9000
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fSs http://localhost:9000/minio/health/live || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

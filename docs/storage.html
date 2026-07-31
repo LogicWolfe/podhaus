@@ -78,11 +78,17 @@
       <p>
         QNAP HDD array, RAID5 across 4 drives (static volume, rebuilt 2026-06), ~21.8 TB usable.
         Bulk content where capacity matters more than per-drive resilience: Plex media,
-        flood downloads, Syncthing-replicated folders.
+        flood downloads, Syncthing-replicated folders, and Sky's encrypted restic repository.
       </p>
       <p>
         Bilby mounts Pouch over NFS at <code>/mnt/pouch</code>; kangaroo accesses it at
         <code>/share/CACHEDEV1_DATA/Pouch</code>. Same backing data.
+      </p>
+      <p>
+        The dedicated <code>pouch-minio</code> stack runs on kangaroo and writes directly to
+        <code>/share/CACHEDEV1_DATA/Pouch/minio</code>. Its private
+        <code>sky-backups</code> bucket is an additional backup copy of data that remains on
+        Sky's source device. It is not copied to Jump or OneDrive.
       </p>
       <aside class="callout note">
         <span class="callout-title">Why these aren't backed up the same way</span>
@@ -101,15 +107,19 @@
         <li><strong>&gt;50 GB, bulk, regenerable:</strong> Pouch.</li>
       </ul>
       <aside class="callout warning">
-        <span class="callout-title">kangaroo container state goes on CACHEDEV2 (Jump) — always</span>
+        <span class="callout-title">kangaroo's ordinary container state goes on CACHEDEV2 (Jump)</span>
         Every kangaroo-resident stack's state dir lives under
         <code>/share/CACHEDEV2_DATA/Container/</code>, the backed-up SSD volume — Container
         Station itself installs there too (it follows the QTS default volume, which is
-        CACHEDEV2). <strong>CACHEDEV1 (Pouch) holds only unbacked bulk media and
-        Syncthing's synced data — never container state.</strong> The 2026-06 Pouch RAID
+        CACHEDEV2). <strong>CACHEDEV1 (Pouch) holds bulk media, Syncthing's synced data,
+        and the deliberate <code>pouch-minio</code> backup-target exception.</strong>
+        MinIO's system metadata stays beside its objects because the server requires one
+        exclusive data root; Terraform and 1Password can reconstruct its configuration.
+        The 2026-06 Pouch RAID
         failure wiped Container Station and every stack whose state had defaulted onto
         CACHEDEV1; state survived only because backrest <em>copied</em> it cross-volume.
-        Placement on the backed-up volume is the model, copies are the safety net.
+        Placement on the backed-up volume remains the model for every ordinary stack. The
+        MinIO exception is safe only because Pouch itself is the requested secondary copy.
       </aside>
 
       <h2 id="nas-quirks">NFS quirks</h2>
@@ -178,7 +188,7 @@
           <tr><td><code>/var/lib/&lt;stack&gt;</code></td><td>bilby</td><td>Local NVMe state per stack.</td></tr>
           <tr><td><code>/mnt/jump</code></td><td>bilby</td><td>NFS to QNAP SSD (Jump).</td></tr>
           <tr><td><code>/mnt/pouch</code></td><td>bilby</td><td>NFS to QNAP HDD (Pouch).</td></tr>
-          <tr><td><code>/share/CACHEDEV1_DATA/Pouch</code></td><td>kangaroo</td><td>Direct access to Pouch.</td></tr>
+          <tr><td><code>/share/CACHEDEV1_DATA/Pouch</code></td><td>kangaroo</td><td>Direct access to Pouch, including <code>pouch-minio</code> at <code>Pouch/minio</code>.</td></tr>
           <tr><td><code>/share/CACHEDEV2_DATA/Jump</code></td><td>kangaroo</td><td>Direct access to Jump.</td></tr>
           <tr><td><code>/share/CACHEDEV2_DATA/Container/</code></td><td>kangaroo</td><td>Container state on the backed-up SSD volume (Periphery, Syncthing, kangaroo Backrest). Never on CACHEDEV1 — see the placement rule above.</td></tr>
         </tbody>

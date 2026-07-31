@@ -1,0 +1,15 @@
+[[stack]]
+name = "pouch-minio"
+description = "Dedicated MinIO on kangaroo for Sky's Pouch-backed restic repository"
+tags = ["kangaroo", "podhaus"]
+
+[stack.config]
+server = "kangaroo"
+linked_repo = "podhaus"
+run_directory = "pouch-minio"
+
+environment = """
+TZ=[[TZ]]
+MINIO_ROOT_USER=[[OP__KOMODO__POUCH_MINIO_ROOT__USERNAME]]
+MINIO_ROOT_PASSWORD=[[OP__KOMODO__POUCH_MINIO_ROOT__PASSWORD]]
+"""

@@ -26,6 +26,18 @@ storage.pod.haus, *.storage.pod.haus {
 	reverse_proxy minio:9000
 }
 
+# pouch.pod.haus is the public S3 endpoint for the separate MinIO instance
+# on kangaroo. The existing kookaburra :443 rathole service carries the TLS
+# stream to this Caddy instance; Caddy then crosses the LAN to kangaroo. Keep
+# the proxy free of response encoding so SigV4-signed headers stay intact.
+pouch.pod.haus {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
+	reverse_proxy 10.0.0.25:9000
+}
+
 # git.pod.haus is Forgejo's single public hostname for both protocols.
 # DNS-only A points at kookaburra: raw :443 traverses the existing
 # rathole service to this Caddy instance, while raw :22 uses the

@@ -103,8 +103,9 @@
           nightly.</li>
         <li><strong>Jump</strong> (NAS SSD, RAID5, ~280 GB free) — durable storage we'd hate to
           lose: restic repo.</li>
-        <li><strong>Pouch</strong> (NAS HDD, RAID5, ~5 TB free) — bulk content where capacity
-          matters more than per-drive resilience.</li>
+        <li><strong>Pouch</strong> (NAS HDD, RAID5, ~14 TB free) — bulk content where capacity
+          matters more than per-drive resilience, including the dedicated
+          <code>sky-backups</code> restic target served by MinIO on kangaroo.</li>
       </ul>
       <p>See <a href="/storage.html">Storage</a> for mount details and the NAS-squash quirk.</p>
 
@@ -140,8 +141,10 @@
         hostname means adding one rule there plus a CNAME in <code>dns/dnsconfig.js</code>.
         Cloudflare Access enforces a <code>*.pod.haus</code> wildcard policy so every admin
         surface is gated on a "Family" identity group without needing a per-service Access app.
-        DNS-only relay services are the explicit exceptions: MinIO TLS and both Forgejo
-        protocols reach bilby through kookaburra's rathole relay. Forgejo uses one hostname,
+        DNS-only relay services are the explicit exceptions: both MinIO S3 endpoints and both
+        Forgejo protocols reach bilby through kookaburra's rathole relay. Caddy serves
+        <code>storage.pod.haus</code> from bilby's MinIO and sends
+        <code>pouch.pod.haus</code> across the LAN to kangaroo. Forgejo uses one hostname,
         <code>git.pod.haus</code>: :443 terminates at bilby's Caddy and :22 reaches Forgejo's
         embedded SSH server. Pocket ID is the web authentication boundary.
       </p>

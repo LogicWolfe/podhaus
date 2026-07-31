@@ -115,6 +115,20 @@ restic repo                restic repo
         no NFS roundtrip from inside the container.
       </p>
 
+      <h2 id="sky-backups">Sky backups on Pouch</h2>
+      <p>
+        Sky's client writes an encrypted restic repository to the private
+        <code>sky-backups</code> bucket at <code>pouch.pod.haus</code>. The dedicated MinIO
+        instance runs on kangaroo and stores its data directly under
+        <code>/share/CACHEDEV1_DATA/Pouch/minio</code>.
+      </p>
+      <p>
+        This repository is deliberately outside both Backrest plans and the OneDrive rclone
+        hooks. It is already an additional backup copy, and the placement requirement is that
+        none of it lands on Jump. Pouch loss therefore loses this repository; Sky's source data
+        is the rebuild source. See the <a href="/runbooks/pouch-minio">Pouch MinIO runbook</a>.
+      </p>
+
       <h2 id="kookaburra-no-backup">Kookaburra — intentionally unbacked (conditional)</h2>
       <p>
         <code>kookaburra</code> (the off-LAN DigitalOcean public-ingress relay; see
