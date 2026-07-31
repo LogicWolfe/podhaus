@@ -42,7 +42,7 @@ x-forgejo-environment: &forgejo-environment
   FORGEJO__oauth2_client__USERNAME: preferred_username
   FORGEJO__oauth2_client__ACCOUNT_LINKING: disabled
   FORGEJO__oauth2_client__OPENID_CONNECT_SCOPES: openid email profile groups
-  FORGEJO__admin__EXTERNAL_USER_DISABLE_FEATURES: deletion,manage_ssh_keys,manage_password
+  FORGEJO__admin__EXTERNAL_USER_DISABLE_FEATURES: deletion,manage_password
   FORGEJO__repository__ROOT: /data/jump/repositories
   FORGEJO__repository__FORCE_PRIVATE: "true"
   FORGEJO__repository__DEFAULT_PRIVATE: private

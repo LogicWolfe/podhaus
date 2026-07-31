@@ -48,7 +48,14 @@ The OIDC source requires `forgejo-users`, maps `forgejo-admins` to the Forgejo
 admin flag, and synchronizes the `ssh_keys` array on every login. Removing a key
 from Terraform therefore removes it from Forgejo at the next login. Password
 login, HTTP Basic password authentication, account linking, unmanaged
-registration, password management and manual SSH-key management are disabled.
+registration and password management are disabled.
+
+The SSH-key page is enabled. Keys synchronized from Pocket are visible there but
+remain externally managed: Forgejo won't let someone edit or delete them. A
+person can add separate manual keys as an escape hatch. Pocket reconciliation
+only replaces keys owned by the Pocket login source, so manual keys survive
+future logins. Terraform therefore owns the Pocket subset rather than every key
+that may exist on the Forgejo account.
 
 The authentication source itself is a Forgejo database object and has no
 Terraform resource. The `forgejo-auth-init` one-shot converges that single
