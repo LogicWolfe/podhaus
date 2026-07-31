@@ -77,6 +77,12 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
 
       <h2 id="gatus">Gatus</h2>
       <p>
+        Forgejo has three independent signals: an internal HTTP health check against
+        <code>forgejo:3000</code>, a public TCP check of <code>git.pod.haus:22</code>, and an
+        external heartbeat from the quiesced Backrest plan. Together they distinguish an
+        application failure, a public SSH relay failure, and a backup failure.
+      </p>
+      <p>
         Config-as-code endpoint monitoring, defined entirely in
         <code>gatus/conf/config.yaml</code>. Monitors HTTP endpoints, pushed heartbeats, and
         downstream-service-state checks. Stores results in SQLite with a 90-day cap. Service

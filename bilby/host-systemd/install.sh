@@ -74,8 +74,22 @@ rmdir "$TRIP"
 #    container's healthcheck can prove it bound the real share, not a
 #    local stub. Touching the path triggers the automount. Keep this list
 #    in sync with NFS binds (AGENTS.md: drop a marker when you add one).
+# Forgejo keeps SQLite/config on local NVMe and repositories on Jump.
+# Provision both sides here so a fresh bilby has the exact ownership the
+# rootless image and QNAP's all_squash mapping expect.
+install -d -o 1000 -g 100 -m 0750 \
+    /var/lib/forgejo /var/lib/forgejo/data /var/lib/forgejo/data/log \
+    /var/lib/forgejo/config
+install -d -o 1000 -g 100 -m 0750 \
+    /mnt/jump/forgejo \
+    /mnt/jump/forgejo/repositories \
+    /mnt/jump/forgejo/lfs \
+    /mnt/jump/forgejo/attachments \
+    /mnt/jump/forgejo/repo-archives
+
 for p in /mnt/pouch /mnt/jump /mnt/jump/backups /mnt/jump/paperless \
-         /mnt/jump/paperless/documents /mnt/jump/plex-video-thumbnails; do
+         /mnt/jump/paperless/documents /mnt/jump/plex-video-thumbnails \
+         /mnt/jump/forgejo; do
     if [ -d "$p" ] && touch "$p/.podhaus-share-mounted" 2>/dev/null; then
         echo "  sentinel: $p/.podhaus-share-mounted"
     else

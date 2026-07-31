@@ -19,7 +19,9 @@ services:
     environment:
       RATHOLE_CONFIG_TEMPLATE: /etc/rathole/server.toml.tmpl
       RATHOLE_TOKEN: ${RATHOLE_TOKEN}
+      RATHOLE_GIT_TOKEN: ${RATHOLE_GIT_TOKEN}
       RATHOLE_NOISE_LOCAL_PRIVATE_KEY: ${RATHOLE_NOISE_LOCAL_PRIVATE_KEY}
+      RATHOLE_DISCOVER_ANCHOR: "1"
       # Server template doesn't reference the remote pubkey, but the
       # entrypoint's envsubst list includes it harmlessly.
       RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY:-unused}
@@ -34,8 +36,9 @@ services:
       # Same pattern kangaroo's stacks use (absolute path via the host
       # mount). Directory bind (never single-file) — committed template.
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-kookaburra/relay/kookaburra:/etc/rathole:ro
-    # Host networking: rathole needs to bind 0.0.0.0:443 + 0.0.0.0:2333
-    # on the droplet's public interface.
+    # Host networking: rathole binds public :443, control :2333, and
+    # DigitalOcean anchor-IP :22 for git.pod.haus. Host sshd binds the
+    # ordinary public IPv4 :22, so the two SSH services do not collide.
     network_mode: host
     labels:
       autoheal: "true"

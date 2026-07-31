@@ -13,6 +13,33 @@
 set -euo pipefail
 
 BILBY_WAN="${BILBY_WAN:-144.6.147.203}"   # seed: bilby's home WAN
+METADATA=http://169.254.169.254/metadata/v1/interfaces/public/0
+PUBLIC_IPV4="$(curl -fsS --max-time 5 "$METADATA/ipv4/address")"
+ANCHOR_IPV4="$(curl -fsS --max-time 5 "$METADATA/anchor_ipv4/address")"
+
+valid_ipv4() {
+  local value=$1 octet
+  [[ $value =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+  IFS=. read -r -a octets <<< "$value"
+  for octet in "${octets[@]}"; do
+    (( 10#$octet <= 255 )) || return 1
+  done
+}
+
+valid_ipv4 "$PUBLIC_IPV4" || {
+  echo "invalid DigitalOcean public IPv4: $PUBLIC_IPV4" >&2
+  exit 1
+}
+valid_ipv4 "$ANCHOR_IPV4" || {
+  echo "invalid DigitalOcean anchor IPv4: $ANCHOR_IPV4" >&2
+  exit 1
+}
+[[ $PUBLIC_IPV4 != "$ANCHOR_IPV4" ]] || {
+  echo "public and anchor IPv4 unexpectedly match: $PUBLIC_IPV4" >&2
+  exit 1
+}
+
+echo "[ssh-harden] public=$PUBLIC_IPV4 anchor=$ANCHOR_IPV4"
 
 echo "[ssh-harden] sshd config drop-in"
 mkdir -p /etc/ssh/sshd_config.d
@@ -24,11 +51,13 @@ cat > /etc/ssh/sshd_config.d/99-podhaus.conf <<EOF
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin prohibit-password
+ListenAddress $PUBLIC_IPV4:22
 # Generous MaxStartups — the per-source rate-limit lives at the
 # nftables layer so this just needs enough headroom for legit bursts.
 MaxStartups 200:30:1000
 EOF
 chmod 644 /etc/ssh/sshd_config.d/99-podhaus.conf
+sshd -t
 
 echo "[ssh-harden] nftables ssh_trusted set + per-IP rate-limit"
 # Atomically replace the podhaus table. Set has a 30d timeout per
@@ -46,13 +75,22 @@ table inet podhaus {
     type filter hook input priority -10; policy accept;
     # Already-established TCP flows always pass (existing sessions).
     tcp dport 22 ct state established,related accept
+    # Reserved-IP traffic lands on DigitalOcean's anchor address.
+    # rathole, not host sshd, owns this socket. Do not apply host SSH's
+    # scanner rate-limit or PAM trusted-source semantics to Git clients.
+    ip daddr $ANCHOR_IPV4 tcp dport 22 accept
+    # No port-22 service belongs on another local destination.
+    ip daddr != $PUBLIC_IPV4 tcp dport 22 drop
     # Trusted IPs bypass rate-limit entirely.
     tcp dport 22 ip saddr @ssh_trusted accept
     # Everyone else: rate-limited to 10 new conn/min per source IP.
     # No ban — over the rate, packets just drop until the bucket
     # refills. Legitimate fumbled-key agents fit within 10/min;
     # internet scanners doing hundreds/min do not.
-    tcp dport 22 ct state new meter ssh_rate { ip saddr limit rate 10/minute } accept
+    # Expire scanner identities. Without a timeout this dynamic set eventually
+    # fills its 65,535-entry default and drops every previously unseen source,
+    # including legitimate recovery clients.
+    tcp dport 22 ct state new meter ssh_rate size 65535 { ip saddr timeout 1h limit rate 10/minute } accept
     tcp dport 22 ct state new drop
   }
 }
@@ -94,7 +132,8 @@ echo "[ssh-harden] reload sshd"
 systemctl reload sshd
 
 echo "[ssh-harden] verify"
-sshd -T 2>/dev/null | grep -iE "^(password|kbdinteractive|maxstartups|permitroot)"
+sshd -T 2>/dev/null | grep -iE "^(listenaddress|password|kbdinteractive|maxstartups|permitroot)"
+ss -ltnp | grep "$PUBLIC_IPV4:22"
 echo "current ssh_trusted elements:"
 nft list set inet podhaus ssh_trusted 2>/dev/null | grep elements
 echo "[ssh-harden] DONE"

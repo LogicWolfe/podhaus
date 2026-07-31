@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Quiesce Forgejo around its Backrest snapshot. SQLite lives on bilby's
+# NVMe while repositories live on Jump, so a live two-filesystem copy
+# cannot guarantee one point in time.
+set -euo pipefail
+
+LOCK=/data/forgejo-backup.lock
+GATUS_URL="${GATUS_BASE_URL:?set GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_FORGEJO_ENDPOINT_ID:?set GATUS_BACKREST_FORGEJO_ENDPOINT_ID}/external"
+
+push_result() {
+  local success=$1 error=${2:-}
+  curl -fsS -X POST \
+    -H "Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN:?set GATUS_BACKREST_PUSH_TOKEN}" \
+    --get \
+    --data-urlencode "success=$success" \
+    --data-urlencode "error=$error" \
+    "$GATUS_URL" >/dev/null
+}
+
+wait_healthy() {
+  local attempt
+  for attempt in $(seq 1 60); do
+    if curl -fsS --max-time 3 http://forgejo:3000/api/healthz >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 5
+  done
+  return 1
+}
+
+start_forgejo() {
+  docker start forgejo >/dev/null
+  wait_healthy
+}
+
+stop_forgejo() {
+  if ! (set -o noclobber; printf '%s\n' "$(date -Is)" > "$LOCK") 2>/dev/null; then
+    echo "forgejo backup lock already exists: $LOCK" >&2
+    return 1
+  fi
+
+  local stopped=0
+  cleanup_on_error() {
+    local status=$?
+    if (( status != 0 && stopped == 1 )); then
+      start_forgejo || true
+    fi
+    if (( status != 0 )); then
+      rm -f "$LOCK"
+    fi
+    exit "$status"
+  }
+  trap cleanup_on_error EXIT
+
+  test -f /userdata/forgejo/jump/.podhaus-share-mounted
+  test -d /userdata/forgejo/local
+  test -d /userdata/forgejo/jump/repositories
+
+  docker stop --time 60 forgejo >/dev/null
+  stopped=1
+  test "$(docker inspect -f '{{.State.Running}}' forgejo)" = "false"
+  trap - EXIT
+}
+
+finish_backup() {
+  local snapshot_error=${1:-} snapshot_id=${2:-}
+  local recovery_error=
+
+  if ! start_forgejo; then
+    recovery_error="Forgejo did not become healthy after snapshot ${snapshot_id:-unknown}"
+  fi
+
+  if [[ -n "$recovery_error" ]]; then
+    push_result false "$recovery_error" || true
+    return 1
+  fi
+
+  rm -f "$LOCK"
+  if [[ -n "$snapshot_error" ]]; then
+    push_result false "Forgejo snapshot failed: $snapshot_error" || true
+    return 1
+  fi
+  push_result true
+}
+
+recover_interrupted() {
+  [[ -f "$LOCK" ]] || return 0
+  pgrep -x restic >/dev/null && return 0
+
+  echo "recovering Forgejo from interrupted backup"
+  if start_forgejo; then
+    rm -f "$LOCK"
+    push_result false "Recovered Forgejo after an interrupted Backrest snapshot" || true
+  else
+    push_result false "Forgejo backup recovery could not restore service health" || true
+    return 1
+  fi
+}
+
+case "${1:-}" in
+  stop)
+    recover_interrupted
+    stop_forgejo
+    ;;
+  finish)
+    finish_backup "${2:-}" "${3:-}"
+    ;;
+  recover)
+    recover_interrupted
+    ;;
+  *)
+    echo "usage: $0 {stop|finish [error] [snapshot-id]|recover}" >&2
+    exit 2
+    ;;
+esac

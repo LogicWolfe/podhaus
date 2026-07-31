@@ -97,6 +97,9 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
   --target / --include /userdata/&lt;stack&gt;</code></pre>
           (Adjust the include path so it lands at the right host location — the runbook here
           is per-stack; cross-reference each <a href="/runbooks/plex.html">runbook</a>.)
+          Forgejo is the important two-path exception: restore its local and Jump trees from
+          the same quiesced snapshot, then follow the
+          <a href="/runbooks/forgejo">Forgejo runbook</a> before starting it.
         </li>
         <li>Deploy <code>minio</code> first so the Terraform state backend is available, then
           restore <code>/var/lib/minio</code> from the latest Backrest snapshot.
@@ -119,7 +122,7 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
         <li>Deploy every other stack from the Komodo UI in dependency order. The repo's
           ResourceSync has already created the stack definitions.</li>
         <li>Verify DNS (stock <code>terraform</code>, no wrapper, creds from the
-          chezmoi fish env): <code>cd cloudflare && terraform plan</code>
+          chezmoi fish env): <code>cd terraform && terraform plan</code>
           from the working directory. Should report no changes (state restored from
           Backrest matches the deployed Cloudflare + UniFi resources). If there's drift,
           stop and investigate before applying — drift here means either the restored

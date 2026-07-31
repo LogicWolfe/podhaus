@@ -190,12 +190,15 @@
         no home inbound.
       </p>
       <ul>
-        <li><strong>Public surface:</strong> :443 (rathole data) and :2333 (rathole control,
+        <li><strong>Public surface:</strong> :443 on the Reserved IP for storage, :22 on the
+          Reserved IP's anchor interface for Forgejo SSH, and :2333 (rathole control,
           noise+token). Nothing else inbound from the internet (DO firewall). Public SSH on :22
           is kept open as a recovery path; the host's nftables ruleset rate-limits non-trusted
           sources and auto-allowlists any IP that successfully authenticates (no banning — agents
           fumbling keys aren't punished). All persisted in
-          <code>kookaburra/ssh-hardening/apply.sh</code> so it survives any rebuild.</li>
+          <code>kookaburra/ssh-hardening/apply.sh</code> so it survives any rebuild. Host sshd
+          listens on :22 only at the droplet's ordinary public address; rathole owns :22 only
+          at the anchor address, so both protocols retain the standard port.</li>
         <li><strong>Management plane:</strong> Tailscale (<code>tag:podnet</code>); kookaburra
           appears as <code>kookaburra-podnet</code>. Komodo Periphery dials Core <em>outbound</em>
           at <code>ws://bilby-podnet.tail9ceb.ts.net:9120</code> (Komodo v2 PKI, X25519 noise

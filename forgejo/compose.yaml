@@ -1,0 +1,149 @@
+# Forgejo runs on bilby. Latency-sensitive state stays on local NVMe;
+# repositories and large object stores live on Jump. Public web traffic
+# arrives through cloudflared. Public SSH arrives through kookaburra's
+# rathole relay and reaches forgejo:2222 over dockernet.
+
+x-forgejo-environment: &forgejo-environment
+  USER: git
+  FORGEJO_WORK_DIR: /var/lib/gitea
+  GITEA_CUSTOM: /etc/gitea
+  GITEA_APP_INI: /etc/gitea/app.ini
+  FORGEJO____APP_NAME: PodHaus Git
+  FORGEJO__server__PROTOCOL: http
+  FORGEJO__server__HTTP_ADDR: 0.0.0.0
+  FORGEJO__server__HTTP_PORT: "3000"
+  FORGEJO__server__DOMAIN: forge.pod.haus
+  FORGEJO__server__ROOT_URL: https://forge.pod.haus/
+  FORGEJO__server__LOCAL_ROOT_URL: http://forgejo:3000/
+  FORGEJO__server__START_SSH_SERVER: "true"
+  FORGEJO__server__SSH_LISTEN_HOST: 0.0.0.0
+  FORGEJO__server__SSH_LISTEN_PORT: "2222"
+  FORGEJO__server__SSH_DOMAIN: git.pod.haus
+  FORGEJO__server__SSH_PORT: "22"
+  FORGEJO__server__SSH_USER: git
+  FORGEJO__server__LFS_START_SERVER: "true"
+  FORGEJO__server__LFS_JWT_SECRET: ${FORGEJO_LFS_JWT_SECRET}
+  FORGEJO__database__DB_TYPE: sqlite3
+  FORGEJO__database__PATH: /var/lib/gitea/database/forgejo.db
+  FORGEJO__database__SQLITE_JOURNAL_MODE: WAL
+  FORGEJO__security__INSTALL_LOCK: "true"
+  FORGEJO__security__SECRET_KEY: ${FORGEJO_SECRET_KEY}
+  FORGEJO__security__INTERNAL_TOKEN: ${FORGEJO_INTERNAL_TOKEN}
+  FORGEJO__security__REVERSE_PROXY_LIMIT: "1"
+  FORGEJO__security__REVERSE_PROXY_TRUSTED_PROXIES: 172.18.0.0/16
+  FORGEJO__service__DISABLE_REGISTRATION: "true"
+  FORGEJO__service__REQUIRE_SIGNIN_VIEW: "true"
+  FORGEJO__repository__ROOT: /data/jump/repositories
+  FORGEJO__repository__FORCE_PRIVATE: "true"
+  FORGEJO__repository__DEFAULT_PRIVATE: private
+  FORGEJO__repository__DISABLE_HTTP_GIT: "true"
+  FORGEJO__repository__USE_COMPAT_SSH_URI: "false"
+  FORGEJO__repository__DISABLED_REPO_UNITS: repo.actions
+  FORGEJO__attachment__STORAGE_TYPE: local
+  FORGEJO__attachment__PATH: /data/jump/attachments
+  FORGEJO__lfs__STORAGE_TYPE: local
+  FORGEJO__lfs__PATH: /data/jump/lfs
+  FORGEJO__storage.repo-archive__STORAGE_TYPE: local
+  FORGEJO__storage.repo-archive__PATH: /data/jump/repo-archives
+  FORGEJO__packages__ENABLED: "false"
+  FORGEJO__actions__ENABLED: "false"
+  FORGEJO__log__MODE: console
+  FORGEJO__log__LEVEL: Info
+  FORGEJO__log__ROOT_PATH: /var/lib/gitea/log
+  TZ: ${TZ}
+
+x-forgejo-volumes: &forgejo-volumes
+  - /var/lib/forgejo/data:/var/lib/gitea
+  - /var/lib/forgejo/config:/etc/gitea
+  - /mnt/jump/forgejo:/data/jump
+
+services:
+  forgejo-preflight:
+    container_name: forgejo-preflight
+    image: codeberg.org/forgejo/forgejo:16.0.1-rootless@sha256:71863f6b6c5837a27b3a2d133c3161c78a432aa878d57798d74b1d917ff842be
+    user: "1000:100"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        grep -q ' /data/jump ' /proc/mounts
+        test -f /data/jump/.podhaus-share-mounted
+        test -w /data/jump
+        test -w /var/lib/gitea
+        test -w /etc/gitea
+        for path in repositories lfs attachments repo-archives; do
+          test -d "/data/jump/$$path"
+          test -w "/data/jump/$$path"
+        done
+        echo "forgejo storage preflight passed"
+    volumes: *forgejo-volumes
+    security_opt:
+      - label:disable
+    restart: "no"
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  forgejo:
+    container_name: forgejo
+    image: codeberg.org/forgejo/forgejo:16.0.1-rootless@sha256:71863f6b6c5837a27b3a2d133c3161c78a432aa878d57798d74b1d917ff842be
+    user: "1000:100"
+    restart: unless-stopped
+    depends_on:
+      forgejo-preflight:
+        condition: service_completed_successfully
+    environment: *forgejo-environment
+    volumes: *forgejo-volumes
+    security_opt:
+      - label:disable
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -q -O- http://127.0.0.1:3000/api/healthz >/dev/null
+          && grep -q ' /data/jump ' /proc/mounts
+      interval: 60s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+
+  forgejo-admin-init:
+    container_name: forgejo-admin-init
+    image: codeberg.org/forgejo/forgejo:16.0.1-rootless@sha256:71863f6b6c5837a27b3a2d133c3161c78a432aa878d57798d74b1d917ff842be
+    user: "1000:100"
+    restart: "no"
+    depends_on:
+      forgejo:
+        condition: service_healthy
+    environment:
+      <<: *forgejo-environment
+      FORGEJO_ADMIN_USERNAME: ${FORGEJO_ADMIN_USERNAME}
+      FORGEJO_ADMIN_EMAIL: ${FORGEJO_ADMIN_EMAIL}
+      FORGEJO_ADMIN_PASSWORD: ${FORGEJO_ADMIN_PASSWORD}
+    volumes: *forgejo-volumes
+    security_opt:
+      - label:disable
+    networks:
+      - dockernet
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        if forgejo admin user list --admin | awk 'NR > 1 { print $$2 }' | grep -Fxq "$$FORGEJO_ADMIN_USERNAME"; then
+          echo "forgejo admin already exists"
+          exit 0
+        fi
+        forgejo admin user create \
+          --username "$$FORGEJO_ADMIN_USERNAME" \
+          --email "$$FORGEJO_ADMIN_EMAIL" \
+          --password "$$FORGEJO_ADMIN_PASSWORD" \
+          --admin \
+          --must-change-password=false
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+networks:
+  dockernet:
+    external: true

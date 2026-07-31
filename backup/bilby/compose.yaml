@@ -57,6 +57,16 @@ services:
       # rule, the backup repo lives on Jump — durable storage we'd hate
       # to lose, on a different physical drive set than Pouch's bulk media.
       - /mnt/jump/backups:/repos/podhaus
+      # Forgejo's SQLite/config is local; repositories and large objects
+      # are on Jump. One plan snapshots both while Forgejo is stopped.
+      - /var/lib/forgejo:/userdata/forgejo/local:ro
+      - /mnt/jump/forgejo:/userdata/forgejo/jump:ro
+      # Command hooks stop/start Forgejo through Docker's API. The
+      # Backrest image already contains the Docker CLI; the socket is
+      # bilby-only and this service already runs label-unconfined for
+      # its existing database backup hooks.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PODHAUS_REPO}/backup/bilby/scripts:/hooks:ro,z
 
       # Source data — all read-only. Layout:
       #   /userdata/<stack>          — host bind mounts for migrated stacks
@@ -132,6 +142,8 @@ services:
       # this label, an init-tools change rebuilds the init image but
       # backrest keeps using whatever config it had when it last started.
       podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}
+      ofelia.job-exec.forgejo-backup-recover.schedule: "0 */5 * * * *"
+      ofelia.job-exec.forgejo-backup-recover.command: "/hooks/forgejo-backup-control recover"
 volumes:
   # External volumes owned by other stacks — Backrest mounts them
   # read-only as backup sources. `external: true` tells compose to

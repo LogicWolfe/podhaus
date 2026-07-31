@@ -61,6 +61,7 @@ restic repo                restic repo
       <table>
         <thead><tr><th>Plan</th><th>Source</th><th>Schedule</th></tr></thead>
         <tbody>
+          <tr><td><code>forgejo</code></td><td>Local SQLite/config + Jump repositories, LFS, attachments, and archives; Forgejo is stopped around the snapshot so the two filesystems share one consistency point</td><td>03:45</td></tr>
           <tr><td><code>plex</code></td><td><code>/var/lib/plex-local</code></td><td>04:00</td></tr>
           <tr><td><code>flood</code></td><td><code>/var/lib/flood-db</code></td><td>04:10</td></tr>
           <tr><td><code>fenwick</code></td><td><code>/var/lib/fenwick</code> (the bot's SQLite: identity, activity log, guidance, schedules) + <code>/var/lib/signal-cli</code> (the Signal device link — irrecoverable; loss means human-only re-registration)</td><td>04:15</td></tr>
@@ -84,6 +85,12 @@ restic repo                restic repo
       <p>
         Retention on every plan: <strong>14 daily + 4 weekly + 6 monthly</strong>. Weekly prune
         (Sunday 04:00) and check (Sunday 05:00) on the repo.
+      </p>
+      <p>
+        Forgejo's plan uses start/end hooks to stop the service, snapshot both storage tiers,
+        restart it, wait for health, and report a dedicated Gatus heartbeat. A five-minute
+        recovery job restarts Forgejo if Backrest is interrupted while the quiesce lock exists.
+        See the <a href="/runbooks/forgejo">Forgejo runbook</a>.
       </p>
       <p>
         The <code>backrest-state</code> plan runs last and has a

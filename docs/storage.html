@@ -51,6 +51,10 @@
           backup target.</li>
         <li><strong>Kangaroo's restic repo</strong> at <code>/mnt/jump/backups-kangaroo/</code> —
           separate from bilby's to avoid two-client coordination.</li>
+        <li><strong>Forgejo repositories</strong> at <code>/mnt/jump/forgejo/</code>, including
+          Git repositories, LFS objects, attachments, and generated repository archives.
+          Forgejo's SQLite database and config stay on bilby's local NVMe; Backrest stops the
+          service while snapshotting both tiers together.</li>
         <li><strong>Paperless media</strong> at <code>/mnt/jump/paperless/</code> — small,
           random-read, must-not-lose.</li>
         <li><strong>Plex BIF thumbnails</strong> at <code>/mnt/jump/plex-video-thumbnails/</code>

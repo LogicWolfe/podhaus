@@ -13,9 +13,9 @@ resource "digitalocean_ssh_key" "kookaburra" {
 }
 
 resource "digitalocean_droplet" "kookaburra" {
-  image      = "fedora-43-x64"
-  name       = "kookaburra"
-  region     = "syd1"
+  image  = "fedora-43-x64"
+  name   = "kookaburra"
+  region = "syd1"
   # 1GB (not 512MB) — three concurrent Komodo DeployStack ops on
   # 512MB OOM-thrashed the box (load avg 27, sshd wedged). With four
   # Komodo-managed stacks now riding here (tailscale, periphery is
@@ -72,15 +72,11 @@ resource "digitalocean_firewall" "kookaburra" {
     port_range       = "2333"
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
-  # SSH public — deliberately kept open as a recovery path. Internet
-  # SSH-scanner pressure does keep sshd's MaxStartups (10:30:100)
-  # counter elevated, occasionally RST-ing legit bursts from bilby
-  # (kex_exchange_identification: read: Connection reset by peer) —
-  # but for normal/recovery use (occasional single connections,
-  # especially with SSH ControlMaster reuse) this is mostly invisible.
-  # If it becomes routine pain, mitigations are: raise MaxStartups,
-  # add fail2ban, or move sshd to a non-default port — NOT close
-  # public SSH (that defeats the recovery purpose).
+  # Port 22 has two address-specific owners on the droplet. Host sshd
+  # binds the ordinary public IPv4 for cattle-rebuild recovery. Rathole
+  # binds DigitalOcean's anchor IPv4; traffic sent to the Reserved IP
+  # (git.pod.haus) maps there and is relayed to Forgejo on bilby.
+  # kookaburra/ssh-hardening/apply.sh owns the bind + nftables split.
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"

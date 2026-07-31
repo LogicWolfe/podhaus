@@ -19,14 +19,17 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-# Default to the reserved IP — DigitalOcean reassigns it to the new
-# droplet on every `terraform apply -replace`, so this is the only
-# IP guaranteed stable across rebuilds. The direct droplet IPv4
-# (from terraform output droplet_ipv4) drifts every rebuild and
-# isn't worth chasing here. Override only if SSHing to a droplet
-# that doesn't yet have the reserved IP assigned (sub-minute window
-# during a fresh terraform apply).
-DROPLET_IP="${DROPLET_IP:-170.64.241.136}"
+# Host sshd owns the droplet's ordinary public IPv4. The Reserved IP's
+# port 22 belongs to the Forgejo rathole service, so bootstrap discovers
+# the current administrative address from the consolidated Terraform
+# state. DROPLET_IP remains an explicit recovery override.
+if [[ -z "${DROPLET_IP:-}" ]]; then
+  DROPLET_IP="$(terraform -chdir=terraform output -raw droplet_ipv4)"
+fi
+[[ -n "$DROPLET_IP" ]] || {
+  echo "terraform output droplet_ipv4 was empty; set DROPLET_IP explicitly" >&2
+  exit 1
+}
 SSH_HOST="root@${DROPLET_IP}"
 REMOTE_DIR=/opt/komodo-periphery
 BILBY_KEYS_DIR="${BILBY_KEYS_DIR:-/opt/komodo/keys}"

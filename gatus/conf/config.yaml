@@ -166,6 +166,21 @@ endpoints:
     <<: *defaults
     group: Identity
 
+  - name: Forgejo
+    url: http://forgejo:3000/api/healthz
+    <<: *defaults
+    group: Git
+
+  # DNS-only public path: Reserved IP → DigitalOcean anchor :22 →
+  # kookaburra rathole → Forgejo's embedded SSH server on bilby.
+  - name: Forgejo SSH (public relay)
+    url: tcp://git.pod.haus:22
+    group: Git
+    interval: 2m
+    alerts: *alerts
+    conditions:
+      - "[CONNECTED] == true"
+
   # Mumble is non-HTTP — tcp:// proves DNS (DDNS-updated A) +
   # UDM forward (terraform/unifi.tf) + Murmur control channel are
   # all healthy. UDP/voice quality is not synthetically probed; ear-
@@ -627,6 +642,18 @@ external-endpoints:
         description: "Backrest's nightly backup pipeline didn't check in. Either no snapshots ran tonight, or the post-plan rclone sync to OneDrive failed. Investigate: `docker logs backrest`, or query in HyperDX (watch.pod.haus), and check /mnt/pouch/backups for the expected repository state."
         failure-threshold: 3
         success-threshold: 2
+        send-on-resolved: true
+
+  - name: Backrest Forgejo
+    group: Backup
+    token: ${GATUS_BACKREST_PUSH_TOKEN}
+    heartbeat:
+      interval: 25h
+    alerts:
+      - type: custom
+        description: "Forgejo's quiesced nightly snapshot did not check in. The hook stops Forgejo, snapshots local SQLite state plus Jump repositories, restarts Forgejo, and only then reports success. Check the backrest Forgejo plan, `docker logs backrest`, and `/data/forgejo-backup.lock` inside Backrest."
+        failure-threshold: 1
+        success-threshold: 1
         send-on-resolved: true
 
   # Hourly pets backup heartbeat. The pets plan (DB + assets in one

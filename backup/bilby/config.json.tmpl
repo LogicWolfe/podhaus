@@ -328,6 +328,39 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "forgejo",
+      "repo": "podhaus",
+      "paths": ["/userdata/forgejo/local", "/userdata/forgejo/jump"],
+      "schedule": {
+        "cron": "45 3 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [
+        {
+          "conditions": ["CONDITION_SNAPSHOT_START"],
+          "onError": "ON_ERROR_FATAL",
+          "actionCommand": {
+            "command": "/hooks/forgejo-backup-control stop"
+          }
+        },
+        {
+          "conditions": ["CONDITION_SNAPSHOT_END"],
+          "onError": "ON_ERROR_IGNORE",
+          "actionCommand": {
+            "command": "/hooks/forgejo-backup-control finish {{ .ShellEscape .Error }} {{ .ShellEscape .SnapshotId }}"
+          }
+        }
+      ],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "backrest-state",
       "repo": "podhaus",
       "paths": ["/userdata/backrest-state"],

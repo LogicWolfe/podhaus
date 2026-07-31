@@ -11,3 +11,8 @@ remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
 type = "tcp"
 local_addr = "caddy:443"
 token = "${RATHOLE_TOKEN}"
+
+[client.services.git]
+type = "tcp"
+local_addr = "forgejo:2222"
+token = "${RATHOLE_GIT_TOKEN}"

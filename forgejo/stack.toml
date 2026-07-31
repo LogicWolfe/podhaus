@@ -1,0 +1,20 @@
+[[stack]]
+name = "forgejo"
+description = "Forgejo — private Git hosting; local SQLite state, repositories on Jump, public SSH through kookaburra"
+tags = ["podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/forgejo"
+ignore_services = ["forgejo-preflight", "forgejo-admin-init"]
+
+environment = """
+TZ=[[TZ]]
+FORGEJO_SECRET_KEY=[[OP__KOMODO__FORGEJO_SECRETS__SECRET_KEY]]
+FORGEJO_INTERNAL_TOKEN=[[OP__KOMODO__FORGEJO_SECRETS__INTERNAL_TOKEN]]
+FORGEJO_LFS_JWT_SECRET=[[OP__KOMODO__FORGEJO_SECRETS__LFS_JWT_SECRET]]
+FORGEJO_ADMIN_USERNAME=[[OP__KOMODO__FORGEJO_ADMIN__USERNAME]]
+FORGEJO_ADMIN_EMAIL=[[OP__KOMODO__FORGEJO_ADMIN__EMAIL]]
+FORGEJO_ADMIN_PASSWORD=[[OP__KOMODO__FORGEJO_ADMIN__CREDENTIAL]]
+"""
