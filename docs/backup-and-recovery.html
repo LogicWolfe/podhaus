@@ -129,10 +129,12 @@ restic repo                restic repo
         is the rebuild source. See the <a href="/runbooks/pouch-minio">Pouch MinIO runbook</a>.
       </p>
       <p>
-        Gatus has a <code>Backup / Sky Laptop</code> dead-man switch. The laptop reports only
-        after a successful restic backup; seven days without a success produces a Signal alert.
-        This complements the MinIO liveness check: a healthy S3 endpoint does not prove a recent
-        client snapshot exists.
+        Gatus has a <code>Backup / Sky Restic Repository</code> check. An hourly monitor lists
+        committed <code>snapshots/&lt;id&gt;</code> objects in MinIO and requires one written within
+        the last seven days. A normal restic backup creates a snapshot even when the source tree
+        hasn't changed, so the check measures completed backup runs without a client callback.
+        A new empty repository gets seven days from its <code>config</code> object's creation time
+        to produce the first snapshot.
       </p>
 
       <h2 id="kookaburra-no-backup">Kookaburra — intentionally unbacked (conditional)</h2>

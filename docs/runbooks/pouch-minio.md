@@ -31,6 +31,7 @@ Terraform owns the whole identity chain:
   Terraform provider;
 - the private `sky-backups` bucket, with S3 versioning disabled;
 - the `sky-backups` IAM user, policy, and revocable service account;
+- a list-only `sky-backups-monitor` identity for repository-age checks;
 - the `Sky Backups` 1Password login containing the S3 access key, secret key,
   repository URL, region, and restic encryption password.
 
@@ -43,30 +44,21 @@ the client configuration:
 ```dotenv
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
-RESTIC_REPOSITORY=s3:https://pouch.pod.haus/sky-backups
+RESTIC_REPOSITORY=s3:https://pouch.pod.haus/sky-backups/personal-laptop
 RESTIC_PASSWORD=...
 AWS_DEFAULT_REGION=us-east-1
 ```
 
-The repository was initialized during deployment verification, so the client
-must not run `restic init` again. Configure the backup and retention schedule
-on Sky's client. Don't enable MinIO bucket versioning: restic owns snapshot
-retention, and S3 versions would retain packs that restic has pruned.
+The `personal-laptop` repository is initialized, so the client must not run
+`restic init` again. Configure the backup and retention schedule on Sky's
+client. Don't enable MinIO bucket versioning: restic owns snapshot retention,
+and S3 versions would retain packs that restic has pruned.
 
-After each successful backup, the client must report to Gatus:
-
-```sh
-restic backup /path/to/data && \
-  curl --fail --silent --show-error --request POST \
-    --header "Authorization: Bearer ${GATUS_HEARTBEAT_PUSH_TOKEN}" \
-    'https://gatus.pod.haus/api/v1/endpoints/backup_sky-laptop/external?success=true'
-```
-
-Source `GATUS_HEARTBEAT_PUSH_TOKEN` from the client-side secret store before
-the job runs; its value is the 1Password Homelab item `Gatus Heartbeat Push
-Token`. Do not put the literal token in a script, service definition, or this
-repository. The `&&` is load-bearing: only a successful restic process refreshes
-the dead-man switch. Gatus alerts after 168 hours without a success.
+Do not use `restic backup --skip-if-unchanged` on the client. A normal backup
+always commits a new encrypted `snapshots/<snapshot-id>` object, even when its
+file tree matches the parent snapshot and all data packs are deduplicated.
+`--skip-if-unchanged` suppresses that commit, which would make a successful run
+invisible to the repository monitor.
 
 ## Operation
 
@@ -79,10 +71,20 @@ The console port is not published. Terraform reaches the admin API through
 `https://pouch.pod.haus`; Sky's scoped key reaches only the S3 operations her
 repository needs.
 
-The public Gatus exception covers only
-`/api/v1/endpoints/backup_sky-laptop/external`. Cloudflare Access still protects
-the Gatus dashboard and every other route, while the push path requires the
-Gatus bearer token.
+The `sky-backups-monitor` container on bilby lists committed snapshot objects
+under `sky-backups/personal-laptop/snapshots/` at 15 minutes past each hour. It
+reports success when at least one snapshot object has a server-side modification
+time within the last seven days.
+
+Terraform provisions a separate `sky-backups-monitor` MinIO identity for this
+check. Its policy permits bucket listing and location lookup only. It cannot read,
+write, or delete an object.
+
+Before the first snapshot, the repository's `config` object starts the same
+seven-day grace window. After that, an empty repository or an older newest snapshot
+reports failure. Query failures produce no result, so Gatus's two-hour heartbeat
+window also catches a stopped monitor or an unreachable repository. Sky's laptop
+needs no Gatus credential or callback.
 
 ## Checks
 

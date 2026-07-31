@@ -78,6 +78,36 @@ services:
     # Postmark history showed 0 alerts ever sent for those endpoints
     # despite hours of unhealthy state.
 
+  sky-backups-monitor:
+    container_name: sky-backups-monitor
+    build:
+      context: .
+      dockerfile: Dockerfile.monitor
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_SKY_BACKUPS_MONITOR:-unset}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["exec sleep infinity"]
+    environment:
+      MC_CONFIG_DIR: /dev/shm/mc
+      SKY_BACKUPS_ENDPOINT: https://pouch.pod.haus
+      SKY_BACKUPS_BUCKET: sky-backups
+      SKY_BACKUPS_PREFIX: personal-laptop
+      SKY_BACKUPS_MAX_AGE: 7d
+      SKY_BACKUPS_ACCESS_KEY: ${SKY_BACKUPS_ACCESS_KEY}
+      SKY_BACKUPS_SECRET_KEY: ${SKY_BACKUPS_SECRET_KEY}
+      GATUS_BASE_URL: http://gatus:8080
+      GATUS_HEARTBEAT_PUSH_TOKEN: ${GATUS_HEARTBEAT_PUSH_TOKEN}
+    networks:
+      - dockernet
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      ofelia.enabled: "true"
+      # One authenticated S3 LIST per hour. Gatus's 2h heartbeat window also
+      # catches a stopped monitor or two consecutive query failures.
+      ofelia.job-exec.sky-backups-monitor.schedule: "0 15 * * * *"
+      ofelia.job-exec.sky-backups-monitor.command: "/usr/local/bin/check-sky-backups"
+
 networks:
   dockernet:
     external: true

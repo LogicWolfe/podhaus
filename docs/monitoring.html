@@ -179,13 +179,15 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         that bearer.
       </p>
       <p>
-        Sky's laptop uses the same pattern as a weekly backup dead-man switch:
-        <code>Backup / Sky Laptop</code> must receive a successful push within
-        <code>168h</code>. Its client-facing URL is
-        <code>https://gatus.pod.haus/api/v1/endpoints/backup_sky-laptop/external?success=true</code>.
-        Terraform exempts exactly that path from Cloudflare Access so an unattended laptop can
-        reach it; Gatus still requires the heartbeat bearer. The dashboard, status API, and all
-        other <code>gatus.pod.haus</code> paths remain behind the normal Family gate.
+        Sky's backup check is storage-driven. The hourly
+        <code>sky-backups-monitor</code> job lists encrypted snapshot objects under
+        <code>sky-backups/personal-laptop/snapshots/</code> in Pouch MinIO and reports whether
+        the newest object was committed within seven days. The job pushes its result to Gatus
+        over dockernet; the laptop has no Gatus token or callback. Its
+        <code>Backup / Sky Restic Repository</code> endpoint has a two-hour heartbeat window so
+        a stopped monitor also becomes unhealthy.
+        Before the first snapshot, the repository's <code>config</code> object supplies the
+        seven-day initialization grace period.
       </p>
 
       <h2 id="ingest-staleness">Ingest-staleness alerts</h2>

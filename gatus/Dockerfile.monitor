@@ -1,0 +1,14 @@
+FROM minio/mc:latest AS mc
+
+FROM alpine:latest
+
+RUN apk add --no-cache ca-certificates curl
+
+COPY --from=mc /usr/bin/mc /usr/local/bin/mc
+COPY scripts/check-sky-backups.sh /usr/local/bin/check-sky-backups
+RUN chmod 0755 /usr/local/bin/check-sky-backups
+
+# Content-hash build arg from the podhaus mechanism. The monitor image contains
+# the check script, so a gatus/ build-context change must rebuild the image.
+ARG STACK_CONTENT_HASH=unset
+ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}

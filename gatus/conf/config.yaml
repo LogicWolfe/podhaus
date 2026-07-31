@@ -639,20 +639,18 @@ external-endpoints:
         success-threshold: 1
         send-on-resolved: true
 
-  # Sky's laptop reports only after a successful restic backup. This dead-man
-  # switch checks client activity. A reachable MinIO bucket doesn't prove that
-  # the client has produced a recent snapshot.
-  # The exact public push path is exempted from Cloudflare Access in
-  # terraform/gatus_heartbeat.tf; Gatus's bearer token still authenticates
-  # every POST. Endpoint key: `backup_sky-laptop`.
-  - name: Sky Laptop
+  # An hourly monitor lists the Restic repository's committed snapshot objects
+  # in Pouch MinIO. A normal backup creates snapshots/<id> even when its tree is
+  # unchanged; interrupted uploads that leave only packs or indexes don't pass.
+  # Endpoint key: `backup_sky-restic-repository`.
+  - name: Sky Restic Repository
     group: Backup
     token: ${GATUS_HEARTBEAT_PUSH_TOKEN}
     heartbeat:
-      interval: 168h
+      interval: 2h
     alerts:
       - type: custom
-        description: "Sky's laptop has not completed a successful restic backup in 7 days. Check the laptop's backup scheduler and restic logs, confirm it has power and network access, then verify the sky-backups repository at pouch.pod.haus."
+        description: "Sky's Restic repository has no snapshot committed within the last 7 days, or the hourly MinIO snapshot check has stopped reporting. Check the laptop's backup scheduler and Restic logs, then inspect sky-backups/personal-laptop/snapshots/ at pouch.pod.haus. The client must not use --skip-if-unchanged."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true

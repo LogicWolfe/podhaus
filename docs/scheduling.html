@@ -60,6 +60,7 @@
           <tr><td><code>rar-backlog</code></td><td>flood</td><td>04:50 daily</td><td>Scans <code>/data/{Movies,TV,Kids}</code> for folders with RAR pieces ≥2h old and no extracted keepers. Pushes Gatus heartbeat with success or failure context.</td></tr>
           <tr><td><code>pinelake-stignore</code></td><td>flood</td><td>every 5 min</td><td>Reconciles Pouch's <code>.stignore</code> with rtorrent's <code>pinelake</code>-tagged complete torrents. Safety net for the <code>event.download.finished</code> rtorrent hook (which can't catch tags applied post-completion). See <a href="/runbooks/flood.html#pinelake-stignore">flood runbook</a>.</td></tr>
           <tr><td><code>plex-label-sync</code></td><td>flood</td><td>every 5 min</td><td>Mirrors each torrent's Flood tags onto its Plex show/movie as Labels (per-managed-user content restrictions). Same dual-trigger pattern as <code>pinelake-stignore</code>; the tick is the workhorse since Plex's library scan lags publish. See <a href="/runbooks/flood.html#plex-label-sync">flood runbook</a>.</td></tr>
+          <tr><td><code>sky-backups-monitor</code></td><td>sky-backups-monitor</td><td>hourly at :15</td><td>Lists committed Restic snapshot objects in Pouch MinIO and alerts through Gatus when none was written within seven days.</td></tr>
           <tr><td><code>daily-self-restart</code></td><td>ofelia</td><td>04:00 daily</td><td>Workaround — see below.</td></tr>
         </tbody>
       </table>

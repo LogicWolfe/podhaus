@@ -66,6 +66,54 @@ resource "minio_iam_service_account" "sky_backups" {
   target_user = minio_iam_user.sky_backups.name
 }
 
+# Read-only metadata identity for the hourly repository monitor. ListBucket is
+# enough for mc to see snapshots/<id> names and server-side modification times;
+# it cannot read, write, or delete any backup object.
+resource "minio_iam_policy" "sky_backups_monitor" {
+  provider = minio.pouch
+
+  name = "sky-backups-monitor"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
+        Resource = ["arn:aws:s3:::sky-backups"]
+      },
+    ]
+  })
+}
+
+resource "minio_iam_user" "sky_backups_monitor" {
+  provider = minio.pouch
+
+  name = "sky-backups-monitor"
+}
+
+resource "minio_iam_user_policy_attachment" "sky_backups_monitor" {
+  provider = minio.pouch
+
+  user_name   = minio_iam_user.sky_backups_monitor.name
+  policy_name = minio_iam_policy.sky_backups_monitor.name
+}
+
+resource "minio_iam_service_account" "sky_backups_monitor" {
+  provider = minio.pouch
+
+  target_user = minio_iam_user.sky_backups_monitor.name
+}
+
+resource "onepassword_item" "sky_backups_monitor" {
+  vault    = data.onepassword_vault.homelab.uuid
+  title    = "Sky Backups Monitor"
+  category = "login"
+  url      = "https://pouch.pod.haus"
+  username = minio_iam_service_account.sky_backups_monitor.access_key
+  password = minio_iam_service_account.sky_backups_monitor.secret_key
+  tags     = ["terraform-managed", "monitoring", "sky"]
+}
+
 # One ready-to-use handoff. The standard username/password fields hold the
 # S3 access and secret keys; the Restic section carries the repository URL,
 # region, and independently-generated repository encryption password.
@@ -84,7 +132,7 @@ resource "onepassword_item" "sky_backups" {
     field {
       label = "RESTIC_REPOSITORY"
       type  = "STRING"
-      value = "s3:https://pouch.pod.haus/sky-backups"
+      value = "s3:https://pouch.pod.haus/sky-backups/personal-laptop"
     }
 
     field {
@@ -107,5 +155,5 @@ resource "onepassword_item" "sky_backups" {
 }
 
 output "sky_backups_repository" {
-  value = "s3:https://pouch.pod.haus/sky-backups"
+  value = "s3:https://pouch.pod.haus/sky-backups/personal-laptop"
 }
