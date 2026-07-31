@@ -15,4 +15,9 @@ resource "cloudflare_dns_record" "git_a" {
     ipv4_only     = false
     ipv6_only     = false
   }
+  # Cloudflare normalizes this optional block away after create. Match
+  # storage.pod.haus and ignore that cosmetic provider/API round-trip.
+  lifecycle {
+    ignore_changes = [settings]
+  }
 }
