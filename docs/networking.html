@@ -63,14 +63,14 @@ networks:
 
       <h2 id="tunnel">Cloudflare Tunnel</h2>
       <p>
-        Forgejo uses two deliberately separate ingress paths. The web UI at
-        <code>forge.pod.haus</code> uses Cloudflare Tunnel + Access. Git SSH at
-        <code>git.pod.haus:22</code> is raw TCP: grey-cloud DNS points at kookaburra's
-        Reserved IP, rathole accepts port 22 on the droplet's anchor address, and forwards it
-        to Forgejo's embedded SSH server on bilby. Host administration remains on port 22 of
+        Forgejo uses one DNS-only hostname with two raw relay paths.
+        <code>https://git.pod.haus</code> reaches kookaburra :443, traverses rathole to
+        bilby's Caddy, then proxies to Forgejo; Pocket ID is the application login.
+        <code>git.pod.haus:22</code> reaches rathole on the droplet's anchor address and
+        forwards to Forgejo's embedded SSH server. Host administration remains on port 22 of
         kookaburra's ordinary public address because sshd binds only that address. This gives
-        normal <code>git@git.pod.haus:owner/repo.git</code> URLs without Tailscale or a custom
-        client port.
+        ordinary web and <code>git@git.pod.haus:owner/repo.git</code> URLs without
+        Cloudflare Access, Tailscale, or custom client ports.
       </p>
       <aside class="callout warn">
         <span class="callout-title">One deliberate exception: storage.pod.haus</span>

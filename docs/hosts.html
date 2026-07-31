@@ -177,11 +177,11 @@
       <h2 id="kookaburra">kookaburra</h2>
       <p>
         DigitalOcean droplet, syd1 region, 1 vCPU / 1 GB RAM, 10 GB disk, Fedora 43 x86_64.
-        <strong>Off-LAN public-ingress relay host</strong> — its sole job is terminating TCP for
-        <code>storage.pod.haus</code> on its public reserved IP <code>170.64.241.136</code> and
-        passing the bytes through a rathole reverse tunnel to bilby's Caddy. TLS terminates on
-        bilby (LE wildcard), so this droplet only ever sees ciphertext — no MinIO data, no certs,
-        no creds. <strong>Stateless by design</strong> (see the AGENTS hard rule).
+        <strong>Off-LAN public-ingress relay host.</strong> Its job is terminating raw TCP for
+        <code>storage.pod.haus</code> and <code>git.pod.haus</code> on its public reserved IP
+        <code>170.64.241.136</code>, then passing the bytes through rathole to bilby. HTTPS
+        terminates at Caddy on bilby; the droplet only sees ciphertext. Forgejo SSH terminates
+        in Forgejo itself. <strong>Stateless by design</strong> (see the AGENTS hard rule).
       </p>
       <p>
         Why it exists: the UDM Pro SE binds WAN tcp/443 with UniFi OS itself and shadows any
@@ -190,8 +190,8 @@
         no home inbound.
       </p>
       <ul>
-        <li><strong>Public surface:</strong> :443 on the Reserved IP for storage, :22 on the
-          Reserved IP's anchor interface for Forgejo SSH, and :2333 (rathole control,
+        <li><strong>Public surface:</strong> :443 on the Reserved IP for storage + Forgejo
+          HTTPS, :22 on the Reserved IP's anchor interface for Forgejo SSH, and :2333 (rathole control,
           noise+token). Nothing else inbound from the internet (DO firewall). Public SSH on :22
           is kept open as a recovery path; the host's nftables ruleset rate-limits non-trusted
           sources and auto-allowlists any IP that successfully authenticates (no banning — agents

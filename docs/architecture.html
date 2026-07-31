@@ -140,9 +140,10 @@
         hostname means adding one rule there plus a CNAME in <code>dns/dnsconfig.js</code>.
         Cloudflare Access enforces a <code>*.pod.haus</code> wildcard policy so every admin
         surface is gated on a "Family" identity group without needing a per-service Access app.
-        Raw protocols use explicit exceptions: MinIO TLS and Forgejo SSH reach bilby through
-        kookaburra's rathole relay. Forgejo's web UI remains behind Access, while
-        <code>git.pod.haus:22</code> is DNS-only raw SSH.
+        DNS-only relay services are the explicit exceptions: MinIO TLS and both Forgejo
+        protocols reach bilby through kookaburra's rathole relay. Forgejo uses one hostname,
+        <code>git.pod.haus</code>: :443 terminates at bilby's Caddy and :22 reaches Forgejo's
+        embedded SSH server. Pocket ID is the web authentication boundary.
       </p>
       <p>See <a href="/networking.html">Networking</a> for dockernet, host-network services, and
         DNS detail.</p>

@@ -25,7 +25,7 @@ resource "cloudflare_zero_trust_access_group" "family" {
   include = [
     { email_domain = { domain = "nathanbaxter.com" } },
     { email_domain = { domain = "pod.haus" } },
-    { email        = { email = "scroeser@gmail.com" } },
+    { email = { email = "scroeser@gmail.com" } },
   ]
 }
 
@@ -100,18 +100,18 @@ resource "cloudflare_zero_trust_access_policy" "public_bypass" {
 # Pod Haus wildcard — the default deny-by-default gate for everything
 # not covered by a more-specific Application.
 resource "cloudflare_zero_trust_access_application" "pod_haus_wildcard" {
-  account_id           = var.account_id
-  name                 = "Pod Haus wildcard (default-deny)"
-  type                 = "self_hosted"
-  domain               = "*.pod.haus"
-  self_hosted_domains  = ["*.pod.haus"]
-  session_duration     = "730h"
+  account_id          = var.account_id
+  name                = "Pod Haus wildcard (default-deny)"
+  type                = "self_hosted"
+  domain              = "*.pod.haus"
+  self_hosted_domains = ["*.pod.haus"]
+  session_duration    = "730h"
 
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = false
-  app_launcher_visible      = false
-  http_only_cookie_attribute= true
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = false
+  app_launcher_visible       = false
+  http_only_cookie_attribute = true
   policies = [
     { precedence = 1, id = cloudflare_zero_trust_access_policy.homelab_service_token_bypass.id },
     { precedence = 2, id = cloudflare_zero_trust_access_policy.pod_haus_family_allow.id },
@@ -126,36 +126,36 @@ resource "cloudflare_zero_trust_access_policy" "pod_haus_family_allow" {
 
 # Pine Lake — household-specific, only Nathan, no Family group.
 resource "cloudflare_zero_trust_access_application" "pine_lake_ssh" {
-  account_id           = var.account_id
-  name                 = "Pine Lake SSH"
-  type                 = "ssh"
-  domain               = "home.pinelake.haus"
-  self_hosted_domains  = ["home.pinelake.haus"]
-  session_duration     = "730h"
+  account_id          = var.account_id
+  name                = "Pine Lake SSH"
+  type                = "ssh"
+  domain              = "home.pinelake.haus"
+  self_hosted_domains = ["home.pinelake.haus"]
+  session_duration    = "730h"
 
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = false
-  app_launcher_visible      = true
-  http_only_cookie_attribute= false
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = false
+  app_launcher_visible       = true
+  http_only_cookie_attribute = false
   policies = [
     { precedence = 1, id = cloudflare_zero_trust_access_policy.nathan.id },
   ]
 }
 
 resource "cloudflare_zero_trust_access_application" "pine_lake_torrent" {
-  account_id           = var.account_id
-  name                 = "Pine Lake Torrent"
-  type                 = "self_hosted"
-  domain               = "torrent.pinelake.haus"
-  self_hosted_domains  = ["torrent.pinelake.haus"]
-  session_duration     = "730h"
+  account_id          = var.account_id
+  name                = "Pine Lake Torrent"
+  type                = "self_hosted"
+  domain              = "torrent.pinelake.haus"
+  self_hosted_domains = ["torrent.pinelake.haus"]
+  session_duration    = "730h"
 
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = true
-  app_launcher_visible      = true
-  http_only_cookie_attribute= false
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = true
+  app_launcher_visible       = true
+  http_only_cookie_attribute = false
   policies = [
     { precedence = 1, id = cloudflare_zero_trust_access_policy.nathan.id },
   ]
@@ -166,36 +166,36 @@ resource "cloudflare_zero_trust_access_application" "pine_lake_torrent" {
 # the nathanbaxter.com zone, not pod.haus. Inline, same shape as the
 # Pine Lake apps below.
 resource "cloudflare_zero_trust_access_application" "nathanbaxter_dev" {
-  account_id           = var.account_id
-  name                 = "nathanbaxter dev"
-  type                 = "self_hosted"
-  domain               = "dev.nathanbaxter.com"
-  self_hosted_domains  = ["dev.nathanbaxter.com"]
-  session_duration     = "730h"
+  account_id          = var.account_id
+  name                = "nathanbaxter dev"
+  type                = "self_hosted"
+  domain              = "dev.nathanbaxter.com"
+  self_hosted_domains = ["dev.nathanbaxter.com"]
+  session_duration    = "730h"
 
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = false
-  app_launcher_visible      = true
-  http_only_cookie_attribute= false
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = false
+  app_launcher_visible       = true
+  http_only_cookie_attribute = false
   policies = [
     { precedence = 1, id = cloudflare_zero_trust_access_policy.nathan.id },
   ]
 }
 
 resource "cloudflare_zero_trust_access_application" "pine_lake_syncthing" {
-  account_id           = var.account_id
-  name                 = "Pine Lake Syncthing"
-  type                 = "self_hosted"
-  domain               = "sync.pinelake.haus"
-  self_hosted_domains  = ["sync.pinelake.haus"]
-  session_duration     = "730h"
+  account_id          = var.account_id
+  name                = "Pine Lake Syncthing"
+  type                = "self_hosted"
+  domain              = "sync.pinelake.haus"
+  self_hosted_domains = ["sync.pinelake.haus"]
+  session_duration    = "730h"
 
-  auto_redirect_to_identity = false
-  enable_binding_cookie     = false
-  options_preflight_bypass  = true
-  app_launcher_visible      = true
-  http_only_cookie_attribute= false
+  auto_redirect_to_identity  = false
+  enable_binding_cookie      = false
+  options_preflight_bypass   = true
+  app_launcher_visible       = true
+  http_only_cookie_attribute = false
   policies = [
     { precedence = 1, id = cloudflare_zero_trust_access_policy.nathan.id },
   ]
@@ -249,12 +249,12 @@ resource "cloudflare_zero_trust_access_policy" "app_launcher_family" {
 # listener URL while leaving the rest of komodo.pod.haus gated.
 # Komodo validates the HMAC itself, so an open bypass here is safe.
 resource "cloudflare_zero_trust_access_application" "komodo_webhook" {
-  account_id           = var.account_id
-  name                 = "Komodo webhook (bypass)"
-  type                 = "self_hosted"
-  domain               = "komodo.pod.haus/listener/github"
-  self_hosted_domains  = ["komodo.pod.haus/listener/github"]
-  session_duration     = "24h"
+  account_id          = var.account_id
+  name                = "Komodo webhook (bypass)"
+  type                = "self_hosted"
+  domain              = "komodo.pod.haus/listener/github"
+  self_hosted_domains = ["komodo.pod.haus/listener/github"]
+  session_duration    = "24h"
 
   policies = [
     { precedence = 1, id = cloudflare_zero_trust_access_policy.komodo_webhook_bypass.id },

@@ -26,6 +26,25 @@ storage.pod.haus, *.storage.pod.haus {
 	reverse_proxy minio:9000
 }
 
+# git.pod.haus is Forgejo's single public hostname for both protocols.
+# DNS-only A points at kookaburra: raw :443 traverses the existing
+# rathole service to this Caddy instance, while raw :22 uses the
+# separate rathole service to Forgejo's embedded SSH server. Pocket ID
+# is Forgejo's application-level authentication boundary.
+git.pod.haus {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+	}
+
+	reverse_proxy forgejo:3000
+}
+
 # music.pod.haus — Music Assistant web UI, served LAN-direct by Caddy so
 # Home Assistant's server-to-server websocket to MA bypasses Cloudflare
 # Access (which blocks non-browser clients carrying no Access cookie).

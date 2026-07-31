@@ -20,7 +20,7 @@ terraform {
       # parity plus the UniFi DNS records the controller added more
       # recently.
       # Docs: https://registry.terraform.io/providers/ubiquiti-community/unifi/latest/docs
-      source  = "ubiquiti-community/unifi"
+      source = "ubiquiti-community/unifi"
       # Pin to the MINOR (~> 0.53.0 = >=0.53.0 <0.54.0). This is a 0.x
       # provider, so minor bumps carry breaking changes (0.41 → 0.53 moved
       # dns_record.ttl from an int to a Go duration string). A two-segment
@@ -67,6 +67,15 @@ terraform {
       # Docs: https://registry.terraform.io/providers/1Password/onepassword/latest/docs
       source  = "1Password/onepassword"
       version = "~> 3.1" # section_map/field_map (v3.1.0+) for the access.tf Pocket ID OIDC data source
+    }
+    pocketid = {
+      # Pocket ID is authoritative for human identities, application
+      # access groups and OIDC claims (including Forgejo SSH keys).
+      # Pin the minor: this is a young community provider and schema
+      # changes must be reviewed deliberately.
+      # Docs: https://registry.terraform.io/providers/Trozz/pocketid/latest/docs
+      source  = "Trozz/pocketid"
+      version = "~> 2.1.0"
     }
   }
 

@@ -70,19 +70,6 @@ module "bugsink" {
   backend  = "http://bugsink:8000"
 }
 
-module "forgejo" {
-  source = "./modules/pod_haus_service"
-
-  account_id               = local.pod_haus_service_defaults.account_id
-  zone_id                  = local.pod_haus_service_defaults.zone_id
-  tunnel_target            = local.pod_haus_service_defaults.tunnel_target
-  default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
-  default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
-
-  hostname = "forge"
-  backend  = "http://forgejo:3000"
-}
-
 module "backup" {
   source = "./modules/pod_haus_service"
 

@@ -66,7 +66,17 @@ provider "minio" {
 # read via section_map[…].field_map[…].value) or recreated with
 # expected field IDs. That restructure ripples to chezmoi `op read`
 # paths, komodo-op slugified Komodo Variables, and any stack.toml
-# `[[OP__…]]` refs. Deferred — see /docs/terraform.html.
+# `[[OP__…]]` refs. Deferred; see /docs/terraform.html.
 #
-# The onepassword PROVIDER stays declared so future-resolvable items
-# can plug into it cheaply; nothing currently uses a data source.
+# The resolvable exceptions use fields the provider understands:
+# access.tf reads Pocket ID's sectioned OIDC fields, while
+# pocket_id.tf reads the API Credential item and manages the Forgejo
+# Login item.
+
+provider "pocketid" {
+  # Public by design: OIDC relying parties and Terraform must reach the
+  # issuer without Cloudflare Access in front. The API token is resolved
+  # from 1Password at plan time and never committed.
+  base_url  = "https://id.pod.haus"
+  api_token = data.onepassword_item.pocket_id_api_key.credential
+}

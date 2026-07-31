@@ -69,7 +69,7 @@ consumer — no secret in git or a shell env.
 |---|---|---|---|
 | `Pocket ID Encryption Key` | API Credential, `credential` | `OP__KOMODO__POCKET_ID_ENCRYPTION_KEY__CREDENTIAL` (komodo-op) → `ENCRYPTION_KEY` | the container, via `stack.toml` |
 | `Pocket ID OIDC` | section `OIDC`: `client id` + `client secret` | `data "onepassword_item"` at plan time (`access.tf`) | Terraform, directly |
-| `Pocket ID API Key` | API Credential, `credential` | read ad-hoc via the service-account token | provisioning |
+| `Pocket ID API Key` | API Credential, `credential` | `data.onepassword_item.pocket_id_api_key` → Pocket ID Terraform provider | users, groups, OIDC clients |
 
 The OIDC client id/secret are read **directly by Terraform** via the
 `onepassword` provider data source (`section_map["OIDC"].field_map[…].value`), not
@@ -87,22 +87,20 @@ A single Pocket ID OIDC client named **Cloudflare Zero Trust**: confidential
 id/secret live in the *Pocket ID OIDC* 1P item and are consumed by the Cloudflare
 IdP resource — Cloudflare's stored `redirect_url` must equal that callback.
 
-## Provisioning people
+## Provisioning people and clients
 
-Via the admin API (header `X-API-Key`), or the equivalent UI. Each person opens a
-one-time link and enrols their own passkey — passkeys can't be enrolled for them.
+`terraform/pocket_id.tf` is authoritative for Pocket users, groups, group
+membership, custom claims and new OIDC clients. Nathan and Sky were imported by
+their existing UUIDs, so Terraform adoption preserved their passkeys. Do not
+create or edit these objects in the Pocket UI; change Terraform and apply.
 
-```sh
-# create a user (email must match a Family rule)
-curl -X POST https://id.pod.haus/api/users -H "X-API-Key: $KEY" \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"sky","email":"scroeser@gmail.com","firstName":"Sky","lastName":"Croeser"}'
+Passkeys remain deliberately outside Terraform: a new person enrols their own
+authenticator through Pocket ID after the user resource is created.
 
-# mint a one-time passkey-enrolment link (ttl default 15m, max 31d)
-curl -X POST https://id.pod.haus/api/users/<id>/one-time-access-token \
-  -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d '{"ttl":"168h"}'
-# -> {"token":"…"}  →  hand out https://id.pod.haus/lc/<token> out of band
-```
+Forgejo demonstrates the full model. Terraform restricts its client to
+`forgejo-users`, maps Nathan through `forgejo-admins`, and publishes each
+person's committed public keys as a JSON-array `ssh_keys` custom claim. Forgejo
+creates the local profile and synchronizes those keys during OIDC login.
 
 ## Backup & restore
 

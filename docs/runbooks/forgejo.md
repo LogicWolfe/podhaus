@@ -5,18 +5,20 @@ description: Local Git hosting, public SSH relay, backup, and recovery
 
 # Forgejo
 
-Forgejo runs on bilby. The browser UI is `https://forge.pod.haus` through
-Cloudflare Tunnel + Access. Git SSH uses the ordinary hostname-only URL:
+Forgejo runs on bilby. HTTPS and SSH share one ordinary hostname:
 
 ```text
+https://git.pod.haus
 git@git.pod.haus:owner/repository.git
 ```
 
-That SSH path does not use Cloudflare or Tailscale. `git.pod.haus` is a
-DNS-only A record to kookaburra's DigitalOcean Reserved IP. DigitalOcean
-delivers that address to the droplet's anchor interface, where rathole listens
-on port 22 and forwards to Forgejo's embedded SSH server on bilby. Kookaburra's
-own sshd is bound only to the droplet's ordinary public address on port 22.
+Neither path uses Cloudflare Access or Tailscale. `git.pod.haus` is a DNS-only
+A record to kookaburra's DigitalOcean Reserved IP. Public :443 traverses the
+existing rathole service to bilby's Caddy, which terminates TLS and proxies to
+Forgejo. DigitalOcean delivers Reserved-IP :22 to the droplet's anchor
+interface, where rathole forwards it to Forgejo's embedded SSH server. The
+droplet sees only TLS ciphertext on :443; its own sshd remains bound to the
+ordinary public address on :22.
 
 ## Storage
 
@@ -30,28 +32,35 @@ own sshd is bound only to the droplet's ordinary public address on port 22.
 sentinel exists, and every required directory is writable. Host directories
 and the sentinel are owned by `bilby/host-systemd/install.sh`.
 
-## Accounts and keys
+## Identity and keys
 
-Registration is disabled and repositories default to private. Account and SSH
-key state lives under `forgejo/provision/`:
+Pocket ID is the only interactive identity source. Terraform owns:
 
-- `users.json` declares each managed account and the 1Password fields that own
-  its email and password.
-- `keys/<username>/*.pub` declares that person's managed SSH keys.
-- `reconcile.sh` converges the declared accounts and keys through Forgejo's
-  admin API on every stack deploy.
+- the existing Nathan and Sky Pocket users, imported by UUID so passkeys and
+  user identities survive adoption;
+- `forgejo-users`, the group allowed to use the confidential Forgejo client;
+- `forgejo-admins`, whose members become Forgejo administrators on login;
+- the Forgejo OIDC client and its 1Password credential handoff;
+- each user's `ssh_keys` custom claim, sourced from `forgejo/keys/`.
 
-The reconciler owns keys named `podhaus-managed:*`. It removes a managed key
-that disappears from git or whose content drifts. Keys added manually with any
-other title are left alone. Account email, password, admin status, active
-status, and login restrictions are authoritative too.
+Forgejo auto-registers a local profile on the first successful Pocket login.
+The OIDC source requires `forgejo-users`, maps `forgejo-admins` to the Forgejo
+admin flag, and synchronizes the `ssh_keys` array on every login. Removing a key
+from Terraform therefore removes it from Forgejo at the next login. Password
+login, HTTP Basic password authentication, account linking, unmanaged
+registration, password management and manual SSH-key management are disabled.
 
-Nathan's credentials live in `Forgejo Admin`; Sky's live in
-`Forgejo User Sky`. Application secrets come from `Forgejo Secrets`, and the
-rathole service token comes from `Rathole Git Relay`.
+The authentication source itself is a Forgejo database object and has no
+Terraform resource. The `forgejo-auth-init` one-shot converges that single
+object using Forgejo's supported `admin auth {add,update}-oauth` CLI. User and
+key reconciliation does not happen in a custom script.
 
-The `forgejo-admin-init` service exists only for an empty-database recovery,
-where the API can't authenticate until the first admin exists.
+`Forgejo Secrets` owns the application cryptographic secrets. Terraform creates
+the `Forgejo OIDC` login item in 1Password from the Pocket client; komodo-op
+exports its standard login fields as
+`OP__KOMODO__FORGEJO_OIDC__USERNAME` and
+`OP__KOMODO__FORGEJO_OIDC__PASSWORD`, and feeds them to the init service.
+`Rathole Git Relay` owns the SSH relay token.
 
 To refresh Nathan's keys from GitHub:
 
@@ -61,20 +70,22 @@ gh api users/LogicWolfe/keys --paginate \
 ```
 
 Commit the resulting public keys as
-`forgejo/provision/keys/nathan/github-<id>.pub`. Sky's current source key is
-`~/.ssh/id_ed25519_sky_access.pub`.
+`forgejo/keys/nathan/github-<id>.pub`. Sky's current source key is
+`~/.ssh/id_ed25519_sky_access.pub`. Run Terraform after changing a key claim;
+the affected user then logs in once to make Forgejo synchronize it.
 
 ## Checks
 
 ```bash
 docker inspect --format '{{.State.Health.Status}}' forgejo
 docker exec forgejo forgejo doctor check
+curl -fsS https://git.pod.haus/api/healthz
 ssh -T git@git.pod.haus
 git clone git@git.pod.haus:OWNER/REPOSITORY.git
 ```
 
 `ssh -T` should reach Forgejo and report that shell access is disabled. Gatus
-checks the internal HTTP health endpoint and the public TCP relay separately.
+checks internal HTTP, public HTTPS and public SSH separately.
 
 ## Backup
 
@@ -99,7 +110,9 @@ failed heartbeat. This covers interruption between the stop and end hooks.
    `/var/lib/forgejo` and the Jump tree to `/mnt/jump/forgejo`.
 5. Re-run `sudo ./bilby/host-systemd/install.sh` to assert ownership,
    permissions, and the Jump sentinel.
-6. Start the stack, wait for health, run `forgejo doctor check`, then clone and
+6. Start the stack. `forgejo-auth-init` reconciles the Pocket source from
+   1Password after Forgejo becomes healthy.
+7. Run `forgejo doctor check`, sign in through Pocket ID, then clone and
    `git fsck` a representative repository.
 
 Do not restore only the database or only the repositories. The quiesced

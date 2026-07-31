@@ -1,7 +1,8 @@
 # Forgejo runs on bilby. Latency-sensitive state stays on local NVMe;
-# repositories and large object stores live on Jump. Public web traffic
-# arrives through cloudflared. Public SSH arrives through kookaburra's
-# rathole relay and reaches forgejo:2222 over dockernet.
+# repositories and large object stores live on Jump. Public HTTPS and
+# SSH both arrive at git.pod.haus through kookaburra's rathole relay:
+# TLS goes to Caddy then forgejo:3000; SSH goes directly to
+# forgejo:2222. Pocket ID is the only interactive identity source.
 
 x-forgejo-environment: &forgejo-environment
   USER: git
@@ -12,8 +13,8 @@ x-forgejo-environment: &forgejo-environment
   FORGEJO__server__PROTOCOL: http
   FORGEJO__server__HTTP_ADDR: 0.0.0.0
   FORGEJO__server__HTTP_PORT: "3000"
-  FORGEJO__server__DOMAIN: forge.pod.haus
-  FORGEJO__server__ROOT_URL: https://forge.pod.haus/
+  FORGEJO__server__DOMAIN: git.pod.haus
+  FORGEJO__server__ROOT_URL: https://git.pod.haus/
   FORGEJO__server__LOCAL_ROOT_URL: http://forgejo:3000/
   FORGEJO__server__START_SSH_SERVER: "true"
   FORGEJO__server__SSH_LISTEN_HOST: 0.0.0.0
@@ -31,8 +32,17 @@ x-forgejo-environment: &forgejo-environment
   FORGEJO__security__INTERNAL_TOKEN: ${FORGEJO_INTERNAL_TOKEN}
   FORGEJO__security__REVERSE_PROXY_LIMIT: "1"
   FORGEJO__security__REVERSE_PROXY_TRUSTED_PROXIES: 172.18.0.0/16
+  FORGEJO__security__DISABLE_QUERY_AUTH_TOKEN: "true"
   FORGEJO__service__DISABLE_REGISTRATION: "true"
+  FORGEJO__service__ALLOW_ONLY_EXTERNAL_REGISTRATION: "true"
   FORGEJO__service__REQUIRE_SIGNIN_VIEW: "true"
+  FORGEJO__service__ENABLE_INTERNAL_SIGNIN: "false"
+  FORGEJO__service__ENABLE_BASIC_AUTHENTICATION: "false"
+  FORGEJO__oauth2_client__ENABLE_AUTO_REGISTRATION: "true"
+  FORGEJO__oauth2_client__USERNAME: preferred_username
+  FORGEJO__oauth2_client__ACCOUNT_LINKING: disabled
+  FORGEJO__oauth2_client__OPENID_CONNECT_SCOPES: openid email profile groups
+  FORGEJO__admin__EXTERNAL_USER_DISABLE_FEATURES: deletion,manage_ssh_keys,manage_password
   FORGEJO__repository__ROOT: /data/jump/repositories
   FORGEJO__repository__FORCE_PRIVATE: "true"
   FORGEJO__repository__DEFAULT_PRIVATE: private
@@ -110,8 +120,8 @@ services:
       retries: 15
       start_period: 60s
 
-  forgejo-admin-init:
-    container_name: forgejo-admin-init
+  forgejo-auth-init:
+    container_name: forgejo-auth-init
     image: codeberg.org/forgejo/forgejo:16.0.1-rootless@sha256:71863f6b6c5837a27b3a2d133c3161c78a432aa878d57798d74b1d917ff842be
     user: "1000:100"
     restart: "no"
@@ -120,9 +130,8 @@ services:
         condition: service_healthy
     environment:
       <<: *forgejo-environment
-      FORGEJO_ADMIN_USERNAME: ${FORGEJO_ADMIN_USERNAME}
-      FORGEJO_ADMIN_EMAIL: ${FORGEJO_ADMIN_EMAIL}
-      FORGEJO_ADMIN_PASSWORD: ${FORGEJO_ADMIN_PASSWORD}
+      FORGEJO_OIDC_CLIENT_ID: ${FORGEJO_OIDC_CLIENT_ID}
+      FORGEJO_OIDC_CLIENT_SECRET: ${FORGEJO_OIDC_CLIENT_SECRET}
     volumes: *forgejo-volumes
     security_opt:
       - label:disable
@@ -131,45 +140,42 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        if forgejo admin user list --admin | awk 'NR > 1 { print $$2 }' | grep -Fxq "$$FORGEJO_ADMIN_USERNAME"; then
-          echo "forgejo admin already exists"
-          exit 0
-        fi
-        forgejo admin user create \
-          --username "$$FORGEJO_ADMIN_USERNAME" \
-          --email "$$FORGEJO_ADMIN_EMAIL" \
-          --password "$$FORGEJO_ADMIN_PASSWORD" \
-          --admin \
-          --must-change-password=false
-    labels:
-      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+        auth_id="$$(forgejo admin auth list --vertical-bars \
+          | awk -F '|' 'NR > 1 {
+              gsub(/^[ \t]+|[ \t]+$$/, "", $$1)
+              gsub(/^[ \t]+|[ \t]+$$/, "", $$2)
+              if ($$2 == "PocketID") print $$1
+            }')"
 
-  forgejo-provision:
-    container_name: forgejo-provision
-    image: init-tools:local
-    build:
-      context: ../init-tools
-      args:
-        STACK_CONTENT_HASH: ${BUILD_HASH_FORGEJO_PROVISION:-unset}
-    restart: "no"
-    depends_on:
-      forgejo:
-        condition: service_healthy
-      forgejo-admin-init:
-        condition: service_completed_successfully
-    environment:
-      FORGEJO_ADMIN_USERNAME: ${FORGEJO_ADMIN_USERNAME}
-      FORGEJO_ADMIN_PASSWORD: ${FORGEJO_ADMIN_PASSWORD}
-      FORGEJO_ADMIN_EMAIL: ${FORGEJO_ADMIN_EMAIL}
-      FORGEJO_SKY_EMAIL: ${FORGEJO_SKY_EMAIL}
-      FORGEJO_SKY_PASSWORD: ${FORGEJO_SKY_PASSWORD}
-    volumes:
-      - ./provision:/provision:ro
-    security_opt:
-      - label:disable
-    networks:
-      - dockernet
-    entrypoint: ["/bin/sh", "/provision/reconcile.sh"]
+        if [ -n "$$auth_id" ]; then
+          action=update-oauth
+          id_args="--id $$auth_id"
+        else
+          action=add-oauth
+          id_args=
+        fi
+
+        # Authentication sources live in Forgejo's database and no
+        # Terraform provider exposes them. Converge this one object
+        # through Forgejo's supported CLI; users, groups, roles and SSH
+        # keys remain Terraform-owned in Pocket ID.
+        # shellcheck disable=SC2086
+        forgejo admin auth "$$action" $$id_args \
+          --name PocketID \
+          --provider openidConnect \
+          --key "$$FORGEJO_OIDC_CLIENT_ID" \
+          --secret "$$FORGEJO_OIDC_CLIENT_SECRET" \
+          --auto-discover-url https://id.pod.haus/.well-known/openid-configuration \
+          --skip-local-2fa \
+          --scopes openid \
+          --scopes email \
+          --scopes profile \
+          --scopes groups \
+          --required-claim-name groups \
+          --required-claim-value forgejo-users \
+          --group-claim-name groups \
+          --admin-group forgejo-admins \
+          --attribute-ssh-public-key ssh_keys
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 

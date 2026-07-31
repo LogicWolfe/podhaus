@@ -1,8 +1,8 @@
-# git.pod.haus is raw SSH, not an HTTP service. Cloudflare is
+# git.pod.haus is Forgejo's single HTTPS + SSH hostname. Cloudflare is
 # authoritative DNS only: clients connect to kookaburra's stable
-# Reserved IP on standard port 22, DigitalOcean maps that to the
-# droplet's anchor IPv4, and rathole forwards the TCP stream to
-# Forgejo's embedded SSH server on bilby.
+# Reserved IP. Rathole forwards anchor-IP :22 to Forgejo's embedded SSH
+# server and public :443 to bilby's Caddy, which terminates TLS and
+# proxies the web UI to Forgejo.
 resource "cloudflare_dns_record" "git_a" {
   zone_id = local.zones["pod.haus"]
   name    = "git.pod.haus"

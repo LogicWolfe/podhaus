@@ -171,6 +171,13 @@ endpoints:
     <<: *defaults
     group: Git
 
+  # DNS-only public HTTPS path: Reserved IP → kookaburra :443 →
+  # rathole → bilby Caddy → Forgejo. The health endpoint is auth-free.
+  - name: Forgejo HTTPS (public relay)
+    url: https://git.pod.haus/api/healthz
+    <<: *defaults
+    group: Git
+
   # DNS-only public path: Reserved IP → DigitalOcean anchor :22 →
   # kookaburra rathole → Forgejo's embedded SSH server on bilby.
   - name: Forgejo SSH (public relay)
