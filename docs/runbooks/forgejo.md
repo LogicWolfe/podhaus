@@ -20,6 +20,11 @@ interface, where rathole forwards it to Forgejo's embedded SSH server. The
 droplet sees only TLS ciphertext on :443; its own sshd remains bound to the
 ordinary public address on :22.
 
+Signed-out visits to the root go straight to Forgejo's built-in login page. It
+shows the Pocket ID button without Forgejo's marketing homepage, powered-by
+label, version, or template timing. This is configuration in `compose.yaml`, not
+a template override, so Forgejo upgrades don't carry a custom-template seam.
+
 ## Storage
 
 - `/var/lib/forgejo/data` on bilby's NVMe: SQLite, sessions, logs, and runtime

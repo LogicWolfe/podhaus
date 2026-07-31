@@ -16,6 +16,10 @@ x-forgejo-environment: &forgejo-environment
   FORGEJO__server__DOMAIN: git.pod.haus
   FORGEJO__server__ROOT_URL: https://git.pod.haus/
   FORGEJO__server__LOCAL_ROOT_URL: http://forgejo:3000/
+  # Signed-out visitors need the login, not Forgejo's product pitch.
+  # Keep this on the built-in page so upgrades don't carry a custom
+  # template compatibility burden.
+  FORGEJO__server__LANDING_PAGE: login
   FORGEJO__server__START_SSH_SERVER: "true"
   FORGEJO__server__SSH_LISTEN_HOST: 0.0.0.0
   FORGEJO__server__SSH_LISTEN_PORT: "2222"
@@ -57,6 +61,9 @@ x-forgejo-environment: &forgejo-environment
   FORGEJO__storage.repo-archive__PATH: /data/jump/repo-archives
   FORGEJO__packages__ENABLED: "false"
   FORGEJO__actions__ENABLED: "false"
+  FORGEJO__other__SHOW_FOOTER_POWERED_BY: "false"
+  FORGEJO__other__SHOW_FOOTER_VERSION: "false"
+  FORGEJO__other__SHOW_FOOTER_TEMPLATE_LOAD_TIME: "false"
   FORGEJO__log__MODE: console
   FORGEJO__log__LEVEL: Info
   FORGEJO__log__ROOT_PATH: /var/lib/gitea/log
