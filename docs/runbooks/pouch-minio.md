@@ -37,11 +37,8 @@ Terraform owns the whole identity chain:
 Sky never receives the MinIO root credential. Her policy grants object
 read/write/delete plus list and location operations on `sky-backups` only.
 
-The `Sky Backups` item is the Terraform-owned source of truth. Sky does not
-need 1Password. `pouch-minio/sky-backups.env.tpl` contains only 1Password
-references. Bilby resolves it on demand and streams the result over SSH, so no
-plaintext handoff file lives on bilby's disk. The only long-lived plaintext
-copy is Sky's client file, owned by her account with mode `0600`:
+The `Sky Backups` 1Password item is the Terraform-owned source of truth for
+the client configuration:
 
 ```dotenv
 AWS_ACCESS_KEY_ID=...
@@ -49,41 +46,6 @@ AWS_SECRET_ACCESS_KEY=...
 RESTIC_REPOSITORY=s3:https://pouch.pod.haus/sky-backups
 RESTIC_PASSWORD=...
 AWS_DEFAULT_REGION=us-east-1
-```
-
-Sky fetches or refreshes her client file with:
-
-```sh
-mkdir -p ~/.config/restic
-chmod 0700 ~/.config/restic
-umask 077
-ssh bilby-backups \
-  'cd ~/repos/podhaus && ~/.local/bin/op-homelab inject -i pouch-minio/sky-backups.env.tpl' \
-  > ~/.config/restic/sky-backups.env
-chmod 0600 ~/.config/restic/sky-backups.env
-```
-
-Sky's complete setup guide lives at `~/restic-guide.md` on bilby. Load the file
-for an interactive terminal with:
-
-```sh
-set -a
-source ~/.config/restic/sky-backups.env
-set +a
-restic snapshots
-```
-
-For an administrative check on bilby, keep the credentials process-local in a
-subshell:
-
-```sh
-(
-  set -a
-  source <(~/.local/bin/op-homelab inject \
-    -i pouch-minio/sky-backups.env.tpl)
-  set +a
-  restic snapshots
-)
 ```
 
 The repository was initialized during deployment verification, so the client
