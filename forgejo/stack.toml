@@ -7,7 +7,8 @@ tags = ["podhaus"]
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/forgejo"
-ignore_services = ["forgejo-preflight", "forgejo-admin-init"]
+ignore_services = ["forgejo-preflight", "forgejo-admin-init", "forgejo-provision"]
+run_build = true
 
 environment = """
 TZ=[[TZ]]
@@ -17,4 +18,6 @@ FORGEJO_LFS_JWT_SECRET=[[OP__KOMODO__FORGEJO_SECRETS__LFS_JWT_SECRET]]
 FORGEJO_ADMIN_USERNAME=[[OP__KOMODO__FORGEJO_ADMIN__USERNAME]]
 FORGEJO_ADMIN_EMAIL=[[OP__KOMODO__FORGEJO_ADMIN__EMAIL]]
 FORGEJO_ADMIN_PASSWORD=[[OP__KOMODO__FORGEJO_ADMIN__CREDENTIAL]]
+FORGEJO_SKY_EMAIL=[[OP__KOMODO__FORGEJO_USER_SKY__EMAIL]]
+FORGEJO_SKY_PASSWORD=[[OP__KOMODO__FORGEJO_USER_SKY__CREDENTIAL]]
 """

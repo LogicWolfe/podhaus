@@ -30,16 +30,39 @@ own sshd is bound only to the droplet's ordinary public address on port 22.
 sentinel exists, and every required directory is writable. Host directories
 and the sentinel are owned by `bilby/host-systemd/install.sh`.
 
-## Accounts and secrets
+## Accounts and keys
 
-Registration is disabled and repositories default to private. The initial
-admin is idempotently created from the `Forgejo Admin` 1Password item.
-Application secrets come from `Forgejo Secrets`; the rathole service token
-comes from `Rathole Git Relay`. Never put these values in compose, Terraform,
-or the Forgejo UI as a second source of truth.
+Registration is disabled and repositories default to private. Account and SSH
+key state lives under `forgejo/provision/`:
 
-Add subsequent users from the admin UI. Each user adds their public SSH key in
-Settings → SSH / GPG Keys.
+- `users.json` declares each managed account and the 1Password fields that own
+  its email and password.
+- `keys/<username>/*.pub` declares that person's managed SSH keys.
+- `reconcile.sh` converges the declared accounts and keys through Forgejo's
+  admin API on every stack deploy.
+
+The reconciler owns keys named `podhaus-managed:*`. It removes a managed key
+that disappears from git or whose content drifts. Keys added manually with any
+other title are left alone. Account email, password, admin status, active
+status, and login restrictions are authoritative too.
+
+Nathan's credentials live in `Forgejo Admin`; Sky's live in
+`Forgejo User Sky`. Application secrets come from `Forgejo Secrets`, and the
+rathole service token comes from `Rathole Git Relay`.
+
+The `forgejo-admin-init` service exists only for an empty-database recovery,
+where the API can't authenticate until the first admin exists.
+
+To refresh Nathan's keys from GitHub:
+
+```bash
+gh api users/LogicWolfe/keys --paginate \
+  --jq '.[] | [.id,.key] | @tsv'
+```
+
+Commit the resulting public keys as
+`forgejo/provision/keys/nathan/github-<id>.pub`. Sky's current source key is
+`~/.ssh/id_ed25519_sky_access.pub`.
 
 ## Checks
 

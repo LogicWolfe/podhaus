@@ -144,6 +144,35 @@ services:
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
+  forgejo-provision:
+    container_name: forgejo-provision
+    image: init-tools:local
+    build:
+      context: ../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_FORGEJO_PROVISION:-unset}
+    restart: "no"
+    depends_on:
+      forgejo:
+        condition: service_healthy
+      forgejo-admin-init:
+        condition: service_completed_successfully
+    environment:
+      FORGEJO_ADMIN_USERNAME: ${FORGEJO_ADMIN_USERNAME}
+      FORGEJO_ADMIN_PASSWORD: ${FORGEJO_ADMIN_PASSWORD}
+      FORGEJO_ADMIN_EMAIL: ${FORGEJO_ADMIN_EMAIL}
+      FORGEJO_SKY_EMAIL: ${FORGEJO_SKY_EMAIL}
+      FORGEJO_SKY_PASSWORD: ${FORGEJO_SKY_PASSWORD}
+    volumes:
+      - ./provision:/provision:ro
+    security_opt:
+      - label:disable
+    networks:
+      - dockernet
+    entrypoint: ["/bin/sh", "/provision/reconcile.sh"]
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
 networks:
   dockernet:
     external: true
