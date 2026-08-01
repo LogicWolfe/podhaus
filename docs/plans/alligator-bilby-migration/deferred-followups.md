@@ -16,16 +16,6 @@ deploying the target stack, and confirming Ofelia adopts the new value without
 a restart. Then remove Stage 3 from `komodo/sync/procedures.toml` and update
 `docs/scheduling.html` and `AGENTS.md`.
 
-## Make bilby's host package set reproducible
-
-The disaster-recovery guide lists the packages a rebuilt bilby needs, but the
-set is still installed by hand. Capture the canonical package set in a dnf
-manifest or an idempotent host installer and make the rebuild guide call it.
-
-The current known set includes `docker`, the Docker Compose plugin, `git`,
-`op`, `restic`, `rclone`, `zellij`, and `sqlite3`. Include any host utilities
-that the bootstrap and recovery scripts actually invoke.
-
 ## Automate the first Komodo API key on a fresh database
 
 `komodo-start` reads the `Komodo API OnePassword Sync` item before it can call

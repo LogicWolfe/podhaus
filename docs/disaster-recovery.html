@@ -40,14 +40,31 @@
       </ul>
 
       <h2 id="bilby-rebuild">Fresh bilby from scratch</h2>
-      <p>Assumes bilby is bootable with a base Fedora Asahi install + Docker.</p>
+      <p>Assumes bilby is bootable with a base Fedora Asahi install. The package names
+        below match the live Fedora 43 host as of 2026-08-01. Confirm them against the
+        current Fedora and vendor repositories during a rebuild.</p>
       <ol>
-        <li>Install <code>docker</code> + <code>docker compose</code>. Add user to the
-          <code>docker</code> group.</li>
-        <li>Install host packages we know we depend on: <code>op</code> (1Password CLI),
-          <code>git</code>, <code>restic</code> (for off-site restores), <code>rclone</code>,
-          <code>zellij</code>, <code>sqlite3</code>. (A canonical host-package runbook is a
-          deferred follow-up.)</li>
+        <li>Install the Fedora-packaged container runtime and recovery tools:
+          <pre><code>sudo dnf install \
+  moby-engine docker-cli docker-compose \
+  git curl jq restic rclone sqlite \
+  firewalld nfs-utils e2fsprogs util-linux openssh-clients</code></pre>
+          This supplies <code>docker compose</code>, <code>sqlite3</code>,
+          <code>mount.nfs</code>, <code>chattr</code>, and <code>firewall-cmd</code> under
+          their Fedora package names.</li>
+        <li>Follow 1Password's current Fedora repository instructions, then install
+          <code>1password-cli</code>. Enable Docker and give the operator account access:
+          <pre><code>sudo dnf install 1password-cli
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"</code></pre>
+          Log out and back in before running Docker as the operator account.</li>
+        <li>Verify the minimum command surface before continuing:
+          <pre><code>docker compose version
+for cmd in git curl jq op restic rclone sqlite3 mount mount.nfs chattr firewall-cmd ssh; do
+  command -v "$cmd" || echo "missing: $cmd"
+done</code></pre>
+          Terraform is installed separately by the chezmoi Fedora package setup. MinIO
+          CLI, GitHub CLI, Railway, and Zellij are optional operator tools.</li>
         <li>Mount Jump and Pouch from kangaroo:
           <pre><code>sudo mkdir -p /mnt/jump /mnt/pouch
 sudo mount -t nfs -o vers=4.1 10.0.0.25:/Jump  /mnt/jump

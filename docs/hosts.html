@@ -99,10 +99,11 @@
         <li><code>yq</code> — YAML munging for compose files and Gatus config.</li>
       </ul>
       <p>
-        This list isn't reproducible-install-script-backed yet — see the
-        <a href="/plans/plan-viewer.html?file=alligator-bilby-migration/deferred-followups.md">
-        bilby host-package runbook</a> follow-up. Until that lands, treat this section as
-        the canonical list; add a row when you install a new tool.
+        This table and the <a href="/disaster-recovery.html#bilby-rebuild">bilby rebuild
+        checklist</a> are the canonical package record. There is deliberately no installer:
+        a full rebuild is exceptional, and Fedora and vendor package sources will change
+        between rebuilds. Re-check the current package instructions, install them manually,
+        and update these pages when the host changes.
       </p>
 
       <h3 id="bilby-firewall">Firewall (firewalld)</h3>
