@@ -171,6 +171,7 @@ and their Tailscale path remain live only for rollback. A planned host
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
 | `kookaburra_bootstrap` | Idempotent kookaburra bring-up: SSH hardening → dockernet bridge → tailscale (Komodo adopts it post-handoff) → Periphery. Defaults `DROPLET_IP` to the reserved IP (`170.64.241.136`) so it stays correct across `terraform apply -replace`. |
 | `numbat_bootstrap` | Idempotent Rocky host, recovery SSH, nftables, Docker, dockernet, and outbound Periphery reconciliation. Numbat application stacks are Komodo-managed. |
+| `pomerium-ssh-origin-bootstrap` | Generic target-side Pomerium SSH origin bootstrap. Reads the per-route token from stdin, installs the current rathole release, trusts the Pomerium CA, and reconciles a hardened systemd service. The initial SSH transport stays outside the script. |
 | `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS and rollback edge, UniFi DNS, GitHub deploy webhook, Tailscale rotation, DigitalOcean, MinIO IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in MinIO via public `https://storage.pod.haus`; run stock `terraform` directly. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (per-site static hosting) via `storage.pod.haus`. |
 | `caddy/` | Bilby's split origin: private mTLS `:4443` for Pomerium, public-only `:4444` for Numbat raw/CDN endpoints, and retained `:443` rollback/LAN routes. |
@@ -523,6 +524,12 @@ These have failure modes that you must not introduce:
   between minor versions and `terraform apply` errors with "Attribute X
   required" or similar without making it obvious which version you
   need. Provider doc URLs are linked from each provider's required_providers block in `terraform/backend.tf`.
+- **Use the current stable release by default.** Do not introduce a
+  version or digest pin merely for reproducibility. Every image pull,
+  package install, build, and host bootstrap is an opportunity to take
+  an available upgrade. A temporary compatibility pin needs a concrete,
+  documented reason and should be removed the next time that component
+  is touched and the current release can be verified.
 - **Don't bypass git hooks (`--no-verify`, etc.) without explicit
   permission.** Same for force-push, hard reset, branch deletion.
 - **Komodo Core ↔ Periphery uses v2 X25519 noise-handshake PKI auth

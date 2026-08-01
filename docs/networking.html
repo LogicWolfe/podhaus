@@ -87,6 +87,9 @@ networks:
         port 22 for ordinary <code>git@git.pod.haus</code> SSH. Host SSH uses Pomerium on
         <code>ssh.pod.haus:22</code>; routes are named <code>bilby</code>,
         <code>numbat</code>, and <code>voltaire</code>.
+        The generic <code>pomerium-ssh-origin-bootstrap</code> installs the
+        machine-local outbound relay and CA trust on a target; the operator chooses the
+        initial SSH transport separately.
       </p>
 
       <h2 id="identity">Identity and machine exceptions</h2>

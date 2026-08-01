@@ -267,6 +267,13 @@ description = "Service port (well-known, not a secret)"</code></pre>
         </tbody>
       </table>
       <p>
+        <strong>Version policy:</strong> use the current stable upstream release by default.
+        Pulls, builds, installs, and bootstraps should take an available upgrade rather than
+        preserving an old version for reproducibility alone. A compatibility pin is an
+        exception that needs a concrete documented reason and should be removed when that
+        component is next touched and verified.
+      </p>
+      <p>
         <strong>init-tools shared image:</strong> All init containers across the fleet use the
         same locally-built image declared at <code>init-tools/Dockerfile</code>
         (alpine + gettext + python3 + curl + jq — covers config templating,

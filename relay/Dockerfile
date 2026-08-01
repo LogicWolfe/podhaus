@@ -5,10 +5,11 @@
 # "build locally because upstream's arch story is wrong" pattern as
 # komodo-op. run_build = true in the stack.toml builds per host.
 FROM debian:stable-slim
-ARG RATHOLE_VERSION=v0.5.0
+ARG STACK_CONTENT_HASH=unset
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl unzip gettext-base \
  && rm -rf /var/lib/apt/lists/* \
+ && test -n "$STACK_CONTENT_HASH" \
  && arch="$(uname -m)" \
  && case "$arch" in \
       aarch64) asset="rathole-aarch64-unknown-linux-musl.zip" ;; \
@@ -16,7 +17,7 @@ RUN apt-get update \
       *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
     esac \
  && curl -fsSL -o /tmp/r.zip \
-      "https://github.com/rapiz1/rathole/releases/download/${RATHOLE_VERSION}/${asset}" \
+      "https://github.com/rathole-org/rathole/releases/latest/download/${asset}" \
  && unzip -o /tmp/r.zip -d /usr/local/bin rathole \
  && chmod +x /usr/local/bin/rathole \
  && rm /tmp/r.zip
@@ -25,12 +26,9 @@ RUN apt-get update \
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Content-hash build arg from the podhaus mechanism (see AGENTS.md
-# "Content-hash change detection"). Declared purely for cache busting:
-# bilby's rathole-client and kookaburra's rathole-server each pass their
-# own BUILD_HASH_<service> as this ARG, so each rebuilds independently
-# when relay/ contents change. The value is never read at runtime.
-ARG STACK_CONTENT_HASH=unset
+# The content hash is consumed before the download so every requested
+# rebuild checks the current upstream release instead of reusing an old
+# dependency layer.
 ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

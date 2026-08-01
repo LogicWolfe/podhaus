@@ -30,7 +30,9 @@ Neither path uses Tailscale.
 Host SSH uses Pomerium on `ssh.pod.haus:22`, with routes for Bilby, Numbat, and
 Voltaire. Forgejo remains ordinary `git@git.pod.haus` SSH on the other address.
 The repository owns only Voltaire's gateway-side resources; its rathole
-client and SSH CA trust stay machine-local.
+client and SSH CA trust stay machine-local. The generic
+`pomerium-ssh-origin-bootstrap` reconciles those machine-local pieces without
+encoding the initial connection method.
 
 ## Identity and exceptions
 
@@ -72,9 +74,11 @@ restarts, so the smallest plan remains the right size.
 - Verify Forgejo HTTPS, SSH, clone, push, and LFS; Paperless iOS; S3 path-style
   and virtual-host access; WebSockets; and native SSH to Bilby, Numbat, and
   Voltaire.
-- Finish the machine-local Voltaire rathole client and Pomerium CA trust.
 - Run a no-op Terraform plan from outside the LAN through
   `storage.pod.haus`.
+
+Kangaroo's additional Pomerium route and the host-native Tailscale backup path
+are tracked in the separate [host recovery access plan](../host-recovery-access.md).
 
 After those checks and Nathan's explicit approval, remove the old DNS rollback
 values, Kookaburra, migrated Tunnel and Access resources, the old Tailscale
