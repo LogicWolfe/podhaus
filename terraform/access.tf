@@ -3,12 +3,10 @@
 # Topology:
 #   - One account-level Family group (email_domain + explicit emails)
 #   - One reusable "Nathan" policy (used by the Pine Lake apps)
-#   - One reusable "Homelab service token" bypass policy (NEW — service
-#     token gates programmatic access across the *.pod.haus surface)
-#   - 10 existing Applications, each gating one or more hostnames
-#   - 2 NEW Applications:
-#       * Komodo webhook bypass (path-scoped, future Railway driver)
-#       * Paperless iOS (mobile app with a dedicated service token)
+#   - One reusable "Homelab service token" bypass policy for
+#     programmatic access across the *.pod.haus surface
+#   - More-specific applications for hostnames and path-scoped exceptions
+#   - A dedicated Paperless iOS service-token path
 #
 # More-specific Application matches take precedence over the
 # `*.pod.haus` wildcard, so per-host apps act as overrides and their
@@ -278,7 +276,7 @@ resource "cloudflare_zero_trust_access_policy" "komodo_webhook_bypass" {
 # allowed_idps=[this] + auto_redirect on the target app(s) — a separate
 # gated change. The id.pod.haus Access app itself (public bypass, so
 # Cloudflare can reach the OIDC endpoints) is module.pocket_id in
-# services_pod_haus.tf. See docs/plans/pocket-id.md.
+# services_pod_haus.tf. See docs/runbooks/pocket-id.md.
 
 # First data-source consumer of the declared onepassword provider. The
 # "Pocket ID OIDC" Homelab item has an "OIDC" section with CONCEALED

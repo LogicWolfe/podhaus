@@ -56,16 +56,20 @@
       <table>
         <thead><tr><th>Job</th><th>Container</th><th>Schedule</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>plex-stats-cleanup</code></td><td>plex</td><td>04:00 on the 1st of each month</td><td>Online DELETE on <code>statistics_bandwidth</code> rows older than 30 days + VACUUM.</td></tr>
+          <tr><td><code>plex-stats-cleanup</code></td><td>plex</td><td>05:30 on the 1st of each month</td><td>Online DELETE on <code>statistics_bandwidth</code> rows older than 30 days + VACUUM.</td></tr>
           <tr><td><code>rar-backlog</code></td><td>flood</td><td>04:50 daily</td><td>Scans <code>/data/{Movies,TV,Kids}</code> for folders with RAR pieces ≥2h old and no extracted keepers. Pushes Gatus heartbeat with success or failure context.</td></tr>
           <tr><td><code>pinelake-stignore</code></td><td>flood</td><td>every 5 min</td><td>Reconciles Pouch's <code>.stignore</code> with rtorrent's <code>pinelake</code>-tagged complete torrents. Safety net for the <code>event.download.finished</code> rtorrent hook (which can't catch tags applied post-completion). See <a href="/runbooks/flood.html#pinelake-stignore">flood runbook</a>.</td></tr>
+          <tr><td><code>flood-publish</code></td><td>flood</td><td>every minute</td><td>Publishes completed torrents from Flood into their final media paths.</td></tr>
           <tr><td><code>plex-label-sync</code></td><td>flood</td><td>every 5 min</td><td>Mirrors each torrent's Flood tags onto its Plex show/movie as Labels (per-managed-user content restrictions). Same dual-trigger pattern as <code>pinelake-stignore</code>; the tick is the workhorse since Plex's library scan lags publish. See <a href="/runbooks/flood.html#plex-label-sync">flood runbook</a>.</td></tr>
           <tr><td><code>sky-backups-monitor</code></td><td>sky-backups-monitor</td><td>hourly at :15</td><td>Lists committed Restic snapshot objects in Pouch MinIO and alerts through Gatus when none was written within seven days.</td></tr>
-          <tr><td><code>daily-self-restart</code></td><td>ofelia</td><td>04:00 daily</td><td>Workaround — see below.</td></tr>
+          <tr><td><code>clickstack-mongo-dump</code></td><td>clickstack-mongo</td><td>03:50 daily</td><td>Dumps ClickStack's MongoDB metadata into the backed-up host path.</td></tr>
+          <tr><td><code>forgejo-backup-recover</code></td><td>backrest</td><td>every 5 min</td><td>Recovers the Forgejo backup control path if a prior quiesce or hook was interrupted.</td></tr>
+          <tr><td><code>search-index</code></td><td>search-indexer</td><td>every minute</td><td>Refreshes the cross-repository documentation search index.</td></tr>
+          <tr><td><code>streamfab-publish</code></td><td>streamfab-publish</td><td>every minute</td><td>Publishes completed StreamFab output into the media library.</td></tr>
         </tbody>
       </table>
 
-      <h2 id="self-restart">Why ofelia restarts itself daily</h2>
+      <h2 id="self-restart">Why the push procedure restarts Ofelia</h2>
       <aside class="callout warn">
         <span class="callout-title">Workaround for upstream label-reload bug</span>
         ofelia 0.3.x in label-discovery mode reads container labels at startup and only
@@ -74,14 +78,13 @@
         take effect.
       </aside>
       <p>
-        The workaround: ofelia has a <code>job-exec</code> label on itself that runs
-        <code>kill 1</code> at 04:00 every day. PID 1 is ofelia, so it exits, and
-        <code>restart: unless-stopped</code> brings up a fresh instance that re-reads all
-        labels — including any schedule changes deployed during the day.
+        The workaround lives in Stage 3 of <code>podhaus-push-deploy</code>. After changed stacks
+        deploy, Komodo runs <code>RestartStack "ofelia"</code>. The fresh process re-reads every
+        target container's labels, including schedule and command changes from that push.
       </p>
       <p>
-        Bounds the worst-case "stale schedule" window to ~24 hours instead of indefinite.
-        Self-referential but reliable. Drop it when
+        <code>./komodo-sync</code> invokes the same procedure, so local iteration gets the same
+        refresh. Drop Stage 3 when
         <a href="https://github.com/mcuadros/ofelia/pull/368">upstream PR #368</a> ships true
         Docker-event-driven hot reload of label changes.
       </p>
@@ -106,9 +109,8 @@
   ofelia.job-exec.&lt;name&gt;.schedule: "0 4 * * *"
   ofelia.job-exec.&lt;name&gt;.command: "/path/to/script.sh"</code></pre>
         </li>
-        <li>Deploy the target stack. Restart ofelia once
-          (<code>docker restart ofelia</code>) so it picks up the new labels — the
-          daily-self-restart hack will catch them the next cycle if you forget.</li>
+        <li>Push the target stack or run <code>./komodo-sync</code>. Stage 3 restarts Ofelia after
+          deployment so it reads the new labels.</li>
         <li>If the job is critical, add a Gatus push heartbeat — the script should POST
           success/failure to a bearer-token-protected push endpoint, and Gatus's
           dead-man's-switch interval (25h is the convention) catches missed pings. Pattern in

@@ -161,12 +161,8 @@ volumes:
   # The /Jump export on kangaroo uses all_squash (writes land as 1000:100
   # regardless of container UID, chown is denied), which breaks the
   # postgres entrypoint's `chown -R postgres:postgres $PGDATA` step.
-  # See alligator-bilby-migration.md "Deferred (non-blocking follow-ups)"
-  # for the NAS fix plan; once /Jump stops squashing we flip both
-  # volumes back to NFS at :/Jump/komodo/postgres and :/Jump/komodo/ferretdb.
-  # Until then, komodo orchestration state lives on local bilby disk as a
-  # pragmatic exception to the bilby-is-stateless rule. Losing it means
-  # re-bootstrapping Komodo from git — annoying but not catastrophic since
-  # all stack definitions are in the repo.
+  # Active database state belongs on bilby's local NVMe; Backrest protects
+  # these volumes. If the backup is also unavailable, Komodo can still be
+  # bootstrapped from the resource definitions in git.
   postgres-data:
   ferretdb-state:

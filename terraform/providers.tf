@@ -6,10 +6,8 @@
 # resolve from 1Password's Homelab vault. The 1P service-account
 # token is the ONE secret raw on disk (see AGENTS.md); MinIO bucket
 # creds (AWS_*) are least-priv-scoped to the terraform-state bucket;
-# the rest will move to onepassword TF provider data sources in a
-# follow-up (see /docs/plans/terraform-foundation.md — the
-# credential-source swap is a separate gated step so it can be
-# verified as zero-diff).
+# the remaining ambient credentials are tracked as deferred platform debt in
+# docs/plans/alligator-bilby-migration/deferred-followups.md.
 
 provider "cloudflare" {
   # api_token from CLOUDFLARE_API_TOKEN env var (chezmoi-rendered).

@@ -3,7 +3,7 @@
 The platform foundation everything else builds on. Brings pinelake from
 "a Mac mini with hand-rolled docker run" to "a managed Komodo Periphery
 host with dockernet, sensible sleep config, a Tailscale daemon, and a
-working `tf`-side handle." Nothing service-level lands until this is
+working Terraform-side handle." Nothing service-level lands until this is
 done.
 
 ## Goal state
@@ -13,8 +13,10 @@ done.
 - Komodo Periphery running as a container on pinelake, registered in
   Core (linked-repo mode like kangaroo).
 - `pmset` + `caffeinate` belt-and-braces so the host stays awake.
-- Tailscale `tailscaled` LaunchDaemon (replacing App Store IPNExtension).
-- `cloudflared` upgraded to current.
+- A supported system-managed Tailscale installation on the podhaus management
+  tailnet, replacing the per-user App Store IPNExtension on its current
+  separate tailnet.
+- `cloudflared` upgraded to the release selected at execution time.
 
 ## Step 1 — back up everything stateful
 
@@ -83,11 +85,11 @@ Mark it idempotent in any bootstrap script — `docker network inspect
 dockernet >/dev/null 2>&1 || docker network create ...`.
 
 Confirm `docker network ls` and `docker network inspect dockernet`.
-The subnet must be exactly `172.18.0.0/16` — every podhaus stack
-assumes containers reach each other by name within this network and
-that the host-network services are reachable at `172.18.0.1:<port>`
-from inside containers (this is the cloudflared → host-Plex /
-host-Syncthing path on bilby; same convention here).
+The subnet must be exactly `172.18.0.0/16` so Pinelake containers can use the
+same service-name convention as the rest of podhaus. On Colima,
+`172.18.0.1` is the Linux VM's bridge gateway, not the macOS host. Native
+macOS services and native cloudflared must use proven Colima port forwarding;
+do not copy bilby's Linux host-service gateway pattern.
 
 `rtorrent-flood` is still on the default `bridge` network at this
 point. It moves to dockernet in [Flood](flood.md), not here — keep
@@ -95,8 +97,9 @@ this stream focused on the platform.
 
 ## Step 4 — Komodo Periphery on pinelake
 
-Linked-repo mode (like kangaroo) — Komodo Core on bilby drives this,
-pinelake's periphery clones the repo itself.
+Use the current v2 outbound model. Pinelake's Periphery dials Core over
+the tailnet, authenticates with its private key, and clones a host-specific
+Linked Repo. Nothing listens on pinelake port 8120 from the LAN or internet.
 
 ### Komodo side (bilby, repo)
 
@@ -105,60 +108,67 @@ In `komodo/sync/servers.toml`, add:
 ```toml
 [[server]]
 name = "pinelake"
+description = "Apple M1 Mac mini, second household. macOS + Colima. v2 outbound: Periphery dials Core."
+tags = ["pinelake", "podhaus"]
+
 [server.config]
-description = "Apple M1 Mac mini, second household. macOS + colima."
-address = "https://pinelake.haus:8120"   # via tailscale if LAN routing not available
+address = ""
 enabled = true
-auto_prune = true
-# Auth model — depends on Periphery v2 decision (open question #7 in index)
-# Option A (current/legacy): periphery_passkeys via env
-# Option B (v2 keypair):     periphery_public_key = "<pinelake pubkey>"
+disk_warning = 85.0
+disk_critical = 95.0
 ```
+
+Add `komodo/keys/pinelake-periphery.pub` to Core's trusted Periphery
+public-key list using the same path as Kangaroo and Kookaburra.
 
 In `komodo/sync/repos.toml`, add:
 
 ```toml
 [[repo]]
-name = "podhaus"
+name = "podhaus-pinelake"
 [repo.config]
 server = "pinelake"
 git_provider = "github.com"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"
 branch = "main"
-# Polling cadence + webhook target inherit from existing kangaroo entry
 ```
 
 ### Pinelake side (host)
 
-Mirror the `kangaroo_bootstrap` script (see top-level of repo) into
-`pinelake_bootstrap` if it's not yet host-portable. Differences from
-kangaroo:
+Use `kangaroo_bootstrap` and `kookaburra_bootstrap` as references for a
+new idempotent `pinelake_bootstrap`. Pinelake differs in these ways:
 
 - Runs on macOS, not QTS — paths under `/Users/baxter/` not
   `/share/CACHEDEV*_DATA/`.
-- Colima provides the docker socket; bind-mount it from
-  `~/.colima/default/docker.sock` into the periphery container.
-- The compose's `repo_dir` setting points at `/etc/komodo/repos/podhaus`
-  inside the periphery container — periphery clones the linked repo
-  itself there.
-- `.env` (containing the periphery passkey or v2 private key) is
-  rendered by `op run --env-file=…` from the 1Password `Komodo
-  Periphery (pinelake)` item.
-- Crontab `@reboot` entry that re-runs `docker compose up -d` against
-  the periphery compose (belt-and-braces over Docker's own restart).
-  Alternative: launchd plist that depends on `io.colima.start.plist`.
+- Colima owns the Docker daemon. The compose bind is
+  `/var/run/docker.sock:/var/run/docker.sock` from the daemon's view,
+  matching ordinary Docker-in-Docker control stacks.
+- Generate `periphery.key` once on pinelake, copy the matching public key
+  into `komodo/keys/`, and copy Core's public key to the host. Mount both
+  under `/config/keys`, following the existing Periphery composes.
+- Set `PERIPHERY_CORE_ADDRESSES` to
+  `ws://bilby-podnet.tail9ceb.ts.net:9120` and
+  `PERIPHERY_CONNECT_AS=pinelake`. Prove Colima's containers can resolve
+  the MagicDNS FQDN before starting Periphery. If they cannot, configure
+  Colima's Docker daemon to forward unknown names to `100.100.100.100` and a
+  public fallback, then re-test. Preserve Docker's embedded resolver and never
+  add per-container `dns:` overrides.
+- Persist `/etc/komodo` and `/config/keys` under a stable host directory.
+- Let the existing Colima LaunchDaemon start the VM. Use
+  `restart: unless-stopped` for Periphery and add a dependent LaunchDaemon
+  only if Colima doesn't restore the container reliably after a real reboot.
 
-The Periphery compose file lands as
-`komodo-periphery/pinelake/compose.yaml` + `stack.toml` (this can
-self-host once Core can reach it; first start is manual via
-`pinelake_bootstrap`).
+The Periphery compose lives under `pinelake/periphery/` and remains
+bootstrap-managed. It can't manage itself because Core loses the host if
+Periphery is down.
 
 ### Verify
 
-From bilby's Komodo UI: pinelake shows green in the Servers list,
-Periphery version matches, latency reasonable. From pinelake's
-periphery logs: handshake succeeded, no auth errors.
+From bilby's Komodo UI, pinelake shows green in the Servers list and the
+Periphery version matches the fleet. The pinelake Periphery logs show a
+successful outbound noise handshake with no reconnect loop. No host port
+8120 is published.
 
 ## Step 5 — sleep / power management
 
@@ -220,17 +230,16 @@ caffeinate.
 **Do not** add `-d` to the args — that prevents display sleep, which
 contradicts the goal.
 
-## Step 6 — Tailscale: replace App Store with `tailscaled` daemon
+## Step 6: Tailscale, replace the per-user App Store runtime
 
-Reason: the App Store IPNExtension has no LaunchDaemon, no watchdog,
-no exposed CLI by default. A daemon-based install lets Gatus probes
-and `tailscale serve` work, and lets a crashed daemon get restarted by
-launchd.
+Reason: the audited App Store IPNExtension has no system LaunchDaemon or
+exposed CLI and is on a different tailnet from podhaus. Pinelake Periphery
+needs the management path before an interactive user logs in.
 
 ```sh
-# 1. Capture current state for rollback
+# 1. Capture the old tailnet state for rollback
 tailscale ip -4   # via "Install CLI" in app first, OR read from app menu
-# Note the current authkey/tags.
+# Record the old account, device name, and IP.
 
 # 2. Sign out of the App Store app
 #    Tailscale.app menu -> Account -> Log out
@@ -239,27 +248,26 @@ tailscale ip -4   # via "Install CLI" in app first, OR read from app menu
 #    (App Store removal works; do not delete the user-extension state
 #    forcibly — let macOS clean it up)
 
-# 4. Install Homebrew daemon-based tailscale
-brew install tailscale
-sudo brew services start tailscale
+# 4. Install the current official standalone macOS distribution and enable
+#    its supported unattended/system mode. Do not assume the Homebrew
+#    open-source daemon provides a system-wide macOS VPN.
 
-# 5. Authenticate as the same node identity
-sudo tailscale up --hostname=pinelake \
-  --advertise-tags=tag:server \
-  --accept-routes \
-  --accept-dns=true
+# 5. Using that installation's CLI, enrol into the podhaus tailnet with
+#    hostname pinelake and the TF-managed tag:podnet auth key from:
+op read 'op://Homelab/Tailscale Auth Key/credential'
 ```
 
-The node should rejoin with the **same** tailnet IP (`100.124.202.28`)
-if the authkey/account is the same; otherwise the IP rotates, which
-means Gatus/Komodo configs that pin the IP need updating. Prefer
-MagicDNS names everywhere instead of raw IPs to avoid this.
+The existing `100.124.202.28` address belongs to the old tailnet and is not
+expected to survive. No podhaus config should depend on the new address.
+Use the MagicDNS name everywhere and verify the node carries
+`tag:podnet`, which is embedded in the Terraform-managed auth key.
 
 Verify:
 - `tailscale status` shows the node as `pinelake`
-- `tailscale ip -4` returns the expected address
+- `tailscale ip -4` returns an address on the podhaus tailnet
 - From bilby (also on tailnet): `tailscale ping pinelake`
-- Reboot the host; confirm `tailscaled` comes up via launchd
+- Reboot without an interactive login; confirm the Tailscale node and
+  Pinelake Periphery reconnect
 
 ### Optional: `tailscale serve` for Plex
 
@@ -275,7 +283,7 @@ TLS cert, no port-forward, no Cloudflare.
 
 ## Step 7 — Upgrade cloudflared
 
-Just `brew upgrade cloudflared`. Don't touch the config or the daemon
+Run `brew upgrade cloudflared`. Don't touch the config or the daemon
 plist yet — config migration is its own stream
 ([Cloudflare tunnel + Terraform](cloudflare-tunnel.md)). After the
 upgrade, `sudo launchctl kickstart -k system/com.cloudflare.cloudflared`
@@ -295,17 +303,16 @@ docker-compose` and add the plugin path to `~/.docker/config.json`:
 
 Verify: `docker compose version`.
 
-## Step 9 — verify dockernet from a probe
+## Step 9: Verify dockernet and Mac port forwarding
 
 ```sh
-docker run --rm --network dockernet alpine sh -c \
-  'apk add --no-cache curl >/dev/null && curl -sI http://172.18.0.1:32400 | head -1'
+docker run --rm --network dockernet --name pinelake-net-probe alpine ip route
 ```
 
-Should return `HTTP/1.0 200 OK` (Plex's web UI responds even
-unauthenticated). Confirms the path that the migrated cloudflared (and
-the per-service ingress rules) will use to reach the host-network
-Plex.
+Confirm the probe receives an address in `172.18.0.0/16`. Separately launch a
+disposable HTTP container with a loopback-only published port and confirm the
+Mac can reach it at `127.0.0.1`. That is the path native cloudflared will use
+for containerised Flood and any later Syncthing migration.
 
 ## Acceptance criteria
 
@@ -317,7 +324,7 @@ Plex.
   `powernap 0`, `standby 0`
 - `launchctl print system/haus.podhaus.caffeinate` shows running
 - `tailscale status` invoked from a shell (CLI installed)
-- `cloudflared --version` reports 2026.3.x (or current)
+- `cloudflared --version` reports the release chosen at execution time
 - `docker compose version` works on the host
 
 None of the above touches a service stack — those are in their own
@@ -325,7 +332,6 @@ streams.
 
 ## Open items deferred
 
-- Komodo Periphery auth model (open question #7 in index)
-- Plex public exposure decision (informs `tailscale serve` step)
+- Plex public exposure decision (informs the optional `tailscale serve` step)
 - Whether `pinelake_bootstrap` is a separate script or a parameterised
   evolution of `kangaroo_bootstrap`

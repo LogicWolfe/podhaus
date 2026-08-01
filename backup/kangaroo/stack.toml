@@ -6,10 +6,9 @@ tags = ["kangaroo", "podhaus"]
 [stack.config]
 server = "kangaroo"
 linked_repo = "podhaus"
-# No webhook_force_deploy / no per-stack webhook — the single push
-# webhook's podhaus-push-deploy procedure force-deploys this via
-# Stage 2 (BatchDeployStack "kangaroo-*"). See
-# logging/kangaroo/stack.toml + komodo/sync/procedures.toml.
+# No per-stack webhook. The shared podhaus procedure reconciles content
+# and build-context hashes in Stage 1, then handles compose-text changes
+# and new stacks through Stage 2's wildcard IfChanged pass.
 run_directory = "backup/kangaroo"
 file_paths = ["compose.yaml", "../compose.shared.yaml"]
 # init-tools image built inline by the backrest-init service via `build:`.

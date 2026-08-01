@@ -4,10 +4,9 @@
 # and its single-level Universal SSL cert can't cover Publii's
 # virtual-host buckets). Traffic now goes: client → this A record
 # (kookaburra relay reserved IP) → rathole reverse tunnel → Caddy on
-# bilby (own LE *.storage.pod.haus wildcard) → MinIO. The old home-WAN
-# / UniFi port-forward path is dead (UDM WAN:443 shadow — see
-# docs/plans/storage-public-relay.md). LAN clients still hit Caddy
-# directly via the split-horizon record (dns_unifi_split_horizon.tf).
+# bilby (own LE *.storage.pod.haus wildcard) → MinIO. LAN clients hit
+# Caddy directly via the split-horizon record
+# (dns_unifi_split_horizon.tf). See docs/hosts.html#kookaburra.
 
 # Kookaburra reserved IP from the relay's resource (intra-root after
 # the foundation consolidation; was a terraform_remote_state cross-

@@ -1,7 +1,7 @@
 # kookaburra — the public ingress relay droplet. Runs the rathole
 # SERVER (public :443 data + :2333 control, noise+token); bilby dials
 # out. TLS still terminates at bilby's Caddy — the droplet only ever
-# sees ciphertext. See docs/plans/storage-public-relay.md.
+# sees ciphertext. See docs/hosts.html#kookaburra.
 
 data "digitalocean_project" "podhaus" {
   name = "podhaus"

@@ -3,7 +3,7 @@
 // Config-as-code: one tracked file per service. Imported by
 // config.alloy via `import.file "parsers"` and composed into the
 // processing chain. Adding a service = add a file here + one line in
-// the chain. See docs/plans/clickstack-migration/ingestion-pipeline.md.
+// the chain. See docs/monitoring.html.
 //
 // komodo-op log format (UTC):
 //   2026/05/16 03:27:18 [INFO] Syncing Komodo secret 'OP__...'

@@ -21,14 +21,14 @@
 
       <h1>Hosts</h1>
       <p class="lead text-lg text-text-muted">
-        Two physical hosts today, a third planned. Both are registered with the same Komodo Core
-        on bilby; stack deploys for either host go through the same UI.
+        Three active hosts and one planned. Bilby's Komodo Core manages bilby, kangaroo, and
+        kookaburra; pinelake will join as the fourth host.
       </p>
 
       <h2 id="bilby">bilby</h2>
       <p>
         Apple M1 Mac mini, 8 cores, 15 GB RAM, aarch64, Fedora Asahi Linux. Primary host. Runs
-        Komodo Core (Postgres + FerretDB + Core + Periphery), every original podhaus stack, the
+        Komodo Core (Postgres + FerretDB + Core + Periphery), the primary podhaus stacks, the
         Cloudflare Tunnel, and the 1Password Connect API. LAN IP <code>10.0.0.119</code>.
       </p>
       <p>
@@ -37,10 +37,10 @@
       <ul>
         <li><strong>Local NVMe</strong> — hot operational state for every stack. See
           <a href="/storage.html">Storage</a> for the per-stack layout.</li>
-        <li><strong><code>/mnt/pouch</code></strong> — NFS mount of the QNAP HDD array. Plex media,
-          BIFs, paperless documents, flood downloads.</li>
-        <li><strong><code>/mnt/jump</code></strong> — NFS mount of the QNAP SSD array. Restic repo
-          storage.</li>
+        <li><strong><code>/mnt/pouch</code></strong>: NFS mount of the QNAP HDD array. Plex media
+          and Flood downloads.</li>
+        <li><strong><code>/mnt/jump</code></strong>: NFS mount of the QNAP SSD array. Restic
+          repositories, Paperless documents, Forgejo data, and Plex BIF thumbnails.</li>
       </ul>
       <aside class="callout warn">
         <span class="callout-title">SELinux on Fedora Asahi</span>
@@ -168,17 +168,18 @@
       </ul>
       <aside class="callout note">
         <span class="callout-title">No Container Station GUI involvement</span>
-        Periphery deploys via SSH + <code>docker compose up -d</code> against the QNAP host's
-        Docker daemon directly. Container Station's REST API only accepts built-in template
+        The bootstrap uses SSH to install and start Periphery. After that, Periphery deploys
+        stacks through the QNAP Docker socket. Container Station's REST API only accepts built-in template
         names, and its GUI flow blocks the <code>docker.sock</code> mount Periphery needs.
-        Survival across CS/QTS upgrades is handled by a <code>@reboot</code> line in
-        <code>/etc/config/crontab</code> — see
+        Survival across CS/QTS upgrades is handled by the QNAP boot-DOM
+        <code>autorun.sh</code> installed from <code>kangaroo/host-autorun/</code>. It starts
+        Container Station's user Docker engine and reconciles exited or detached containers. See
         <a href="/disaster-recovery.html#kangaroo-rebuild">disaster recovery</a>.
       </aside>
 
       <h2 id="kookaburra">kookaburra</h2>
       <p>
-        DigitalOcean droplet, syd1 region, 1 vCPU / 1 GB RAM, 10 GB disk, Fedora 43 x86_64.
+        DigitalOcean droplet, syd1 region, 1 vCPU / 1 GB RAM, Fedora 43 x86_64.
         <strong>Off-LAN public-ingress relay host.</strong> Its job is terminating raw TCP for
         <code>storage.pod.haus</code>, <code>pouch.pod.haus</code>, and
         <code>git.pod.haus</code> on its public reserved IP
@@ -205,9 +206,9 @@
         <li><strong>Management plane:</strong> Tailscale (<code>tag:podnet</code>); kookaburra
           appears as <code>kookaburra-podnet</code>. Komodo Periphery dials Core <em>outbound</em>
           at <code>ws://bilby-podnet.tail9ceb.ts.net:9120</code> (Komodo v2 PKI, X25519 noise
-          handshake — no inbound :8120 listener on kookaburra). The MagicDNS FQDN resolves
-          to whatever tailnet IP <code>bilby-podnet</code> currently holds; both the Periphery
-          (dockernet) and dockernet itself forward DNS through MagicDNS via the host
+          handshake; port 8120 is not published on kookaburra). The MagicDNS FQDN resolves
+          to whatever tailnet IP <code>bilby-podnet</code> currently holds; containers on
+          dockernet forward unknown names through MagicDNS via the host
           <code>/etc/docker/daemon.json</code>.</li>
         <li><strong>Bootstrap-launched services</strong> (run before Komodo can manage them
           because Komodo→Periphery depends on Periphery being reachable):
@@ -223,9 +224,8 @@
           <code>kookaburra-relay</code> (rathole server), and <code>kookaburra-logging</code>
           (alloy → bilby ClickStack cross-tailnet). Linked-repo clone
           (<code>podhaus-kookaburra</code>) at
-          <code>/opt/komodo-periphery/etc-komodo/repos/podhaus-kookaburra/</code>; force-deployed
-          on every push via the <code>kookaburra-*</code> pattern in Stage 2 of
-          <code>podhaus-push-deploy</code>.</li>
+          <code>/opt/komodo-periphery/etc-komodo/repos/podhaus-kookaburra/</code>. The normal
+          content-hash reconcile and deploy-if-changed stages cover these stacks on each push.</li>
       </ul>
       <p>
         Disaster recovery: <code>terraform apply -replace=digitalocean_droplet.kookaburra</code>
@@ -242,8 +242,9 @@
         Designed to drop into the existing layout: a new entry in
         <code>komodo/sync/servers.toml</code>, its own row in the multi-host shared services
         (<code>backup/</code>, <code>autoheal/</code>, <code>logging/</code>), and per-stack
-        deploys via the same Komodo UI. <code>pinelake.haus</code> already has DNS scaffolding
-        in <code>dns/dnsconfig.js</code>; no infrastructure landed yet.
+        deploys through the same Komodo Core. <code>pinelake.haus</code> already has Cloudflare
+        DNS and Access scaffolding in <code>terraform/</code>; no server or stack definitions
+        have landed yet.
       </p>
 
       <h2 id="adding-host">Adding another host</h2>
@@ -254,9 +255,9 @@
       <ol>
         <li>Bring up a Periphery agent on the new host
           (template at <code>kangaroo/periphery/compose.yaml</code>).</li>
-        <li>Use the <code>kangaroo_bootstrap</code> script as a model — it's idempotent and
-          covers .env rendering from 1Password, crontab survival, and idempotently appending the
-          new server entry to <code>komodo/sync/servers.toml</code>.</li>
+        <li>Use <code>kangaroo_bootstrap</code> and <code>kookaburra_bootstrap</code> as models.
+          New Peripheries use v2 keypair authentication and dial Core outbound. Host-native boot
+          integration keeps the Docker engine and bootstrap-managed Periphery alive.</li>
         <li>Declare a Linked Repo for the host in <code>komodo/sync/repos.toml</code> (kangaroo
           uses one — push-to-deploy via git clone) <strong>or</strong> use
           <code>files_on_host</code> if the repo is going to live directly on the host

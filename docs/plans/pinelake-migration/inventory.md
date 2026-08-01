@@ -183,7 +183,7 @@ should be cleaned out post-migration.
 
 | Field | Value |
 |---|---|
-| Binary | `/opt/homebrew/bin/cloudflared` (Homebrew, v2025.11.1 — **outdated**, current is 2026.3.0) |
+| Binary | `/opt/homebrew/bin/cloudflared` (Homebrew, v2025.11.1; 2026.3.0 was available at the audit) |
 | Auto-start | `/Library/LaunchDaemons/com.cloudflare.cloudflared.plist` (root, `RunAtLoad`, `KeepAlive`) |
 | Cmd | `cloudflared --config /etc/cloudflared/config.yml tunnel run` |
 | Active config | `/etc/cloudflared/config.yml` (root:wheel, 644) |
@@ -334,7 +334,7 @@ in [Cloudflare tunnel + Terraform](cloudflare-tunnel.md).
   Syncthing index loss would mean a full rescan of every peer; rtorrent
   session loss would mean re-checking 1.2 TB of torrent data.
 - TerraMaster mount race at boot — preserve `colima-start-wait.sh`.
-- cloudflared is on 2025.11.1 (current 2026.3.0).
+- cloudflared was on 2025.11.1; recheck the available release before migration.
 - Two cloudflared `config.yml` files — only one is read; the other is
   a footgun.
 - Tunnel name `torrent-pinelake` is no longer descriptive.

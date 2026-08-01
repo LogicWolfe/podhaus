@@ -9,12 +9,14 @@
 # and the fleet is past 20. Instead ONE webhook targets the
 # `podhaus-push-deploy` Procedure's listener (resource_type
 # `procedure`; the final path segment is the branch filter, not an
-# execution verb — see Komodo 1.19.5 bin/core/src/listener/router.rs
+# execution verb; see Komodo's listener router
 # "/procedure/{id}/{branch}"). The procedure fans out internally:
-#   - Stage 1 BatchDeployStackIfChanged "*"  — every stack, deploy
-#     only if its files changed (bilby no-churn; kangaroo no-ops here)
-#   - Stage 2 BatchDeployStack "kangaroo-*"  — force-deploy the
-#     linked_repo stacks (replaces per-stack webhook_force_deploy)
+#   - Stage 0 RunSync reconciles TOML definitions
+#   - Stage 1 injects content hashes and directly reconciles stale
+#     config/build-context consumers whose compose text did not change
+#   - Stage 2 BatchDeployStackIfChanged "*" owns compose-text changes
+#     and brand-new stacks
+#   - Stage 3 restarts Ofelia so it re-reads scheduling labels
 # Defined config-as-code in komodo/sync/procedures.toml. New stacks
 # are covered automatically by the "*" pattern — no edit here, ever.
 #
@@ -35,7 +37,7 @@
 # Rotation: change the secret in
 # op://Homelab/Komodo Webhook Secret/password, restart Komodo Core so
 # it picks up the new env (komodo/compose.env reads it via op://), and
-# `tf apply` to push the matching secret to GitHub.
+# `terraform apply` to push the matching secret to GitHub.
 
 variable "komodo_webhook_secret" {
   description = "HMAC secret shared between GitHub and Komodo. Set via TF_VAR_komodo_webhook_secret env (resolved at chezmoi-render time from op://Homelab/Komodo Webhook Secret/password)."

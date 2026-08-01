@@ -63,7 +63,8 @@ services:
     # in-container probe would only confirm the HTTP listener is up,
     # which is upstream of the property that actually matters ("is the
     # alerter alerting"). That property is monitored externally
-    # instead — see docs (dead-man's-switch follow-up). autoheal label
+    # instead; the external dead-man is tracked in
+    # docs/plans/alligator-bilby-migration/deferred-followups.md. autoheal label
     # also removed: without a healthcheck it can never fire.
     #
     # Background: the prior `["CMD", "/gatus", "healthcheck"]` looked

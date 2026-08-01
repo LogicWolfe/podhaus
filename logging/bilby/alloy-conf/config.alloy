@@ -298,7 +298,7 @@ otelcol.exporter.otlphttp "clickstack" {
     }
   }
 
-  // Resilience (clickstack-migration issue ①). The collector endpoint
+  // Collector resilience. The endpoint
   // blips on every clickstack redeploy; OTel's default retry gives up
   // after 5min and the in-memory queue then wedges → silent data loss
   // until a manual restart. Retry forever + a large buffer so any

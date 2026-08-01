@@ -2,11 +2,11 @@
 # Cloudflare Tunnel (no exposed ports), so these resources exist only
 # for services that genuinely cannot ride the Tunnel.
 #
-# Today that's Mumble — non-HTTP, UDP-load-bearing for voice quality
+# Today that's Mumble: non-HTTP, UDP-load-bearing for voice quality
 # (Tunnel can't carry arbitrary UDP). 64738 isn't bound by the UDM's
 # own services, so the WAN:443 shadow trap that killed the old
 # storage.pod.haus forward (UDM web UI binds WAN:443 itself) does not
-# apply here. See docs/plans/mumble-voice-pod-haus.md.
+# apply here. See docs/runbooks/mumble.md.
 #
 # Two single-protocol resources rather than a hypothetical
 # `protocol = "tcp_udp"`: the v0.41 provider's `protocol` field is a

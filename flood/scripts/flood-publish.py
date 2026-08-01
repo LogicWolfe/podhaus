@@ -7,7 +7,7 @@
 # the publish target the user picked at add-time — so a prioritized episode
 # appears in Plex the moment it lands, not when the whole season finishes,
 # and Plex never sees a partial file. See
-# docs/plans/flood-atomic-publish.md.
+# docs/runbooks/flood.html.
 #
 # Run two ways, same code path (single-flight via flock so they can't race):
 #   - ofelia tick every minute (steady-state file-at-a-time delivery)

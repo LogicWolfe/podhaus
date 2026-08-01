@@ -50,8 +50,8 @@
           deferred follow-up.)</li>
         <li>Mount Jump and Pouch from kangaroo:
           <pre><code>sudo mkdir -p /mnt/jump /mnt/pouch
-sudo mount -t nfs -o vers=4.1 10.0.0.232:/Jump  /mnt/jump
-sudo mount -t nfs -o vers=4.1 10.0.0.232:/Pouch /mnt/pouch</code></pre>
+sudo mount -t nfs -o vers=4.1 10.0.0.25:/Jump  /mnt/jump
+sudo mount -t nfs -o vers=4.1 10.0.0.25:/Pouch /mnt/pouch</code></pre>
         </li>
         <li>Clone the repo, put the service-account token at the repo root:
           <pre><code>git clone &lt;repo&gt; ~/repos/podhaus
@@ -150,11 +150,11 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
               them and the Periphery compose file to kangaroo.</li>
             <li>SSHs into kangaroo and runs <code>docker compose up -d</code> in the destination
               directory.</li>
-            <li>Waits for Periphery's <code>:8120</code> health endpoint.</li>
-            <li>Installs the <code>@reboot</code> crontab line at
-              <code>/etc/config/crontab</code> on kangaroo so it survives Container Station and
-              QTS upgrades.</li>
-            <li>Idempotently appends kangaroo's <code>[[server]]</code> entry to
+            <li>Waits until Komodo Core reports the outbound Periphery connection as healthy.</li>
+            <li>Installs the native QNAP boot-DOM <code>autorun.sh</code> hook from
+              <code>kangaroo/host-autorun/</code>, so Container Station's Docker engine and
+              restart-managed containers return after reboots and upgrades.</li>
+            <li>Verifies that the committed outbound-mode kangaroo entry exists in
               <code>komodo/sync/servers.toml</code>.</li>
           </ul>
         </li>
@@ -165,8 +165,9 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
           <code>[[git_provider]]</code> block in kangaroo's
           <code>periphery.config.toml</code>. <code>kangaroo_bootstrap</code> writes the
           provider config; the repo block is committed in the repo.</li>
-        <li>Deploy kangaroo's stacks (<code>syncthing</code>, <code>kangaroo/backrest</code>,
-          <code>kangaroo/autoheal</code>, <code>kangaroo/logging</code>) from the Komodo UI.</li>
+        <li>Run <code>./komodo-sync</code> to deploy kangaroo's stacks: <code>syncthing</code>,
+          <code>kangaroo-backup</code>, <code>kangaroo-autoheal</code>, and
+          <code>kangaroo-logging</code>.</li>
         <li>Restore kangaroo's state from
           <code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo/</code> if state was lost.</li>
       </ol>
@@ -178,8 +179,11 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
       </p>
       <ol>
         <li>On any machine with internet, install <code>rclone</code> and <code>restic</code>.</li>
-        <li>Re-do the rclone OneDrive OAuth dance (<code>rclone config</code>). Save the new
-          OAuth blob to 1P at <code>op://Homelab/rclone-onedrive-token/notesPlain</code>.</li>
+        <li>Re-do the rclone OneDrive OAuth dance (<code>rclone config</code>) for this restore
+          client. After the hosts are recovered, create independent refresh-token chains for
+          bilby and kangaroo and update the base64 snapshots in
+          <code>rclone-onedrive-token-bilby</code> and
+          <code>rclone-onedrive-token-kangaroo</code>.</li>
         <li>Pull both repos:
           <pre><code>rclone sync onedrive:Backups/podhaus-restic           ./recovery/podhaus
 rclone sync onedrive:Backups/podhaus-kangaroo-restic  ./recovery/kangaroo</code></pre>

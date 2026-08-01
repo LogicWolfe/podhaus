@@ -1,7 +1,6 @@
-# pod.haus Cloudflare Tunnel configuration — single source of truth for
-# every ingress rule cloudflared serves. Replaces the bind-mounted
-# `cloudflare-tunnel/conf/config.yml` once `source = "cloudflare"` is
-# active and the cloudflared compose stops passing `--config`.
+# pod.haus Cloudflare Tunnel configuration. This is the single source
+# of truth for every ingress rule cloudflared serves in remote-config
+# mode.
 #
 # Reference docs:
 #   - cloudflare_zero_trust_tunnel_cloudflared_config:
@@ -40,14 +39,18 @@ locals {
   ]
 }
 
+resource "cloudflare_zero_trust_tunnel_cloudflared" "voltaire" {
+  account_id = var.account_id
+  name       = "voltaire"
+  config_src = "local"
+}
+
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pod_haus" {
   account_id = var.account_id
   tunnel_id  = local.tunnel_ids.pod_haus
 
-  # `cloudflare` source moves authority from the bind-mounted YAML into
-  # CF's API. cloudflared has to be launched without `--config` for
-  # the change to actually flip; until then cloudflared keeps using
-  # its local config and this resource is just CF-side metadata.
+  # `cloudflare` keeps authority in Cloudflare's API. The connector runs
+  # without `--config`, so it consumes this remote configuration.
   source = "cloudflare"
 
   # The for-loops reshape each entry into a fresh object literal —

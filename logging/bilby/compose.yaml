@@ -3,10 +3,9 @@
 # bind, and the /var/lib/flood-db tail for rtorrent-cleanup events that
 # don't reach docker stdout.
 #
-# VictoriaLogs and Grafana were removed when ClickStack (watch.pod.haus)
-# fully replaced them — see docs/plans/clickstack-migration/cutover.md
-# (Phase D). bilby's alloy now ships OTLP to ClickStack; the backend +
-# UI are the clickstack stack, not part of logging anymore.
+# Bilby's Alloy ships OTLP to ClickStack. The backend and HyperDX UI
+# live in the clickstack stack, not this logging stack. See
+# docs/monitoring.html.
 
 
 services:

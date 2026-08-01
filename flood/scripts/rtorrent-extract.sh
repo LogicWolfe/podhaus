@@ -2,7 +2,7 @@
 # Called by rtorrent's event.download.finished hook with $d.base_path= as $1.
 #
 # Real-time in-place RAR extraction for completed torrents. Torrents now
-# download under /data/torrents (see docs/plans/flood-atomic-publish.md);
+# download under /data/torrents (see docs/runbooks/flood.html);
 # rtorrent passes the exact base_path the torrent landed under, so we walk
 # that subtree, extract every RAR set found via bsdtar in place, and drop a
 # `_unpackerred.<dir>.txt` marker per extracted dir. flood-publish.py then

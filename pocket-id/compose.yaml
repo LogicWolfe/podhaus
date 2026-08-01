@@ -3,7 +3,7 @@
 # Exposed at id.pod.haus via the tunnel with a PUBLIC-BYPASS Access app:
 # Cloudflare's servers fetch this IdP's OIDC token/JWKS endpoints
 # server-side, so they must not be Access-gated. See
-# docs/plans/pocket-id.md for the full design + failure modes.
+# docs/runbooks/pocket-id.md for the operating constraints.
 #
 # APP_URL is also the WebAuthn relying-party ID. It must stay exactly the
 # public origin (https://id.pod.haus) — changing it invalidates every

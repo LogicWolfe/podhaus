@@ -21,7 +21,7 @@ services:
       # aws-sdk-js v3 only does virtual-host, so this is required for it;
       # path-style (Host == storage.pod.haus, and internal/loopback
       # Hosts like 127.0.0.1/minio:9000 which aren't under this domain)
-      # is unaffected. See docs/plans/minio-public-caddy.md.
+      # is unaffected. See docs/terraform.html.
       MINIO_DOMAIN: ${MINIO_DOMAIN}
       # Tells the console to use the tunnel hostname when issuing OAuth
       # redirects so links from the UI stay valid behind Cloudflare

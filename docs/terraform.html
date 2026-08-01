@@ -70,7 +70,6 @@
         not Terraform. See <a href="/komodo.html">Komodo</a> and
         <a href="/secrets.html">Secrets</a>.
       </p>
-
       <h2 id="state">State backend — MinIO</h2>
       <p>
         Terraform state lives in MinIO at <code>s3://terraform-state/podhaus.tfstate</code>.
@@ -107,9 +106,8 @@
 
       <h2 id="runner">Running Terraform (stock, from any machine)</h2>
       <p>
-        There is <strong>no wrapper script</strong> (the old <code>./tf</code>
-        docker runner was decommissioned). Run <strong>stock
-        <code>terraform</code></strong> directly:
+        There is <strong>no wrapper script</strong>. Run stock
+        <code>terraform</code> directly:
       </p>
       <pre><code>cd terraform
 terraform init   # one-time per machine
@@ -144,10 +142,10 @@ terraform apply</code></pre>
         command-echo.
       </aside>
       <aside class="callout note">
-        <span class="callout-title">onepassword TF provider declared, no data sources yet</span>
+        <span class="callout-title">onepassword TF provider has selective consumers</span>
         The consolidated root declares the <code>1Password/onepassword</code>
-        provider so future items can plug into data-source-driven
-        credential resolution. None of the current chezmoi-rendered TF
+        provider. Pocket ID and selected Terraform-created credentials already
+        use it, but none of the current chezmoi-rendered TF
         provider creds (CLOUDFLARE_API_TOKEN, UNIFI_API_KEY, GITHUB_TOKEN,
         DIGITALOCEAN_TOKEN, TAILSCALE_OAUTH_*, TF_VAR_minio_user/password,
         TF_VAR_komodo_webhook_secret) actually use it — the provider's

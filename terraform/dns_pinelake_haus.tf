@@ -1,5 +1,5 @@
-# pinelake.haus — tunnel-routed CNAMEs only. Other entries (planned A
-# records for LAN devices) live in UniFi DNS via DNSControl, not here.
+# pinelake.haus tunnel-routed CNAMEs. Pinelake is not on the home LAN,
+# so this root does not create split-horizon UniFi records for it.
 
 resource "cloudflare_dns_record" "pinelake_haus_tunnel" {
   for_each = toset(["home", "sync", "torrent"])

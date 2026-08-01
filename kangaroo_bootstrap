@@ -9,8 +9,8 @@
 #   3. SCP keys (private + Core's pub) and render config (TZ + GitHub PAT).
 #   4. SSH-execute `docker compose up -d`.
 #   5. Wait for Periphery health (outbound dial settles via Core in <30s).
-#   6. Idempotently install @reboot crontab line (CS upgrade survival).
-#   7. Idempotently append [[server]] block for kangaroo to komodo/sync/servers.toml.
+#   6. Idempotently install the QNAP boot-DOM autorun hook.
+#   7. Verify the committed kangaroo Server definition.
 #
 # v2 PKI + outbound: Periphery dials Core at ws://10.0.0.119:9120; auth is
 # X25519 noise handshake. periphery.key (kangaroo-periphery.key on bilby)
@@ -161,4 +161,4 @@ ok "kangaroo Periphery bootstrap done."
 echo
 echo "Next:"
 echo "  1. Verify in https://komodo.pod.haus that kangaroo shows state=Ok"
-echo "  2. Push to deploy any kangaroo-* stack changes via the procedure"
+echo "  2. Push or run ./komodo-sync to deploy any changed kangaroo stacks"

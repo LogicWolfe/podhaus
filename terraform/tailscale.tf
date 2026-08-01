@@ -23,10 +23,7 @@
 #   The key value passes via env var (not the command line) so it
 #   doesn't surface in Terraform's command-echo logs.
 #
-# Interim location: this file lives in cloudflare/ today (per
-# docs/plans/tailscale-and-init-hardening.md). It will move to the
-# consolidated TF root via `terraform state mv` when
-# docs/plans/terraform-foundation.md lands — pure-state op, no diff.
+# This resource is part of the consolidated podhaus Terraform root.
 
 resource "time_rotating" "tailscale_authkey" {
   # 80 days < the Tailscale OAuth-minted key max (90 days). 10-day

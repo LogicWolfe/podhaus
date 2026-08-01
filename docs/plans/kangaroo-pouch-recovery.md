@@ -1,300 +1,78 @@
-# Kangaroo Pouch outage — recovery status & open issues
+# Kangaroo Pouch recovery follow-ups
 
-**Status:** In progress · last updated 2026-06-12
+The June 2026 Pouch recovery is operationally complete. The array was rebuilt
+as a healthy four-disk RAID5, container state moved to CACHEDEV2, the 10 GbE
+path became active at `10.0.0.25`, and all managed services returned healthy.
 
-This is the working handoff doc for the kangaroo Pouch RAID failure and its
-recovery. It captures the summary, what's already resolved, and every known
-open issue. When the recovery completes, fold the resulting-state bits into
-the relevant `docs/` pages, write the postmortem, and delete this plan.
+This page carries only the remaining validation and cleanup work. The last
+recorded host-side verification was 2026-06-13, so re-check live state before
+acting on any item below.
 
----
+## Syncthing recovery mode
 
-## Summary
+Kangaroo was rebuilt with a fresh Syncthing identity and the Pouch folder in
+Receive Only mode. Pinelake held the protected subset in Send Only mode. This
+prevented an empty rebuilt Pouch from propagating deletions outward.
 
-A power outage (and a subsequent rebuild attempt) caused **kangaroo**'s Pouch
-RAID5 (`md1`, originally 5×8TB) to **double-fault**, rendering the ~28TB media
-volume unrecoverable as a redundant array. The bulk of Pouch (~20TB of
-Anime / Movies / Comics / etc.) was **never backed up — accepted loss**.
+Before switching Kangaroo back to Send & Receive:
 
-Recovery (≈ 2026-06-05 → 2026-06-12): priority data was rescued off the
-degraded array, the array was **wiped and rebuilt clean** as a fresh **4-disk
-RAID5 static volume** (`[4/4]`, redundant, ~21.8 TB), the 10GbE link was fixed
-and cut over, and services are being restored. **Plex is back up and healthy.**
-**Kids/TV is restoring** from a USB backup. **All of kangaroo's container
-stacks remain down** — Container Station itself was on the wiped volume and
-needs reinstalling, which is also the moment to fix the backup-placement gap
-this outage exposed.
+1. Confirm Pinelake and Kangaroo are paired and fully connected.
+2. Regenerate Pouch's `.stignore` from the Pinelake-held subset.
+3. Confirm the expected files are present on Pouch and Syncthing reports no
+   remaining pull errors.
+4. Take a fresh backup or snapshot of the recovered configuration.
+5. Change the folder mode and watch both sides for unexpected deletions.
 
----
+Do not restore Kangaroo's old Syncthing identity or folder database against a
+partial Pouch. That reintroduces the deletion-cascade risk.
 
-## Resolved
+## Reboot validation
 
-- **Priority data rescued** before the wipe:
-  - Photos ("Other Photos Library") → OneDrive (`onedrive:Recovered/`) + Jump;
-    Family Photos already covered by Mylio (`onedrive:Apps/Mylio`).
-  - `sky` (incl. sensitive data) → OneDrive.
-  - **Kids/TV** (8493 files / 2.9 TB) → bilby USB drive (`/mnt/usb4t`).
-  - Gmail exports (~52 GB) → Jump (`/share/CACHEDEV2_DATA/recovered/gmail/`).
-- **Disks validated** (full `badblocks` write+read): sdc/sdd/sde/sdf clean;
-  **sdd rehabbed** (8 pending → 0); **sdg (bay 1) = dead recycler**
-  (81896 pending) — pulled.
-- **New array built:** 4-disk RAID5 **static volume** (sdd/sdc/sdf/sde =
-  bays 2/3/4/5), `[4/4] [UUUU]`, ~21.8 TB, via the QTS GUI. Resync complete.
-- **UPS** (APC BX950MI-AZ) armed via NUT/upsmon — graceful shutdown on low
-  battery.
-- **10GbE recovered + cut over:** kangaroo active on **.25 (10G)**, **.232 (1G)
-  kept as a live spare**; both TF-managed (`unifi_client.kangaroo` +
-  `kangaroo_10g`, with the `kangaroo_active_ip` cutover knob). bilby fstab
-  Pouch/Jump → .25.
-- **Pouch share + NFS export recreated;** bilby `/mnt/pouch` remounted cleanly
-  on .25 (`daemon-reload` fixed a stale `.232` mount unit). Sentinel + perms
-  verified.
-- **Plex restored:** BIF thumbnails relocated **Pouch → Jump**
-  (`/mnt/jump/plex-video-thumbnails`); healthcheck updated to validate the Jump
-  mount. Committed `1ec7b5a`, pushed, verified healthy, identity
-  (`machineIdentifier`) preserved.
-- **`ssh.pod.haus`** browser-rendered SSH built during the incident (lets
-  `op-unlock` be run from the iPad to unblock long unattended tasks).
+The QNAP boot DOM now runs `kangaroo/host-autorun/autorun.sh`. It starts
+Container Station's user Docker engine and reconciles exited or detached
+containers after boot. The installer and a boot-like minimal environment were
+tested, but the recorded recovery never performed a real QNAP reboot because
+that would interrupt Pouch and Jump for bilby.
 
----
+Schedule a controlled reboot, confirm both NFS automounts recover, then verify
+Periphery, Syncthing, Backrest, Alloy, and Autoheal return without manual work.
 
-## Open issues
+## Disk capacity and replacement
 
-### 1. Kids/TV restore — ✅ done; 28 episodes unrecoverable (USB bad sectors)
-**8465 / 8493** files restored to Pouch (2026-06-13). The 28 missing are
-`Unrecovered read error` bad sectors on the **USB rescue drive** (sda
-Medium Error in dmesg); a retry pass recovered none. All are
-re-acquirable single episodes — user decision: re-download via flood vs
-drop. USB drive is failing media; it holds nothing unique beyond the
-unreadable 28 — **retire it**.
+Pouch currently uses four old disks in RAID5 with roughly 21.8 TB usable. Bay
+1 is empty after the failed disk was removed.
 
-Unrecoverable episodes (28 files; double-episodes count as one file):
-100% Wolf S01E10/E12/E25 · Ada Twist S01E02 · ALVINNN S01E09, S02E03 ·
-Avatar TLA S02E16, S03E16 · Big Hero 6 S01E01 · Blaze S05E08/E15 ·
-Bluey S01E49 · Dinosaur Train S01E15E16, S01E35E36, S02E03E04,
-S03E13E14 · DuckTales (1987) S01E36 · Get Rolling with Otis S02E03 ·
-Hilda S01E12 · Kim Possible S02E05 · Maya and the Three S01E02 ·
-MLP FiM S02E17 (YayPonies file), S09E14 · Phineas and Ferb S04E18 ·
-Spidey S04E12 · Star Wars Young Jedi Adventures S01E05 · Teachers Pet
-S01E08 · Stinky & Dirty S02E25
+- Add a fifth disk when capacity requires it.
+- Plan rotation of the surviving drives. At the last audit they had roughly
+  37,000 to 61,000 power-on hours.
+- Keep the monthly scrub on the first Sunday with Service First priority.
 
-### 1b. bilby NFS-bind containers stopped during the incident — ✅ restarted
-flood (stopped at outage start 2026-06-05), paperless + backrest (stopped
-during the .25 cutover window 2026-06-10) were `docker start`ed 2026-06-12
-~21:15 AWST after verifying mounts + sentinels. **All three healthy.**
-- ✅ **backrest** — nightly bilby backups resume (missed 2026-06-10 → -12;
-  heartbeat greens after the next nightly run).
-- ✅ **paperless** — fully recovered, media on Jump intact. Stale
-  `.podhaus-jump-mounted` healthcheck *comment* fixed in `590dbd5`.
-- ✅ **flood** — restarted; rtorrent loaded its 269 surviving session entries
-  against wiped `/data`. **User is handling the missing-torrent fallout in
-  the UI.** "RAR Extraction" heartbeat stays red until the pipeline next
-  runs.
+## UPS tuning
 
-### 2. kangaroo container-plane rebuild — ✅ COMPLETE (2026-06-12 ~22:10)
-All five kangaroo containers up + healthy on CACHEDEV2 paths: Periphery,
-syncthing (fresh identity), backrest (+init), alloy, autoheal. Gatus: every
-service endpoint green; only the 3 heartbeats remain red until their next
-scheduled runs (backrest nightlies 04:00/04:10, RAR extraction on next
-pipeline run). Komodo CRITICAL alert auto-resolved. Deploy-time fixes below
-are committed locally — needs push.
-Progress 2026-06-12 (evening):
-- ✅ **Container Station reinstalled on CACHEDEV2** via `qpkg_cli` over SSH
-  (fully headless — engine started via CS's own supervisor; docker
-  27.1.2-qnap8, data-root on CACHEDEV2). The QTS default volume is already
-  CACHEDEV2, so placement was native.
-- ✅ **Periphery bootstrapped** (`kangaroo_bootstrap`, new CACHEDEV2 paths,
-  original identity — see #4). kangaroo **state=Ok** in Komodo.
-- ✅ **Placement-fix commit `590dbd5`** staged locally: full CACHEDEV1 →
-  CACHEDEV2 bind sweep (syncthing/periphery/backup/logging), backrest
-  source widened to capture PKI keys (repos/ clone excluded), bootstrap
-  paths, gatus probe → .25, storage placement rule + stale-doc refresh.
-- ✅ **Pushed + deployed** (2026-06-12 → 13). All five kangaroo
-  containers up + healthy on CACHEDEV2; fresh syncthing device ID handed
-  off (#5). No restic restore needed: Periphery config bootstrap-
-  regenerated, syncthing identity deliberately fresh.
-- ✅ Boot-survival fixed 2026-06-13. The old `@reboot` crontab line was
-  inert (present, not stripped) because kangaroo's cron is **BusyBox
-  crond v1.24.1**, which doesn't implement the `@reboot` nickname — so
-  boot-recovery never ran. Root concern: CS leaves its **user** Docker
-  engine at `autostart=false` and the qpkg boot script starts only
-  system-docker + ctstation, so the `restart: unless-stopped` stacks
-  depend on ctstation restoring engine state. Replaced with the native
-  QNAP boot hook **`kangaroo/host-autorun/autorun.sh`** (mirrors
-  `bilby/host-systemd/`): installed on the boot DOM (`sdg6`, survives
-  firmware + CS upgrades) via `install.sh`, gated by `Misc Autorun=TRUE`.
-  Its one job is `supervisord ctl start docker`; Docker's restart
-  policies bring all five stacks back. `kangaroo_bootstrap` now installs
-  it (replacing the dead crontab step). Validated under a minimal
-  boot-like PATH (`env -i`) — no-op when the engine is already up, no
-  container bounce. The only un-coverable gap is an actual reboot test,
-  deferred (would drop Pouch/Jump to bilby).
-- ✅ Fixed during deploy (rebuild-only gaps, all closed in working tree):
-  - **Periphery v2.2.0 regression:** with `core_addresses` set,
-    `server_enabled` now defaults to false → no :8120 listener → the
-    healthcheck red-looped. Fixed via `PERIPHERY_SERVER_ENABLED: "true"`
-    in BOTH `kangaroo/periphery/` and `kookaburra/periphery/` composes
-    (kookaburra hits the same thing on its next image pull).
-  - **dockernet missing on fresh Container Station** — backup/logging
-    deploys failed (`network dockernet … could not be found`). Created
-    manually + `kangaroo_bootstrap` now ensures it (mirrors
-    kookaburra_bootstrap).
-  - **syncthing-config ownership** — docker auto-created the fresh bind
-    dir as root; syncthing (1000:100) crash-looped on cert write. Fixed
-    via the runbook chown.
-  - Linked-repo first-deploy **concurrent-clone race**: three stacks
-    cloning `/etc/komodo/repos/podhaus` simultaneously; two lost. Retry
-    after the clone completes succeeds — known one-time-per-rebuild
-    quirk, no fix needed.
+The APC UPS is armed through NUT and `upsmon`. Review the minutes-based shutdown
+thresholds during the controlled reboot window and confirm the host shuts down
+with enough battery margin for the array to stop cleanly.
 
-### 3. Backup-placement architecture fix — ✅ DONE (committed + deployed)
-All of a–d landed in commit `590dbd5` + the redeploy; container state now
-lives natively on CACHEDEV2 and is captured by backrest from there.
+## Plex cleanup
 
-**Root cause:** kangaroo container state lived on **CACHEDEV1 (Pouch,
-unbacked)** because Container Station defaulted there — it was only rescued by
-backrest's cross-volume copy to the restic repo on **Jump (CACHEDEV2)** +
-OneDrive. The intended model was "state lives on Jump, backed up." It didn't;
-it lived on Pouch and was *copied* to Jump.
+Plex trash still contains media lost with the old Pouch array. Emptying it is
+safe for online-agent libraries because watch state is keyed by account and
+GUID outside the deleted media rows. Sports and Kids Video use local-hash GUIDs,
+so their watch state won't reconnect if the files are later re-added.
 
-**Recoverable from restic** (`/share/CACHEDEV2_DATA/Jump/backups-kangaroo` →
-`onedrive:Backups/podhaus-kangaroo-restic`): Syncthing identity + folder config,
-Periphery `etc-komodo` config.
+This is user-driven and has no urgency. Take a current Plex database backup
+before emptying trash.
 
-**Fix (at rebuild):**
-- a. Reinstall Container Station targeting **CACHEDEV2 / Jump** so state lives
-  natively on the backed-up volume.
-- b. Sweep all kangaroo compose binds `CACHEDEV1_DATA/Container/…` →
-  `CACHEDEV2_DATA/…/Container/…`: `syncthing/`, `kangaroo/periphery/`,
-  `backup/kangaroo/`, `logging/kangaroo/`.
-- c. Widen backrest's source mount `komodo-periphery/etc-komodo` → parent
-  `komodo-periphery/` so the keys are captured.
-- d. Fix the misleading "Backed up by kangaroo/backrest" comment in
-  `syncthing/compose.yaml`; codify the rule in `docs/storage.html`
-  (*kangaroo container state → CACHEDEV2/Jump; Pouch = unbacked bulk media +
-  Syncthing's synced data only*).
+## Recovery staging
 
-### 4. kangaroo Periphery identity — ✅ no regeneration needed
-kangaroo's copy of the privkey was wiped, but the **original
-`kangaroo-periphery.key` is still on bilby** at `/opt/komodo/keys/` (verified
-2026-06-12) — `kangaroo_bootstrap` SCPs it from there on every run. Core
-already trusts the matching pubkey. Re-running bootstrap restores Periphery
-identity as-is; no keygen, no `compose.env` change, no Core restart.
+`/share/CACHEDEV2_DATA/recovered/` contains Gmail exports and duplicate photo
+and Sky recovery copies. Choose the final home for anything still unique, then
+remove duplicate staging data.
 
-### 5. Syncthing rebuild — pinelake cascade-safety + recovery
-Syncthing replicated a **whitelisted subset of movie/TV subdirs** (via a
-`!keep … **`-ignore-rest `.stignore`) to **pinelake** (father's off-site copy).
-That subset is **intact on pinelake = a recovery source**. The `.stignore`
-whitelist (lived on Pouch) is lost, but its contents == what pinelake holds —
-regenerate it from a pinelake listing during re-pair. **Decision (2026-06-12):
-`.stignore` stays out of the repo** — it describes exactly the data it lives
-beside, so losing it alongside that data costs nothing; no config-as-code
-carve-in needed.
+The old USB rescue drive had unreadable sectors and should be retired once its
+contents are confirmed non-unique.
 
-**Status 2026-06-13:** syncthing redeployed with a **fresh identity**:
-device ID `HDF5HFT-TIFGFRV-Z6XJIRU-EJS64HO-54EERPP-PFCZXKH-EGOILDV-P3NXYAR`.
-GUI open-access warning silenced the right way (`gui.insecureAdminAccess`
-— not a password; see `docs/runbooks/syncthing.html`). **User is pairing**
-the device on pinelake + other devices, folder path `/var/syncthing/Pouch`,
-folder **Receive Only**. Remaining before any flip to Send & Receive:
-regenerate `.stignore` from a pinelake listing, confirm Pouch fully
-restored.
+## Completion
 
-**⚠ Cascade risk at rebuild:** do **not** restore the old Syncthing identity +
-folder config and let it reconnect to pinelake against an empty/partial Pouch —
-that propagates deletes to pinelake. Safe path:
-- Fresh device ID (won't auto-connect — user re-pairs manually on pinelake +
-  other devices).
-- kangaroo folder = **Receive Only** so data flows pinelake → kangaroo (pulls
-  the titles back), never the empty side outward.
-- ✅ **pinelake is already Send Only** (confirmed 2026-06-12; user has access)
-  — cascade risk fully defused, no coordination needed.
-- Switch to Send & Receive only after Pouch is fully restored + verified.
-
-pinelake currently sees kangaroo as **offline** (disconnection ≠ deletion); its
-copy is untouched and safe.
-
-### 6. Array redundancy / capacity / aging fleet
-Current: **4-disk RAID5 `[4/4]`**, ~21.8 TB usable (was 5-disk ~29 TB).
-bay 1 / sdg pulled (dead recycler).
-- Bay-1 replacement → 5-disk expansion: **deferred until the array fills up**
-  (decision 2026-06-12). Array is redundant as-is.
-- **All drives are old** (4.3–6.9 yr, 37k–61k hrs) — rotation/replacement
-  planning warranted.
-
-### 7. Scrub + UPS finalization
-- ✅ **Scrub:** monthly, first Sunday 00:00; priority flipped to **Service
-  First** (done 2026-06-12).
-- **UPS:** armed; the minutes-based shutdown settings weren't ideal — possible
-  minor tuning.
-
-### 8. Plex trash cleanup (user-driven, later)
-Goal: empty Plex trash to clear the lost (missing) media **while preserving
-watch state**. Mechanics verified from the DB:
-- Watch state lives in `metadata_item_settings`, keyed by `(account_id, guid)`,
-  **not** FK'd to items and with **no delete trigger** → it survives trash and
-  **reconnects on re-add by GUID**.
-- **PRESERVED** for online-agent libraries (`tv.plex.agents.*` / `plex://`
-  GUIDs = every library *except* Sports + Kids Video).
-- **LOST** for the two `com.plexapp.agents.none` libraries (Sports, Kids Video —
-  volatile local-hash GUIDs).
-- Auto-trash is **OFF**, so missing items just grey out (no deletion) until you
-  manually empty trash. **No urgency.** DB (14,687 watched items) is on bilby
-  local NVMe + Plex nightly backups.
-
-### 9. Recovery-staging cleanup
-- `/share/CACHEDEV2_DATA/recovered/` on Jump holds gmail (~52 GB), photos, sky
-  copies — rescue staging. Photos + sky are also on OneDrive. Decide a final
-  home / clean up the duplicates.
-- USB drive `/mnt/usb4t` = Kids/TV source; keep until the restore is verified.
-
-### 10. Monitoring — ✅ ALL GREEN (2026-06-13 ~06:20)
-Every gatus endpoint green, zero reds. Final fix: the `rar-backlog`
-ofelia job had been silently dead since 2026-05-30 — ofelia restarted
-during that outage's recovery while flood was still down, so the
-`job-exec` never re-registered (the exact label-re-read trap Stage 3
-exists for), and yesterday's push never reached Stage 3 because Stage 2
-aborted on the kangaroo deploy failures. Restarted ofelia (flood now up,
-job re-registered) + ran `rar-backlog.sh` once to push the heartbeat.
-
-Red inventory as found 2026-06-12, for the postmortem:
-11 of 25 gatus endpoints red; every one maps to a known cause above, no
-surprises hiding:
-- **Paperless, Flood (Torrent), Backrest (bilby)** + heartbeats **Backrest
-  Nightly, RAR Extraction** → the stopped bilby containers (#1b).
-- **Kangaroo Periphery / Backrest (kangaroo) / Syncthing (via Komodo),
-  Kangaroo Log Ingest (staleness)** + heartbeat **Backrest Kangaroo
-  Nightly** → kangaroo stacks down (#2).
-- **Komodo Alerts** → exactly 1 unresolved CRITICAL alert (kangaroo
-  Periphery unreachable); auto-clears with #2.
-- The "Kangaroo (NAS)" probe targets **.232** (the spare) and is green —
-  update to .25 so it watches the active link (config edit + deploy). Minor.
-
----
-
-## Reference (for a fresh session)
-
-- **op-unlock SSH agent:** socket `/run/user/1000/op-unlock/agent.sock`,
-  ~16h TTL (expires often — the recurring blocker; renew via `op-unlock`,
-  reachable from iPad via `ssh.pod.haus`). Prefix git/ssh with
-  `SSH_AUTH_SOCK=<sock> GIT_SSH_COMMAND="ssh -o IdentityAgent=<sock>"`.
-- **kangaroo:** `admin@10.0.0.25` (10G active), `10.0.0.232` (1G spare).
-  QNAP quirks: `docker` not in admin PATH; no `nohup`/`timeout` (use `setsid`
-  + full PATH `/usr/bin:/bin:/sbin:/usr/sbin`).
-- **Arrays:** `md1` (Pouch) = RAID5 `[4/4]` sdd/sdc/sdf/sde (roles 0–3), static
-  ext4, `/share/CACHEDEV1_DATA/Pouch`. `md2` (Jump) = RAID1,
-  `/share/CACHEDEV2_DATA`. **Never touch** QTS system arrays
-  (md9/md13/md256/md322) or md2.
-- **restic repo:** `/share/CACHEDEV2_DATA/Jump/backups-kangaroo` →
-  `onedrive:Backups/podhaus-kangaroo-restic`. Plans: `syncthing`,
-  `komodo-periphery`, `backrest-state`.
-- **bilby mounts:** `/mnt/pouch` (`10.0.0.25:/Pouch`), `/mnt/jump`
-  (`10.0.0.25:/Jump`) — NFSv4 soft automount; sentinel `.podhaus-share-mounted`
-  at each bind root.
-- **Plex:** thumbnails `/mnt/jump/plex-video-thumbnails` (empty — BIFs
-  regenerate on the scheduled task), media `/mnt/pouch`, DB on bilby
-  `/var/lib/plex-local`.
-
-**Related:** `docs/postmortems/2026-05-30-power-outage-nfs-recovery.md` (the
-bilby-side NFS automount fix from the same outage window),
-`docs/postmortems/2026-05-23-pouch-jump-mount-failure.md`.
+After these items are resolved, record any lasting operating rules in Storage,
+Backup and recovery, Syncthing, or Hosts. Then delete this plan.

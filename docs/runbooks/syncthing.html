@@ -21,18 +21,16 @@
 
       <h1>Syncthing</h1>
       <p class="lead text-lg text-text-muted">
-        Runs on kangaroo (post-Phase-16 relocation). Host network for LAN device discovery via
+        Runs on kangaroo. Host network provides LAN device discovery via
         UDP/21027 multicast. UI exposed at <code>sync.pod.haus</code> through the bilby
-        Cloudflare Tunnel, LAN-resolved to <code>10.0.0.232:8384</code>. GUI auth disabled —
+        Cloudflare Tunnel, currently routed to <code>10.0.0.25:8384</code>. GUI auth is disabled;
         Cloudflare Access is the gate externally.
       </p>
 
       <h2 id="why-kangaroo">Why it lives on kangaroo</h2>
       <p>
         Syncthing's main shared folder is Pouch (the QNAP HDD array). Running Syncthing on
-        kangaroo means the file scan + hash + sync stays on local storage — no NFS roundtrip.
-        Pre-Phase-16 it ran on bilby and the scan had to cross NFS; relocation removed that
-        whole class of fragility.
+        kangaroo keeps file scanning, hashing, and sync on local storage instead of NFS.
       </p>
 
       <h2 id="device-id">Kangaroo's device ID</h2>
@@ -127,14 +125,14 @@
 
       <h2 id="ingress">Ingress</h2>
       <p>
-        Cloudflare Tunnel rule:
+        Terraform-managed Cloudflare Tunnel rule:
       </p>
-      <pre><code>- hostname: sync.pod.haus
-  service: http://10.0.0.232:8384</code></pre>
+      <pre><code>sync.pod.haus → http://${local.kangaroo_active_ip}:8384
+local.kangaroo_active_ip = 10.0.0.25</code></pre>
       <p>
-        bilby's cloudflared routes over the LAN to kangaroo's published port. Pre-Phase-16
-        this pointed at <code>172.18.0.1:8384</code> (bilby host gateway, where Syncthing used
-        to run); the flip happened atomically when the new stack came up healthy.
+        bilby's cloudflared routes over the LAN to kangaroo's published port. The active
+        NIC is a single Terraform knob in <code>terraform/services_pod_haus.tf</code>;
+        <code>10.0.0.232</code> remains the spare 1GbE path.
       </p>
 
       <h2 id="see-also">See also</h2>
@@ -142,8 +140,8 @@
         <li><a href="/backup-and-recovery.html#kangaroo-plans">Backup &amp; recovery →
           kangaroo plans</a> — the <code>syncthing</code> plan captures the config + identity
           dir nightly.</li>
-        <li><a href="/plans/index.html">Plans</a> — Phase 16 migration plan covers the full
-          relocation runbook including the new device ID.</li>
+        <li><a href="/plans/kangaroo-pouch-recovery.md">Kangaroo recovery plan</a>: the
+          remaining controlled Syncthing flip and reboot checks.</li>
       </ul>
 
     </main>

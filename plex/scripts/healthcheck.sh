@@ -2,8 +2,8 @@
 # Runs inside the plex container every 60s.
 # Fails if Plex API is down or critical remote mounts are unreadable.
 #
-# /config itself is a local bind mount to /var/lib/plex-local on the host
-# (post Phase 6 pivot — see alligator-bilby-migration.md). The mounts that
+# /config itself is a local bind mount to /var/lib/plex-local on the host.
+# The mounts that
 # can fail independently of local disk are the media files (Pouch NFS) and
 # the BIF scrubbing thumbnails (Jump NFS — a separate export/volume). Check
 # both.

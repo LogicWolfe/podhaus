@@ -54,10 +54,6 @@ Risks:
 `flood/pinelake/compose.yaml`:
 
 ```yaml
-include:
-  - ../compose.shared.yaml      # if bilby/flood is already in the multi-host pattern,
-                                # otherwise this stack stands alone (current state)
-
 services:
   flood:
     container_name: flood
@@ -67,7 +63,7 @@ services:
     networks:
       - dockernet
     ports:
-      - "3000:3000"             # only published for LAN; tunnel reaches via 172.18.0.1
+      - "127.0.0.1:3000:3000"   # native cloudflared reaches Mac loopback
     environment:
       HOME: /config
       FLOOD_OPTION_HOST: 0.0.0.0
@@ -82,6 +78,7 @@ services:
       - /Volumes/TerraMaster/Torrents:/data
     labels:
       autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/auth/verify || exit 1"]
       interval: 60s
@@ -97,19 +94,27 @@ networks:
 `flood/pinelake/stack.toml`:
 
 ```toml
-[stack]
-server = "pinelake"
-linked_repo = "podhaus"
-run_directory = "/etc/komodo/repos/podhaus/flood/pinelake"
+[[stack]]
+name = "pinelake-flood"
+tags = ["pinelake", "podhaus"]
 
-[stack.environment]
-PINELAKE_BAXTER_VM_GID = "<captured value>"   # plain non-secret, fine in repo OR seed via komodo-start
+[stack.config]
+server = "pinelake"
+linked_repo = "podhaus-pinelake"
+run_directory = "flood/pinelake"
+
+environment = """
+PINELAKE_BAXTER_VM_GID=[[PINELAKE_BAXTER_VM_GID]]
+"""
+
+[[variable]]
+name = "PINELAKE_BAXTER_VM_GID"
+value = "<captured value>"
+description = "Group ID that owns Pinelake's torrent files inside Colima"
 ```
 
-`PINELAKE_BAXTER_VM_GID` can also be seeded by `komodo-start` (matching
-how `TZ`, `MEDIA_DIR`, `PODHAUS_REPO` are handled) if we'd rather not
-have it in the repo. Either is fine — it's not a secret, just a host
-quirk.
+`PINELAKE_BAXTER_VM_GID` is host-specific but non-secret, so it stays
+with the stack as a TOML variable. Don't add it to `komodo-start`.
 
 ## Healthcheck
 
@@ -128,8 +133,8 @@ against the static page (`/`).
    docker rm rtorrent-flood`. The container's
    `/Users/baxter/.config/torrent/.local/share/rtorrent/.session/` is
    the live session — leaving it untouched is essential.
-3. **Deploy via Komodo**: register `flood/pinelake` stack via
-   `./komodo-sync` (smart-deploy will see the new hash and bring it up).
+3. **Deploy via Komodo**: register `flood/pinelake` through
+   `./komodo-sync`. Stage 2 treats a brand-new stack as a full deploy.
 4. **Verify**: Flood UI loads at `torrent.pinelake.haus`, active
    torrents show as resumed (not re-hashed), `nc -zv 127.0.0.1 3000`
    from host. Existing downloads in `/data` accessible.
@@ -144,10 +149,10 @@ against the static page (`/`).
 ## Tunnel ingress side
 
 The on-host `/etc/cloudflared/config.yml` currently maps
-`torrent.pinelake.haus → http://127.0.0.1:3000`. Once cloudflared is
-in dockernet (or just rules are CF-managed and target the same port),
-the new backend is `http://flood:3000`. Don't change the ingress until
-the new container is up, healthy, and serving on dockernet.
+`torrent.pinelake.haus → http://127.0.0.1:3000`. Keep that backend after the
+config moves into Terraform: cloudflared remains a native LaunchDaemon and
+reaches the container through Colima's loopback-only published port. Other
+containers use `http://flood:3000` over dockernet.
 
 Detailed tunnel migration in
 [Cloudflare tunnel + Terraform](cloudflare-tunnel.md).
@@ -184,6 +189,3 @@ Detail in [Platform stacks](platform-stacks.md).
   bilby's existing flood (current bilby flood is single-host) — depends
   on whether the configs are identical enough. Recommendation: keep
   separate single-host until/unless we see real duplication.
-- Whether to drop the `ports: - "3000:3000"` publish (LAN access goes
-  away; tunnel still works via `172.18.0.1:3000` then `flood:3000`).
-  Tighter is better; deferred to a polish pass.

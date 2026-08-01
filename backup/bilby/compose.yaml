@@ -103,7 +103,7 @@ services:
       # (ofelia job on clickstack-mongo writes /var/lib/clickstack/
       # mongo-dumps). Quiescent gzip archives — restic-safe, unlike a
       # live mongo data dir. ClickHouse telemetry is deliberately NOT
-      # backed up (regenerable; see clickstack-migration/backup-and-dr).
+      # backed up because telemetry is regenerable; see docs/monitoring.html.
       - /var/lib/clickstack/mongo-dumps:/userdata/clickstack/mongo:ro
       #
       # Docker named volumes from stacks that still use them (NAS squash
@@ -131,7 +131,7 @@ services:
       - music-assistant_music-assistant-data:/userdata/music-assistant:ro
       # Pocket ID: SQLite db (pocket-id.db) + uploads under /app/data.
       # The IdP's ENCRYPTION_KEY lives in 1Password, not here — a restore
-      # needs it (see docs/plans/pocket-id.md).
+      # needs it (see docs/runbooks/pocket-id.md).
       - pocket-id_pocket-id-data:/userdata/pocket-id:ro
 
     labels:

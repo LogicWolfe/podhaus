@@ -45,12 +45,10 @@ replacement for it.
 | Host | Class | Secret path | Rests on |
 |---|---|---|---|
 | bilby | Asahi (Apple Silicon), YubiKey PIV | 1P Homelab vault, direct | hardware + FDE *(gap)* |
-| voltaire | Linux, TPM | 1P Homelab vault, direct | hardware + FDE *(gap)* |
-| kookaburra | Komodo periphery | Komodo variable interpolation | FDE *(gap)* |
+| kookaburra | Disposable cloud relay | Komodo variable interpolation | provider disk controls + cattle rebuild |
 | kangaroo | QNAP QTS appliance | Komodo variable interpolation | network auth only |
 
-kookaburra and kangaroo need no per-host credential work: as Komodo
-periphery hosts they are already on the
+kookaburra and kangaroo already receive service secrets through the
 `1P Homelab → komodo-op → Komodo Variables → [[VARIABLE]]` path
 documented in [`docs/secrets.html`](../secrets.html). "Source secrets
 from bilby" is already true for both.
@@ -101,21 +99,21 @@ Komodo writes a rendered `.env` — resolved secrets plus the stamped
 So the Komodo path distributes secrets from 1Password without a bespoke
 channel, but it **does not keep them off disk**.
 
-For kookaburra this is acceptable once FDE lands. For kangaroo it is the
-only exposure that matters, since the appliance cannot be encrypted.
+For kookaburra, the physical-theft threat model doesn't map cleanly to a
+DigitalOcean VM. Keep it disposable and avoid durable application state. For
+kangaroo, rendered environment files are the main at-rest exposure because the
+appliance can't use guest-managed full-disk encryption.
 
 Candidate fix: a **tmpfs `run_directory`** on kangaroo, so resolved
-secrets exist only in RAM. Komodo redeploys and rewrites `.env` on boot,
-and there is already an `@reboot` crontab line installed by
-`kangaroo_bootstrap` for Container Station survival. **Unverified** —
-needs checking against Komodo's deploy assumptions and against QTS
-tmpfs sizing before being treated as viable.
+secrets exist only in RAM. The QNAP boot-DOM autorun hook starts Container
+Station's Docker engine, but it doesn't currently repopulate Komodo run
+directories. **Unverified:** check Komodo's deploy assumptions, QTS tmpfs
+sizing, and the cold-boot ordering before treating this as viable.
 
-Note also that kangaroo's secrets are only as protected as whatever
-authenticates it to Komodo. If that credential lands on its disk, the
-problem has moved rather than been solved. Connect tokens are scopeable
-and revocable, so the mitigation is tight vault scoping plus rotation
-rather than secrecy of the client credential.
+Kangaroo's Periphery private key also lives on disk. Moving rendered stack
+environment into tmpfs wouldn't protect that key. The host could still
+authenticate to Core after a theft, so the design also needs a clear public-key
+revocation and replacement runbook.
 
 ### Service account token on disk
 
@@ -133,8 +131,8 @@ The token grants exactly the **Homelab** vault and nothing else
 (verified: the service account sees one vault). That scoping is already
 correct and is what makes the blast radius tolerable.
 
-Hardware-backed storage for it — a YubiKey PIV data object on bilby, a
-TPM NV index on voltaire — is feasible: the token is 853 bytes, `ykman`
+Hardware-backed storage as a YubiKey PIV data object on bilby is feasible:
+the token is 853 bytes, `ykman`
 5.9.0 supports arbitrary PIV object import/export and is already
 installed, and only PIV slot 9A is occupied (the machine-ssh key), so the
 retired slots are free. Whether a chosen object is PIN-gated on read
@@ -161,7 +159,5 @@ secret" mitigation relied on for kangaroo above.
 
 - Full-disk or partial encryption, and which unlock method.
 - Does a tmpfs `run_directory` work on kangaroo under Komodo and QTS?
-- What hardware does kookaburra actually have? Not checked — it may not
-  matter, since the Komodo path means it needs no per-host credential.
 - Is the rotation-doesn't-redeploy behaviour worth revisiting given it
   undercuts rotation as a mitigation?

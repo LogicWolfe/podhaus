@@ -1,6 +1,6 @@
 [[stack]]
 name = "mumble"
-description = "Mumble (Murmur) voice server at voice.pod.haus — direct WAN forward, see docs/plans/mumble-voice-pod-haus.md"
+description = "Mumble (Murmur) voice server at voice.pod.haus; direct WAN forward, see docs/runbooks/mumble.md"
 tags = ["podhaus"]
 
 [stack.config]

@@ -1,8 +1,6 @@
 # Shared service definition for autoheal (willfarrell/autoheal). Each
-# host's compose.yaml in autoheal/<host>/ extends this via `include:`.
-# The only thing that varies between hosts is bilby's SELinux label:disable
-# (Fedora Asahi enforces; QTS doesn't), so kangaroo's overlay is just an
-# include with no body.
+# host stack combines its overlay with this file through `file_paths`.
+# The host overlays contain only genuinely host-specific settings.
 
 services:
   autoheal:

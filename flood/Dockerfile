@@ -24,7 +24,7 @@ FROM jesec/rtorrent-flood:latest
 # libarchive-tools → bsdtar for the RAR extract hook.
 # python3 → flood-publish.py, which queries rtorrent over the SCGI socket
 #   for per-file completion and hardlinks completed media into the library
-#   (see flood/scripts/flood-publish.py + docs/plans/flood-atomic-publish.md).
+#   (see flood/scripts/flood-publish.py + docs/runbooks/flood.html).
 # plexapi (via pip) → plex-label-sync.py, which mirrors Flood tags onto the
 #   matching Plex show/movie as Labels. --break-system-packages: Alpine's
 #   python3 is PEP-668 externally-managed and there's no py3-plexapi apk.

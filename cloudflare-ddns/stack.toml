@@ -1,6 +1,6 @@
 [[stack]]
 name = "cloudflare-ddns"
-description = "Keeps voice.pod.haus A record on the current WAN IP — see docs/plans/mumble-voice-pod-haus.md"
+description = "Keeps the voice.pod.haus A record on the current WAN IP; see docs/runbooks/mumble.md"
 tags = ["podhaus"]
 
 [stack.config]

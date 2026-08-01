@@ -5,7 +5,7 @@
 # each email as one document — body + attachments bundled, a copy-pasteable
 # text version prepended, PDF/A out. It still uses the existing Gotenberg +
 # Tika sidecars for the HTML→PDF step. This is what powers "full-email mode
-# for everything" (see docs/plans/.../paperless-email-ingest.md).
+# for everything" (see docs/runbooks/paperless.html).
 #
 # Installed into the image's system Python: the upstream image installs its
 # own deps with `uv pip install --system` (no venv), and runs as root, so

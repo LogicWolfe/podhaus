@@ -21,9 +21,9 @@
 
       <h1>Backup &amp; recovery</h1>
       <p class="lead text-lg text-text-muted">
-        Backrest manages restic snapshots of operational state from both hosts. Each host has
-        its own restic repository on Jump; bilby's nightly hook also mirrors both repos off-site
-        to OneDrive via rclone.
+        Backrest manages restic snapshots of operational state from bilby and kangaroo. Each
+        stateful host has its own repository on Jump and mirrors that repository to OneDrive
+        through its own rclone hook and OAuth token chain.
       </p>
 
       <h2 id="topology">Backup topology</h2>
@@ -35,21 +35,18 @@ bilby Backrest             kangaroo Backrest
     ↓                          ↓
 restic repo                restic repo
 /mnt/jump/backups/         /share/CACHEDEV2_DATA/Jump/backups-kangaroo/
-                           (visible to bilby over NFS as /mnt/jump/backups-kangaroo)
     │                          │
-    └──────────┬───────────────┘
-               ↓
-       bilby Backrest's
-       rclone hook (CONDITION_SNAPSHOT_SUCCESS
-       on the last plan of the night)
-               ↓
-       OneDrive
-       (Backups/podhaus-restic/  + Backups/podhaus-kangaroo-restic/)</code></pre>
+    ↓                          ↓
+bilby rclone hook          kangaroo rclone hook
+    │                          │
+    ↓                          ↓
+OneDrive                   OneDrive
+Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
       <p>
         Two restic clients on one repo is supported (per-operation locking) but kangaroo gets
         its own repo to avoid lock coordination across the LAN, and to keep its plan schedule
-        independent of bilby's. The off-site mirror is done from bilby's Backrest because that's
-        where the rclone config (multi-line OAuth blob) already lives.
+        independent of bilby's. Each Backrest instance owns its own rclone config and refresh
+        token so concurrent uploads cannot invalidate one another.
       </p>
 
       <h2 id="bilby-plans">Bilby plans</h2>
@@ -95,7 +92,7 @@ restic repo                restic repo
       <p>
         The <code>backrest-state</code> plan runs last and has a
         <code>CONDITION_SNAPSHOT_SUCCESS</code> hook that fires the nightly rclone sync to
-        OneDrive (covering both bilby's repo and kangaroo's via the read-only NFS view), and a
+        OneDrive for bilby's repository, and a
         success ping to the Gatus heartbeat.
       </p>
 
@@ -110,9 +107,9 @@ restic repo                restic repo
         </tbody>
       </table>
       <p>
-        Done by 04:20 — well before bilby's <code>backrest-state</code> hook fires the rclone
-        sync at ~05:20. Kangaroo's restic repo lives on the SSD-backed Jump volume directly, so
-        no NFS roundtrip from inside the container.
+        The <code>backrest-state</code> success hook then mirrors Kangaroo's repository to
+        OneDrive and reports its Gatus heartbeat. The repository lives on the SSD-backed Jump
+        volume directly, so there is no NFS roundtrip from inside the container.
       </p>
 
       <h2 id="sky-backups">Sky backups on Pouch</h2>
@@ -173,21 +170,20 @@ restic repo                restic repo
 
       <h2 id="off-site">Off-site sync</h2>
       <p>
-        rclone OneDrive sync runs out of bilby's Backrest container, triggered by the last
-        plan of the night via <code>CONDITION_SNAPSHOT_SUCCESS</code>. Two upload targets:
+        Each host's <code>backrest-state</code> plan triggers its own rclone sync after a
+        successful snapshot. The upload targets are:
       </p>
       <ul>
         <li><code>onedrive:Backups/podhaus-restic/</code> — bilby's repo.</li>
-        <li><code>onedrive:Backups/podhaus-kangaroo-restic/</code> — kangaroo's repo (read over
-          NFS).</li>
+        <li><code>onedrive:Backups/podhaus-kangaroo-restic/</code>: kangaroo's repo.</li>
       </ul>
       <p>
-        The rclone config is a multi-line OAuth blob stored as a Secure Note in 1P
-        (<code>rclone-onedrive-token</code> / <code>notesPlain</code>) — multi-line values
-        don't round-trip through Komodo env files cleanly, so an init container in the backup
-        stack renders <code>rclone.conf</code> on first boot from the synced variable. Token
-        rotation: regenerate via <code>rclone config</code> on a laptop, paste the new
-        <code>[onedrive]</code> block into the 1P Secure Note, redeploy.
+        Bilby and kangaroo use separate OAuth snapshots in 1Password. The init container
+        decodes the host's snapshot and renders <code>rclone.conf</code> only when its named
+        volume is empty. After that, rclone owns the live file and persists refresh-token
+        rotation in place; an ordinary redeploy deliberately preserves it. Back up the live
+        config before resetting that volume, then update the matching 1Password snapshot used
+        for cold bootstrap.
       </p>
 
       <h2 id="restore-drill">Restore drill</h2>

@@ -21,8 +21,8 @@ tags = ["kangaroo"]
 # that this Server expects Periphery→Core direction — the kangaroo
 # Periphery dials Core at ws://10.0.0.119:9120 (its PERIPHERY_CORE_ADDRESSES).
 # Auth is the X25519 keypair handshake (kangaroo-periphery.pub trusted by
-# Core's KOMODO_PERIPHERY_PUBLIC_KEYS list). No inbound :8120 listener on
-# kangaroo.
+# Core's KOMODO_PERIPHERY_PUBLIC_KEYS list). Port 8120 is not published on
+# kangaroo; its internal listener exists only for the local healthcheck.
 address = ""
 enabled = true
 # kangaroo is a NAS — saturating CPU on downloads, Plex transcodes, and RAID
@@ -44,8 +44,9 @@ tags = ["kookaburra", "podhaus"]
 [server.config]
 # Outbound mode (v2 PKI noise handshake). kookaburra Periphery dials Core
 # at ws://bilby-podnet:9120 over tailnet (its PERIPHERY_CORE_ADDRESSES).
-# Auth is the X25519 keypair handshake. No inbound :8120 listener on
-# kookaburra — the public surface there is just :443 (rathole data) +
+# Auth is the X25519 keypair handshake. Port 8120 is not published on
+# kookaburra; its internal listener is healthcheck-only. The public surface is
+# just :443 (rathole data) +
 # :2333 (rathole control); the management plane is tailnet-only.
 address = ""
 enabled = true

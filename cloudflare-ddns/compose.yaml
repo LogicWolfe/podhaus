@@ -1,4 +1,4 @@
-# Cloudflare Dynamic DNS — keeps the voice.pod.haus A record on the
+# Cloudflare Dynamic DNS keeps the voice.pod.haus A record on the
 # current WAN IP. Mumble (the first non-HTTP public ingress since the
 # kookaburra relay took over storage.pod.haus) goes direct via a UDM
 # WAN forward, so its DNS needs to track the home WAN IP. Terraform
@@ -7,7 +7,7 @@
 #
 # Add additional names to DOMAINS here for any future non-HTTP service
 # that lands a UDM forward (still grey-cloud, still pod.haus zone). See
-# docs/plans/mumble-voice-pod-haus.md.
+# docs/runbooks/mumble.md.
 #
 # storage.pod.haus is deliberately NOT here — it points at a static
 # DigitalOcean reserved IP for the kookaburra relay (TF-owned content,

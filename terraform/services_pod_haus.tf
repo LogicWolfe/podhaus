@@ -2,8 +2,8 @@
 # Access-gated service. The module owns DNS CNAME + Access app +
 # default-locked policy chain + tunnel ingress rule.
 #
-# Adding a service: drop a `module "<name>"` block here, `../tf plan`,
-# `../tf apply`. That's it.
+# Adding a service: drop a `module "<name>"` block here, then run stock
+# `terraform plan` and `terraform apply` from this directory.
 #
 # Reference docs:
 #   - Cloudflare provider:    https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs
@@ -192,9 +192,7 @@ module "music" {
   backend  = "http://172.18.0.1:8095"
 }
 
-# logs.pod.haus (VictoriaLogs vmui) and grafana.pod.haus were removed
-# when ClickStack/HyperDX (watch.pod.haus) replaced them — see
-# docs/plans/clickstack-migration/cutover.md Phase D.
+# ClickStack/HyperDX is exposed at watch.pod.haus.
 
 module "watch" {
   source = "./modules/pod_haus_service"
@@ -205,10 +203,7 @@ module "watch" {
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
-  # HyperDX (ClickStack UI) — replaces logs.pod.haus (VL vmui) +
-  # grafana.pod.haus. Those modules stay until decommission (Phase D);
-  # watch goes up alongside them. Default chain: Homelab service-token
-  # bypass → Family allow, same as the rest of the fleet.
+  # Default chain: Homelab service-token bypass, then Family allow.
   hostname = "watch"
   backend  = "http://hyperdx:8080"
 }
@@ -310,7 +305,7 @@ module "unifi" {
 # "fresh keys" verification). A bypass-everyone policy overrides the
 # *.pod.haus wildcard's Family gate — same mechanism as module.unifi.
 # Pocket ID's own passkey login protects the admin UI.
-# See docs/plans/pocket-id.md.
+# See docs/runbooks/pocket-id.md.
 module "pocket_id" {
   source = "./modules/pod_haus_service"
 
@@ -345,8 +340,7 @@ module "stats" {
 }
 
 # storage.pod.haus is NOT a Cloudflare-proxied service. Its S3 API is
-# served via its own Caddy + LE wildcard behind a UniFi port-forward,
+# served via Caddy and its own LE wildcard behind the Kookaburra relay,
 # with grey-cloud (DNS-only) records in dns_storage.tf — Cloudflare's
 # HTTP proxy mangles SigV4 (Accept-Encoding) and its single-level cert
-# can't cover Publii's virtual-host buckets. See
-# docs/plans/minio-public-caddy.md.
+# can't cover Publii's virtual-host buckets. See docs/hosts.html.

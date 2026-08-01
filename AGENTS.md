@@ -75,15 +75,15 @@ devices (blast-radius containment).
 
 ## Architecture
 
-- **Komodo Core** on bilby manages every stack on both hosts via per-host
+- **Komodo Core** on bilby manages stacks on all active deploy hosts via per-host
   Periphery agents.
 - Single-host services live in a top-level directory with `compose.yaml`
   and `stack.toml` (e.g. `paperless/`, `plex/`, `gatus/`).
 - **Multi-host shared services** use `<service>/{compose.shared.yaml,
-  <host>/...}`. Each host's `<service>/<host>/compose.yaml` does
-  `include: [../compose.shared.yaml]` (or Komodo's
-  `file_paths = ["compose.yaml", "../compose.shared.yaml"]`) and overlays
-  host-specific bits. Pattern in use: `backup/`, `autoheal/`, `logging/`.
+  <host>/...}`. Each host stack sets
+  `file_paths = ["compose.yaml", "../compose.shared.yaml"]`; its compose
+  file contains only the host-specific overlay. Pattern in use: `backup/`,
+  `autoheal/`, `logging/`, `tailscale/`.
 - Repo root is bind-mounted into both bilby's Komodo Core (ResourceSync)
   and bilby's Periphery (compose files). Kangaroo's Periphery clones the
   repo itself via Komodo's Linked Repo feature.
@@ -133,15 +133,17 @@ devices (blast-radius containment).
   `network_mode: host`. Cloudflare Tunnel reaches them via the dockernet
   bridge gateway at `172.18.0.1:<port>`.
 - Cloudflare Tunnel routes `*.pod.haus` subdomains directly to backends
-  (no nginx). Ingress rules in `cloudflare-tunnel/conf/config.yml`.
+  (no nginx). Terraform owns the remote ingress configuration in
+  `terraform/tunnel.tf`; single-host `*.pod.haus` services are declared
+  through `terraform/services_pod_haus.tf`.
 - A single Cloudflare Access app gates the entire `*.pod.haus` wildcard
   on a Family identity policy — no per-service Access app needed.
 - **bilby's `/etc/docker/daemon.json` sets
   `"dns": ["100.100.100.100", "1.1.1.1"]`**, so Docker's embedded DNS
   resolver (`127.0.0.11`) forwards unknown names to Tailscale's MagicDNS
-  first, then 1.1.1.1. This is what lets `komodo/sync/servers.toml`
-  use `https://kookaburra-podnet.tail9ceb.ts.net:8120` instead of
-  the drifting tailnet IP. Service-name resolution (`ferretdb`,
+  first, then 1.1.1.1. This lets Kookaburra Periphery and Alloy dial back
+  to bilby by MagicDNS name without pinning a drifting tailnet IP.
+  Service-name resolution (`ferretdb`,
   `caddy`, etc.) is still handled internally by the embedded resolver
   before forwarding. **Never reintroduce per-container `dns: [...]`
   in compose** — that replaces `127.0.0.11` entirely and breaks
@@ -182,7 +184,7 @@ devices (blast-radius containment).
 | `relay/` | rathole stacks — `relay/bilby/` (Komodo-managed client, dials out) + `relay/kookaburra/` (Komodo-managed server, public :443 + :2333). Built from upstream release binary (no arm64 image). |
 | `forgejo/` | Local Git hosting on bilby. HTTPS and ordinary SSH share `git.pod.haus` through kookaburra: :443 → rathole → Caddy → Forgejo; anchor :22 → rathole → Forgejo embedded SSH. Pocket ID is the only browser identity source; Terraform owns its users, Forgejo access groups, admin role, OIDC client, and `ssh_keys` claims from `forgejo/keys/`. Forgejo auto-registers and synchronizes keys on login. SQLite/config are local NVMe; repositories/LFS/attachments/archives are on Jump. See `docs/runbooks/forgejo.md`. |
 | `tailscale/` | Tailscale management-plane nodes. `tailscale/bilby/` and `tailscale/kookaburra/` are both Komodo-managed (Komodo Core on bilby, `kookaburra-tailscale` linked-repo stack on kookaburra). kookaburra's tailscale is bootstrap-launched (via `kookaburra_bootstrap`) so Periphery can join the tailnet, then Komodo adopts the running container — bootstrap and Komodo use the same compose project name + container name (`kookaburra-podnet`) so the named state volume and tailnet identity survive the handoff. `tailscale/compose.shared.yaml` has a `tailscale-cleanup` init service (built from the shared `init-tools:local` image — `curl + jq` baked in) that calls the Tailscale API before tailscaled starts to prune offline devices matching `${TS_HOSTNAME}` — claims the bare hostname back when the state volume is regenerated (rebuild, accidental volume nuke). The auth key it would re-enrol with is **TF-managed** by `terraform/tailscale.tf` (mints a reusable `tag:podnet` key, 80-day rotation via `time_rotating`, writes back to the same 1P item via `op item edit`). Requires `Tailscale OAuth Client` 1P item scopes `auth_keys:write` + `devices:core:write`. |
-| `kookaburra/periphery/` | kookaburra Komodo Periphery compose. Bootstrap-managed (parallels `kangaroo/periphery/`). v2 outbound mode — Periphery dials Core at `ws://bilby-podnet.tail9ceb.ts.net:9120` over tailnet via dockernet+MagicDNS. No inbound :8120 listener; auth is the noise handshake. |
+| `kookaburra/periphery/` | kookaburra Komodo Periphery compose. Bootstrap-managed (parallels `kangaroo/periphery/`). In v2 outbound mode, Periphery dials Core at `ws://bilby-podnet.tail9ceb.ts.net:9120` over tailnet via dockernet+MagicDNS. Port 8120 is not published; the internal listener exists only for the local container healthcheck. Auth is the noise handshake. |
 | `logging/kookaburra/` | Alloy on kookaburra — ships container logs cross-tailnet to bilby's ClickStack at `bilby-podnet.tail9ceb.ts.net:4318` via MagicDNS. kookaburra's `/etc/docker/daemon.json` forwards container DNS to `100.100.100.100` + `1.1.1.1` (mirrors bilby's setup; daemon.json is system-level on the droplet, not in this repo). |
 | `docs/` | This repo's docs, served by the central docs-server at `docs.pod.haus`. Author as Markdown (HTML for layout); conventions in `~/repos/docs/docs/authoring.md`. |
 | `AGENTS.md` | This file |
@@ -233,8 +235,8 @@ devices (blast-radius containment).
    **config-reconcile-only**: every podhaus `stack.toml` omits the
    `deploy` flag (defaults to `false`), so Komodo's `Sync Deploy`
    sub-stage inside RunSync — which auto-deploys any stack whose
-   config differs from deployed — no-ops on podhaus stacks. Stage 2
-   is the sole deploy authority. Without this, a single linked-repo
+   config differs from deployed, no-ops on podhaus stacks. RunSync is
+   reconcile-only; Stages 1 and 2 own deployment. Without this, a single linked-repo
    Periphery timeout inside `Sync Deploy` would fail Stage 0 and abort
    Stages 1–3 entirely; bit kookaburra-relay/kookaburra-tailscale on
    2026-05-25 (~24 h stale until investigation). **Stage 1**
@@ -354,12 +356,13 @@ devices (blast-radius containment).
 ## When adding a new instance of a shared service to another host
 
 Multi-host services already in this layout: `backup/`, `autoheal/`,
-`logging/`. Each has `<service>/compose.shared.yaml` plus per-host
+`logging/`, `tailscale/`. Each has `<service>/compose.shared.yaml` plus per-host
 subdirs.
 
-1. Create `<service>/<host>/compose.yaml` that does
-   `include: [../compose.shared.yaml]` (or set `file_paths` in
-   `stack.toml`) and overlays host-specific bits.
+1. Create `<service>/<host>/compose.yaml` with only the host-specific
+   overlay, then set
+   `file_paths = ["compose.yaml", "../compose.shared.yaml"]` in its
+   `stack.toml`.
 2. Create `<service>/<host>/stack.toml` setting the per-host
    `environment` block. Variable **names** must match the shared
    compose's contract; **values** come from host-specific 1P items.
@@ -454,34 +457,28 @@ These have failure modes that you must not introduce:
   at commit time. (`vpn-diagnostics` is the only stack that
   intentionally carries `deploy = false`; for podhaus stacks just
   omit the field.)
-- **Linked Repo hosts (kangaroo, kookaburra, future pinelake) deploy
-  via the same content-hash IfChanged path as bilby — not via
-  unconditional force-deploy.** Komodo v2 semantics:
+- **Linked Repo hosts (kangaroo, kookaburra, future pinelake) use the
+  same four-stage procedure as bilby.** Komodo v2 semantics:
   `DeployStack` `git pull`s the linked clone before composing;
   `RestartStack` does not pull (it only `docker compose restart`s).
-  The trap to be aware of: Komodo's native
-  `DeployStackIfChanged` change-check compares against the
-  Periphery clone — which only advances *during* a deploy. On a
-  `linked_repo` stack that's a deadlock: the stale clone always
-  looks "unchanged" so IfChanged no-ops forever. The
-  `podhaus-push-deploy` procedure routes around this via Stage 1's
+  Komodo's native `DeployStackIfChanged` sees compose-text changes,
+  but it does not see a changed value behind a `${VAR}` reference. The
+  `podhaus-push-deploy` procedure closes that gap via Stage 1's
   `RunAction "podhaus-inject-content-hashes"`: the Action computes
   hashes from bilby's view of the repo and stamps
   `STACK_CONTENT_HASH=<hash>` + per-service `BUILD_HASH_<svc>=<hash>`
-  into each stack's stored env *before* Stage 2's
-  `BatchDeployStackIfChanged` runs. The env diff becomes
-  the load-bearing change signal — sourced from a place IfChanged
-  doesn't have a stale view of — so IfChanged is correct for
-  linked_repo stacks too. New linked_repo stacks are picked up
-  automatically by the wildcard; **no force-deploy patterns to
-  maintain, no `webhook_force_deploy` on individual stacks, no
+  into each stack's stored env. It then reads the running containers'
+  `podhaus.*` labels and directly force-deploys a stale stack when its
+  compose text is unchanged. Stage 2 owns the disjoint cases: compose
+  changes and new stacks. New linked_repo stacks are picked up
+  automatically by the wildcard; **no per-host force-deploy patterns to
+  maintain, no `webhook_force_deploy` on individual stacks, and no
   `<host>-` naming contract** (the prefix is a readability
   convention, not a deploy-routing contract). Stage 0 `RunSync`
   re-imports `stack.toml` config + TOML-declared variables from
-  bilby's bind-mount (no git); Stage 1's Action handles the
-  bilby-side hash; Stage 2's `DeployStack` does the per-host
-  `git pull` on the linked-repo Periphery as part of its normal
-  flow. Always confirm a deploy via a config-level signal (the
+  bilby's bind-mount; any `DeployStack` does the per-host `git pull`
+  on the linked-repo Periphery as part of its normal flow. Always
+  confirm a deploy via a config-level signal (the
   pulled-to hash / a metric), never "container healthy". See
   [`docs/komodo.html#operating-models`](docs/komodo.html).
 - **Always use absolute host paths in bind mounts.**
@@ -591,19 +588,22 @@ The full set of pages on `docs.pod.haus`:
 - [Syncthing](docs/runbooks/syncthing.html)
 - [Flood + RAR pipeline](docs/runbooks/flood.html)
 - [Bugsink](docs/runbooks/bugsink.html)
+- [Forgejo](docs/runbooks/forgejo.md)
+- [Home Assistant](docs/runbooks/home-assistant.md)
+- [Mumble](docs/runbooks/mumble.md)
 - [Music Assistant + doorbell](docs/runbooks/music-assistant.html)
+- [Pocket ID](docs/runbooks/pocket-id.md)
+- [Pouch MinIO](docs/runbooks/pouch-minio.md)
 - [StreamFab publish](docs/runbooks/streamfab-publish.html)
 
 **Plans**
 - [All plans](docs/plans/)
 - Plans can be authored as `.md`, `.html`, or as a directory containing
-  `index.md` plus sub-pages (for big multi-phase plans). See the
-  [Sample Nested Plan](docs/plans/sample-nested-plan/) for the
-  convention.
+  `index.md` plus sub-pages for a larger, active workstream.
 
 **Postmortems**
-- [All postmortems](docs/postmortems/index.html)
-- [How we write postmortems](docs/postmortems/conventions.md) — when to
+- [All postmortems](docs/postmortems/)
+- [How we write postmortems](docs/postmortems/conventions.md): when to
   open one, structure, action-item discipline.
 
 ---

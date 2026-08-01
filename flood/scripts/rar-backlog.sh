@@ -11,7 +11,7 @@
 #      Plex library (flood-publish.py --gaps). This is the safety net for
 #      the no-delete-time-guard model — a publish gap surfaces here before
 #      the user would ever "Remove and delete data". See
-#      docs/plans/flood-atomic-publish.md.
+#      docs/runbooks/flood.html.
 #
 # Pushes result to Gatus heartbeat endpoint:
 #   0 unhealthy → success=true
@@ -97,7 +97,7 @@ sed 's/^/  /' "$unhealthy_list"
 
 # Build a short URL-safe error string: count + first 3 item basenames.
 # Gatus renders this in [RESULT_ERRORS] in the alert email. Full list
-# remains in the stdout above (→ Alloy → Victoria Logs).
+# remains in the stdout above (→ Alloy → ClickStack).
 sample=$(head -3 "$unhealthy_list" | awk -F/ '{print $NF}' | tr '\n' ',' | sed 's/,$//')
 error_msg="${unhealthy_count} extraction/publish issues; sample: ${sample}"
 # Percent-encode spaces → +, plus the delimiters that break query parsing

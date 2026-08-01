@@ -12,7 +12,7 @@
 
   Retention (TTL) is NOT set here — the OTel collector creates the
   otel_* tables; TTL is applied post-bootstrap (ALTER TABLE … MODIFY
-  TTL to 180 d). See docs/plans/clickstack-migration/retention-and-storage.md.
+  TTL to 180 d). See docs/monitoring.html.
 -->
 <clickhouse>
     <!-- Bind-mounting this config.d directory shadows the official

@@ -3,7 +3,7 @@
 # This is the only stack on kangaroo that is NOT itself managed by Komodo —
 # it has to come up before kangaroo can be a Komodo deploy target. Bootstrapped
 # via ./kangaroo_bootstrap from bilby; survives Container Station + QTS upgrades
-# via the @reboot crontab line that bootstrap installs.
+# via the native QNAP boot-DOM autorun hook that bootstrap installs.
 #
 # All other kangaroo stacks (syncthing, kangaroo/backrest, etc.) live under
 # the standard <stackname>/compose.yaml pattern and are deployed by Komodo

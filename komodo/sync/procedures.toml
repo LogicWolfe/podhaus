@@ -28,8 +28,8 @@
 # to false — see Komodo source `client/core/rs/src/entities/toml.rs`),
 # which makes Sync Deploy no-op at `deploy.rs:489` (`if !stack.deploy`)
 # while still reconciling stored config via `Stack::execute_sync_updates`
-# on line 379-382 of execute/sync.rs. Stage 2 below is the sole deploy
-# authority; `tools/lint-stack-toml.py` enforces the no-`deploy=true`
+# on line 379-382 of execute/sync.rs. Stages 1 and 2 below own deployment;
+# `tools/lint-stack-toml.py` enforces the no-`deploy=true`
 # invariant at commit time.
 #
 # Stage 1 — content-hash injection. The Action
@@ -39,22 +39,19 @@
 # `STACK_CONTENT_HASH=<hash>` (hash of the entire stack directory,
 # including bind-mounted config paths) and one
 # `BUILD_HASH_<UPPER_SERVICE>=<hash>` per service with a `build:`
-# directive (hash of the resolved build context — may live outside the
-# stack dir, e.g. shared init-tools/ or relay/). That turns Komodo's
-# existing compose-file-only change detection into full stack-directory
-# change detection — Dockerfile, build-context sources, bind-mounted
-# config files, all get tracked uniformly.
-# Crucially this is the SAME mechanism for files_on_host and linked_repo
-# stacks: the hash is computed from bilby's view of the repo, so it
-# routes around the stale-clone deadlock that breaks Komodo's native
-# IfChanged on linked_repo (where the change-check compares against the
-# Periphery's clone, which only advances during a deploy).
+# directive (hash of the resolved build context, which may live outside
+# the stack dir, such as shared init-tools/ or relay/). Injecting those
+# values is necessary but does not itself trigger Komodo's IfChanged:
+# that check compares stored compose text, not the rendered env. The
+# Action therefore also compares the hashes against running container
+# labels and force-deploys stale stacks whose compose text is unchanged.
+# This is the load-bearing path for config-only and build-context edits,
+# and it works for files_on_host and linked_repo stacks because hashes
+# come from bilby's current repo view.
 #
-# Stage 2 — every stack, deploy ONLY if its rendered env diffs from
-# what's deployed. Stage 1's hash appears in the env diff for any stack
-# whose tracked files changed; unchanged stacks no-op (no churn).
-# Works uniformly across bilby files_on_host AND linked_repo because
-# the hash injection makes IfChanged correct for both.
+# Stage 2: BatchDeployStackIfChanged owns compose-text changes and new
+# stacks. Stage 1 deliberately leaves those alone, so the stages do not
+# recreate the same stack twice. Unchanged stacks no-op.
 #
 # Stage 3 — restart ofelia so it picks up label changes on whichever
 # containers Stage 2 just recreated. ofelia v0.3.22
@@ -91,7 +88,7 @@ executions = [
 ]
 
 [[procedure.config.stage]]
-name = "Inject per-stack content hashes into stored env"
+name = "Inject content hashes and reconcile stale running stacks"
 enabled = true
 executions = [
   { execution.type = "RunAction", execution.params = { action = "podhaus-inject-content-hashes" }, enabled = true }

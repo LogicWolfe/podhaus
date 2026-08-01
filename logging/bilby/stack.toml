@@ -1,6 +1,6 @@
 [[stack]]
 name = "logging"
-description = "Victoria Logs + Alloy + Grafana — centralised logs (bilby)"
+description = "Alloy log collector on bilby, shipping to ClickStack"
 tags = ["podhaus"]
 
 [stack.config]

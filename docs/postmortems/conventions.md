@@ -65,11 +65,11 @@ The Resolution checklist is the load-bearing part. Conventions:
 
 When you write a new postmortem:
 
-1. Add it to `docs/postmortems/index.html` (one row in the table — date, title, status, 1-line hook).
-2. Add a one-line entry to the **Postmortems** section in `AGENTS.md`. Format: `- YYYY-MM-DD — <short slug> — <one-sentence what-and-why>`. This is what every agent/contributor sees when they load the root instruction file, so the line earns its place by being scannable and informative.
+1. Put the dated postmortem in `docs/postmortems/`; the docs server generates the directory listing.
+2. Add a one-line entry to the **Postmortems** section in `AGENTS.md`. Format: `- YYYY-MM-DD: <short slug>: <one-sentence what-and-why>`. This is what every agent/contributor sees when they load the root instruction file, so the line earns its place by being scannable and informative.
 3. If the postmortem produces a new convention or hard rule, that change goes in its own appropriate doc (`docs/stack-conventions.html`, hard-rules section of `AGENTS.md`, etc.) and the postmortem links to it.
 
 ## Related
 
-- `AGENTS.md` — postmortems index lives there too
-- `docs/postmortems/index.html` — the rendered list
+- `AGENTS.md`: postmortems are linked there too
+- `docs/postmortems/`: the docs server renders the directory listing

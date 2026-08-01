@@ -1,7 +1,7 @@
 # ClickStack — ClickHouse + HyperDX UI + bundled OTel collector + Mongo.
-# Replaces VictoriaLogs as the observability backend (bilby-only, like
-# VL was). Alloy on both hosts ships here over OTLP; Gatus metrics ride
-# the same pipeline. See docs/plans/clickstack-migration/.
+# ClickStack observability backend on bilby. Alloy on all managed hosts
+# ships here over OTLP; Gatus metrics ride the same pipeline. See
+# docs/monitoring.html.
 #
 # Adaptations from upstream ClickHouse/ClickStack docker-compose.yml:
 #   - `internal` network → dockernet (reach by container name)

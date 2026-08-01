@@ -20,7 +20,7 @@
 # scrapes this and bridges it to ClickStack over OTLP. Non-sensitive
 # operational data; reachable only on dockernet (the public
 # gatus.pod.haus path stays Access-gated and /metrics is not added to
-# the tunnel ingress). See docs/plans/clickstack-migration/gatus-metrics.md.
+# the tunnel ingress). See docs/monitoring.html.
 metrics: true
 
 storage:
@@ -160,7 +160,7 @@ endpoints:
   # Pocket ID OIDC provider — internal probe of the app's /healthz
   # (returns 200 when up). The public id.pod.haus is a bypass app so a
   # public probe would work, but the internal one is the convention and
-  # avoids the edge. See docs/plans/pocket-id.md.
+  # avoids the edge. See docs/runbooks/pocket-id.md.
   - name: Pocket ID
     url: http://pocket-id:1411/healthz
     <<: *defaults
@@ -188,11 +188,11 @@ endpoints:
     conditions:
       - "[CONNECTED] == true"
 
-  # Mumble is non-HTTP — tcp:// proves DNS (DDNS-updated A) +
+  # Mumble is non-HTTP. tcp:// proves DNS (DDNS-updated A) +
   # UDM forward (terraform/unifi.tf) + Murmur control channel are
   # all healthy. UDP/voice quality is not synthetically probed; ear-
   # test on first call after any networking change. See
-  # docs/plans/mumble-voice-pod-haus.md.
+  # docs/runbooks/mumble.md.
   - name: Mumble (Voice)
     url: "tcp://voice.pod.haus:64738"
     group: Mumble
@@ -261,7 +261,7 @@ endpoints:
   # --- storage.pod.haus paths ---
   # On-bilby probe (LAN/split-horizon resolves to bilby:443 directly):
   # tests Caddy + MinIO. Independent of the relay. Catches a
-  # Caddy/MinIO/cert failure on-box. See docs/plans/storage-public-relay.md.
+  # Caddy/MinIO/cert failure on-box. See docs/hosts.html#kookaburra.
   - name: MinIO S3 (storage.pod.haus, on-bilby)
     url: https://storage.pod.haus/minio/health/live
     <<: *defaults
@@ -559,8 +559,8 @@ endpoints:
   # --- Fenwick health (the alert pipeline's own backstop) ---
   # Since every other check now alerts THROUGH Fenwick, these watch the
   # path itself (Gatus → Fenwick → signal-cli → Signal). They alert via
-  # `email` (Postmark), NOT `custom` (Fenwick) — a check must never route
-  # through the thing it watches. See docs/plans/gatus-fenwick-notifications.md.
+  # `email` (Postmark), NOT `custom` (Fenwick). A check must never route
+  # through the thing it watches. See docs/monitoring.html#alerting.
 
   # Liveness: Fenwick's Hono server answers /health with "ok". Fast
   # (minutes) detection of a hard container-down / crash-loop / failed

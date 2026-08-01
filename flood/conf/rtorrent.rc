@@ -52,7 +52,7 @@ method.set_key=event.download.finished,rar_extract,"execute.nothrow.bg={/scripts
 # /data/torrents into the publishdir captured below. This finish-hook pass
 # makes a freshly-completed torrent publish near-instantly; the ofelia tick
 # (every minute) is the steady-state driver and the backstop if this pass
-# runs before rar_extract. See docs/plans/flood-atomic-publish.md.
+# runs before rar_extract. See docs/runbooks/flood.html.
 method.set_key=event.download.finished,flood_publish,"execute.nothrow.bg={python3,/scripts/flood-publish.py}"
 
 # Flood tag → Plex label mirror. On finish, kick a reconciler pass that

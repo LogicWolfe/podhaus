@@ -1,7 +1,7 @@
 # Public TLS front for MinIO's S3 API. Owns its own Let's Encrypt
 # wildcard so the S3 data path never touches Cloudflare's proxy (which
 # rewrites the SigV4-signed Accept-Encoding header and only has a
-# single-level Universal SSL cert). See docs/plans/minio-public-caddy.md.
+# single-level Universal SSL cert). See docs/hosts.html#kookaburra.
 #
 # One endpoint serves every S3 client:
 #   - path-style   https://storage.pod.haus            (Terraform)
@@ -22,7 +22,7 @@ storage.pod.haus, *.storage.pod.haus {
 	# 1Password + the chezmoi-rendered Terraform env. Deliberately NOT
 	# edge-blocked: an admin-path 403 would break the from-anywhere
 	# `minio/terraform/` Terraform root (no TF root is exempt from the
-	# from-anywhere rule — see AGENTS.md / docs/plans/minio-public-caddy.md).
+	# from-anywhere rule; see AGENTS.md and docs/terraform.html.
 	reverse_proxy minio:9000
 }
 
@@ -86,10 +86,8 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 	# NoSuchKey 404, raises `error 404`, and this handler serves the
 	# styled 404.html body from the bucket with a real 404 status.
 	# `replace_status` overrides the 200 the inner reverse_proxy gets
-	# for the (existing) 404.html object — and it must sit INSIDE the
-	# reverse_proxy block, not as a standalone handle_errors directive
-	# (the placement an earlier attempt got wrong). See
-	# docs/plans/caddy-404-status-and-komodo-ifchanged.md.
+	# for the existing 404.html object. It must sit INSIDE the
+	# reverse_proxy block, not as a standalone handle_errors directive.
 	handle_errors 404 {
 		rewrite * /nathanbaxter-com/404.html
 		reverse_proxy minio:9000 {

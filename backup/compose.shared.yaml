@@ -1,5 +1,5 @@
-# Shared service definition for Backrest. Each host's compose.yaml in
-# backup/<host>/ extends this via `include:` and adds host-specific bits
+# Shared service definition for Backrest. Each host stack combines its
+# overlay with this file through `file_paths` and adds host-specific bits
 # (build context, template bind-mount paths, source data binds, repo
 # bind, security_opt). The contract here is the in-container env-var
 # names — each host's stack.toml maps host-specific 1P-backed Komodo
@@ -7,10 +7,8 @@
 # the shared rclone.conf.tmpl + per-host config.json.tmpl) never branches
 # by host.
 #
-# Bug B fix (kangaroo OneDrive sync): kangaroo runs its own rclone-to-
-# OneDrive hook now (see backup/kangaroo/config.json.tmpl). Bilby's hook
-# only syncs its own repo. NFS-all_squash on the kangaroo restic repo
-# is no longer in any sync path.
+# Each host runs its own rclone-to-OneDrive hook and uses an independent
+# refresh-token chain. Bilby's hook only syncs its own repository.
 #
 # rclone.conf rendering: backrest-init renders /rclone/rclone.conf from
 # backup/rclone.conf.tmpl + the base64-decoded OAuth token from 1P. The
@@ -18,9 +16,7 @@
 # named volume, we preserve it (rclone rotates the refresh token in-
 # place; a re-render from the bootstrap snapshot would clobber it).
 #
-# Replaces komodo-start's prior host-side rclone render. Both hosts now
-# use this same mechanism; bilby's host-side /etc/komodo/rclone goes
-# unused after migration.
+# Both hosts use this container-side render path.
 
 services:
   backrest-init:
@@ -78,8 +74,8 @@ services:
         condition: service_completed_successfully
     ports:
       # Published on each host's LAN so bilby's cloudflared can route
-      # backups.pod.haus → backrest:9898 (dockernet, bilby) and
-      # kangaroo-backups.pod.haus → 10.0.0.232:9898 (LAN, kangaroo).
+      # backup.pod.haus -> backrest:9898 (dockernet, bilby) and
+      # kangaroo-backup.pod.haus -> the active kangaroo LAN IP:9898.
       - 9898:9898
     environment:
       BACKREST_PORT: "0.0.0.0:9898"

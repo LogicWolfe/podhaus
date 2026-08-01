@@ -21,9 +21,9 @@
 
       <h1>Networking</h1>
       <p class="lead text-lg text-text-muted">
-        One Docker bridge network, one Cloudflare Tunnel for ingress, one wildcard Access app
-        for auth, two DNS surfaces (public Cloudflare + LAN UniFi). No nginx in the path —
-        cloudflared talks directly to backends by container name.
+        Docker bridge networking, Terraform-managed Cloudflare ingress, Access policy chains,
+        public Cloudflare DNS, and LAN UniFi DNS. Cloudflared talks directly to most backends;
+        Caddy handles the DNS-only relay services that need public TLS on bilby.
       </p>
 
       <h2 id="dockernet">dockernet bridge</h2>
@@ -95,14 +95,14 @@ networks:
 
       <aside class="callout note">
         <span class="callout-title">Management plane: Tailscale (<code>tag:podnet</code>)</span>
-        Inter-host management traffic (Komodo Core→Periphery for kookaburra,
-        log ship-back from kookaburra to bilby's ClickStack) rides a
+        Inter-host management traffic (Kookaburra Periphery dialing Core and
+        log ship-back from Kookaburra to bilby's ClickStack) rides a
         private Tailscale tailnet — bilby (<code>bilby-podnet</code>) and
-        kookaburra (<code>kookaburra-podnet</code>). Komodo Core dials kookaburra
-        by MagicDNS FQDN (<code>https://kookaburra-podnet.tail9ceb.ts.net:8120</code>
-        in <code>komodo/sync/servers.toml</code>); the IP changes on every droplet
-        rebuild but the FQDN doesn't, so rebuilds don't require editing this
-        config. Resolution works because <strong>both</strong> bilby's
+        kookaburra (<code>kookaburra-podnet</code>). Kookaburra's Periphery dials
+        <code>ws://bilby-podnet.tail9ceb.ts.net:9120</code>. The Kookaburra server
+        entry has an empty address because Core expects the outbound connection;
+        no port 8120 is exposed on the droplet. Resolution works because
+        <strong>both</strong> bilby's
         <em>and</em> kookaburra's <code>/etc/docker/daemon.json</code> set
         <code>"dns": ["100.100.100.100", "1.1.1.1"]</code> — Docker's embedded
         resolver (<code>127.0.0.11</code>) forwards unknown names to Tailscale's
@@ -161,10 +161,9 @@ networks:
         bilby, an ACL rule
         <code>{"src": ["tag:podnet"], "dst": ["10.0.0.0/24:*"]}</code>,
         and route approval in the Tailscale admin (or via
-        <code>tailscale_acl</code> when the TF foundation consolidation
-        lands). After that, anything on the tailnet — kookaburra,
+        a Terraform-managed Tailscale ACL). After that, permitted tailnet nodes, including Kookaburra,
         your off-LAN laptop, future pinelake — could reach kangaroo at
-        <code>10.0.0.119</code>.
+        <code>10.0.0.25</code>.
         <br><br>
         Not enabled because nothing needs it. Kangaroo's outbound traffic
         (alloy → ClickStack, backrest → bilby) is initiated <em>from</em>
@@ -174,19 +173,20 @@ networks:
         option is discoverable.
       </aside>
       <p>
-        A single <code>cloudflared</code> container on bilby holds the tunnel credential. Ingress
-        rules live in <code>cloudflare-tunnel/config.yml</code> (bind-mounted into the container)
-        and look like:
+        A single <code>cloudflared</code> container on bilby holds the pod.haus tunnel credential.
+        It starts without <code>--config</code> and fetches ingress from Cloudflare. Terraform's
+        <code>cloudflare_zero_trust_tunnel_cloudflared_config.pod_haus</code> resource in
+        <code>terraform/tunnel.tf</code> is the source of truth.
       </p>
       <pre><code>- hostname: gatus.pod.haus
   service: http://gatus:8080
 - hostname: home.pod.haus
   service: http://172.18.0.1:8123</code></pre>
       <p>
-        Anything not listed returns 404 at the tunnel edge. New service that needs a hostname?
-        Add the rule here, add a <code>cloudflare_dns_record</code> to the relevant
-        <code>terraform/dns_*.tf</code> file, run <code>terraform apply</code>
-        from <code>terraform/</code>, then <code>./komodo-sync</code> to refresh the tunnel container.
+        Anything not listed returns 404 at the tunnel edge. For a normal pod.haus service, add
+        a module block in <code>terraform/services_pod_haus.tf</code>, append its ingress output to
+        <code>pod_haus_module_ingress</code>, then run <code>terraform apply</code> from
+        <code>terraform/</code>. Cloudflared receives the remote configuration without a stack deploy.
       </p>
       <aside class="callout warn">
         <span class="callout-title">cloudflared is distroless</span>
@@ -293,8 +293,6 @@ networks:
         Cloudflare-proxied — see <a href="/terraform.html">Terraform</a>.
       </p>
       <p>
-        DNSControl (the previous DNS tool) was retired 2026-05-12; its <code>dns/</code>
-        directory, <code>dns-preview</code>, and <code>dns-push</code> scripts are gone.
         Provider docs (read before editing):
         <a href="https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs/resources/dns_record">cloudflare_dns_record</a>,
         <a href="https://registry.terraform.io/providers/ubiquiti-community/unifi/latest/docs/resources/dns_record">unifi_dns_record</a>.
@@ -306,6 +304,7 @@ networks:
         <tbody>
           <tr><td><code>backup.pod.haus</code></td><td>Backrest UI on bilby</td></tr>
           <tr><td><code>kangaroo-backup.pod.haus</code></td><td>Backrest UI on kangaroo</td></tr>
+          <tr><td><code>fenwick.pod.haus</code></td><td>Fenwick home-helper API</td></tr>
           <tr><td><code>komodo.pod.haus</code></td><td>Komodo Core UI</td></tr>
           <tr><td><code>torrent.pod.haus</code></td><td>Flood UI</td></tr>
           <tr><td><code>home.pod.haus</code></td><td>Home Assistant (host network)</td></tr>
@@ -314,11 +313,14 @@ networks:
           <tr><td><code>unifi.pod.haus</code></td><td>UniFi network controller</td></tr>
           <tr><td><code>paperless.pod.haus</code></td><td>Paperless web</td></tr>
           <tr><td><code>plex.pod.haus</code></td><td>Plex web UI (native clients use plex.tv discovery)</td></tr>
+          <tr><td><code>music.pod.haus</code></td><td>Music Assistant</td></tr>
           <tr><td><code>watch.pod.haus</code></td><td>HyperDX (ClickStack observability UI)</td></tr>
           <tr><td><code>bugs.pod.haus</code></td><td>Bugsink (Sentry-protocol error tracker)</td></tr>
           <tr><td><code>gatus.pod.haus</code></td><td>Gatus status page</td></tr>
           <tr><td><code>docs.pod.haus</code></td><td>This documentation site</td></tr>
           <tr><td><code>minio.pod.haus</code></td><td>MinIO console (Terraform state backend)</td></tr>
+          <tr><td><code>id.pod.haus</code></td><td>Pocket ID</td></tr>
+          <tr><td><code>stats.pod.haus</code></td><td>Umami analytics</td></tr>
         </tbody>
       </table>
 

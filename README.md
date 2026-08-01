@@ -1,85 +1,86 @@
 # podhaus
 
-Docker container infrastructure for home servers — Docker Compose stacks
-managed via Komodo, secrets from 1Password, ingress via Cloudflare
-Tunnel + Access at `*.pod.haus`. Two hosts today:
+Docker infrastructure for three managed hosts. Compose stacks live in this
+repo, Komodo deploys them, 1Password supplies secrets, and Terraform owns the
+external infrastructure.
 
-- **bilby** — Apple M1 Mac mini, Fedora Asahi Linux. Primary; runs
-  Komodo Core + Periphery + every original stack (Plex, Paperless,
-  Home Assistant, Flood, etc.).
-- **kangaroo** — QNAP NAS, QTS + Container Station. Second Periphery;
-  runs Syncthing + a second Backrest + autoheal + logging Alloy.
+- **bilby:** Apple M1 Mac mini running Fedora Asahi Linux. It hosts Komodo Core
+  and the primary services.
+- **kangaroo:** QNAP NAS running QTS and Container Station. It hosts Syncthing,
+  Backrest, Autoheal, Alloy, and Pouch MinIO.
+- **kookaburra:** DigitalOcean Fedora droplet in Sydney. It is the stateless
+  public relay for storage and Forgejo, with management traffic over Tailscale.
 
-A third host, **pinelake**, is planned.
+**pinelake** is a planned fourth host for the second household.
 
-## Docs
+## Documentation
 
-The full documentation lives at **<https://docs.pod.haus>** (gated by
-Cloudflare Access). Local fallback: open
-[`docs/index.html`](docs/index.html) in a browser.
+The live documentation is at <https://docs.pod.haus>. Start with:
 
-Start with [Architecture](docs/architecture.html), [Hosts](docs/hosts.html),
-[Komodo](docs/komodo.html), and [Stack conventions](docs/stack-conventions.html)
-— that's ~10 minutes and covers most of what you need to know.
+1. [Architecture](docs/architecture.html)
+2. [Hosts](docs/hosts.html)
+3. [Komodo](docs/komodo.html)
+4. [Stack conventions](docs/stack-conventions.html)
 
-## Quickstart on bilby
+`AGENTS.md` is the canonical instruction file for agents working in this repo.
 
-```sh
-./komodo-start    # bootstrap-only: Komodo Core up, chicken-and-egg vars, sync registered
-./komodo-sync     # debug iterate: single RunSync + redeploy stale (no commit needed)
-./komodo-status   # show Komodo container status
-./komodo-stop     # shut down Komodo Core
-./komodo-upgrade  # pull latest images + restart
-```
+## Day-to-day operation
 
-Steady-state deploys: commit + push. The single GitHub webhook
-fires the `podhaus-push-deploy` Komodo Procedure (RunSync →
-deploy-if-changed → force-deploy linked-repo stacks). No manual
-`./komodo-sync` needed.
-
-## Quickstart on kangaroo
-
-Run from bilby:
+On bilby:
 
 ```sh
-./kangaroo_bootstrap   # idempotent — sets up Periphery on the QNAP
+./komodo-start
+./komodo-sync
+./komodo-status
+./komodo-upgrade
+./komodo-stop
 ```
 
-After that, kangaroo-targeted stacks deploy through the same Komodo UI
-on bilby.
+`komodo-start` is the bootstrap path. Normal deployments are commit and push.
+The GitHub webhook runs `podhaus-push-deploy`, which reconciles definitions,
+stamps content hashes, recreates stacks whose committed content changed,
+deploys compose changes and new stacks, then restarts Ofelia so it re-reads
+job labels.
 
-## DNS
+Use `./komodo-sync` for local iteration without a push and after editing
+`komodo/sync/procedures.toml`.
+
+Bootstrap the remote hosts from bilby:
 
 ```sh
-./dns-preview   # show pending DNS changes (read-only)
-./dns-push      # apply DNS changes via DNSControl
+./kangaroo_bootstrap
+./kookaburra_bootstrap
 ```
 
-## Index of top-level dirs
+## Terraform
 
-| Dir | Purpose |
+`terraform/` is the single Terraform root for Cloudflare, UniFi, GitHub,
+DigitalOcean, Tailscale, MinIO, and Pocket ID. Run stock Terraform from that
+directory. Credentials come from the chezmoi-rendered, repository-scoped shell
+environment.
+
+```sh
+cd terraform
+terraform plan
+terraform apply
+```
+
+State lives in MinIO at `s3://terraform-state/podhaus.tfstate` through
+`https://storage.pod.haus`. There is no Terraform wrapper and DNSControl has
+been retired.
+
+## Repository map
+
+| Path | Purpose |
 |---|---|
-| `komodo/` | Komodo Core infrastructure + ResourceSync TOML |
-| `onepassword/` | 1Password Connect API + komodo-op |
-| `cloudflare-tunnel/` | Tunnel container + ingress rules (`conf/config.yml`) |
-| `dns/` | DNSControl config |
-| `init-tools/` | Shared init-container image (alpine + gettext + python3) |
-| `plex/` | Plex Media Server |
-| `paperless/` | Paperless-ngx + Postgres + Redis + Tika + Gotenberg |
-| `home-assistant/` | Home Assistant |
-| `flood/` | rtorrent + Flood UI + in-place RAR auto-extract via rtorrent hook |
-| `syncthing/` | Syncthing (deployed on kangaroo) |
-| `gatus/` | Endpoint monitoring + alerting |
-| `ofelia/` | Docker label-driven cron |
-| `backup/` | Backrest (multi-host) |
-| `autoheal/` | Container restart on unhealthy (multi-host) |
-| `logging/` | Alloy + Victoria Logs + Grafana (multi-host) |
-| `docs/` | Documentation site (served at `docs.pod.haus`) |
-| `docs-server/` | nginx serving `docs/` |
-| `kangaroo/` | Kangaroo-side Periphery compose + per-host overlays |
-
-## Agents
-
-[`AGENTS.md`](AGENTS.md) is the canonical instructions file for any AI
-agent working in this repo. Claude Code reads it via
-[`CLAUDE.md`](CLAUDE.md)'s `@AGENTS.md` import.
+| `komodo/` | Core infrastructure, ResourceSync definitions, procedures, and actions |
+| `terraform/` | Consolidated external infrastructure root |
+| `onepassword/` | 1Password Connect and `komodo-op` |
+| `cloudflare-tunnel/` | Bilby's remotely configured Cloudflare connector |
+| `caddy/`, `relay/` | Public TLS and raw relay path through Kookaburra |
+| `tailscale/` | Bilby and Kookaburra management-plane nodes |
+| `backup/`, `autoheal/`, `logging/` | Multi-host shared services |
+| `clickstack/`, `gatus/` | Observability, health checks, and alerting |
+| `bilby/`, `kangaroo/`, `kookaburra/` | Host bootstrap and host-level configuration |
+| `docs/` | Current-state documentation and live plans |
+| `<service>/compose.yaml` | A single-host service stack |
