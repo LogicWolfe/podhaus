@@ -1,13 +1,14 @@
-# Tailscale auth-key rotation as code.
+# Tailscale account configuration and auth-key rotation.
 #
 # What this owns:
-#   1. A reusable, preauthorized, tag:podnet auth key minted by the
+#   1. Tailnet DNS settings used by the podnet management plane.
+#   2. A reusable, preauthorized, tag:podnet auth key minted by the
 #      tailscale provider via the same OAuth client the tailscale-cleanup
 #      init uses.
-#   2. An 80-day rotation cadence (time_rotating) that triggers a
+#   3. An 80-day rotation cadence (time_rotating) that triggers a
 #      `terraform plan` to schedule a replace once the window elapses —
 #      apply is still explicit (no autopilot).
-#   3. A write-back to the existing 1Password item
+#   4. A write-back to the existing 1Password item
 #      `op://Homelab/Tailscale Auth Key/credential`, so every downstream
 #      consumer (kookaburra_bootstrap, the tailscale stacks via
 #      komodo-op) picks up the rotated value without code change.
@@ -24,6 +25,12 @@
 #   doesn't surface in Terraform's command-echo logs.
 #
 # This resource is part of the consolidated podhaus Terraform root.
+
+resource "tailscale_dns_configuration" "podnet" {
+  magic_dns          = true
+  override_local_dns = false
+  search_paths       = []
+}
 
 resource "time_rotating" "tailscale_authkey" {
   # 80 days < the Tailscale OAuth-minted key max (90 days). 10-day

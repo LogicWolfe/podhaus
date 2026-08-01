@@ -47,13 +47,6 @@ Measure part creation and merge pressure, then tune the collector or ClickHouse
 insert path. Prove lower part growth under normal telemetry volume before
 removing the async-load safeguard.
 
-## Manage MagicDNS settings in Terraform
-
-The Tailscale nodes and Docker daemon forwarding rely on tailnet-wide MagicDNS,
-but that setting is still managed in the Tailscale admin UI. Extend the existing
-OAuth client's scopes with `dns:write`, import or declare the current DNS
-settings, and require a zero-diff plan before applying.
-
 ## Add an external dead-man check for Gatus
 
 Gatus monitors the services and Fenwick monitors the alert delivery path, but a

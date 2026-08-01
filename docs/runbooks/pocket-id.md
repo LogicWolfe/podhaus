@@ -1,10 +1,9 @@
 # Pocket ID
 
-Self-hosted, passkey-first OIDC identity provider on bilby at `id.pod.haus`. It
-is wired into Cloudflare Access as a login method *alongside* the existing GitHub
-login — Cloudflare Access (the Family group) stays the authority on *who* is
-allowed; Pocket ID only provides *authentication* (WebAuthn passkeys). One Go
-binary plus SQLite, single local volume.
+Self-hosted, passkey-first OIDC identity provider on bilby at `id.pod.haus`.
+Cloudflare Access, Forgejo, and Tailscale use it for browser authentication.
+Each relying party keeps its own authorisation policy. One Go binary plus
+SQLite, single local volume.
 
 > **`id.pod.haus` must stay publicly reachable — it is NOT Access-gated.**
 > Cloudflare validates the OIDC token *server-side*: during a login its own
@@ -29,6 +28,10 @@ binary plus SQLite, single local volume.
   (generic OIDC, PKCE) in `terraform/access.tf`, next to the dashboard-managed
   GitHub IdP. `allowed_idps` is intentionally unset on every Access app, so the
   login chooser lists both GitHub and Pocket ID and the Family group is unchanged.
+- **Tailscale login** uses the client and `tailscale-users` group in
+  `terraform/pocket_id.tf`. Caddy serves the required WebFinger response at
+  `nathanbaxter.com/.well-known/webfinger`; the IdP selection itself is set in
+  the Tailscale console because its Terraform provider doesn't expose it.
 
 ## Identity model
 
@@ -62,14 +65,16 @@ token carries no email claim.
 
 ## Secrets
 
-Three 1Password Homelab items, each consumed by the mechanism that fits its
-consumer — no secret in git or a shell env.
+Five 1Password Homelab items use the mechanism that fits each consumer. No
+secret is stored in git or a shell env.
 
 | Item | Shape | Consumed as | By |
 |---|---|---|---|
 | `Pocket ID Encryption Key` | API Credential, `credential` | `OP__KOMODO__POCKET_ID_ENCRYPTION_KEY__CREDENTIAL` (komodo-op) → `ENCRYPTION_KEY` | the container, via `stack.toml` |
 | `Pocket ID OIDC` | section `OIDC`: `client id` + `client secret` | `data "onepassword_item"` at plan time (`access.tf`) | Terraform, directly |
 | `Pocket ID API Key` | API Credential, `credential` | `data.onepassword_item.pocket_id_api_key` → Pocket ID Terraform provider | users, groups, OIDC clients |
+| `Forgejo OIDC` | Login, username + password | Terraform-managed output from `pocketid_client.forgejo` | `forgejo-auth-init` through komodo-op |
+| `Tailscale OIDC` | Login, username + password | Terraform-managed output from `pocketid_client.tailscale` | Tailscale's console-managed IdP registration |
 
 The OIDC client id/secret are read **directly by Terraform** via the
 `onepassword` provider data source (`section_map["OIDC"].field_map[…].value`), not
@@ -79,13 +84,20 @@ a `TF_VAR`. This is the first data-source consumer of that provider; it needs
 enforced maximum — pick a far-future date) and inherit the creating user's
 privileges.
 
-## The OIDC client
+## OIDC clients
 
-A single Pocket ID OIDC client named **Cloudflare Zero Trust**: confidential
-(`isPublic=false`), PKCE enabled, callback
-`https://podhaus.cloudflareaccess.com/cdn-cgi/access/callback`. Its client
-id/secret live in the *Pocket ID OIDC* 1P item and are consumed by the Cloudflare
-IdP resource — Cloudflare's stored `redirect_url` must equal that callback.
+**Cloudflare Zero Trust** is confidential, uses PKCE, and has callback
+`https://podhaus.cloudflareaccess.com/cdn-cgi/access/callback`. Its credentials
+live in `Pocket ID OIDC`.
+
+**Forgejo** is confidential, uses PKCE, and is restricted to `forgejo-users`.
+Its credentials live in `Forgejo OIDC`; the remaining identity model is in the
+[Forgejo runbook](forgejo.md#identity-and-keys).
+
+**Tailscale** is confidential, has PKCE disabled, is restricted to
+`tailscale-users`, and has callback
+`https://login.tailscale.com/a/oauth_response`. Its credentials live in
+`Tailscale OIDC`.
 
 ## Provisioning people and clients
 
@@ -129,6 +141,10 @@ GitHub login stays configured (`allowed_idps` unset everywhere), so a Pocket ID
 outage or misconfiguration does *not* lock you out — log in via GitHub to reach
 `komodo.pod.haus` and fix it. The Homelab service token also still bypasses for
 automation.
+
+Tailscale's Owner is `nathan@nathanbaxter.com` through Pocket ID. The separate
+Tailscale-native `logicwolfe@passkey` Admin is the recovery path if Pocket ID is
+unavailable. Keep it independent of Pocket ID and outside Terraform.
 
 Making login skip the chooser and go straight to a passkey
 (`auto_redirect_to_identity = true`) requires `allowed_idps` to list exactly one

@@ -33,6 +33,11 @@ resource "pocketid_group" "forgejo_admins" {
   friendly_name = "Forgejo administrators"
 }
 
+resource "pocketid_group" "tailscale_users" {
+  name          = "tailscale-users"
+  friendly_name = "Tailscale users"
+}
+
 resource "pocketid_user" "nathan" {
   username       = "LogicWolfe"
   email          = "nathan@nathanbaxter.com"
@@ -46,6 +51,7 @@ resource "pocketid_user" "nathan" {
   groups = [
     pocketid_group.forgejo_users.id,
     pocketid_group.forgejo_admins.id,
+    pocketid_group.tailscale_users.id,
   ]
 
   # Pocket ID interprets a JSON-array custom-claim value as an array in
@@ -96,6 +102,23 @@ resource "pocketid_client" "forgejo" {
   ]
 }
 
+resource "pocketid_client" "tailscale" {
+  name      = "Tailscale"
+  client_id = "tailscale"
+
+  callback_urls = [
+    "https://login.tailscale.com/a/oauth_response",
+  ]
+
+  is_public                 = false
+  pkce_enabled              = false
+  requires_reauthentication = false
+
+  allowed_user_groups = [
+    pocketid_group.tailscale_users.id,
+  ]
+}
+
 # Forgejo's stack consumes the confidential-client credentials through
 # komodo-op. The secret is generated once by Pocket ID, stored in
 # Terraform's versioned MinIO state, and copied into 1Password.
@@ -106,6 +129,16 @@ resource "onepassword_item" "forgejo_oidc" {
   url      = "https://git.pod.haus"
   username = pocketid_client.forgejo.client_id
   password = pocketid_client.forgejo.client_secret
+  tags     = ["terraform-managed"]
+}
+
+resource "onepassword_item" "tailscale_oidc" {
+  vault    = data.onepassword_vault.homelab.uuid
+  title    = "Tailscale OIDC"
+  category = "login"
+  url      = "https://login.tailscale.com"
+  username = pocketid_client.tailscale.client_id
+  password = pocketid_client.tailscale.client_secret
   tags     = ["terraform-managed"]
 }
 

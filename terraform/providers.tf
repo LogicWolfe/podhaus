@@ -26,9 +26,9 @@ provider "github" {
 provider "tailscale" {
   # OAuth client credentials from TAILSCALE_OAUTH_CLIENT_ID /
   # TAILSCALE_OAUTH_CLIENT_SECRET env vars. Same OAuth client the
-  # tailscale-cleanup init uses; scope auth_keys:write mints the
-  # rotating tailnet key. tailnet arg omitted — defaults to the
-  # tailnet that owns the OAuth client.
+  # tailscale-cleanup init uses. It deliberately has the broad `all`
+  # scope for current and future Terraform ownership. tailnet arg
+  # omitted; it defaults to the tailnet that owns the OAuth client.
 }
 
 provider "digitalocean" {

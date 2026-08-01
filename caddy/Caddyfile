@@ -100,6 +100,11 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 	# — Caddy doesn't reliably chain sequential rewrites here). The
 	# generator emits <dir>/index.html; assets carry a file extension.
 	route {
+		handle /.well-known/webfinger {
+			header Content-Type application/jrd+json
+			respond `{"subject":"acct:nathan@nathanbaxter.com","links":[{"rel":"http://openid.net/specs/connect/1.0/issuer","href":"https://id.pod.haus"}]}`
+		}
+
 		@dirslash path_regexp dirslash ^(/.+)/$
 		@noext path_regexp noext ^(/[^.]+)$
 

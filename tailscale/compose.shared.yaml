@@ -20,9 +20,9 @@ services:
   # Best-effort: any API error becomes a warning + exit 0 (a stale
   # ghost is worse than a stale ghost AND a wedged bootstrap).
   #
-  # OAuth client = the existing `Tailscale OAuth Client` 1P item,
-  # scopes `auth_keys:write` (existing) + `devices:core:write` (added
-  # for this cleanup). Long-lived, no 90-day rotation chore.
+  # OAuth client = the existing `Tailscale OAuth Client` 1P item.
+  # It deliberately has the broad `all` scope so the same durable
+  # credential can back current and future Terraform resources.
   #
   # The 60s threshold was chosen to be long enough that a normal
   # container restart (disconnect window typically <30s) doesn't
@@ -149,8 +149,7 @@ services:
 # resolver settings forward unknown container names to MagicDNS while
 # preserving embedded Docker DNS for service names. Never add a
 # per-container `dns:` override; it bypasses Docker service discovery.
-# MagicDNS itself remains a tailnet-wide setting in the Tailscale admin
-# until the Terraform OAuth client has `dns:write`.
+# Tailnet-wide MagicDNS settings are owned by Terraform.
       TS_EXTRA_ARGS: "--accept-dns=true"
     restart: unless-stopped
     labels:

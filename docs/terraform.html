@@ -128,8 +128,8 @@ terraform apply</code></pre>
         constraints (no cross-platform hash drift, zero maintenance).
       </p>
       <aside class="callout note">
-        <span class="callout-title">Tailscale auth-key rotation lives in this root</span>
-        <code>terraform/tailscale.tf</code> mints the
+        <span class="callout-title">Tailscale DNS and auth-key rotation live in this root</span>
+        <code>terraform/tailscale.tf</code> owns the tailnet DNS configuration and mints the
         <code>tag:podnet</code> tailnet auth key via the
         <code>tailscale/tailscale</code> provider, drives an 80-day
         rotation via a <code>time_rotating</code> resource, and writes
