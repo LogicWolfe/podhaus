@@ -287,8 +287,8 @@ networks:
         Workflow: edit the relevant <code>dns_&lt;zone&gt;.tf</code>, run
         <code>terraform plan</code> from <code>terraform/</code>,
         then <code>terraform apply</code> (stock <code>terraform</code>, no
-        wrapper, from any machine — creds from the chezmoi-rendered fish
-        env). The S3 state backend is the public
+        wrapper, from any machine; creds are loaded by the PWD-scoped chezmoi
+        fish hook through <code>op inject</code>). The S3 state backend is the public
         <code>https://storage.pod.haus</code> (Caddy → MinIO), not
         Cloudflare-proxied — see <a href="/terraform.html">Terraform</a>.
       </p>

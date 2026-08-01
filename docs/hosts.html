@@ -77,7 +77,7 @@
           <tr><td><code>gh</code></td><td>GitHub PR / issue interaction</td><td><code>dnf</code></td></tr>
           <tr><td><code>jq</code></td><td>JSON munging (Komodo API, mc output, etc.)</td><td><code>dnf</code></td></tr>
           <tr><td><code>mcli</code></td><td>MinIO admin (buckets, users, policies)</td><td><code>sudo dnf install https://dl.min.io/client/mc/release/linux-arm64/mc.rpm</code> — RPM-tracked, upstream-signed releases</td></tr>
-          <tr><td><code>terraform</code></td><td>Stock HashiCorp Terraform — run directly in <code>terraform/</code> (no wrapper; backend = public <code>storage.pod.haus</code>; creds from the PWD-scoped chezmoi fish env). Not bilby-special — any chezmoi-managed machine gets it. See <a href="/terraform.html">Terraform</a>.</td><td>chezmoi-managed (official HashiCorp dnf repo, Fedora branch of the packages script)</td></tr>
+          <tr><td><code>terraform</code></td><td>Stock HashiCorp Terraform. Run it directly in <code>terraform/</code> (no wrapper; backend = public <code>storage.pod.haus</code>; creds loaded through <code>op inject</code> by the PWD-scoped chezmoi fish hook). Any chezmoi-managed machine gets it. See <a href="/terraform.html">Terraform</a>.</td><td>chezmoi-managed (official HashiCorp dnf repo, Fedora branch of the packages script)</td></tr>
           <tr><td><code>railway</code></td><td>Railway CLI for the doggos + yiayia migrations</td><td>Upstream installer, lives in <code>~/.local/bin/</code></td></tr>
           <tr><td><code>zellij</code></td><td>Terminal multiplexer (user preference)</td><td>Cargo / upstream</td></tr>
         </tbody>

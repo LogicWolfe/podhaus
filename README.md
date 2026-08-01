@@ -56,8 +56,8 @@ Bootstrap the remote hosts from bilby:
 
 `terraform/` is the single Terraform root for Cloudflare, UniFi, GitHub,
 DigitalOcean, Tailscale, MinIO, and Pocket ID. Run stock Terraform from that
-directory. Credentials come from the chezmoi-rendered, repository-scoped shell
-environment.
+directory. Credentials come from the chezmoi-installed, repository-scoped shell
+hook, which runs `op inject` when the shell enters this repository.
 
 ```sh
 cd terraform

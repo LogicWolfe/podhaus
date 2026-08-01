@@ -1,16 +1,12 @@
 # Provider configurations for the consolidated podhaus root.
 #
-# Credentials come from the PWD-scoped chezmoi-rendered fish env
-# (~/.config/fish/conf.d/podhaus-tf.fish, loaded by the
-# __podhaus_tf_load function on cd into ~/repos/podhaus). All values
-# resolve from 1Password's Homelab vault. The 1P service-account
-# token is the ONE secret raw on disk (see AGENTS.md); MinIO bucket
-# creds (AWS_*) are least-priv-scoped to the terraform-state bucket;
-# the remaining ambient credentials are tracked as deferred platform debt in
-# docs/plans/alligator-bilby-migration/deferred-followups.md.
+# The chezmoi-installed fish hook runs `op inject` when the shell enters
+# ~/repos/podhaus, exports the standard provider variables, and unsets them on
+# exit. The Homelab-scoped 1P service-account token is the only raw secret on
+# disk; the AWS credentials are limited to the terraform-state bucket.
 
 provider "cloudflare" {
-  # api_token from CLOUDFLARE_API_TOKEN env var (chezmoi-rendered).
+  # api_token from CLOUDFLARE_API_TOKEN env var (PWD-scoped op inject).
 }
 
 provider "unifi" {
@@ -72,24 +68,9 @@ provider "minio" {
   minio_password = data.onepassword_item.pouch_minio_root.password
 }
 
-# The 1Password TF provider was scaffolded here as part of the
-# foundation consolidation. It works, BUT the existing Homelab vault
-# items (Cloudflare API Token, UniFi API Key, MinIO Root, Komodo
-# Webhook Secret, Tailscale OAuth Client, GitHub PAT, DigitalOcean PAT)
-# all use root-level fields with random UUIDs as field IDs — and the
-# data source's top-level attribute mapping switches on f.ID against
-# a small fixed set (username/password/credential/hostname/…). So the
-# data source returns empty for every cred we'd want to swap, unless
-# the items get restructured to either put fields in sections (and we
-# read via section_map[…].field_map[…].value) or recreated with
-# expected field IDs. That restructure ripples to chezmoi `op read`
-# paths, komodo-op slugified Komodo Variables, and any stack.toml
-# `[[OP__…]]` refs. Deferred; see /docs/terraform.html.
-#
-# The resolvable exceptions use fields the provider understands:
-# access.tf reads Pocket ID's sectioned OIDC fields, while
-# pocket_id.tf reads the API Credential item and manages the Forgejo
-# Login item.
+# The 1Password provider is deliberately selective. Backend and provider
+# credentials use the PWD hook; data sources and managed items stay here when
+# their field shapes are stable, as with Pocket ID, Pouch MinIO, and Forgejo.
 
 provider "pocketid" {
   # Public by design: OIDC relying parties and Terraform must reach the

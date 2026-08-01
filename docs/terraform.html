@@ -115,12 +115,14 @@ terraform plan
 terraform apply</code></pre>
       <p>
         <strong>Hard requirement: this works from any machine</strong> —
-        clone podhaus + have chezmoi-provisioned creds ⇒ <code>terraform</code>
-        runs. The provider/backend credentials are exported into every
-        fish shell by the chezmoi-rendered
-        <code>~/.config/fish/conf.d/podhaus-tf.fish</code> (resolved from
-        1Password at <code>chezmoi apply</code> time), so they are simply
-        present in the environment — nothing to invoke. The
+        clone podhaus + have the chezmoi hook and local Homelab service-account
+        token ⇒ <code>terraform</code> runs. When a fish shell enters the podhaus
+        tree, <code>~/.config/fish/conf.d/podhaus-tf.fish</code> reads the token,
+        runs <code>op inject</code> against its 1Password references, and exports
+        the standard provider, backend, and <code>TF_VAR_*</code> variables. The
+        hook unsets them when the shell leaves the tree. Stock Terraform therefore
+        needs no wrapper or credential flags. Leave and re-enter the tree, or start
+        a new shell inside it, after rotating a credential. The
         <code>.terraform.lock.hcl</code> is <strong>not</strong> committed;
         each machine self-locks within the <code>~&gt;</code> version
         constraints (no cross-platform hash drift, zero maintenance).
@@ -142,20 +144,15 @@ terraform apply</code></pre>
         command-echo.
       </aside>
       <aside class="callout note">
-        <span class="callout-title">onepassword TF provider has selective consumers</span>
-        The consolidated root declares the <code>1Password/onepassword</code>
-        provider. Pocket ID and selected Terraform-created credentials already
-        use it, but none of the current chezmoi-rendered TF
-        provider creds (CLOUDFLARE_API_TOKEN, UNIFI_API_KEY, GITHUB_TOKEN,
-        DIGITALOCEAN_TOKEN, TAILSCALE_OAUTH_*, TF_VAR_minio_user/password,
-        TF_VAR_komodo_webhook_secret) actually use it — the provider's
-        v3.x data source only exposes root-level fields whose <em>field ID</em>
-        matches a fixed switch (username, password, credential, …), and
-        all the relevant Homelab items use random UUIDs as field IDs.
-        Unblocking the swap means restructuring those 1P items (move
-        each secret into a section, or recreate with a known field ID)
-        which ripples to <code>op read</code> paths and komodo-op
-        variable names. Deferred; the PWD-scoped env vars work fine.
+        <span class="callout-title">Credential split is intentional</span>
+        The PWD hook is authoritative for Terraform backend and provider
+        credentials. The S3 backend must authenticate before Terraform can
+        evaluate provider data sources. Existing Homelab provider items also use
+        custom root fields with random IDs, so restructuring them would ripple to
+        the hook's 1Password references and komodo-op variable names.
+        The <code>1Password/onepassword</code> provider remains for credentials it
+        can read or manage cleanly, including Pocket ID, Pouch MinIO, Forgejo, and
+        the Sky backup accounts.
       </aside>
       <p>
         The S3 state backend is the public

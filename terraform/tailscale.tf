@@ -64,8 +64,8 @@ resource "terraform_data" "publish_authkey_to_1password" {
     interpreter = ["/bin/sh", "-c"]
     # The key is passed via the NEW_KEY env var, NOT interpolated into
     # the command line — keeps it out of TF's command-echo and the
-    # process-list. OP_SERVICE_ACCOUNT_TOKEN comes from the
-    # chezmoi-rendered env file (the single secret allowed raw on disk).
+    # process-list. OP_SERVICE_ACCOUNT_TOKEN is loaded by the PWD hook
+    # from the single raw secret allowed on disk.
     command = "op item edit '3yke5rmhs4xpzgkjekvbxptdyu' \"credential=$NEW_KEY\" --vault 'hjpenq2avoprqh2u3hqxap3jjq' >/dev/null"
     environment = {
       NEW_KEY = tailscale_tailnet_key.podnet.key

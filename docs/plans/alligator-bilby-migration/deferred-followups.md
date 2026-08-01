@@ -57,17 +57,6 @@ Measure part creation and merge pressure, then tune the collector or ClickHouse
 insert path. Prove lower part growth under normal telemetry volume before
 removing the async-load safeguard.
 
-## Decide whether Terraform should resolve every provider credential
-
-Most Terraform provider credentials still arrive through the PWD-scoped,
-chezmoi-rendered environment. The 1Password provider cannot read the current
-items cleanly because their root fields have random IDs. Moving them requires
-restructuring the items and updating every `op read` and komodo-op consumer.
-
-Either keep the environment path as the documented design, or migrate one
-credential class at a time with a zero-diff plan between each move. Do not turn
-this into a second Terraform root or a host-specific wrapper.
-
 ## Manage MagicDNS settings in Terraform
 
 The Tailscale nodes and Docker daemon forwarding rely on tailnet-wide MagicDNS,
