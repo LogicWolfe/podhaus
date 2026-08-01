@@ -130,8 +130,8 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
         <li>Deploy <code>caddy</code> next: Terraform's backend is the public
           <code>https://storage.pod.haus</code> (Caddy + LE wildcard). LAN clients reach
           Caddy direct via UniFi split-horizon; external clients arrive via the
-          kookaburra DigitalOcean rathole relay (see
-          <a href="/hosts.html#kookaburra">hosts → kookaburra</a>). Until
+          Numbat BinaryLane rathole relay (see
+          <a href="/hosts.html#numbat">hosts → Numbat</a>). Until
           <code>caddy</code> is up + has its cert, <code>terraform</code> cannot reach
           state. <code>MINIO_DOMAIN</code> (in <code>minio/stack.toml</code>) is part of
           the minio deploy. See <a href="/terraform.html">Terraform</a> for the full
@@ -188,6 +188,25 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
         <li>Restore kangaroo's state from
           <code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo/</code> if state was lost.</li>
       </ol>
+
+      <h2 id="numbat-rebuild">Fresh Numbat from scratch</h2>
+      <ol>
+        <li>Apply the consolidated Terraform root. It provisions the BinaryLane VM,
+          both addresses, DNS, PKI, Pocket ID client, and 1Password handoffs.</li>
+        <li>Run <code>./numbat_bootstrap</code> with the op-unlock SSH agent active. It
+          reconciles Rocky, Docker, nftables, recovery SSH, dockernet, keys, and outbound
+          Periphery.</li>
+        <li>Run the podhaus sync or push the repository. Komodo deploys
+          <code>numbat-relay</code>, <code>numbat-pomerium</code>, and
+          <code>numbat-logging</code> from <code>podhaus-numbat</code>.</li>
+        <li>Verify Pocket ID login, native SSH, public TLS, Periphery, log ingestion,
+          and a no-op Terraform plan through <code>storage.pod.haus</code>.</li>
+      </ol>
+      <p>
+        Numbat has no irreplaceable state. Pomerium's Autocert cache is persistent for
+        normal restarts but replaceable; all long-lived keys and credentials are in
+        Terraform state and 1Password.
+      </p>
 
       <h2 id="offsite-restore">Restoring from OneDrive (worst case)</h2>
       <p>

@@ -1,0 +1,135 @@
+#cloud-config
+hostname: numbat
+fqdn: numbat.pod.haus
+timezone: Australia/Perth
+ssh_pwauth: false
+disable_root: false
+users:
+  - default
+  - name: nathan
+    groups: [wheel]
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${nathan_authorized_key}
+package_update: true
+package_upgrade: true
+packages:
+  - dnf-plugins-core
+  - git
+  - kernel-modules-extra
+  - nftables
+  - policycoreutils-python-utils
+  - qemu-guest-agent
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/00-podhaus.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin prohibit-password
+      TrustedUserCAKeys /etc/ssh/pomerium-user-ca.pub
+
+  - path: /etc/ssh/pomerium-user-ca.pub
+    owner: root:root
+    permissions: "0644"
+    content: |
+      ${pomerium_ssh_user_ca}
+
+  - path: /etc/nftables/podhaus.nft
+    owner: root:root
+    permissions: "0644"
+    content: |
+      table inet podhaus {
+        chain input {
+          type filter hook input priority -10; policy accept;
+          ct state established,related accept
+          iifname "lo" accept
+          ip protocol icmp accept
+          ip daddr ${application_ipv4} tcp dport { 22, 80, 443, 2222 } accept
+          ip daddr ${relay_ipv4} tcp dport { 22, 443, 2333 } accept
+          ip daddr { ${application_ipv4}, ${relay_ipv4} } drop
+        }
+      }
+
+  - path: /usr/local/sbin/podhaus-nftables
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      nft delete table inet podhaus 2>/dev/null || true
+      exec nft -f /etc/nftables/podhaus.nft
+
+  - path: /etc/systemd/system/podhaus-nftables.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=podhaus host firewall
+      Before=docker.service sshd.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/podhaus-nftables
+      ExecReload=/usr/local/sbin/podhaus-nftables
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/docker/daemon.json
+    owner: root:root
+    permissions: "0644"
+    content: |
+      {
+        "live-restore": true,
+        "log-driver": "local",
+        "log-opts": {
+          "max-file": "3",
+          "max-size": "50m"
+        }
+      }
+
+  - path: /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip
+    owner: root:root
+    permissions: "0755"
+    content: |
+      ${relay_ip_dispatcher}
+
+  - path: /etc/ssh/numbat-bootstrap-sshd_config
+    owner: root:root
+    permissions: "0600"
+    content: |
+      ${bootstrap_sshd_config}
+
+  - path: /etc/systemd/system/numbat-bootstrap-sshd.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      ${bootstrap_sshd_service}
+
+runcmd:
+  - [/etc/NetworkManager/dispatcher.d/20-numbat-relay-ip, eth0, up]
+  - [dnf, -y, config-manager, --add-repo, "https://download.docker.com/linux/rhel/docker-ce.repo"]
+  - [dnf, -y, install, docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+  - [systemctl, disable, --now, firewalld.service]
+  - [systemctl, daemon-reload]
+  - [bash, -c, 'semanage port -a -t ssh_port_t -p tcp 2222 2>/dev/null || semanage port -m -t ssh_port_t -p tcp 2222']
+  - [systemctl, enable, --now, numbat-bootstrap-sshd.service]
+  - [systemctl, enable, --now, podhaus-nftables.service]
+  - [systemctl, enable, --now, qemu-guest-agent.service]
+  - [systemctl, enable, docker.service]
+  - [systemctl, disable, --now, cockpit.socket]
+  - [systemctl, mask, cockpit.socket]
+  - [systemctl, enable, sshd.service]
+  - [bash, -c, 'if ! /usr/sbin/sshd -t || ! systemctl restart sshd.service; then mv /etc/ssh/sshd_config.d/00-podhaus.conf /etc/ssh/sshd_config.d/00-podhaus.conf.failed; systemctl restart sshd.service; fi']
+
+final_message: "Numbat bootstrap complete"
+
+power_state:
+  mode: reboot
+  message: "Booting the updated kernel"
+  timeout: 30

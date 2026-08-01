@@ -1,4 +1,26 @@
 services:
+  caddy-secrets-init:
+    image: alpine:3.22
+    restart: "no"
+    environment:
+      POMERIUM_ORIGIN_CA_CERT_B64: ${POMERIUM_ORIGIN_CA_CERT_B64}
+      POMERIUM_ORIGIN_SERVER_CERT_B64: ${POMERIUM_ORIGIN_SERVER_CERT_B64}
+      POMERIUM_ORIGIN_SERVER_KEY_B64: ${POMERIUM_ORIGIN_SERVER_KEY_B64}
+      LOG_INGEST_CA_CERT_B64: ${LOG_INGEST_CA_CERT_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf '%s' "$${POMERIUM_ORIGIN_CA_CERT_B64}" | base64 -d > /secrets/pomerium-origin-ca.pem
+        printf '%s' "$${POMERIUM_ORIGIN_SERVER_CERT_B64}" | base64 -d > /secrets/pomerium-origin-server-cert.pem
+        printf '%s' "$${POMERIUM_ORIGIN_SERVER_KEY_B64}" | base64 -d > /secrets/pomerium-origin-server-key.pem
+        printf '%s' "$${LOG_INGEST_CA_CERT_B64}" | base64 -d > /secrets/log-ingest-ca.pem
+    volumes:
+      - caddy-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
   caddy:
     container_name: caddy
     build:
@@ -13,6 +35,9 @@ services:
     # stack (docs-server / gatus / cloudflare-tunnel).
     security_opt:
       - label:disable
+    depends_on:
+      caddy-secrets-init:
+        condition: service_completed_successfully
     # Public TLS front: must be reachable on the host LAN interface so
     # the UniFi WAN:443 port-forward (and the split-horizon LAN name)
     # land here. Unlike MinIO (loopback-only), Caddy is intentionally
@@ -24,6 +49,8 @@ services:
       # Cloudflare token for the ACME DNS-01 challenge (wildcard
       # issuance). DNS-edit scope only; from 1Password via komodo-op.
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      HYPERDX_MCP_GATEWAY_TOKEN: ${HYPERDX_MCP_GATEWAY_TOKEN}
+      PAPERLESS_API_GATEWAY_TOKEN: ${PAPERLESS_API_GATEWAY_TOKEN}
     volumes:
       # Directory bind (not file bind) so atomic-rename edits to the
       # Caddyfile on the host surface in the container — same gotcha
@@ -33,6 +60,7 @@ services:
       # limits make losing /data expensive.
       - caddy-data:/data
       - caddy-config:/config
+      - caddy-secrets:/run/podhaus-secrets:ro
     command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]
     networks:
       - dockernet
@@ -55,3 +83,4 @@ networks:
 volumes:
   caddy-data:
   caddy-config:
+  caddy-secrets:

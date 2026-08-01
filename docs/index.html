@@ -25,7 +25,8 @@
       <p class="lead text-lg text-text-muted">
         Docker infrastructure for <strong class="text-text">bilby</strong> (primary),
         <strong class="text-text">kangaroo</strong> (QNAP storage and secondary services), and
-        <strong class="text-text">kookaburra</strong> (off-LAN public relay). One Komodo Core
+        <strong class="text-text">Numbat</strong> (active Perth gateway), with
+        <strong class="text-text">Kookaburra</strong> retained for rollback. One Komodo Core
         manages the fleet; secrets come from 1Password and external infrastructure lives in Terraform.
       </p>
 
@@ -36,7 +37,7 @@
       </p>
       <ol>
         <li><a href="/architecture.html">Architecture</a> — the big picture, in one page.</li>
-        <li><a href="/hosts.html">Hosts</a>: what runs on bilby, kangaroo, and kookaburra.</li>
+        <li><a href="/hosts.html">Hosts</a>: what runs on bilby, kangaroo, Numbat, and Kookaburra.</li>
         <li><a href="/komodo.html">Komodo</a> — how the orchestrator works, two operating models.</li>
         <li><a href="/stack-conventions.html">Stack conventions</a> — how to add or change a service.</li>
       </ol>
@@ -46,9 +47,9 @@
       <h3 id="getting-started">Getting started</h3>
       <ul>
         <li><a href="/architecture.html">Architecture</a>: system overview, host topology, secrets flow.</li>
-        <li><a href="/hosts.html">Hosts</a>: bilby, kangaroo, kookaburra, and planned pinelake.</li>
+        <li><a href="/hosts.html">Hosts</a>: bilby, kangaroo, Numbat, retained Kookaburra, and planned Pinelake.</li>
         <li><a href="/storage.html">Storage</a> — three-tier rule: local NVMe, Jump SSD, Pouch HDD.</li>
-        <li><a href="/networking.html">Networking</a> — dockernet bridge, Cloudflare Tunnel, Access, DNS.</li>
+        <li><a href="/networking.html">Networking</a>: dockernet, Pomerium, rathole, Caddy, DNS, and rollback edge.</li>
       </ul>
 
       <h3 id="platform">Platform</h3>

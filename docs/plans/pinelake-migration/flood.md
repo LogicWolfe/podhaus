@@ -38,11 +38,9 @@ Risks:
    `.torrent.libtorrent_resume` files need their ownership matched
    (otherwise rtorrent refuses to resume those torrents and starts
    them as new-and-unhashed).
-2. **`--auth none` re-exposure.** Flood ships with no auth; Cloudflare
-   Access at `torrent.pinelake.haus` is the only gate. The new compose
-   must keep `--auth none` and the Access app must remain in place
-   throughout cutover. **Verify the Access app is enforced before
-   touching the tunnel ingress.**
+2. **`--auth none` re-exposure.** Flood ships with no auth; Pomerium's
+   Nathan-only route is the gate. Verify the route through Numbat before
+   retiring cloudflared.
 3. **Container name collision.** Existing container is
    `rtorrent-flood` on the default `bridge`. New compose container
    will be `flood` (matching bilby's naming) on `dockernet`. Stop the
@@ -62,8 +60,6 @@ services:
     restart: unless-stopped
     networks:
       - dockernet
-    ports:
-      - "127.0.0.1:3000:3000"   # native cloudflared reaches Mac loopback
     environment:
       HOME: /config
       FLOOD_OPTION_HOST: 0.0.0.0
@@ -146,16 +142,12 @@ against the static page (`/`).
    - Update [Flood runbook](/runbooks/flood.html) with the new compose
      location
 
-## Tunnel ingress side
+## Numbat route
 
-The on-host `/etc/cloudflared/config.yml` currently maps
-`torrent.pinelake.haus → http://127.0.0.1:3000`. Keep that backend after the
-config moves into Terraform: cloudflared remains a native LaunchDaemon and
-reaches the container through Colima's loopback-only published port. Other
-containers use `http://flood:3000` over dockernet.
-
-Detailed tunnel migration in
-[Cloudflare tunnel + Terraform](cloudflare-tunnel.md).
+The Pinelake rathole client connects to `flood:3000` on dockernet and exposes
+only that named service to Numbat. Pomerium applies the Nathan-only route at
+`torrent.pinelake.haus`. Keep the old cloudflared path until the new route is
+verified, then remove its daemon and config.
 
 ## Backup
 

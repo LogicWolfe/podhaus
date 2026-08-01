@@ -34,6 +34,30 @@ services:
       autoheal: "true"
 
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  numbat-rathole-client:
+    container_name: numbat-rathole-client
+    image: rathole:local
+    pull_policy: never
+    restart: unless-stopped
+    security_opt:
+      - label:disable
+      - no-new-privileges:true
+    environment:
+      RATHOLE_CONFIG_TEMPLATE: /etc/rathole/numbat-client.toml.tmpl
+      RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}
+      RATHOLE_PUBLIC_TLS_TOKEN: ${RATHOLE_PUBLIC_TLS_TOKEN}
+      RATHOLE_FORGEJO_SSH_TOKEN: ${RATHOLE_FORGEJO_SSH_TOKEN}
+      RATHOLE_PROTECTED_HTTP_TOKEN: ${RATHOLE_PROTECTED_HTTP_TOKEN}
+      RATHOLE_BILBY_SSH_TOKEN: ${RATHOLE_BILBY_SSH_TOKEN}
+    volumes:
+      - ${PODHAUS_REPO}/relay/bilby:/etc/rathole:ro
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      podhaus.depends-on-rathole-client: ${BUILD_HASH_RATHOLE_CLIENT:-unset}
 networks:
   dockernet:
     external: true

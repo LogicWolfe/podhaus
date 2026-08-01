@@ -19,7 +19,7 @@ resource "cloudflare_dns_record" "storage_a" {
   zone_id = local.zones["pod.haus"]
   name    = "storage.pod.haus"
   type    = "A"
-  content = digitalocean_reserved_ip.kookaburra.ip_address
+  content = local.numbat_relay_ipv4
   proxied = false
   ttl     = 300
   settings = {

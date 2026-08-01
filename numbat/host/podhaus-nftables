@@ -1,0 +1,4 @@
+#!/bin/bash
+set -euo pipefail
+nft delete table inet podhaus 2>/dev/null || true
+exec nft -f /etc/nftables/podhaus.nft

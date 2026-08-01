@@ -22,9 +22,9 @@
       <h1>Syncthing</h1>
       <p class="lead text-lg text-text-muted">
         Runs on kangaroo. Host network provides LAN device discovery via
-        UDP/21027 multicast. UI exposed at <code>sync.pod.haus</code> through the bilby
-        Cloudflare Tunnel, currently routed to <code>10.0.0.25:8384</code>. GUI auth is disabled;
-        Cloudflare Access is the gate externally.
+        UDP/21027 multicast. The UI at <code>sync.pod.haus</code> is Nathan-only through
+        Numbat Pomerium, private-origin Caddy, and <code>10.0.0.25:8384</code>. GUI auth is
+        disabled; Pomerium is the external gate.
       </p>
 
       <h2 id="why-kangaroo">Why it lives on kangaroo</h2>
@@ -85,7 +85,7 @@
 
       <aside class="callout note">
         <span class="callout-title">GUI auth is intentionally off — silence the warning the right way</span>
-        We run the GUI open (no user/password): externally gated by Cloudflare Access,
+        We run the GUI open (no user/password): externally gated by Pomerium,
         LAN trusted. Syncthing then shows a red <em>"remote access without a password"</em>
         banner. That banner is <strong>not</strong> a dismissible notification — it's a
         live <code>openNoAuth</code> check recomputed every page load, so clicking the
@@ -125,12 +125,12 @@
 
       <h2 id="ingress">Ingress</h2>
       <p>
-        Terraform-managed Cloudflare Tunnel rule:
+        Pomerium and Caddy route:
       </p>
-      <pre><code>sync.pod.haus → http://${local.kangaroo_active_ip}:8384
+      <pre><code>sync.pod.haus → Numbat Pomerium → private Caddy → http://${local.kangaroo_active_ip}:8384
 local.kangaroo_active_ip = 10.0.0.25</code></pre>
       <p>
-        bilby's cloudflared routes over the LAN to kangaroo's published port. The active
+        Caddy routes over the LAN to kangaroo's published port. The active
         NIC is a single Terraform knob in <code>terraform/services_pod_haus.tf</code>;
         <code>10.0.0.232</code> remains the spare 1GbE path.
       </p>

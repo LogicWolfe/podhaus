@@ -33,7 +33,8 @@ a multi-terabyte rescan.
    Pinelake's folder mode or peer list.
 4. After both sides are current, remove the retired Alligator device from the
    folder memberships.
-5. Keep the native cloudflared backend at `http://127.0.0.1:8384`.
+5. Add a machine-local rathole client for `127.0.0.1:8384`, then verify the
+   Nathan-only Pomerium route before retiring cloudflared.
 
 This path removes the current backup gap without combining it with an identity
 and networking migration.
@@ -53,7 +54,7 @@ Do this only after the native state and restore path are proven.
    `/Volumes/TerraMaster`; the existing config uses those absolute paths.
 5. Run as the UID/GID that can access both virtiofs mounts.
 6. Publish the GUI only to macOS loopback, for example
-   `127.0.0.1:8384:8384`, so native cloudflared can keep its existing backend.
+   `127.0.0.1:8384:8384`, for the machine-local rathole client.
 7. Explicitly publish TCP and UDP `22000` and UDP `21027`, then verify how
    Colima forwards them to the household LAN. Do not assume multicast discovery
    crosses the VM boundary.
@@ -68,8 +69,8 @@ broaden ports or add a second overlay merely to make the container design fit.
 
 - Device ID is unchanged in the staged container.
 - All live peers can connect through the intended published ports.
-- The GUI remains reachable at `sync.pinelake.haus` through native
-  cloudflared.
+- The GUI remains reachable at `sync.pinelake.haus` through Numbat and
+  Pomerium.
 - No full-folder rescan starts.
 - Rollback to the installed native version has been tested against a copied
   database.
@@ -87,7 +88,7 @@ For the recommended native state:
   the repository objects.
 - The device ID matches the pre-backup capture.
 - All expected peers connect and no unexpected deletions appear.
-- `sync.pinelake.haus` serves the GUI through Access.
+- `sync.pinelake.haus` serves the GUI through Pomerium.
 
 For a later container state, add explicit macOS-loopback, LAN TCP/UDP, peer
 discovery, identity, rescan, and rollback checks to the implementation plan.

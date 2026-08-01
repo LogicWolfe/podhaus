@@ -4,7 +4,8 @@
 # on bilby the rtorrent-cleanup file tail).
 #
 # Alloy bridges container logs to OTLP and ships to ClickStack: bilby
-# in-network, kangaroo cross-LAN, and kookaburra cross-tailnet. The
+# in-network, kangaroo cross-LAN, kookaburra cross-tailnet, and Numbat
+# through its mTLS ingest path. The
 # ingestion key and endpoint live in each host's config and stack TOML.
 
 services:

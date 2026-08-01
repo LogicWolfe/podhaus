@@ -1,0 +1,26 @@
+[[stack]]
+name = "numbat-pomerium"
+description = "Pomerium Core on Numbat, backed by Pocket ID and outbound rathole origins"
+tags = ["numbat", "podhaus"]
+
+[stack.config]
+server = "numbat"
+linked_repo = "podhaus-numbat"
+run_directory = "pomerium"
+file_paths = ["compose.yaml"]
+ignore_services = ["pomerium-secrets-init"]
+auto_pull = true
+
+environment = """
+TZ=[[TZ]]
+SHARED_SECRET=[[OP__KOMODO__POMERIUM_SECRETS__SHARED_SECRET]]
+COOKIE_SECRET=[[OP__KOMODO__POMERIUM_SECRETS__COOKIE_SECRET]]
+SSH_USER_CA_KEY_B64=[[OP__KOMODO__POMERIUM_SECRETS__SSH_USER_CA_KEY_B64]]
+SSH_HOST_KEY_B64=[[OP__KOMODO__POMERIUM_SECRETS__SSH_HOST_KEY_B64]]
+ORIGIN_CLIENT_CERT_B64=[[OP__KOMODO__POMERIUM_SECRETS__ORIGIN_CLIENT_CERT_B64]]
+ORIGIN_CLIENT_KEY_B64=[[OP__KOMODO__POMERIUM_SECRETS__ORIGIN_CLIENT_KEY_B64]]
+ORIGIN_CA_CERT_B64=[[OP__KOMODO__POMERIUM_ORIGIN_PKI__CA_CERT_B64]]
+SIGNING_KEY_B64=[[OP__KOMODO__POMERIUM_SECRETS__SIGNING_KEY_B64]]
+IDP_CLIENT_ID=[[OP__KOMODO__POMERIUM_OIDC__USERNAME]]
+IDP_CLIENT_SECRET=[[OP__KOMODO__POMERIUM_OIDC__PASSWORD]]
+"""

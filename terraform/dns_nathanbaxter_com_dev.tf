@@ -8,13 +8,8 @@
 resource "cloudflare_dns_record" "nathanbaxter_com_dev" {
   zone_id = local.zones["nathanbaxter.com"]
   name    = "dev.nathanbaxter.com"
-  type    = "CNAME"
-  content = local.tunnels.pod_haus
-  proxied = true
-  ttl     = 1
-  settings = {
-    flatten_cname = false
-    ipv4_only     = false
-    ipv6_only     = false
-  }
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
 }

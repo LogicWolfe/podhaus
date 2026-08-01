@@ -47,9 +47,8 @@ Required work:
 3. Record the machine identifier and token source in 1Password without
    changing the live token.
 4. Verify the native login item returns after a real reboot.
-5. Keep Plex remote access on Plex's own path. Optionally use
-   `tailscale serve --bg --https=443 http://localhost:32400` as an operator
-   fallback after Pinelake joins the podhaus tailnet.
+5. Keep Plex remote access on Plex's own path. Add no Numbat browser route
+   unless a concrete operator need appears.
 
 ### B. Containerise Plex on Pinelake
 
@@ -64,8 +63,8 @@ tree while native Plex remains stopped or isolated:
 - The chosen image's config root is correct. `plexinc/pms-docker` expects
   `/config/Library/Application Support/Plex Media Server/`; mounting the native
   `Plex Media Server` directory directly at `/config` is wrong.
-- Published port `32400` is reachable from LAN clients and from native
-  cloudflared or `tailscale serve` as intended.
+- Published port `32400` is reachable from LAN clients and Plex's native
+  remote-access path.
 - Client discovery works, or the household accepts explicit server URLs.
 - The plist-to-`Preferences.xml` translation retains the machine identifier,
   processed identifier, certificate UUID, friendly name, home membership, and

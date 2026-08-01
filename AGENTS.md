@@ -26,7 +26,7 @@ Consult these pages before acting:
 | Multi-host shared services (backup, autoheal, logging) | [`docs/stack-conventions.html`](docs/stack-conventions.html) + [`docs/komodo.html`](docs/komodo.html) |
 | How Komodo, ResourceSync, and the two operating models work | [`docs/komodo.html`](docs/komodo.html) |
 | Secrets, Komodo Variables, the `[[VAR]]` flow | [`docs/secrets.html`](docs/secrets.html) |
-| dockernet, Cloudflare Tunnel, Access, DNS | [`docs/networking.html`](docs/networking.html) |
+| dockernet, Numbat, Pomerium, rathole, DNS, retained Cloudflare rollback | [`docs/networking.html`](docs/networking.html) |
 | Storage tier rule (local / Jump / Pouch) | [`docs/storage.html`](docs/storage.html) |
 | Backup / restore / off-site sync | [`docs/backup-and-recovery.html`](docs/backup-and-recovery.html) |
 | Gatus alerts, log pipeline, autoheal | [`docs/monitoring.html`](docs/monitoring.html) |
@@ -44,32 +44,24 @@ aren't obvious from the compose files alone.
 
 ## What podhaus is
 
-Docker container infrastructure for **three** hosts:
+Docker container infrastructure for **four** active hosts:
 - **bilby** (Apple M1 Mac mini, primary; Fedora Asahi Linux) — runs
   Komodo Core, MinIO, Caddy, every primary service.
 - **kangaroo** (QNAP NAS, QTS + Container Station) — secondary LAN
   deploy target via linked-repo Periphery.
-- **kookaburra** (DigitalOcean droplet, syd1, Fedora 43, x86_64) —
-  off-LAN public-ingress relay host. Runs rathole (server) so external
-  clients reaching `storage.pod.haus` are tunneled back to bilby's
-  Caddy (TLS terminates at bilby; the droplet only sees ciphertext —
-  intrinsic relay config only, no MinIO data/certs/creds).
+- **numbat** (BinaryLane Perth, Rocky Linux 10, x86_64) is the active
+  public gateway. Pomerium authenticates through Pocket ID; named rathole
+  services carry public TLS, private mTLS origins, Forgejo/host SSH,
+  outbound Periphery, and mTLS log shipping. It has no route into the LAN.
+- **kookaburra** (DigitalOcean syd1, Fedora 43, x86_64) is the retained
+  rollback relay. Do not remove it before Nathan verifies Numbat.
 
 Managed as Docker Compose stacks under a single Komodo Core; secrets
-flow from 1Password; ingress for most services via Cloudflare Tunnel
-+ Access at `*.pod.haus`, and for `storage.pod.haus` specifically via
-the kookaburra rathole relay (the UDM Pro SE binds WAN:443 itself, so
-direct port-forward never worked from genuine external clients — see
-`docs/hosts.html#kookaburra`). A planned fourth host **pinelake** will
-slot into the kookaburra pattern (linked-repo Periphery + tailscale).
-
-**Management plane (tag:podnet on Tailscale):** Komodo Core →
-kookaburra Periphery + log ship-back ride a private tailnet between
-bilby (`bilby-1`) and kookaburra (`kookaburra`) — kookaburra's
-Periphery is never internet-exposed; the public surface there is
-only :443 (rathole data) + :2333 (rathole control, noise+token).
-ACL is asymmetric: your devices → podnet freely; podnet ↛ your
-devices (blast-radius containment).
+flow from 1Password. Protected names resolve to Numbat Pomerium; public
+and raw endpoints use Numbat's second address and Caddy. Cloudflare stays
+authoritative DNS and CDN for public websites. Tunnel, Access, Kookaburra,
+and their Tailscale path remain live only for rollback. A planned host
+**pinelake** will use the proven outbound Numbat contract.
 
 ---
 
@@ -132,12 +124,12 @@ devices (blast-radius containment).
 - Services needing device access (Home Assistant, Plex, Syncthing) use
   `network_mode: host`. Cloudflare Tunnel reaches them via the dockernet
   bridge gateway at `172.18.0.1:<port>`.
-- Cloudflare Tunnel routes `*.pod.haus` subdomains directly to backends
-  (no nginx). Terraform owns the remote ingress configuration in
-  `terraform/tunnel.tf`; single-host `*.pod.haus` services are declared
-  through `terraform/services_pod_haus.tf`.
-- A single Cloudflare Access app gates the entire `*.pod.haus` wildcard
-  on a Family identity policy — no per-service Access app needed.
+- Protected names are DNS-only A records to Numbat's application IP.
+  Pomerium authenticates with Pocket ID and reaches Caddy's private
+  `:4443` listener through loopback rathole plus client mTLS.
+- Public and raw endpoints use Numbat's relay IP and Caddy `:4444`.
+  Cloudflare proxies only public CDN sites. Tunnel and Access resources
+  remain Terraform-owned rollback paths.
 - **bilby's `/etc/docker/daemon.json` sets
   `"dns": ["100.100.100.100", "1.1.1.1"]`**, so Docker's embedded DNS
   resolver (`127.0.0.11`) forwards unknown names to Tailscale's MagicDNS
@@ -161,8 +153,8 @@ devices (blast-radius containment).
 | `<name>/compose.yaml` | Docker Compose file for each service stack |
 | `<name>/stack.toml` | Komodo stack metadata (server assignment, environment block) |
 | `komodo/sync/variables.toml` | Global non-secret variable declarations (TZ, MEDIA_DIR). Authoritative — applied by the podhaus sync (`include_variables = true`). Stack-private vars live as inline `[[variable]]` blocks in `<stack>/stack.toml` instead. |
-| `komodo/sync/servers.toml` | Server definitions (bilby + kangaroo + kookaburra) |
-| `komodo/sync/repos.toml` | Linked Repo definitions for kangaroo (`podhaus`) + kookaburra (`podhaus-kookaburra`) |
+| `komodo/sync/servers.toml` | Server definitions (bilby, kangaroo, kookaburra, numbat) |
+| `komodo/sync/repos.toml` | Per-host Linked Repo definitions, including `podhaus-numbat` |
 | `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 RunAction `podhaus-inject-content-hashes` (stamp content hashes into stored env **and** force-deploy stacks with stale hash labels — the actual config-only/build-context trigger) → Stage 2 BatchDeployStackIfChanged "*" (owns compose-text changes + new stacks; does NOT see hash changes) → Stage 3 RestartStack ofelia (label re-read; the released ofelia image has no live label refresh). |
 | `komodo/sync/actions.toml` | Komodo Actions invoked by procedures. Currently one: `podhaus-inject-content-hashes` — Stage 1 of the push procedure. For every stack visible at `/syncs/podhaus`, hashes (a) the stack directory (committed files; `.env` excluded) → `STACK_CONTENT_HASH`, and (b) each service's resolved build context → `BUILD_HASH_<UPPER_SERVICE>`; injects both into stored env. **Then force-deploys any stack whose running container's `podhaus.*` hash labels are stale while its compose text is unchanged** — this reconcile is the load-bearing trigger for podhaus's "any in-stack file change → recreate; any build-context change → image rebuild + recreate" property, because Komodo's IfChanged (Stage 2) only diffs compose text and never sees a hash change. See the Stage-1/content-hash notes in "When adding a new service". |
 | `tools/lint-stack-content-hash.py` | Pre-commit consumer-wiring lint for the content-hash mechanism: every service has the `podhaus.stack-content-hash` label; every build service has `build.args.STACK_CONTENT_HASH` referencing its own `BUILD_HASH_<self>` + the matching `ARG`/`ENV` pair in its Dockerfile; every service that `depends_on` a build service has the `podhaus.depends-on-<dep>` label. Run via `tools/pre-commit` alongside `lint-stack-env.py`. |
@@ -178,11 +170,15 @@ devices (blast-radius containment).
 | `bilby/firewalld/` | **Source of truth for bilby's firewalld** — `zones/public.xml` (LAN `end0` zone) + `services/*.xml` (custom port groups). Staged onto the host by `bilby/host-systemd/install.sh` (installs services, then zone, `--check-config`, reload). **Never** run `firewall-cmd --add-*` (even `--permanent`) — it diverges from this dir and the next `install.sh` reverts it; edit the XML and re-run the installer. The `public` zone trusts the whole home LAN (`10.0.0.0/24 → accept`), so LAN-only services (e.g. HA's HomeKit bridge `tcp/21063`) need no explicit rule; only services needing non-LAN reach (cloudflared via dockernet `172.18.0.1`, tailnet) get an explicit `services/*.xml` (plex, music-assistant). See [`docs/hosts.html#bilby-firewall`](docs/hosts.html#bilby-firewall). |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
 | `kookaburra_bootstrap` | Idempotent kookaburra bring-up: SSH hardening → dockernet bridge → tailscale (Komodo adopts it post-handoff) → Periphery. Defaults `DROPLET_IP` to the reserved IP (`170.64.241.136`) so it stays correct across `terraform apply -replace`. |
-| `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns Cloudflare (DNS, Access, Tunnel), UniFi DNS, GitHub deploy webhook, Tailscale DNS + auth-key rotation, DigitalOcean (kookaburra relay), MinIO IAM/bucket policies (per-site tenants), and Pocket ID users/groups/OIDC clients. State `s3://terraform-state/podhaus.tfstate` in MinIO via `https://storage.pod.haus`. Run **stock `terraform`** directly (creds loaded through `op inject` by the chezmoi-installed, PWD-scoped `~/.config/fish/conf.d/podhaus-tf.fish`; no wrapper). Replaced the split `cloudflare/` + `minio/terraform/` + relay-only `terraform/` roots in 2026-05; see `/docs/terraform.html`. |
+| `numbat_bootstrap` | Idempotent Rocky host, recovery SSH, nftables, Docker, dockernet, and outbound Periphery reconciliation. Numbat application stacks are Komodo-managed. |
+| `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS and rollback edge, UniFi DNS, GitHub deploy webhook, Tailscale rotation, DigitalOcean, MinIO IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in MinIO via public `https://storage.pod.haus`; run stock `terraform` directly. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (per-site static hosting) via `storage.pod.haus`. |
-| `caddy/` | Public TLS front for DNS-only relay services: `storage.pod.haus` → MinIO and `git.pod.haus` → Forgejo. Genuine external traffic arrives via the kookaburra rathole :443 tunnel (the UDM Pro SE binds WAN:443 itself so direct port-forward is a dead path). See `docs/hosts.html#kookaburra` + `docs/terraform.html`. |
-| `relay/` | rathole stacks — `relay/bilby/` (Komodo-managed client, dials out) + `relay/kookaburra/` (Komodo-managed server, public :443 + :2333). Built from upstream release binary (no arm64 image). |
-| `forgejo/` | Local Git hosting on bilby. HTTPS and ordinary SSH share `git.pod.haus` through kookaburra: :443 → rathole → Caddy → Forgejo; anchor :22 → rathole → Forgejo embedded SSH. Pocket ID is the only browser identity source; Terraform owns its users, Forgejo access groups, admin role, OIDC client, and `ssh_keys` claims from `forgejo/keys/`. Forgejo auto-registers and synchronizes keys on login. SQLite/config are local NVMe; repositories/LFS/attachments/archives are on Jump. See `docs/runbooks/forgejo.md`. |
+| `caddy/` | Bilby's split origin: private mTLS `:4443` for Pomerium, public-only `:4444` for Numbat raw/CDN endpoints, and retained `:443` rollback/LAN routes. |
+| `relay/` | rathole clients on bilby and servers on Numbat plus retained Kookaburra. Numbat services are individually tokened and use Noise transport. |
+| `pomerium/` | Pomerium Core on Numbat: Pocket ID browser policy, scoped machine exceptions, native SSH, private-origin client mTLS, and persistent replaceable Autocert cache. |
+| `forgejo/` | Local Git hosting on bilby. Pomerium protects HTTPS; a raw Numbat rathole owns ordinary `git@git.pod.haus` SSH. Forgejo retains native Pocket ID OIDC and key synchronization. |
+| `numbat/periphery/` | Bootstrap-managed outbound Periphery, dialing `wss://core-connect.pod.haus` with Komodo Noise keys. |
+| `logging/numbat/` | Alloy ships to `logs-ingest.pod.haus` through rathole and Caddy with per-host mTLS. |
 | `tailscale/` | Tailscale management-plane nodes. `tailscale/bilby/` and `tailscale/kookaburra/` are both Komodo-managed (Komodo Core on bilby, `kookaburra-tailscale` linked-repo stack on kookaburra). kookaburra's tailscale is bootstrap-launched (via `kookaburra_bootstrap`) so Periphery can join the tailnet, then Komodo adopts the running container — bootstrap and Komodo use the same compose project name + container name (`kookaburra-podnet`) so the named state volume and tailnet identity survive the handoff. `tailscale/compose.shared.yaml` has a `tailscale-cleanup` init service (built from the shared `init-tools:local` image — `curl + jq` baked in) that calls the Tailscale API before tailscaled starts to prune offline devices matching `${TS_HOSTNAME}` — claims the bare hostname back when the state volume is regenerated (rebuild, accidental volume nuke). Tailnet DNS and the auth key are **TF-managed** by `terraform/tailscale.tf`; the latter is a reusable `tag:podnet` key with 80-day rotation and 1P write-back. The `Tailscale OAuth Client` 1P item deliberately has the broad `all` scope for current and future Terraform ownership; the same credential reaches both cleanup containers. Browser login uses Pocket ID; the Tailscale-native passkey Admin is the recovery path. |
 | `kookaburra/periphery/` | kookaburra Komodo Periphery compose. Bootstrap-managed (parallels `kangaroo/periphery/`). In v2 outbound mode, Periphery dials Core at `ws://bilby-podnet.tail9ceb.ts.net:9120` over tailnet via dockernet+MagicDNS. Port 8120 is not published; the internal listener exists only for the local container healthcheck. Auth is the noise handshake. |
 | `logging/kookaburra/` | Alloy on kookaburra — ships container logs cross-tailnet to bilby's ClickStack at `bilby-podnet.tail9ceb.ts.net:4318` via MagicDNS. kookaburra's `/etc/docker/daemon.json` forwards container DNS to `100.100.100.100` + `1.1.1.1` (mirrors bilby's setup; daemon.json is system-level on the droplet, not in this repo). |
@@ -345,10 +341,11 @@ devices (blast-radius containment).
    normally. Pushes that DON'T touch procedures.toml apply fully via
    the webhook with no manual step.
 7. If the service is a single-host pod.haus service, add a
-   `module "<name>"` block in `terraform/services_pod_haus.tf` plus
-   one entry in `tunnel.tf`'s `pod_haus_module_ingress`. The module
-   owns DNS + Access policy chain + tunnel ingress; default policy
-   chain is Homelab service-token bypass + Family allow.
+   `module "<name>"` block in `terraform/services_pod_haus.tf` with
+   `pomerium_ipv4 = local.numbat_application_ipv4`, add the protected
+   route to `pomerium/config.yaml`, and add its private-origin host to
+   `caddy/Caddyfile`. The module retains Access and Tunnel for rollback
+   while publishing active DNS to Numbat.
    `cd terraform && terraform apply` to publish (creds are ambient
    after the chezmoi-installed fish hook runs `op inject`; no wrapper, runs from any
    machine).
@@ -457,7 +454,7 @@ These have failure modes that you must not introduce:
   at commit time. (`vpn-diagnostics` is the only stack that
   intentionally carries `deploy = false`; for podhaus stacks just
   omit the field.)
-- **Linked Repo hosts (kangaroo, kookaburra, future pinelake) use the
+- **Linked Repo hosts (kangaroo, kookaburra, numbat, future pinelake) use the
   same four-stage procedure as bilby.** Komodo v2 semantics:
   `DeployStack` `git pull`s the linked clone before composing;
   `RestartStack` does not pull (it only `docker compose restart`s).
@@ -531,7 +528,7 @@ These have failure modes that you must not introduce:
 - **Komodo Core ↔ Periphery uses v2 X25519 noise-handshake PKI auth
   (no shared passkey).** Private keys live in `/opt/komodo/keys/` on
   bilby (Core's + bilby Periphery's) and on each Periphery host's keys
-  dir (kangaroo/kookaburra). Pubkeys are checked in at
+  dir (kangaroo/kookaburra/numbat). Pubkeys are checked in at
   `komodo/keys/*.pub`. Never commit a `*.key` file; the
   `komodo/keys/.gitignore` defends against it. To add a new Periphery
   host: generate its keypair on bilby (openssl in alpine container, see

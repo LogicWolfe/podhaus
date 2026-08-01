@@ -1,194 +1,85 @@
 # Pomerium edge migration
 
-## Goal
+Status: cut over on 2026-08-01, awaiting Nathan's independent verification.
+Nothing on the old edge may be shut down before that verification.
 
-Move Kookaburra to BinaryLane Perth and make it the public gateway for podhaus.
-Pomerium and Pocket ID replace Cloudflare Access. Internal hosts keep
-outbound-only connections, and Tailscale leaves the steady-state design.
+## Live architecture
 
-The current DigitalOcean, Cloudflare Tunnel, Access, and Tailscale paths remain
-authoritative until cutover.
-
-## Architecture
-
-- Start with BinaryLane's smallest Standard plan in Perth: 1 vCPU, 1 GB RAM,
-  20 GB NVMe, 1 TB transfer, and two public IPv4 addresses.
-- Run Pomerium Core all-in-one on Kookaburra with Pocket ID as its identity
-  provider.
-- Use named outbound rathole services. Kookaburra gets no route into either
-  home network.
-- Keep Cloudflare for authoritative DNS and as the CDN for public websites.
-- Keep the old gateway live for rollback. Pinelake isn't part of this work.
-
-The addresses have complementary owners, so no TCP multiplexer is needed:
+Numbat is a BinaryLane Perth Rocky Linux 10 VM on the smallest Standard plan.
+It has no route into the home network. Bilby and other targets connect outward
+with named rathole services.
 
 | Address | TCP 22 | TCP 80 | TCP 443 | TCP 2333 |
 |---|---|---|---|---|
-| Application IP | Forgejo rathole | Pomerium ACME and redirect | Pomerium HTTP | Closed |
-| Relay IP | Pomerium native SSH | Closed | Public TLS rathole | rathole control |
+| `103.1.184.88` | Forgejo SSH | Pomerium redirect and ACME | Pomerium | Closed |
+| `103.4.235.175` | Pomerium native SSH | Closed | Public TLS rathole | rathole control |
 
-Protected browser names, including `git.pod.haus`, resolve to the application
-IP. Pomerium reaches a private Bilby Caddy listener through a loopback-bound
-rathole service. Raw APIs, machine endpoints, Pocket ID, UniFi, and public
-sites resolve to the relay IP and reach Caddy's public listener directly.
+Protected browser names resolve to the application address. Pomerium
+authenticates with Pocket ID, then uses a loopback-only rathole service and
+client mTLS to reach Caddy's private `:4443` listener. Raw and public endpoints
+use the relay address and Caddy's public-only `:4444` listener.
 
-Caddy's public listener contains no protected virtual hosts. Its private
-listener requires a client certificate mounted only into Pomerium, which stops
-a compromise of the public rathole container becoming a Pomerium bypass. Both
-paths also use rathole Noise transport and separate service tokens.
+Cloudflare remains authoritative DNS and the CDN for public websites and their
+Umami ingestion paths. Protected services and raw protocols are DNS-only.
 
-This removes HAProxy, SNI inspection, PROXY protocol, Pomerium's high SSH port,
-and public recovery SSH. Pomerium receives HTTP client addresses directly.
-Kookaburra itself is a Pomerium SSH route; the BinaryLane console is the
-break-glass path. Bootstrap uses application-IP port 22 temporarily, then
-closes host sshd there before the Forgejo relay starts.
+Numbat Periphery connects outward through `core-connect.pod.haus` with Komodo
+Noise authentication. Alloy sends through `logs-ingest.pod.haus`, where Caddy
+requires Numbat's client certificate and ClickStack requires its ingestion key.
+Neither path uses Tailscale.
 
-Host SSH uses commands such as `ssh nathan@bilby@ssh.pod.haus`. Each route pins
-the Pocket ID subject and allowed Unix username. Bilby and Kookaburra trust the
-Pomerium user CA through committed host configuration. Voltaire's CA trust,
-rathole client, and sshd configuration remain machine-local; this repo owns
-only its gateway route, DNS, and 1Password secret. Forgejo stays conventional:
-`git@git.pod.haus` reaches its embedded SSH server with the original key.
+Host SSH uses Pomerium on `ssh.pod.haus:22`, with routes for Bilby, Numbat, and
+Voltaire. Forgejo remains ordinary `git@git.pod.haus` SSH on the other address.
+The repository owns only Voltaire's gateway-side resources; its rathole
+client and SSH CA trust stay machine-local.
 
-Periphery connects outward through `core-connect.pod.haus` and keeps Komodo's
-Noise authentication. Alloy sends to `logs-ingest.pod.haus`, where Caddy
-requires per-host mTLS and the ClickStack key. After both paths survive a real
-reboot, remove Tailscale, MagicDNS, and the Docker DNS overrides.
+## Identity and exceptions
 
-Terraform provisions a supported Debian stable image and both addresses from
-the existing consolidated root. Prove create, refresh, no-op, resize, replace,
-and secondary-address handling on a disposable server first. Committed
-nftables rules allow only the address and port pairs above. The steady-state
-containers are Pomerium, rathole, Periphery, and Alloy.
+Pomerium's default policy allows the two family Pocket ID identities. Syncthing
+and the development service are Nathan-only.
 
-Pomerium Autocert uses Let's Encrypt HTTP-01 on the application IP. Caddy keeps
-DNS-01 for its certificates. Pomerium's replaceable certificate cache persists
-at `/data/autocert`; Databroker remains in memory. Long-lived keys and secrets
-stay in 1Password, so Kookaburra holds no irreplaceable state.
-
-Start at 1 GB. Upgrade to 2 GB if free memory stays below 25 percent, swap or
-OOM activity appears, or bursts cause memory-driven latency. Move to 4 GB and
-2 vCPUs if CPU saturation remains after the memory upgrade.
-
-The second IP may provide limited isolation when BinaryLane blackholes an
-attacked address, but both addresses share one VM and uplink. Do not add
-failover or duplicate services for that incidental benefit.
-
-Bilby's flat `dockernet` trust domain remains [separate technical
-debt](../tech-debt.md); this migration must not absorb that redesign.
-
-## HTTP and identity
-
-Cloudflare proxies and caches only:
-
-- `nathanbaxter.com` and `www.nathanbaxter.com`
-- `skycroeser.net` and `www.skycroeser.net`
-- `pets.indigopod.au`
-- `stats.nathanbaxter.com`, `stats.skycroeser.net`, and
-  `stats.indigopod.au`, limited at Caddy to `/script.js` and `/api/send`
-
-Every other migrated name is DNS-only. `stats.pod.haus` remains the protected
-Umami dashboard. Cloudflare handles HTTP redirects for proxied sites; DNS-only
-endpoints are HTTPS-only. Authenticated content and API writes aren't cached.
-
-Pomerium applies the Family policy by default and the Nathan-only policy to
-Syncthing and the development service.
-
-| Mode | Services |
-|---|---|
-| Pomerium plus native Pocket ID OIDC | Forgejo, Komodo, MinIO Console, Gatus |
-| Pomerium assertion accepted directly | Fenwick, keyed by Pocket ID issuer and subject |
-| Pomerium as the public login | Docs, Flood, Backrest, Syncthing |
-| Pomerium plus existing application login | Paperless, Home Assistant, Plex, Music Assistant, HyperDX, Bugsink, Umami, QTS |
-| Application login only through public Caddy | UniFi |
-| Public through Caddy | Pocket ID, Pets, and the static sites |
-
-Forgejo keeps its Pocket ID groups, admin mapping, and SSH key claim
-synchronisation. No generic auth shim is part of this project.
-
-## Machine and protocol exceptions
-
-There is no broad replacement for the Cloudflare Homelab service token. Each
-exception is an exact hostname or path.
-
-| Surface | Gateway rule | Application check |
+| Surface | Public exception | Application boundary |
 |---|---|---|
-| `storage.pod.haus`, `*.storage.pod.haus`, `pouch.pod.haus` | Raw TLS through public Caddy | MinIO SigV4 |
-| `git.pod.haus:22` | Raw rathole TCP | Forgejo SSH key |
-| Forgejo LFS | Public Pomerium route matching `^/[^/]+/[^/]+\.git/info/lfs(?:/.*)?$` | Short-lived Forgejo LFS JWT |
-| `paperless-api.pod.haus/api/*` | Public Caddy route plus a Paperless gateway token | Paperless API token |
-| `watch.pod.haus/api/mcp` | Public Pomerium route plus an MCP gateway token | HyperDX personal API key |
-| `komodo.pod.haus/listener/github/*` | Exact public Pomerium route | Existing GitHub HMAC |
-| Per-site Umami `/script.js` and `/api/send` | Cloudflare to exact public Caddy paths | Umami ingestion validation |
-| `unifi.pod.haus` | Public Caddy route | UniFi credentials |
-| `id.pod.haus` | Public Caddy route | Pocket ID passkey and OIDC protocol |
-| `core-connect.pod.haus` | Public Caddy WSS route | Komodo Noise keys |
-| `logs-ingest.pod.haus` | Public Caddy HTTPS route | Per-host mTLS and ClickStack key |
+| MinIO S3 and Pouch | Raw TLS through Caddy | SigV4 |
+| Forgejo SSH | Raw TCP | SSH key |
+| Forgejo LFS | Exact public Pomerium regex | Forgejo LFS token |
+| Paperless API | `paperless-api.pod.haus/api/*` plus scoped gateway token | Paperless API token |
+| HyperDX MCP | `watch.pod.haus/api/mcp` plus scoped gateway token | HyperDX API key |
+| Komodo webhook | `komodo.pod.haus/listener/github/*` | GitHub HMAC |
+| Pocket ID and UniFi | Public Caddy hosts | Native login |
+| Periphery and log ingestion | Public Caddy hosts | Noise or mTLS plus ingestion key |
 
-The Paperless and MCP gateway tokens are separate random secrets in 1Password
-and are checked by Caddy. Their public routes can't capture the corresponding
-browser traffic. The Komodo exception is also path-scoped.
+Forgejo, Komodo, MinIO Console, and Gatus keep native Pocket ID where supported,
+so users may see a second OIDC login. Fenwick verifies Pomerium's signed
+identity assertion, including its signature, issuer, audience, expiry, and
+email. Other protected services retain their existing application login.
 
-The Forgejo LFS route precedes the protected catch-all and passes Bearer tokens
-unchanged. Git smart HTTP stays disabled; Forgejo REST, packages, archives,
-attachments, and the website remain protected.
+## Retained rollback
 
-Plex media and native clients keep Plex's own path. Music Assistant's Home
-Assistant websocket stays LAN-direct. Neither flow traverses Kookaburra.
+Kookaburra, Cloudflare Tunnel and Access, the old rathole paths, Tailscale, and
+Numbat's temporary key-only port 2222 remain live. Terraform still owns all of
+them. Migrated DNS points at Numbat, so rollback is a DNS change and does not
+touch application state. Fenwick also needs its Pomerium identity commit
+reverted while Cloudflare Access is primary.
 
-## Implementation
+## Before retirement
 
-1. Add BinaryLane to the consolidated Terraform root and pass the disposable
-   lifecycle proof. Provision both addresses, Debian, nftables, temporary setup
-   SSH, and no Tailscale.
-2. Deploy Pomerium, rathole, Periphery, and Alloy with explicit address binds.
-   Add the Pocket ID client, policies, Autocert volume, SSH CA, and origin
-   client certificate through Terraform and 1Password.
-3. Split Caddy into public and protected listeners. Add the origin, raw TLS,
-   Forgejo SSH, host SSH, Komodo, and log-ingest rathole paths. Prove
-   Kookaburra has no routed access to either LAN.
-4. Declare every browser route and machine exception in committed config.
-   Update Paperless iOS and HyperDX MCP to use their scoped gateway tokens.
-5. Cut Gatus to a temporary DNS-only canary and exercise every protocol. Then
-   use one Terraform apply for the remaining DNS cutover. Keep the old gateway
-   and rollback values intact; a short outage is acceptable.
-6. After 48 hours and one Kookaburra reboot, remove DigitalOcean, migrated
-   Tunnel and Access resources, browser SSH, Bilby and Kookaburra Tailscale,
-   temporary bootstrap access, and obsolete 1Password items. Leave Pinelake's
-   Cloudflare resources untouched.
-7. Update the durable architecture, networking, hosts, monitoring, Terraform,
-   backup, disaster-recovery, Pocket ID, Forgejo, and service runbooks. Then
-   update the Pinelake plans to use the proven gateway contract and delete this
-   plan.
+- Nathan verifies Pocket ID login, logout, Family and Nathan-only policies from
+  an off-LAN device.
+- Verify Forgejo HTTPS, SSH, clone, push, and LFS; Paperless iOS; S3 path-style
+  and virtual-host access; WebSockets; and native SSH to Bilby, Numbat, and
+  Voltaire.
+- Finish the machine-local Voltaire rathole client and Pomerium CA trust.
+- Reboot Numbat and confirm Pomerium, rathole, Periphery, Alloy, certificates,
+  and linked-repo deployment recover.
+- Run a no-op Terraform plan from outside the LAN through
+  `storage.pod.haus`.
+- Measure the 1 GB node. Upgrade only if free memory stays below 25 percent,
+  swap or OOM activity appears, or sustained CPU saturation causes latency.
 
-## Rollback
+After those checks and Nathan's explicit approval, remove the old DNS rollback
+values, Kookaburra, migrated Tunnel and Access resources, the old Tailscale
+management path, Cloudflare browser SSH, obsolete secrets, and port 2222.
+Update the Pinelake plan to use this proven outbound gateway contract.
 
-Keep the old tunnel targets and DigitalOcean relay addresses as explicit
-Terraform rollback values. Rollback restores protected names to their tunnel
-CNAMEs and raw services to DigitalOcean without changing application state.
-
-Do not remove the old relay until an off-LAN workstation can initialise the
-Terraform backend at `https://storage.pod.haus`, perform a no-op plan, and
-complete a harmless state write through BinaryLane.
-
-## Verification
-
-- External scans find only application-IP ports 22, 80, and 443, plus relay-IP
-  ports 22, 443, and 2333. Host sshd isn't public after bootstrap.
-- Unknown hosts, wrong-address requests, missing origin certificates, and
-  invalid rathole tokens fail. Protected requests can't reach Caddy without a
-  valid Pomerium session.
-- Family, Nathan-only, logout, Pocket ID outage, native OIDC, and Fenwick
-  assertion validation match their policies.
-- Forgejo clone, push, `ssh -T`, and LFS operations work. Host SSH reaches
-  Bilby, Voltaire, and Kookaburra through Pomerium on port 22.
-- Paperless iOS and HyperDX MCP require both gateway and application tokens.
-  Webhooks, Umami ingestion, UniFi login, and Pocket ID discovery work.
-- S3 path-style and virtual-host requests, SigV4, uploads, ranges, WebSockets,
-  SSE, Home Assistant, Plex, and Music Assistant pass real-client tests.
-- Periphery and Alloy recover after tunnel, container, and host restarts with
-  no Tailscale dependency.
-- The 1 GB node passes idle, login-burst, sustained proxy, large-transfer,
-  config-reload, and simultaneous Komodo-deploy measurements.
-- Terraform plans to no change from two credentialled machines, including one
-  outside the LAN.
+Bilby's flat `dockernet` trust domain remains separate
+[technical debt](../tech-debt.md).

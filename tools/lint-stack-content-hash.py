@@ -62,6 +62,7 @@ def _interp_re(varname: str) -> re.Pattern[str]:
 SKIP_PATH_FRAGMENTS = (
     "kangaroo/periphery",
     "kookaburra/periphery",
+    "numbat/periphery",
 )
 
 

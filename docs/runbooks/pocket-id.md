@@ -1,19 +1,13 @@
 # Pocket ID
 
 Self-hosted, passkey-first OIDC identity provider on bilby at `id.pod.haus`.
-Cloudflare Access, Forgejo, and Tailscale use it for browser authentication.
+Pomerium, Forgejo, and the retained Tailscale account use it for authentication.
 Each relying party keeps its own authorisation policy. One Go binary plus
 SQLite, single local volume.
 
-> **`id.pod.haus` must stay publicly reachable — it is NOT Access-gated.**
-> Cloudflare validates the OIDC token *server-side*: during a login its own
-> servers fetch `/api/oidc/token` and `/.well-known/jwks.json` from `id.pod.haus`,
-> so those must be reachable with no Access policy in the way. `id.pod.haus`
-> therefore has a **Bypass-everyone** Access app (`module.pocket_id`,
-> `access_policy_ids = [public_bypass]`) that overrides the `*.pod.haus` Family
-> gate — the same mechanism as `sky`/`unifi`. A Family-gated `id.pod.haus`
-> deadlocks with `Failed to verify oidc token with fresh keys`. Pocket ID's own
-> passkey login protects the admin UI, so a public edge is correct here.
+> **`id.pod.haus` stays public.** Pomerium and native OIDC clients must reach
+> its discovery, token, and key endpoints without first authenticating through
+> Pomerium. Pocket ID's own passkey login protects account and admin pages.
 
 ## Topology
 
@@ -21,9 +15,8 @@ SQLite, single local volume.
   + uploads under `/app/data` on the local `pocket-id-data` volume (never NFS).
   Internal port `1411`; healthcheck is the image's built-in `pocket-id healthcheck`
   CLI.
-- **Ingress** `id.pod.haus` → tunnel → `http://pocket-id:1411`, via
-  `module.pocket_id` in `terraform/services_pod_haus.tf` (DNS + the Bypass Access
-  app + tunnel ingress rule).
+- **Ingress** `id.pod.haus` → Numbat public TLS rathole → Caddy `:4444` →
+  `pocket-id:1411`. Cloudflare Tunnel and Bypass Access remain for rollback.
 - **IdP registration** `cloudflare_zero_trust_access_identity_provider.pocket_id`
   (generic OIDC, PKCE) in `terraform/access.tf`, next to the dashboard-managed
   GitHub IdP. `allowed_idps` is intentionally unset on every Access app, so the
@@ -36,14 +29,12 @@ SQLite, single local volume.
 ## Identity model
 
 Pocket ID is the source of truth for people and their passkeys. On login it issues
-an ID token carrying the person's `email`; Cloudflare matches that email against
-the **Family** group in `access.tf` and allows or denies. There is no separate
-Cloudflare user directory.
+an ID token carrying the person's `email`; Pomerium applies its Family or
+Nathan-only route policy. There is no separate Pomerium user directory.
 
 So authorising someone is two facts that must agree: create them in Pocket ID
-*with an email the Family policy already matches* (Family covers
-`@nathanbaxter.com`, `@pod.haus`, and `scroeser@gmail.com`). A Pocket ID user
-whose email doesn't match will authenticate and then be *denied* at the edge.
+with the exact email allowed by `pomerium/config.yaml`. A Pocket ID user whose
+email does not match will authenticate and then be denied at the edge.
 Email is mandatory on a user (`REQUIRE_USER_EMAIL` defaults true) — without one the
 token carries no email claim.
 
@@ -56,9 +47,9 @@ token carries no email claim.
 
 - `ENCRYPTION_KEY` — mandatory; encrypts secrets and the signing keys at rest.
   Sourced from 1Password (below).
-- Behind cloudflared: `TRUST_PROXY=true` + `TRUSTED_PLATFORM=cf-connecting-ip`
-  (correct client IP in the audit log). TLS terminates at the Cloudflare edge — no
-  cert config in the container.
+- Caddy is the only reverse proxy. `TRUST_PROXY=172.18.0.0/16` trusts forwarding
+  headers only from dockernet. Rathole does not carry PROXY protocol, so audit
+  entries show the relay-side proxy rather than the original internet address.
 - Quiet/hardening: `LOG_JSON=true` (Alloy pipeline), `ANALYTICS_DISABLED`,
   `VERSION_CHECK_DISABLED`. `DB_PROVIDER` does not exist in v2 — SQLite is
   auto-detected.
@@ -74,6 +65,7 @@ secret is stored in git or a shell env.
 | `Pocket ID OIDC` | section `OIDC`: `client id` + `client secret` | `data "onepassword_item"` at plan time (`access.tf`) | Terraform, directly |
 | `Pocket ID API Key` | API Credential, `credential` | `data.onepassword_item.pocket_id_api_key` → Pocket ID Terraform provider | users, groups, OIDC clients |
 | `Forgejo OIDC` | Login, username + password | Terraform-managed output from `pocketid_client.forgejo` | `forgejo-auth-init` through komodo-op |
+| `Pomerium OIDC` | Login, username + password | Terraform-managed output from `pocketid_client.pomerium` | `numbat-pomerium` through komodo-op |
 | `Tailscale OIDC` | Login, username + password | Terraform-managed output from `pocketid_client.tailscale` | Tailscale's console-managed IdP registration |
 
 The OIDC client id/secret are read **directly by Terraform** via the
@@ -88,7 +80,11 @@ privileges.
 
 **Cloudflare Zero Trust** is confidential, uses PKCE, and has callback
 `https://podhaus.cloudflareaccess.com/cdn-cgi/access/callback`. Its credentials
-live in `Pocket ID OIDC`.
+live in `Pocket ID OIDC`. It remains configured only for rollback.
+
+**Pomerium** is confidential, uses PKCE, is restricted to `pomerium-users`, and
+has callback `https://authenticate.pod.haus/oauth2/callback`. Terraform writes
+its credentials to `Pomerium OIDC` in 1Password.
 
 **Forgejo** is confidential, uses PKCE, and is restricted to `forgejo-users`.
 Its credentials live in `Forgejo OIDC`; the remaining identity model is in the
@@ -135,20 +131,13 @@ creates the local profile and synchronizes those keys during OIDC login.
   Family group. Fix the email in Pocket ID; the match is case-insensitive but
   otherwise exact.
 
-## Lockout safety & going passkey-only
+## Lockout safety
 
-GitHub login stays configured (`allowed_idps` unset everywhere), so a Pocket ID
-outage or misconfiguration does *not* lock you out — log in via GitHub to reach
-`komodo.pod.haus` and fix it. The Homelab service token also still bypasses for
-automation.
+Pomerium deliberately has one identity provider. A Pocket ID outage blocks new
+protected browser and native SSH sessions. Recovery is Numbat's temporary
+key-only port 2222, the BinaryLane console, LAN access to bilby, or restoring
+the retained Cloudflare DNS and Access path, where GitHub remains a login option.
 
 Tailscale's Owner is `nathan@nathanbaxter.com` through Pocket ID. The separate
-Tailscale-native `logicwolfe@passkey` Admin is the recovery path if Pocket ID is
-unavailable. Keep it independent of Pocket ID and outside Terraform.
-
-Making login skip the chooser and go straight to a passkey
-(`auto_redirect_to_identity = true`) requires `allowed_idps` to list exactly one
-provider — which would disable the GitHub fallback for that app. That is a
-deliberate, reversible change to make per-app (and would need the
-`pod_haus_service` module to expose `allowed_idps`/`auto_redirect`, currently
-hardcoded off); enrol a passkey and prove the login first.
+Tailscale-native `logicwolfe@passkey` Admin remains the recovery path for the
+retained tailnet and stays independent of Pocket ID and Terraform.

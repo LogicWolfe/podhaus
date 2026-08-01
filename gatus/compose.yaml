@@ -22,8 +22,7 @@ services:
       # specific tokens above are kept, no migration). The endpoint key in the
       # push URL is what routes a heartbeat; the token is just shared auth.
       GATUS_HEARTBEAT_PUSH_TOKEN: ${GATUS_HEARTBEAT_PUSH_TOKEN}
-      # Komodo Core API credentials — used by the "Kangaroo Periphery
-      # (via Komodo)" check that asserts kangaroo's Server state is Ok.
+      # Komodo Core API credentials used by the per-host Periphery checks.
       KOMODO_API_KEY: ${KOMODO_API_KEY}
       KOMODO_API_SECRET: ${KOMODO_API_SECRET}
       # ClickHouse default-user password for the pipeline-staleness

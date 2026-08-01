@@ -21,9 +21,8 @@
 
       <h1>Networking</h1>
       <p class="lead text-lg text-text-muted">
-        Docker bridge networking, Terraform-managed Cloudflare ingress, Access policy chains,
-        public Cloudflare DNS, and LAN UniFi DNS. Cloudflared talks directly to most backends;
-        Caddy handles the DNS-only relay services that need public TLS on bilby.
+        Docker bridge networking, Numbat's Pomerium and rathole edge, Caddy origin
+        separation, and Terraform-managed DNS.
       </p>
 
       <h2 id="dockernet">dockernet bridge</h2>
@@ -56,220 +55,70 @@ networks:
           multicast.</li>
       </ul>
       <p>
-        These declare <code>network_mode: host</code> in their compose. Cloudflare Tunnel reaches
-        them via the dockernet bridge gateway IP <code>172.18.0.1</code> from cloudflared's side
-        of the bridge — same pattern as <code>home.pod.haus → 172.18.0.1:8123</code>.
+        These declare <code>network_mode: host</code> in their compose. Caddy reaches them via
+        the dockernet bridge gateway IP <code>172.18.0.1</code>, such as
+        <code>home.pod.haus → 172.18.0.1:8123</code>.
       </p>
 
-      <h2 id="tunnel">Cloudflare Tunnel</h2>
+      <h2 id="edge">Numbat edge</h2>
       <p>
-        Forgejo uses one DNS-only hostname with two raw relay paths.
-        <code>https://git.pod.haus</code> reaches kookaburra :443, traverses rathole to
-        bilby's Caddy, then proxies to Forgejo; Pocket ID is the application login.
-        <code>git.pod.haus:22</code> reaches rathole on the droplet's anchor address and
-        forwards to Forgejo's embedded SSH server. Host administration remains on port 22 of
-        kookaburra's ordinary public address because sshd binds only that address. This gives
-        ordinary web and <code>git@git.pod.haus:owner/repo.git</code> URLs without
-        Cloudflare Access, Tailscale, or custom client ports.
+        Numbat is the active public gateway. Bilby and other internal targets make
+        named outbound rathole connections to it; Numbat has no routed path into the
+        home network.
       </p>
-      <aside class="callout warn">
-        <span class="callout-title">DNS-only S3 endpoints: storage.pod.haus and pouch.pod.haus</span>
-        The two public S3 endpoints are grey-cloud DNS A records to the <strong>kookaburra
-        rathole relay</strong> (DigitalOcean droplet, public IP
-        <code>170.64.241.136</code>) → rathole reverse tunnel → Caddy
-        on bilby (own LE certificates) → MinIO. <code>storage.pod.haus</code> terminates at
-        bilby's primary MinIO; <code>pouch.pod.haus</code> crosses the LAN from Caddy to the
-        dedicated Pouch-backed MinIO on kangaroo. <strong>The home network
-        has NO inbound WAN port</strong> — bilby dials out to
-        kookaburra. The S3 data path <em>cannot</em> traverse
-        Cloudflare's HTTP proxy (rewrites the SigV4-signed
-        <code>Accept-Encoding</code>; single-level cert can't cover
-        Publii vhost buckets); the rathole tunnel is raw TCP
-        passthrough so SigV4 + Host stay intact. Both hostnames share the existing rathole
-        <code>storage</code> service on public port 443; Caddy selects the backend by Host. See
-        <a href="/hosts.html#kookaburra">hosts → kookaburra</a> for
-        the relay host details and
-        <a href="/terraform.html">Terraform</a> for the backend
-        configuration.
-      </aside>
+      <table>
+        <thead><tr><th>Address</th><th>TCP 22</th><th>TCP 80</th><th>TCP 443</th><th>TCP 2333</th></tr></thead>
+        <tbody>
+          <tr><td><code>103.1.184.88</code></td><td>Forgejo SSH relay</td><td>Pomerium redirect and ACME</td><td>Pomerium</td><td>Closed</td></tr>
+          <tr><td><code>103.4.235.175</code></td><td>Pomerium native SSH</td><td>Closed</td><td>Public TLS relay</td><td>rathole control</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Protected browser names resolve to the application address. Pomerium authenticates
+        with Pocket ID, then reaches Caddy's private <code>:4443</code> listener through a
+        loopback-only rathole service. That listener also requires Pomerium's client
+        certificate. The public rathole service reaches Caddy <code>:4444</code>, which has
+        no protected virtual hosts.
+      </p>
+      <p>
+        The public listener serves MinIO S3, Pocket ID, UniFi, static sites, scoped Umami
+        ingestion, <code>paperless-api.pod.haus</code>, Komodo's outbound connection, and
+        mTLS log ingestion. Forgejo uses Pomerium for HTTPS and the application address on
+        port 22 for ordinary <code>git@git.pod.haus</code> SSH. Host SSH uses Pomerium on
+        <code>ssh.pod.haus:22</code>; routes are named <code>bilby</code>,
+        <code>numbat</code>, and <code>voltaire</code>.
+      </p>
 
-      <aside class="callout note">
-        <span class="callout-title">Management plane: Tailscale (<code>tag:podnet</code>)</span>
-        Inter-host management traffic (Kookaburra Periphery dialing Core and
-        log ship-back from Kookaburra to bilby's ClickStack) rides a
-        private Tailscale tailnet — bilby (<code>bilby-podnet</code>) and
-        kookaburra (<code>kookaburra-podnet</code>). Kookaburra's Periphery dials
-        <code>ws://bilby-podnet.tail9ceb.ts.net:9120</code>. The Kookaburra server
-        entry has an empty address because Core expects the outbound connection;
-        no port 8120 is exposed on the droplet. Resolution works because
-        <code>terraform/tailscale.tf</code> owns the tailnet DNS configuration:
-        MagicDNS is enabled, with no global nameservers, split DNS, or extra search paths.
-        <strong>both</strong> bilby's
-        <em>and</em> kookaburra's <code>/etc/docker/daemon.json</code> set
-        <code>"dns": ["100.100.100.100", "1.1.1.1"]</code> — Docker's embedded
-        resolver (<code>127.0.0.11</code>) forwards unknown names to Tailscale's
-        MagicDNS first, then 1.1.1.1; service-name resolution
-        (<code>ferretdb</code>, <code>caddy</code>, etc.) is still handled by the
-        embedded resolver before forwarding. The same setup on kookaburra
-        lets alloy reach bilby's ClickStack at
-        <code>http://bilby-podnet.tail9ceb.ts.net:4318</code> without
-        hardcoding bilby's drifting tailnet IP. Per-host
-        <code>daemon.json</code> is system-level on each box (not in
-        this repo). bilby's was set up manually once; kookaburra's is
-        materialised by <code>kookaburra_bootstrap</code>'s idempotent
-        docker-daemon.json step, so a
-        <code>terraform apply -replace</code> droplet rebuild
-        re-establishes MagicDNS forwarding automatically.
-        ACL is asymmetric:
-        <em>your devices → podnet freely; podnet ↛ your devices</em>
-        (blast-radius containment — a popped relay can't pivot into
-        your laptop). The rathole data tunnel is independent (public,
-        noise+token, NOT on the tailnet — clients reaching
-        storage.pod.haus never touch any private network).
-      </aside>
+      <h2 id="identity">Identity and machine exceptions</h2>
+      <p>
+        Pomerium's default policy allows the two family Pocket ID identities. Syncthing and
+        the development service are Nathan-only. Exact public exceptions exist for Forgejo
+        LFS, Komodo's GitHub webhook, HyperDX MCP, and the separate Paperless API hostname.
+        HyperDX and Paperless each require a distinct
+        <code>X-Podhaus-Gateway-Token</code> from the
+        <code>Pomerium Gateway Tokens</code> 1Password item, followed by the application's
+        own credential.
+      </p>
 
-      <h3>Cross-host container reachability — what works today</h3>
+      <h2 id="cloudflare">Cloudflare scope and rollback</h2>
       <p>
-        Asked plainly: <em>can a container on host A reach a container on
-        host B?</em> The answer depends entirely on whether <strong>both
-        hosts have a podnet sidecar</strong>.
+        Cloudflare remains authoritative DNS and the CDN for public websites and their
+        Umami ingestion paths. CDN zones use Full (Strict) origin TLS to Caddy. Protected
+        services and raw protocols are DNS-only.
+        Cloudflare Tunnel, Access, Kookaburra, and the Kookaburra Tailscale management
+        path remain running as rollback infrastructure until Nathan independently verifies
+        Numbat. Their resources are still Terraform-owned; migrated DNS no longer points
+        at them.
       </p>
-      <ul>
-        <li><strong>bilby ↔ kookaburra:</strong> ✓ Either side's dockernet
-          containers can reach the other's containers by tailnet FQDN
-          (<code>{bilby,kookaburra}-podnet.tail9ceb.ts.net</code>).
-          Packet flow: container → host bridge → host kernel routes
-          <code>100.64.0.0/10</code> to <code>tailscale0</code> → WireGuard
-          → destination host's <code>tailscale0</code> → destination
-          dockernet bridge. The "podnet sidecar" is a
-          <code>network_mode: host</code> tailscale container — it
-          doesn't proxy, it just installs <code>tailscale0</code> on the
-          host. Host kernel does the routing.</li>
-        <li><strong>bilby ↔ kangaroo:</strong> LAN-direct only. Kangaroo
-          has no podnet sidecar (QTS hosts a podnet container would be
-          awkward), so cross-host traffic uses the 10.0.0.0/24 LAN —
-          e.g. kangaroo alloy ships logs to bilby's ClickStack at
-          <code>10.0.0.119:4318</code> (bilby's LAN IP). Fine as long as
-          both stay on-LAN.</li>
-        <li><strong>kookaburra ↔ kangaroo:</strong> ✗ No path today.
-          Kookaburra is off-LAN; kangaroo isn't on the tailnet.</li>
-      </ul>
-      <aside class="callout note">
-        <span class="callout-title">Subnet routing for non-podnet hosts (not configured — YAGNI)</span>
-        Tailscale supports promoting a podnet member to a subnet router so
-        the rest of the tailnet can reach hosts on its LAN. For us that
-        would mean
-        <code>tailscale up --advertise-routes=10.0.0.0/24</code> on
-        bilby, an ACL rule
-        <code>{"src": ["tag:podnet"], "dst": ["10.0.0.0/24:*"]}</code>,
-        and route approval in the Tailscale admin (or via
-        a Terraform-managed Tailscale ACL). After that, permitted tailnet nodes, including Kookaburra,
-        your off-LAN laptop, future pinelake — could reach kangaroo at
-        <code>10.0.0.25</code>.
-        <br><br>
-        Not enabled because nothing needs it. Kangaroo's outbound traffic
-        (alloy → ClickStack, backrest → bilby) is initiated <em>from</em>
-        kangaroo and uses the LAN directly. If a future requirement
-        flips that — kookaburra needing kangaroo, or remote admin into
-        kangaroo without VPN — turn it on then. Documented here so the
-        option is discoverable.
-      </aside>
-      <p>
-        A single <code>cloudflared</code> container on bilby holds the pod.haus tunnel credential.
-        It starts without <code>--config</code> and fetches ingress from Cloudflare. Terraform's
-        <code>cloudflare_zero_trust_tunnel_cloudflared_config.pod_haus</code> resource in
-        <code>terraform/tunnel.tf</code> is the source of truth.
-      </p>
-      <pre><code>- hostname: gatus.pod.haus
-  service: http://gatus:8080
-- hostname: home.pod.haus
-  service: http://172.18.0.1:8123</code></pre>
-      <p>
-        Anything not listed returns 404 at the tunnel edge. For a normal pod.haus service, add
-        a module block in <code>terraform/services_pod_haus.tf</code>, append its ingress output to
-        <code>pod_haus_module_ingress</code>, then run <code>terraform apply</code> from
-        <code>terraform/</code>. Cloudflared receives the remote configuration without a stack deploy.
-      </p>
-      <aside class="callout warn">
-        <span class="callout-title">cloudflared is distroless</span>
-        No shell, no curl, no wget — the image only ships the cloudflared binary. In-container
-        healthchecks against <code>/ready</code> on port 20241 are structurally impossible, so
-        the stack has no healthcheck and no autoheal label. cloudflared handles its own
-        reconnection; <code>restart: unless-stopped</code> catches outright crashes; external
-        liveness is monitored by Gatus hitting the public hostnames.
-      </aside>
 
-      <h2 id="access">Cloudflare Access</h2>
+      <h2 id="management">Management and logs</h2>
       <p>
-        All Access applications, policies, groups, and service tokens are codified in
-        <code>terraform/access.tf</code> (Terraform). A single
-        <strong>Pod Haus wildcard</strong> Application covers <code>*.pod.haus</code> with a
-        Family allow policy — any single-label hostname under <code>pod.haus</code> is gated
-        by browser-side Cloudflare Access login automatically.
+        Numbat Periphery dials <code>wss://core-connect.pod.haus</code> through the public
+        TLS relay; Komodo's Noise keys authenticate it. Numbat Alloy sends OTLP to
+        <code>https://logs-ingest.pod.haus</code>; Caddy requires Numbat's client
+        certificate and ClickStack requires its ingestion key. Neither path uses Tailscale
+        or exposes an internal management listener.
       </p>
-      <p>
-        <strong>Identity providers.</strong> Two login methods are offered and the
-        Access login page shows a chooser: <strong>GitHub</strong> (dashboard-managed)
-        and <strong>Pocket ID</strong> — a self-hosted passkey OIDC provider at
-        <code>id.pod.haus</code>, registered as a generic-OIDC IdP in
-        <code>access.tf</code>. The IdP only authenticates; the Family group still
-        decides who is allowed, and <code>allowed_idps</code> is left unset on every app
-        so both methods stay available (no lockout). See the
-        <a href="/runbooks/pocket-id.md">Pocket ID runbook</a>.
-      </p>
-      <p>
-        Implication for hostname design: prefer single-label names like <code>backup.pod.haus</code>
-        over multi-label like <code>backup.kangaroo.pod.haus</code> — the wildcard only covers
-        one label. Host-distinguishing names use a hyphen prefix instead
-        (<code>kangaroo-backup.pod.haus</code>).
-      </p>
-      <p>
-        Every tunnel-routed pod.haus hostname has its own Access app, created by an
-        instance of the <code>terraform/modules/pod_haus_service</code> Terraform module
-        (one block per service in <code>terraform/services_pod_haus.tf</code>). The
-        default policy chain is "Homelab service-token bypass → Family allow" — locked
-        by default, overridable per service.
-      </p>
-      <p>
-        Per-service policy overrides currently in use:
-      </p>
-      <ul>
-        <li><strong>UniFi</strong> — single Bypass-everyone policy (UniFi has its own LAN login).</li>
-        <li><strong>Pocket ID</strong> (<code>id.pod.haus</code>) — Bypass-everyone, so
-          Cloudflare can fetch the IdP's OIDC token + JWKS endpoints server-side; Pocket
-          ID's own passkey login guards the admin UI. See the
-          <a href="/runbooks/pocket-id.md">runbook</a>.</li>
-        <li><strong>Syncthing</strong> — Homelab bypass + Nathan-only reusable policy
-          (cross-household concern, household share is private).</li>
-        <li><strong>Paperless</strong> — Paperless-iOS service-token bypass at
-          precedence 1, then the default chain.</li>
-        <li><strong>Pine Lake apps</strong> — Nathan-only reusable policy, separate from the
-          Family group (cross-household).</li>
-        <li><strong>Komodo webhook</strong> — path-scoped Bypass on the
-          <code>komodo.pod.haus/listener/github</code> prefix (Komodo's
-          per-stack webhook listeners all live under it) so GitHub webhook
-          deliveries skip Access; Komodo HMAC-validates each delivery itself.</li>
-      </ul>
-      <p>
-        The <code>*.pod.haus</code> wildcard Access app stays as the default-deny safety
-        net. Anything not covered by a more-specific app falls through to it; the wildcard
-        denies unless you're in the Family group or carrying the Homelab service token.
-      </p>
-      <h3 id="service-tokens">Service tokens</h3>
-      <p>
-        Two service tokens for programmatic access. Send as
-        <code>CF-Access-Client-Id</code> + <code>CF-Access-Client-Secret</code> headers:
-      </p>
-      <ul>
-        <li><strong>Homelab service token</strong> (<code>op://Homelab/Cloudflare Access —
-          Homelab Service Token</code>) — full bypass of the
-          <code>*.pod.haus</code> surface plus every per-host override above. One token,
-          everything. Treat as high-value; a leak grants access to all of pod.haus.</li>
-        <li><strong>Paperless iOS</strong> (<code>op://Homelab/Cloudflare Access — Paperless
-          iOS Service Token</code>) — bypass scoped to <code>paperless.pod.haus</code> only.
-          Paste both header values into Swift Paperless &gt; Settings &gt; Connection &gt;
-          Extra Headers.</li>
-      </ul>
 
       <h2 id="dns">DNS</h2>
       <p>
@@ -277,13 +126,13 @@ networks:
         <code>s3://terraform-state/podhaus.tfstate</code>:
       </p>
       <ul>
-        <li><strong>Cloudflare</strong> public zones — per-zone <code>dns_&lt;zone&gt;.tf</code>
-          files plus the per-service module's CNAME for each tunnel-routed pod.haus host.</li>
-        <li><strong>UniFi</strong> LAN-side split-horizon — <code>dns_unifi_split_horizon.tf</code>
-          declares the two A records (<code>unifi.pod.haus → 10.0.0.1</code>,
-          <code>bilby.pod.haus → 10.0.0.119</code>) via the
-          <code>ubiquiti-community/unifi</code> provider against the UniFi controller at
-          <code>10.0.0.1</code>.</li>
+        <li><strong>Cloudflare</strong> public zones: DNS-only A records to Numbat for
+          protected and raw services; proxied A records to Numbat's relay address for
+          the public CDN sites. The old Tunnel CNAME targets remain available for rollback.</li>
+        <li><strong>UniFi</strong> LAN-side split-horizon. Both
+          <code>unifi.pod.haus</code> and <code>bilby.pod.haus</code> resolve to
+          bilby at <code>10.0.0.119</code>. The former goes through Caddy so the
+          Terraform provider sees the same valid hostname certificate on and off LAN.</li>
       </ul>
       <p>
         Workflow: edit the relevant <code>dns_&lt;zone&gt;.tf</code>, run

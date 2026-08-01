@@ -36,6 +36,7 @@ locals {
     tunnel_target            = local.tunnels.pod_haus
     default_bypass_policy_id = local.default_pod_haus_bypass_policy
     default_allow_policy_id  = local.default_pod_haus_allow_policy
+    edge_ipv4                = local.numbat_application_ipv4
   }
 }
 
@@ -50,6 +51,7 @@ module "gatus" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -63,6 +65,7 @@ module "bugsink" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -76,6 +79,7 @@ module "backup" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -89,6 +93,7 @@ module "fenwick" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -102,6 +107,7 @@ module "kangaroo_backup" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -115,6 +121,7 @@ module "kangaroo" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -128,6 +135,7 @@ module "komodo" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -141,6 +149,7 @@ module "torrents" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -154,6 +163,7 @@ module "home_assistant" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -167,6 +177,7 @@ module "plex" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -185,6 +196,7 @@ module "music" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -200,6 +212,7 @@ module "watch" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -214,6 +227,7 @@ module "docs" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -231,6 +245,7 @@ module "minio" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 
@@ -250,6 +265,7 @@ module "syncthing" {
   account_id    = local.pod_haus_service_defaults.account_id
   zone_id       = local.pod_haus_service_defaults.zone_id
   tunnel_target = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4     = local.pod_haus_service_defaults.edge_ipv4
 
   hostname = "sync"
   backend  = "http://${local.kangaroo_active_ip}:8384"
@@ -269,6 +285,7 @@ module "paperless" {
   account_id    = local.pod_haus_service_defaults.account_id
   zone_id       = local.pod_haus_service_defaults.zone_id
   tunnel_target = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4     = local.pod_haus_service_defaults.edge_ipv4
 
   hostname = "paperless"
   backend  = "http://paperless:8000"
@@ -288,6 +305,7 @@ module "unifi" {
   account_id    = local.pod_haus_service_defaults.account_id
   zone_id       = local.pod_haus_service_defaults.zone_id
   tunnel_target = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4     = local.numbat_relay_ipv4
 
   hostname             = "unifi"
   backend              = "https://10.0.0.1:443"
@@ -312,6 +330,7 @@ module "pocket_id" {
   account_id    = local.pod_haus_service_defaults.account_id
   zone_id       = local.pod_haus_service_defaults.zone_id
   tunnel_target = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4     = local.numbat_relay_ipv4
 
   hostname = "id"
   backend  = "http://pocket-id:1411"
@@ -332,6 +351,7 @@ module "stats" {
   account_id               = local.pod_haus_service_defaults.account_id
   zone_id                  = local.pod_haus_service_defaults.zone_id
   tunnel_target            = local.pod_haus_service_defaults.tunnel_target
+  edge_ipv4                = local.pod_haus_service_defaults.edge_ipv4
   default_bypass_policy_id = local.pod_haus_service_defaults.default_bypass_policy_id
   default_allow_policy_id  = local.pod_haus_service_defaults.default_allow_policy_id
 

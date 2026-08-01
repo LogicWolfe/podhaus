@@ -134,7 +134,7 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
         to produce the first snapshot.
       </p>
 
-      <h2 id="kookaburra-no-backup">Kookaburra — intentionally unbacked (conditional)</h2>
+      <h2 id="gateway-no-backup">Gateway hosts are intentionally unbacked</h2>
       <p>
         <code>kookaburra</code> (the off-LAN DigitalOcean public-ingress relay; see
         <a href="/hosts.html#kookaburra">hosts → kookaburra</a>) has <strong>no backup
@@ -144,11 +144,18 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
         rebuild, so there is nothing recoverable to snapshot.
       </p>
       <p>
+        Numbat has the same conditional exemption. Its Pomerium Autocert cache and Docker
+        volumes are replaceable; PKI and long-lived secrets are recoverable from Terraform
+        state and 1Password. Rebuild is <code>terraform apply</code>,
+        <code>./numbat_bootstrap</code>, then Komodo deployment. Meaningful application data
+        landing there would reopen this decision.
+      </p>
+      <p>
         <strong>This exemption is conditional, not permanent.</strong> If any meaningful state
-        ever lands on kookaburra — a persistent volume, a local key/cert, app data, anything not
-        reconstructible from <code>terraform apply</code> — the backup decision <em>must</em> be
-        reopened and kookaburra added to <code>backup/</code> with its own plan. A future reader
-        who finds state on kookaburra with no backup should treat that as a bug, not a deliberate
+        ever lands on either gateway, such as a persistent volume, local-only key/cert, or app data
+        that is not reconstructible from <code>terraform apply</code>, the backup decision <em>must</em> be
+        reopened and that host added to <code>backup/</code> with its own plan. A future reader
+        who finds irreplaceable gateway state with no backup should treat that as a bug, not a deliberate
         choice (this is also a hard rule in <code>AGENTS.md</code>).
       </p>
 

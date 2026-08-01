@@ -17,7 +17,7 @@ Create `logging/pinelake/` by mirroring the Kangaroo overlay:
   `../compose.shared.yaml`.
 - `compose.yaml` adds the absolute directory bind for `alloy-conf/`.
 - `alloy-conf/config.alloy` stamps `host = "pinelake"` and sends OTLP/HTTP to
-  `http://bilby-podnet.tail9ceb.ts.net:4318` over the management tailnet.
+  `https://logs-ingest.pod.haus` with a Pinelake client certificate.
 - `alloy-conf/parsers/` contains only the parser chain required by Pinelake's
   containers.
 
@@ -27,10 +27,14 @@ settings:
 ```alloy
 otelcol.exporter.otlphttp "clickstack" {
   client {
-    endpoint            = "http://bilby-podnet.tail9ceb.ts.net:4318"
+    endpoint            = "https://logs-ingest.pod.haus"
     disable_keep_alives = true
     headers = {
       "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
+    }
+    tls {
+      cert_file = "/run/podhaus-secrets/pinelake-cert.pem"
+      key_file  = "/run/podhaus-secrets/pinelake-key.pem"
     }
   }
 
@@ -45,8 +49,9 @@ ClickStack collector recreation. The bounded retry prevents a stuck batch from
 blocking forever. Also copy Kangaroo's host-stamped Alloy self-metrics so Gatus
 can detect a stale telemetry pipeline.
 
-The existing `ClickStack Ingestion Key` item supplies the ingestion key. No new
-secret is required.
+The existing `ClickStack Ingestion Key` supplies application auth. Terraform
+also creates a distinct Pinelake log-ingest client certificate and stores the
+handoff in 1Password.
 
 ## Autoheal
 

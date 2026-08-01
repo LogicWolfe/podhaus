@@ -21,11 +21,8 @@ services:
     environment:
       APP_URL: https://id.pod.haus
       ENCRYPTION_KEY: ${POCKET_ID_ENCRYPTION_KEY}
-      # Behind cloudflared (TLS terminates at the Cloudflare edge).
-      # TRUSTED_PLATFORM gives correct client IPs from CF-Connecting-IP in
-      # the audit log.
-      TRUST_PROXY: "true"
-      TRUSTED_PLATFORM: cf-connecting-ip
+      # Only Caddy on dockernet is trusted to supply forwarding headers.
+      TRUST_PROXY: 172.18.0.0/16
       PUID: "1000"
       PGID: "1000"
       # Structured logs for the Alloy → ClickStack pipeline; no outbound

@@ -45,11 +45,15 @@
 
       <h2 id="access">Access model</h2>
       <p>
-        Paperless is reachable two ways:
+        Paperless is reachable three ways:
       </p>
       <ul>
-        <li>Externally at <code>https://paperless.pod.haus</code>, gated by the wildcard
-          Cloudflare Access app (Family group).</li>
+        <li>Browser access at <code>https://paperless.pod.haus</code>, gated by Pomerium's
+          Family policy and then Paperless's own login.</li>
+        <li>API clients use <code>https://paperless-api.pod.haus/api/*</code> with both
+          <code>X-Podhaus-Gateway-Token</code> from the <code>paperless_api</code> field of
+          the <code>Pomerium Gateway Tokens</code> 1Password item and their Paperless API
+          token. Other paths return 404.</li>
         <li>Internally on the dockernet bridge at <code>http://paperless:8000</code>. The
           container's <code>PAPERLESS_ALLOWED_HOSTS=paperless.pod.haus</code> requires the
           <code>Host:</code> header to match.</li>
@@ -58,8 +62,8 @@
         <span class="callout-title">Script-side note</span>
         Migration / import scripts run in throwaway <code>python:3.13-slim</code> containers
         attached to dockernet, hit <code>http://paperless:8000</code> with an explicit
-        <code>Host: paperless.pod.haus</code> header. Going via the public URL would 403 on
-        Cloudflare Access — anything that follows Paperless's own pagination
+        <code>Host: paperless.pod.haus</code> header. Going via the browser URL would redirect
+        to Pomerium. Anything that follows Paperless's own pagination
         <code>next</code> URLs must walk pagination by explicit page number instead.
       </aside>
 

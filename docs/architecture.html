@@ -21,7 +21,7 @@
 
       <h1>Architecture</h1>
       <p class="lead text-lg text-text-muted">
-        Three active hosts, one Komodo Core, one git repo. Services run as Docker Compose stacks
+        Four active hosts, one Komodo Core, one git repo. Services run as Docker Compose stacks
         whose configs are committed; secrets are templated in at deploy time from 1Password.
       </p>
 
@@ -38,9 +38,15 @@
         git repo and are deployed through the same Komodo UI.
       </p>
       <p>
-        <strong>kookaburra</strong> is a Fedora DigitalOcean droplet in Sydney. It is the stateless
-        public-ingress relay for MinIO and Forgejo. Its Periphery dials Core over the private
-        Tailscale management plane; no management port is exposed publicly.
+        <strong>numbat</strong> is a Rocky Linux BinaryLane VM in Perth. It is the active
+        public gateway: Pomerium authenticates browser and host-SSH traffic, rathole accepts
+        named outbound connections, Periphery dials Komodo Core, and Alloy ships logs back
+        to bilby. It has no routed access to the home network.
+      </p>
+      <p>
+        <strong>kookaburra</strong> is the former Fedora DigitalOcean relay in Sydney. It,
+        Cloudflare Tunnel and Access, and their Tailscale management path remain live only
+        for rollback until Numbat is independently verified.
       </p>
       <p>
         <strong>pinelake</strong> is a planned fourth host for the second household. It will use
@@ -60,12 +66,13 @@
         <li>Komodo's own infrastructure lives in <code>komodo/</code>
           (<code>ferretdb.compose.yaml</code>, ResourceSync TOML files).</li>
         <li>Bootstrap scripts (<code>komodo-start</code>, <code>komodo-sync</code>,
-          <code>kangaroo_bootstrap</code>, <code>kookaburra_bootstrap</code>) sit at the
+          <code>kangaroo_bootstrap</code>, <code>kookaburra_bootstrap</code>,
+          <code>numbat_bootstrap</code>) sit at the
           repo root.</li>
         <li><code>terraform/</code> is the ONE consolidated Terraform root for everything
-          outside Docker — Cloudflare zones + Access apps + tunnel ingress, UniFi LAN DNS,
-          the GitHub webhook that drives Komodo auto-deploy, DigitalOcean (the kookaburra
-          relay droplet), Tailscale auth-key rotation, and MinIO IAM/bucket policies for
+          outside Docker: BinaryLane and Numbat edge material, Cloudflare DNS plus retained
+          Access and Tunnel rollback resources, UniFi LAN DNS, the GitHub webhook that drives
+          Komodo auto-deploy, DigitalOcean, Tailscale auth-key rotation, and MinIO IAM for
           Publii tenants. State at <code>s3://terraform-state/podhaus.tfstate</code> in
           MinIO (backend via <code>https://storage.pod.haus</code>). Stock
           <code>terraform</code> runs from any machine — no wrapper. See
@@ -73,7 +80,7 @@
       </ul>
       <p>
         The repo is bind-mounted into bilby's Komodo Core (for ResourceSync) and bilby's
-        Periphery (for stack compose files). Kangaroo's and kookaburra's Peripheries clone
+        Periphery (for stack compose files). Kangaroo's, kookaburra's, and numbat's Peripheries clone
         the repo themselves via Komodo's Linked Repo resource (different Repo names per
         host since each clone is independent state) — see
         <a href="/komodo.html#operating-models">Komodo → operating models</a>.
@@ -140,18 +147,17 @@
 
       <h2 id="ingress">Ingress</h2>
       <p>
-        Browser-facing service traffic enters through the Cloudflare Tunnel connector on bilby.
-        Terraform owns the ingress rules, DNS CNAMEs, and Access applications. A normal
-        <code>*.pod.haus</code> service gets a module block in
-        <code>terraform/services_pod_haus.tf</code> and an ingress output in
-        <code>terraform/tunnel.tf</code>. The default Access chain allows the Homelab service
-        token first and the Family group second; service-specific policy chains override it where needed.
-        DNS-only relay services are the explicit exceptions: both MinIO S3 endpoints and both
-        Forgejo protocols reach bilby through kookaburra's rathole relay. Caddy serves
-        <code>storage.pod.haus</code> from bilby's MinIO and sends
-        <code>pouch.pod.haus</code> across the LAN to kangaroo. Forgejo uses one hostname,
-        <code>git.pod.haus</code>: :443 terminates at bilby's Caddy and :22 reaches Forgejo's
-        embedded SSH server. Pocket ID is the web authentication boundary.
+        Protected browser names resolve to Numbat's application address. Pomerium authenticates
+        with Pocket ID, then uses a loopback-bound rathole service and mTLS to reach bilby's
+        private Caddy listener. Raw and public endpoints use Numbat's second address and a
+        separate rathole service to Caddy's public-only listener. Forgejo HTTPS is protected;
+        <code>git.pod.haus:22</code> remains ordinary key-authenticated SSH. Cloudflare stays
+        in front of public websites as a CDN and remains authoritative DNS. See
+        <a href="/networking.html">Networking</a> for the exact address and exception map.
+      </p>
+      <p>
+        Cloudflare Tunnel, Access, Kookaburra, and Tailscale are still running as rollback
+        paths. Terraform continues to own them, but migrated DNS points at Numbat.
       </p>
       <p>See <a href="/networking.html">Networking</a> for dockernet, host-network services, and
         DNS detail.</p>

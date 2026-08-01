@@ -1,4 +1,4 @@
-# UniFi-side LAN DNS — split-horizon overrides for pod.haus hostnames
+# UniFi-side LAN DNS: split-horizon overrides for pod.haus hostnames
 # that resolve to internal IPs when the requester is on the home
 # network. The public CNAMEs (managed in services_pod_haus.tf via the
 # Cloudflare tunnel) take precedence over these for off-LAN requests;
@@ -13,9 +13,10 @@
 resource "unifi_dns_record" "unifi_pod_haus" {
   name        = "unifi.pod.haus"
   record_type = "A"
-  value       = "10.0.0.1"
-  ttl         = "5m0s"
-  enabled     = true
+  # Keep Terraform's public API URL on a valid Caddy certificate on-LAN too.
+  value   = "10.0.0.119"
+  ttl     = "5m0s"
+  enabled = true
 }
 
 resource "unifi_dns_record" "bilby_pod_haus" {

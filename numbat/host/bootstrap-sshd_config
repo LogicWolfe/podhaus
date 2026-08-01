@@ -1,0 +1,10 @@
+HostKey /etc/ssh/ssh_host_ed25519_key
+AuthorizedKeysFile .ssh/authorized_keys
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+UsePAM yes
+Port 2222
+ListenAddress 0.0.0.0
+PidFile /run/numbat-bootstrap-sshd.pid
+Subsystem sftp /usr/libexec/openssh/sftp-server

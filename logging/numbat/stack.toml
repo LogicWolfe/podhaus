@@ -1,0 +1,17 @@
+[[stack]]
+name = "numbat-logging"
+description = "Alloy on Numbat, shipping to Bilby through the mTLS log-ingest gateway"
+tags = ["numbat", "podhaus"]
+
+[stack.config]
+server = "numbat"
+linked_repo = "podhaus-numbat"
+run_directory = "logging/numbat"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]
+ignore_services = ["alloy-secrets-init"]
+
+environment = """
+CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
+NUMBAT_CERT_B64=[[OP__KOMODO__LOG_INGEST_PKI__NUMBAT_CERT_B64]]
+NUMBAT_KEY_B64=[[OP__KOMODO__LOG_INGEST_PKI__NUMBAT_KEY_B64]]
+"""

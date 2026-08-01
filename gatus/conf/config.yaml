@@ -6,21 +6,20 @@
 # 172.18.0.1:<port> for host-network services on bilby, or
 # `InspectDockerContainer` via Komodo Core for kangaroo-resident
 # containers). A previous design probed public *.pod.haus URLs to
-# cover the full DNS → Cloudflare → tunnel → container path, but
-# Cloudflare Access intercepts unauthenticated requests with a 302
-# to its login page — the existing `[STATUS] < 400` condition
+# cover the full public path, but an identity gateway intercepts
+# unauthenticated requests with a 302 to its login page. The existing
+# `[STATUS] < 400` condition
 # accepted that 302 as healthy, so backend death was invisible.
 # See docs/postmortems/2026-05-30-power-outage-nfs-recovery.md.
 # Full-path checks remain only where the path is genuinely external
 # (storage.pod.haus, kookaburra-probe.storage.pod.haus,
-# nathanbaxter.com, voice.pod.haus) — those bypass Access by design.
+# nathanbaxter.com, voice.pod.haus) that are intentionally public.
 
 # Expose Prometheus metrics at :8080/metrics (same port as the UI +
 # external-endpoint hooks — no new port, no new ingress). Alloy on bilby
 # scrapes this and bridges it to ClickStack over OTLP. Non-sensitive
-# operational data; reachable only on dockernet (the public
-# gatus.pod.haus path stays Access-gated and /metrics is not added to
-# the tunnel ingress). See docs/monitoring.html.
+# operational data; the public path remains Pomerium-protected. See
+# docs/monitoring.html.
 metrics: true
 
 storage:
@@ -171,15 +170,19 @@ endpoints:
     <<: *defaults
     group: Git
 
-  # DNS-only public HTTPS path: Reserved IP → kookaburra :443 →
-  # rathole → bilby Caddy → Forgejo. The health endpoint is auth-free.
-  - name: Forgejo HTTPS (public relay)
+  # Protected public path: Numbat Pomerium returns the login redirect.
+  # Forgejo itself is covered by the internal health check above.
+  - name: Forgejo HTTPS edge
     url: https://git.pod.haus/api/healthz
     <<: *defaults
     group: Git
+    client:
+      ignore-redirect: true
+    conditions:
+      - "[STATUS] == 302"
 
-  # DNS-only public path: Reserved IP → DigitalOcean anchor :22 →
-  # kookaburra rathole → Forgejo's embedded SSH server on bilby.
+  # DNS-only public path: Numbat application IP :22 → rathole →
+  # Forgejo's embedded SSH server on bilby.
   - name: Forgejo SSH (public relay)
     url: tcp://git.pod.haus:22
     group: Git
@@ -279,24 +282,24 @@ endpoints:
     <<: *defaults
     group: Storage
 
-  # nathanbaxter.com: Cloudflare-proxied → pod_haus tunnel → Caddy →
-  # nathanbaxter-com bucket. Catches a tunnel/Caddy/bucket break.
+  # nathanbaxter.com: Cloudflare CDN → Numbat relay → rathole → Caddy →
+  # nathanbaxter-com bucket.
   - name: nathanbaxter.com
     url: https://nathanbaxter.com/
     <<: *defaults
     group: nathanbaxter.com
 
   # Umami analytics — internal probe of the shared container's heartbeat
-  # (the public stats.* hosts are Access-locked except /script.js +
-  # /api/send, so an external probe of /api/heartbeat would 302). Returns
+  # (the public stats.* hosts expose only /script.js and /api/send, so an
+  # external probe of /api/heartbeat is not useful). Returns
   # 200 when the app + its Postgres are up.
   - name: Umami
     url: http://umami:3000/api/heartbeat
     <<: *defaults
     group: Analytics
 
-  # pets.indigopod.au: Cloudflare-proxied → pod_haus tunnel → the pets
-  # engine container. /api/content exercises the whole stack (tunnel →
+  # pets.indigopod.au: Cloudflare CDN → Numbat relay → rathole → the pets
+  # engine container. /api/content exercises the whole stack (edge →
   # container → SQLite → published content), so it catches a tunnel,
   # container, or content-store break — not just a static 200.
   - name: pets.indigopod.au
@@ -357,6 +360,21 @@ endpoints:
       X-Api-Secret: ${KOMODO_API_SECRET}
       Content-Type: application/json
     body: '{"type":"GetServerState","params":{"server":"kookaburra"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == Ok"
+
+  - name: Numbat Periphery (via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Komodo
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"GetServerState","params":{"server":"numbat"}}'
     conditions:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
@@ -471,6 +489,25 @@ endpoints:
     alerts:
       - type: custom
         description: "No kookaburra Alloy metrics reached ClickHouse in 15+ min — the cross-tailnet Alloy->collector pipeline is down (the 60 s self-metric heartbeat stopped). Check `GetContainerLog kookaburra alloy`: an exporter wedge (silence, no errors) clears with `RestartStack kookaburra-logging`; if the log shows the collector unreachable, confirm the podnet tailnet is up (MagicDNS to bilby-podnet) before restarting. Full runbook: docs/monitoring.html#known-issues."
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
+  - name: Numbat Telemetry Pipeline (heartbeat)
+    url: http://clickstack-clickhouse:8123/
+    method: POST
+    group: Observability
+    interval: 5m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='numbat'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: custom
+        description: "No Numbat Alloy metrics reached ClickHouse in 15+ min. Check numbat-logging, the logs-ingest rathole service, Caddy mTLS, and the ClickStack ingestion key."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true

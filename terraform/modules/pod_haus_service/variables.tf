@@ -24,6 +24,12 @@ variable "tunnel_target" {
   type        = string
 }
 
+variable "edge_ipv4" {
+  description = "Optional DNS-only IPv4 target used during the Pomerium migration. Null retains the proxied Cloudflare Tunnel record for rollback."
+  type        = string
+  default     = null
+}
+
 variable "hostname" {
   description = "Short hostname under pod.haus (no zone suffix). 'gatus' → 'gatus.pod.haus'."
   type        = string

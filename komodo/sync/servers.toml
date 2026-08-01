@@ -52,3 +52,14 @@ address = ""
 enabled = true
 disk_warning = 85.0
 disk_critical = 95.0
+
+[[server]]
+name = "numbat"
+description = "BinaryLane Perth gateway. v2 outbound Periphery returns through rathole."
+tags = ["numbat", "podhaus"]
+
+[server.config]
+address = ""
+enabled = true
+disk_warning = 85.0
+disk_critical = 95.0

@@ -105,48 +105,15 @@
         <code>announce_volume</code>.
       </aside>
 
-      <h2 id="access-tension">base_url ↔ Cloudflare Access</h2>
+      <h2 id="access-tension">Public and local base URL</h2>
       <p>
-        MA announces a single <code>base_url</code> that <em>every</em> client
-        (browsers and the HA integration alike) uses for its websocket. The
-        wrinkle: Home Assistant runs on bilby and its connection to MA is
-        <strong>server-to-server</strong> — it carries no Cloudflare Access
-        cookie, so if <code>base_url</code> resolves to the CF edge, Access
-        blocks it (<code>wss://music.pod.haus/ws → 302 cloudflareaccess.com</code>,
-        integration dead).
+        Music Assistant announces one <code>base_url</code> for browsers and the Home
+        Assistant integration. Public clients reach
+        <code>https://music.pod.haus</code> through Pomerium. UniFi split-horizon and Home
+        Assistant's <code>extra_hosts</code> pin resolve the same name to bilby's Caddy on
+        <code>10.0.0.119</code>, so the server-to-server websocket stays local and does not
+        need a Pomerium session.
       </p>
-      <p>
-        The resolution lets <code>base_url = https://music.pod.haus</code> work
-        for everyone:
-      </p>
-      <ul>
-        <li><strong>Off-LAN browser</strong> → public CF record → tunnel → MA
-          (Access cookie lets it in).</li>
-        <li><strong>On-LAN, IPv4</strong> → UniFi split-horizon A record
-          (<code>music.pod.haus → 10.0.0.119</code>, in
-          <code>terraform/dns_unifi_split_horizon.tf</code>) → Caddy vhost
-          (<code>caddy/Caddyfile</code>, real LE cert via DNS-01) → MA. No
-          edge, no Access.</li>
-        <li><strong>Home Assistant</strong> → <code>extra_hosts</code> in
-          <code>home-assistant/compose.yaml</code> pins
-          <code>music.pod.haus → 10.0.0.119</code> <em>IPv4-only</em> inside the
-          container → Caddy → MA.</li>
-      </ul>
-
-      <aside class="callout warn">
-        <span class="callout-title">Why <code>extra_hosts</code> and not just split-horizon</span>
-        <code>music.pod.haus</code> is a <em>proxied</em> Cloudflare record, so
-        CF advertises an <strong>AAAA</strong> (IPv6) alongside the A. Dual-stack
-        resolvers prefer the IPv6 → they reach the CF edge and bypass the
-        split-horizon A. The clean fix would be Cloudflare's per-record
-        <code>ipv4_only</code> setting, but the pod.haus zone's plan rejects it
-        (<code>API error 9227: "not available to this zone"</code>). So HA — the
-        one consumer that must never see the AAAA — gets an
-        <code>/etc/hosts</code> pin (A only) via <code>extra_hosts</code>;
-        <code>nsswitch</code> is <code>files dns</code>, so the pin wins.
-        Dual-stack LAN <em>browsers</em> still hairpin to MA's UI via the
-        tunnel — harmless (Access admits them), just not LAN-direct.
-      </aside>
 
       <h2 id="firewall">Firewall (AirPlay)</h2>
       <p>

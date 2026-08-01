@@ -1,0 +1,28 @@
+[client]
+remote_addr = "103.4.235.175:2333"
+
+[client.transport]
+type = "noise"
+
+[client.transport.noise]
+remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
+
+[client.services.public_tls]
+type = "tcp"
+local_addr = "caddy:4444"
+token = "${RATHOLE_PUBLIC_TLS_TOKEN}"
+
+[client.services.forgejo_ssh]
+type = "tcp"
+local_addr = "forgejo:2222"
+token = "${RATHOLE_FORGEJO_SSH_TOKEN}"
+
+[client.services.protected_http]
+type = "tcp"
+local_addr = "caddy:4443"
+token = "${RATHOLE_PROTECTED_HTTP_TOKEN}"
+
+[client.services.bilby_ssh]
+type = "tcp"
+local_addr = "172.18.0.1:22"
+token = "${RATHOLE_BILBY_SSH_TOKEN}"

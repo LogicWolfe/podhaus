@@ -1,0 +1,57 @@
+services:
+  pomerium-secrets-init:
+    image: alpine:3.22
+    restart: "no"
+    environment:
+      SSH_USER_CA_KEY_B64: ${SSH_USER_CA_KEY_B64}
+      SSH_HOST_KEY_B64: ${SSH_HOST_KEY_B64}
+      ORIGIN_CLIENT_CERT_B64: ${ORIGIN_CLIENT_CERT_B64}
+      ORIGIN_CLIENT_KEY_B64: ${ORIGIN_CLIENT_KEY_B64}
+      ORIGIN_CA_CERT_B64: ${ORIGIN_CA_CERT_B64}
+      SIGNING_KEY_B64: ${SIGNING_KEY_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf '%s' "$${SSH_USER_CA_KEY_B64}" | base64 -d > /secrets/ssh-user-ca-key
+        printf '%s' "$${SSH_HOST_KEY_B64}" | base64 -d > /secrets/ssh-host-key
+        printf '%s' "$${ORIGIN_CLIENT_CERT_B64}" | base64 -d > /secrets/origin-client-cert.pem
+        printf '%s' "$${ORIGIN_CLIENT_KEY_B64}" | base64 -d > /secrets/origin-client-key.pem
+        printf '%s' "$${ORIGIN_CA_CERT_B64}" | base64 -d > /secrets/origin-ca.pem
+        printf '%s' "$${SIGNING_KEY_B64}" | base64 -d > /secrets/signing-key.pem
+    volumes:
+      - pomerium-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  pomerium:
+    container_name: pomerium
+    image: pomerium/pomerium:v0.32.7
+    restart: unless-stopped
+    network_mode: host
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      pomerium-secrets-init:
+        condition: service_completed_successfully
+    environment:
+      SHARED_SECRET: ${SHARED_SECRET}
+      COOKIE_SECRET: ${COOKIE_SECRET}
+      IDP_CLIENT_ID: ${IDP_CLIENT_ID}
+      IDP_CLIENT_SECRET: ${IDP_CLIENT_SECRET}
+      TZ: ${TZ}
+    volumes:
+      - ${NUMBAT_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-numbat}/pomerium:/pomerium:ro
+      - pomerium-secrets:/run/pomerium-secrets:ro
+      - pomerium-autocert:/data/autocert
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+volumes:
+  pomerium-secrets:
+  pomerium-autocert:

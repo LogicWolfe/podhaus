@@ -21,15 +21,16 @@
 
       <h1>Hosts</h1>
       <p class="lead text-lg text-text-muted">
-        Three active hosts and one planned. Bilby's Komodo Core manages bilby, kangaroo, and
-        kookaburra; pinelake will join as the fourth host.
+        Four active hosts and one planned. Bilby's Komodo Core manages bilby, kangaroo,
+        Numbat, and the retained Kookaburra rollback host.
       </p>
 
       <h2 id="bilby">bilby</h2>
       <p>
         Apple M1 Mac mini, 8 cores, 15 GB RAM, aarch64, Fedora Asahi Linux. Primary host. Runs
         Komodo Core (Postgres + FerretDB + Core + Periphery), the primary podhaus stacks, the
-        Cloudflare Tunnel, and the 1Password Connect API. LAN IP <code>10.0.0.119</code>.
+        the retained Cloudflare Tunnel, and the 1Password Connect API. LAN IP
+        <code>10.0.0.119</code>.
       </p>
       <p>
         Filesystem highlights:
@@ -141,7 +142,7 @@
           expose the port to the tailnet and dockernet.</li>
         <li><strong>Service needing non-LAN reach → explicit service XML.</strong>
           <code>plex</code> and <code>music-assistant</code> get their own XML because
-          cloudflared reaches them via the dockernet gateway
+          Caddy reaches them via the dockernet gateway
           (<code>172.18.0.1</code>, not in <code>10.0.0.0/24</code>). That inbound flow
           isn't covered by the LAN rule, so the port must be named explicitly.</li>
       </ul>
@@ -178,15 +179,41 @@
         <a href="/disaster-recovery.html#kangaroo-rebuild">disaster recovery</a>.
       </aside>
 
+      <h2 id="numbat">numbat</h2>
+      <p>
+        BinaryLane Perth, Rocky Linux 10, 1 vCPU, 1 GB RAM, 20 GB NVMe. Numbat is the active
+        public gateway. Terraform owns server <code>644361</code>, both IPv4 addresses, DNS,
+        Pocket ID configuration, PKI, and 1Password handoffs.
+      </p>
+      <ul>
+        <li><strong>Application address <code>103.1.184.88</code>:</strong> Forgejo SSH on
+          port 22, Pomerium redirect and ACME on 80, Pomerium HTTPS on 443.</li>
+        <li><strong>Relay address <code>103.4.235.175</code>:</strong> Pomerium native SSH on
+          port 22, public TLS rathole on 443, and rathole control on 2333.</li>
+        <li><strong>Bootstrap-managed:</strong> host nftables, loopback-only sshd,
+          temporary key-only recovery sshd on application port 2222, and outbound Periphery.
+          Reconcile with <code>./numbat_bootstrap</code>.</li>
+        <li><strong>Komodo-managed:</strong> <code>numbat-pomerium</code>,
+          <code>numbat-relay</code>, and <code>numbat-logging</code> through linked repo
+          <code>podhaus-numbat</code>.</li>
+      </ul>
+      <p>
+        Periphery returns through <code>core-connect.pod.haus</code> with Komodo Noise auth.
+        Alloy returns through <code>logs-ingest.pod.haus</code> with per-host mTLS. There is no
+        Tailscale client and no routed path into either home network. The recovery listener
+        and BinaryLane console remain available until independent verification.
+      </p>
+
       <h2 id="kookaburra">kookaburra</h2>
       <p>
         DigitalOcean droplet, syd1 region, 1 vCPU / 1 GB RAM, Fedora 43 x86_64.
-        <strong>Off-LAN public-ingress relay host.</strong> Its job is terminating raw TCP for
+        <strong>Retained rollback gateway.</strong> Before Numbat it terminated raw TCP for
         <code>storage.pod.haus</code>, <code>pouch.pod.haus</code>, and
         <code>git.pod.haus</code> on its public reserved IP
-        <code>170.64.241.136</code>, then passing the bytes through rathole to bilby. HTTPS
+        <code>170.64.241.136</code>, then passed the bytes through rathole to bilby. HTTPS
         terminates at Caddy on bilby; the droplet only sees ciphertext. Forgejo SSH terminates
-        in Forgejo itself. <strong>Stateless by design</strong> (see the AGENTS hard rule).
+        in Forgejo itself. Migrated DNS no longer targets it, but nothing has been shut down.
+        <strong>Stateless by design</strong> (see the AGENTS hard rule).
       </p>
       <p>
         Why it exists: the UDM Pro SE binds WAN tcp/443 with UniFi OS itself and shadows any
@@ -256,7 +283,8 @@
       <ol>
         <li>Bring up a Periphery agent on the new host
           (template at <code>kangaroo/periphery/compose.yaml</code>).</li>
-        <li>Use <code>kangaroo_bootstrap</code> and <code>kookaburra_bootstrap</code> as models.
+        <li>Use <code>kangaroo_bootstrap</code> or <code>numbat_bootstrap</code> as the model
+          that matches the host's connectivity.</li>
           New Peripheries use v2 keypair authentication and dial Core outbound. Host-native boot
           integration keeps the Docker engine and bootstrap-managed Periphery alive.</li>
         <li>Declare a Linked Repo for the host in <code>komodo/sync/repos.toml</code> (kangaroo

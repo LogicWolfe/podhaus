@@ -1,0 +1,12 @@
+[Unit]
+Description=podhaus host firewall
+Before=docker.service sshd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/podhaus-nftables
+ExecReload=/usr/local/sbin/podhaus-nftables
+
+[Install]
+WantedBy=multi-user.target

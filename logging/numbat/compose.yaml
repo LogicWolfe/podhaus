@@ -1,0 +1,31 @@
+services:
+  alloy-secrets-init:
+    image: alpine:3.22
+    restart: "no"
+    environment:
+      NUMBAT_CERT_B64: ${NUMBAT_CERT_B64}
+      NUMBAT_KEY_B64: ${NUMBAT_KEY_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf '%s' "$${NUMBAT_CERT_B64}" | base64 -d > /secrets/numbat-cert.pem
+        printf '%s' "$${NUMBAT_KEY_B64}" | base64 -d > /secrets/numbat-key.pem
+    volumes:
+      - alloy-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  alloy:
+    security_opt:
+      - label:disable
+    depends_on:
+      alloy-secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - ${NUMBAT_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-numbat}/logging/numbat/alloy-conf:/etc/alloy:ro
+      - alloy-secrets:/run/podhaus-secrets:ro
+
+volumes:
+  alloy-secrets:

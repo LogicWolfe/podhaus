@@ -31,15 +31,10 @@
 resource "cloudflare_dns_record" "ssh_pod_haus" {
   zone_id = local.zones["pod.haus"]
   name    = "ssh.pod.haus"
-  type    = "CNAME"
-  content = local.tunnels.pod_haus
-  proxied = true
-  ttl     = 1
-  settings = {
-    flatten_cname = false
-    ipv4_only     = false
-    ipv6_only     = false
-  }
+  type    = "A"
+  content = local.numbat_relay_ipv4
+  proxied = false
+  ttl     = 300
 }
 
 resource "cloudflare_zero_trust_access_application" "bilby_ssh" {

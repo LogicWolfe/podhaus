@@ -9,7 +9,7 @@ repository. The MinIO process runs on kangaroo and writes directly to Pouch at
 ```text
 Sky's restic
   -> pouch.pod.haus:443
-  -> kookaburra rathole :443
+  -> Numbat public TLS rathole :443
   -> bilby Caddy
   -> kangaroo 10.0.0.25:9000
   -> /share/CACHEDEV1_DATA/Pouch/minio/sky-backups
@@ -21,7 +21,7 @@ port 443 to Caddy, so this hostname doesn't need a second relay service. Caddy
 terminates TLS and preserves the request headers required by S3 SigV4.
 
 LAN clients resolve `pouch.pod.haus` to bilby and take the shorter Caddy to
-kangaroo path. Remote clients resolve it to kookaburra's reserved IP.
+kangaroo path. Remote clients resolve it to Numbat's relay address.
 
 ## Provisioning and credentials
 
@@ -94,10 +94,10 @@ restic snapshots
 restic check
 ```
 
-An external-path check can force the kookaburra route from bilby:
+An external-path check can force the Numbat route from bilby:
 
 ```sh
-curl --resolve pouch.pod.haus:443:170.64.241.136 \
+curl --resolve pouch.pod.haus:443:103.4.235.175 \
   -fsS https://pouch.pod.haus/minio/health/live
 ```
 

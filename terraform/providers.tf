@@ -10,11 +10,9 @@ provider "cloudflare" {
 }
 
 provider "unifi" {
-  # Reach the controller via its public tunnel hostname (module.unifi
-  # publishes unifi.pod.haus → the controller), so Terraform runs from
-  # any machine, not just the LAN. api_key from UNIFI_API_KEY env.
-  # The tunnel presents a valid Cloudflare edge cert, so no
-  # allow_insecure needed.
+  # Reach the controller through unifi.pod.haus from every machine.
+  # Off-LAN this is Numbat; split DNS sends LAN callers through bilby Caddy,
+  # so both paths present a valid certificate. api_key comes from env.
   api_url = "https://unifi.pod.haus"
 }
 
@@ -33,6 +31,15 @@ provider "tailscale" {
 
 provider "digitalocean" {
   # token from DIGITALOCEAN_TOKEN env var.
+}
+
+data "onepassword_item" "binarylane_api_token" {
+  vault = data.onepassword_vault.homelab.uuid
+  title = "BinaryLane podhaus-terraform"
+}
+
+provider "binarylane" {
+  api_token = data.onepassword_item.binarylane_api_token.credential
 }
 
 provider "minio" {

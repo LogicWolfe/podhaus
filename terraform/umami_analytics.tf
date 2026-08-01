@@ -35,15 +35,10 @@
 resource "cloudflare_dns_record" "stats_nathanbaxter_com" {
   zone_id = local.zones["nathanbaxter.com"]
   name    = "stats.nathanbaxter.com"
-  type    = "CNAME"
-  content = local.tunnels.pod_haus
+  type    = "A"
+  content = local.numbat_relay_ipv4
   proxied = true
   ttl     = 1
-  settings = {
-    flatten_cname = false
-    ipv4_only     = false
-    ipv6_only     = false
-  }
 }
 
 # --- Host-level lock: everything on stats.nathanbaxter.com is gated to
@@ -155,15 +150,10 @@ resource "cloudflare_ruleset" "nathanbaxter_stats_redirect" {
 resource "cloudflare_dns_record" "stats_indigopod_au" {
   zone_id = local.zones["indigopod.au"]
   name    = "stats.indigopod.au"
-  type    = "CNAME"
-  content = local.tunnels.pod_haus
+  type    = "A"
+  content = local.numbat_relay_ipv4
   proxied = true
   ttl     = 1
-  settings = {
-    flatten_cname = false
-    ipv4_only     = false
-    ipv6_only     = false
-  }
 }
 
 # Host-level lock: dashboard/admin on stats.indigopod.au gated to Family.
@@ -265,15 +255,10 @@ resource "cloudflare_ruleset" "indigopod_stats_redirect" {
 resource "cloudflare_dns_record" "stats_skycroeser_net" {
   zone_id = local.zones["skycroeser.net"]
   name    = "stats.skycroeser.net"
-  type    = "CNAME"
-  content = local.tunnels.pod_haus
+  type    = "A"
+  content = local.numbat_relay_ipv4
   proxied = true
   ttl     = 1
-  settings = {
-    flatten_cname = false
-    ipv4_only     = false
-    ipv6_only     = false
-  }
 }
 
 # Host-level lock: dashboard/admin on stats.skycroeser.net gated to Family.

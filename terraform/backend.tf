@@ -45,10 +45,26 @@ terraform {
       source  = "hashicorp/time"
       version = "~> 0.13"
     }
+    random = {
+      # Generates long-lived Pomerium and rathole secrets. Values are
+      # persisted in 1Password by resources in pomerium.tf.
+      source  = "hashicorp/random"
+      version = "~> 3.7"
+    }
+    tls = {
+      # Generates the Pomerium SSH keys and private-origin mTLS material.
+      source  = "hashicorp/tls"
+      version = "~> 4.1"
+    }
     digitalocean = {
       # kookaburra relay droplet + reserved IP + firewall + project.
       source  = "digitalocean/digitalocean"
       version = "~> 2.0"
+    }
+    binarylane = {
+      # numbat, the Perth replacement gateway.
+      source  = "oscarhermoso/binarylane"
+      version = "~> 0.13.0"
     }
     minio = {
       # MinIO IAM + bucket policies for the public Publii tenants
@@ -80,7 +96,7 @@ terraform {
   backend "s3" {
     endpoints = {
       # Public endpoint so Terraform runs from any machine. Path goes
-      # storage.pod.haus → (split-horizon on LAN / kookaburra rathole
+      # storage.pod.haus → (split-horizon on LAN / numbat rathole
       # off-LAN) → bilby Caddy → MinIO. SigV4 is the boundary; nothing
       # is host- or LAN-pinned.
       s3 = "https://storage.pod.haus"

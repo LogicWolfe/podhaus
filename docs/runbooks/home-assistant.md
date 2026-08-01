@@ -14,10 +14,9 @@ entities to Apple Home so Siri can drive them through HA.
   `music.pod.haus` to `10.0.0.119` so HA reaches Music Assistant via Caddy
   (real cert) instead of the Cloudflare AAAA (which hits Access and blocks
   server-to-server).
-- **Ingress** `home.pod.haus` → bilby Cloudflare Tunnel →
-  `http://172.18.0.1:8123` (`module.home_assistant` in
-  `terraform/services_pod_haus.tf`), behind the `*.pod.haus` Family Access
-  gate. This is the path for humans in a browser.
+- **Ingress** `home.pod.haus` → Numbat Pomerium → private rathole origin →
+  Caddy → `http://172.18.0.1:8123`, behind the Family policy. The retained
+  Cloudflare Tunnel and Access path is rollback only.
 
 ## Config-as-code layout
 
@@ -56,7 +55,7 @@ file is a dict of `<domain>: <config>`, e.g. `homekit.yaml` holds a top-level
 ## Direct control / API
 
 From bilby, HA's REST + WebSocket API is reachable at
-`http://localhost:8123` — **local, so it bypasses Cloudflare Access** (no
+`http://localhost:8123` is local, so it bypasses Pomerium (no
 server-to-server block). Auth is a long-lived token at
 `op://Homelab/Home Assistant/credential`. Read state, call any service, reload
 config:

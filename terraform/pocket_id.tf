@@ -51,6 +51,7 @@ resource "pocketid_user" "nathan" {
   groups = [
     pocketid_group.forgejo_users.id,
     pocketid_group.forgejo_admins.id,
+    pocketid_group.pomerium_users.id,
     pocketid_group.tailscale_users.id,
   ]
 
@@ -74,6 +75,7 @@ resource "pocketid_user" "sky" {
 
   groups = [
     pocketid_group.forgejo_users.id,
+    pocketid_group.pomerium_users.id,
   ]
 
   custom_claims = {

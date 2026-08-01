@@ -78,7 +78,7 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
       <h2 id="gatus">Gatus</h2>
       <p>
         Forgejo has four independent signals: an internal HTTP health check against
-        <code>forgejo:3000</code>, public HTTPS and TCP checks of
+        <code>forgejo:3000</code>, a public Pomerium-edge check and a TCP check of
         <code>git.pod.haus:443</code> and <code>:22</code>, and an external heartbeat from
         the quiesced Backrest plan. Together they distinguish an application failure, either
         public relay path failing, and a backup failure.
@@ -102,9 +102,9 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           <code>https://10.0.0.25/</code>). External probes are reserved for paths that
           genuinely need full-path coverage (<code>storage.pod.haus</code>,
           <code>kookaburra-probe.storage.pod.haus</code>, <code>nathanbaxter.com</code>,
-          <code>voice.pod.haus</code>) — paths that bypass Cloudflare Access by design.
-          Probing public <code>*.pod.haus</code> URLs for Access-fronted services is
-          deliberately avoided: Access returns <code>302 → login.cloudflareaccess.com</code>
+          <code>voice.pod.haus</code>) that are intentionally public.
+          Probing protected public URLs is deliberately avoided: Pomerium returns a login
+          <code>302</code>
           for unauthenticated requests, which the default <code>[STATUS] &lt; 400</code>
           condition accepts as healthy — masking backend failure. Bit us on 2026-05-30
           (see <a href="/postmortems/postmortem-viewer.html?file=2026-05-30-power-outage-nfs-recovery.md">postmortem</a>).</li>
@@ -142,8 +142,8 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
       <p>
         <code>gatus/conf/config.yaml</code> sets <code>metrics: true</code>, exposing a
         Prometheus <code>/metrics</code> endpoint on Gatus's existing <code>:8080</code> (the
-        same port as the UI; <code>/metrics</code> is not added to the tunnel ingress, so it
-        stays LAN-internal behind Access). bilby's Alloy <code>prometheus.scrape</code>s it at
+        same port as the UI; <code>/metrics</code> remains Pomerium-protected). bilby's Alloy
+        <code>prometheus.scrape</code>s it at
         a ~60s cadence and bridges Prometheus → OTLP through the same authenticated exporter
         as the logs. The series land in ClickHouse's <code>otel_metrics_*</code> tables and
         are queryable and dashboardable in HyperDX. Gatus's own endpoint/heartbeat monitoring
@@ -212,15 +212,16 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
       <pre><code>SELECT toUInt8(count() &gt; 0) FROM default.otel_logs
 WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']='&lt;host&gt;'</code></pre>
       <p>
-        Four live endpoints in <code>gatus/conf/config.yaml</code>, of two kinds —
+        Five live endpoints in <code>gatus/conf/config.yaml</code>, of two kinds:
         <em>heartbeats</em> (assert a fresh Alloy <strong>self-metric</strong> reached
         ClickHouse, i.e. the host's whole telemetry ship-path Alloy → collector → ClickHouse
         is alive) and <em>log-volume</em> checks (count <code>otel_logs</code> rows). Named for
         what they measure:
       </p>
       <ul>
-        <li><strong>Kangaroo Telemetry Pipeline (heartbeat)</strong> and
-          <strong>Kookaburra Telemetry Pipeline (heartbeat)</strong> — each host's Alloy
+        <li><strong>Kangaroo Telemetry Pipeline</strong>,
+          <strong>Kookaburra Telemetry Pipeline</strong>, and
+          <strong>Numbat Telemetry Pipeline</strong> are heartbeats. Each host's Alloy
           scrapes its own self-metrics every 60 s and ships them through the same exporter as
           the logs (kangaroo cross-LAN, kookaburra cross-tailnet), so the query asserts a fresh
           per-host Alloy metric in a 15-minute window (<code>otel_metrics_gauge</code> where
@@ -274,10 +275,11 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
 
       <h3 id="alloy">Alloy log collection</h3>
       <p>
-        Alloy runs on all three active hosts as the multi-host
+        Alloy runs on all four active hosts as the multi-host
         <code>logging</code> service: <code>logging</code> on bilby,
         <code>kangaroo-logging</code> on kangaroo, and
-        <code>kookaburra-logging</code> on kookaburra. They share
+        <code>kookaburra-logging</code> on kookaburra, and
+        <code>numbat-logging</code> on Numbat. They share
         <code>logging/compose.shared.yaml</code>. Alloy scrapes each host's
         Docker socket, bridges Loki-format input to
         OTLP (<code>otelcol.receiver.loki</code> → batch → <code>otelcol.exporter.otlphttp</code>)
@@ -290,6 +292,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
           (plaintext, LAN-only).</li>
         <li><strong>kookaburra</strong>: cross-tailnet to
           <code>http://bilby-podnet.tail9ceb.ts.net:4318</code> by MagicDNS.</li>
+        <li><strong>Numbat</strong>: HTTPS to <code>logs-ingest.pod.haus</code> through
+          rathole and Caddy, with a dedicated client certificate.</li>
       </ul>
       <p>
         Every request carries a HyperDX <strong>ingestion API key</strong> in the
@@ -369,8 +373,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
 
       <h3 id="access">Access</h3>
       <p>
-        <code>watch.pod.haus</code> sits behind the existing <code>*.pod.haus</code>
-        Cloudflare Access wildcard (Family identity policy) <em>and</em> HyperDX's own login.
+        <code>watch.pod.haus</code> sits behind Pomerium's Family policy
+        <em>and</em> HyperDX's own login.
         There is a single HyperDX account, <code>nathan@nathanbaxter.com</code>; credentials
         are in 1Password as <code>clickstack-hyperdx</code>.
       </p>
@@ -448,7 +452,7 @@ $DK restart alloy backrest                           # reattach by name + rebuil
         HyperDX ships a built-in MCP (Model Context Protocol) server, served by the
         <strong>existing</strong> <code>hyperdx</code> container at path
         <code>/api/mcp</code> — no new service or container. Transport is Streamable HTTP;
-        it's reachable through the tunnel at
+        it is reachable through Numbat at
         <code>https://watch.pod.haus/api/mcp</code>. Verified working on HyperDX
         <code>2.25.0-beta</code>. It gives an agent access to logs, exceptions, traces, and
         metrics for review.
@@ -464,13 +468,11 @@ $DK restart alloy backrest                           # reattach by name + rebuil
         Auth is two layers, both passed as HTTP headers, both required:
       </p>
       <ol>
-        <li><strong>Cloudflare Access</strong> on <code>*.pod.haus</code> — pass the Homelab
-          service token to bypass interactive login: headers
-          <code>CF-Access-Client-Id</code> and <code>CF-Access-Client-Secret</code>.
-          Credentials in the 1Password item
-          <code>Cloudflare Access — Homelab Service Token</code> (field
-          <code>username</code> = Client ID, field <code>credential</code> = Client
-          Secret).</li>
+        <li><strong>Numbat gateway</strong>: send
+          <code>X-Podhaus-Gateway-Token</code> using field
+          <code>hyperdx_mcp</code> from the <code>Pomerium Gateway Tokens</code>
+          1Password item. The public Pomerium route is limited to
+          <code>/api/mcp</code>, and Caddy checks the token before HyperDX.</li>
         <li><strong>HyperDX Personal API Access Key</strong> as
           <code>Authorization: Bearer &lt;key&gt;</code> — the per-user
           <code>accessKey</code> (HyperDX Team Settings → API Keys). Stored in 1Password as
@@ -483,17 +485,16 @@ $DK restart alloy backrest                           # reattach by name + rebuil
       </p>
       <pre><code>claude mcp add --scope user --transport http hyperdx \
   https://watch.pod.haus/api/mcp \
-  --header "CF-Access-Client-Id: &lt;id&gt;" \
-  --header "CF-Access-Client-Secret: &lt;secret&gt;" \
+  --header "X-Podhaus-Gateway-Token: &lt;gateway-token&gt;" \
   --header "Authorization: Bearer &lt;key&gt;"</code></pre>
       <p>
         On bilby the client config (<code>~/.claude.json</code>) is
         <strong>chezmoi-managed</strong> — the <code>hyperdx</code> MCP block and the key
-        (templated from 1Password <code>clickstack-hyperdx-mcp-key</code>) live in the
+        (templated from 1Password <code>clickstack-hyperdx-mcp-key</code> and
+        <code>Pomerium Gateway Tokens</code>) live in the
         chezmoi source, <strong>not</strong> hand-edited into <code>~/.claude.json</code>
         (chezmoi regenerates and would clobber a manual <code>claude mcp add</code>). The
-        same command works from any machine — it goes via the public tunnel + Access service
-        token, with no LAN dependency.
+        same command works from any machine through Numbat, with no LAN dependency.
       </p>
 
       <h2 id="autoheal">Autoheal</h2>

@@ -58,7 +58,7 @@
           directory. Bilby is also where the master copies of all four
           keypairs live; the pubkeys are committed to
           <code>komodo/keys/*.pub</code> in the repo for reference + rebuild.</li>
-        <li><strong>kangaroo, kookaburra</strong>: Each host has its own
+        <li><strong>kangaroo, kookaburra, numbat</strong>: Each host has its own
           keys directory (bootstrap-managed bind, separate from
           <code>etc-komodo</code>). The bootstrap script SCPs that host's
           <code>periphery.key</code> + Core's <code>core.pub</code> from
@@ -89,6 +89,10 @@
           <code>ws://bilby-podnet.tail9ceb.ts.net:9120</code> over the
           tailnet (kookaburra Periphery on dockernet; daemon.json forwards
           MagicDNS via <code>100.100.100.100</code>). No inbound listener.</li>
+        <li><strong>numbat</strong>: outbound. Periphery dials
+          <code>wss://core-connect.pod.haus</code> through the public TLS rathole
+          path. Komodo Noise keys authenticate the connection; no inbound listener
+          is exposed.</li>
       </ul>
       <p>
         Off-host Peripheries use outbound on attack-surface grounds:
@@ -108,7 +112,8 @@
             <td>Operating model</td>
             <td><code>files_on_host = true</code></td>
             <td>Linked Repo (<code>linked_repo = "podhaus"</code> for kangaroo,
-              <code>linked_repo = "podhaus-kookaburra"</code> for kookaburra —
+              <code>podhaus-kookaburra</code> for kookaburra, and
+              <code>podhaus-numbat</code> for Numbat;
               Repo resources are per-Periphery, each host's clone is independent state)</td>
           </tr>
           <tr>
@@ -151,9 +156,10 @@
         </tbody>
       </table>
       <p>
-        Two linked-repo hosts exist today: <strong>kangaroo</strong> (QNAP NAS,
-        repo <code>podhaus</code>) and <strong>kookaburra</strong> (DigitalOcean
-        relay, repo <code>podhaus-kookaburra</code>). Future deploy targets
+        Three linked-repo hosts exist today: <strong>kangaroo</strong> (QNAP NAS,
+        repo <code>podhaus</code>), <strong>kookaburra</strong> (retained DigitalOcean
+        rollback, repo <code>podhaus-kookaburra</code>), and <strong>Numbat</strong>
+        (active BinaryLane gateway, repo <code>podhaus-numbat</code>). Future deploy targets
         (e.g. pinelake) should follow the same pattern. Bilby stays on
         <code>files_on_host</code> because tight save-and-deploy beats the
         commit-roundtrip when the editor is on the same host.

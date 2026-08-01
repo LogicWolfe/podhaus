@@ -1,0 +1,120 @@
+address: 103.1.184.88:443
+http_redirect_addr: 103.1.184.88:80
+
+authenticate_service_url: https://authenticate.pod.haus
+idp_provider: oidc
+idp_provider_url: https://id.pod.haus
+idp_scopes: [openid, email, profile]
+
+autocert: true
+autocert_dir: /data/autocert
+autocert_email: nathan@nathanbaxter.com
+databroker_storage_type: memory
+log_level: info
+signing_key_file: /run/pomerium-secrets/signing-key.pem
+
+ssh_address: 103.4.235.175:22
+ssh_user_ca_key_file: /run/pomerium-secrets/ssh-user-ca-key
+ssh_host_key_files: [/run/pomerium-secrets/ssh-host-key]
+
+routes:
+  - &family_route
+    from: https://edge-canary.pod.haus
+    to: https://127.0.0.1:8443
+    preserve_host_header: true
+    tls_upstream_server_name: pomerium-origin.pod.haus
+    tls_custom_ca_file: /run/pomerium-secrets/origin-ca.pem
+    tls_client_cert_file: /run/pomerium-secrets/origin-client-cert.pem
+    tls_client_key_file: /run/pomerium-secrets/origin-client-key.pem
+    allow_websockets: true
+    idle_timeout: 0s
+    policy: &family_policy
+      - allow:
+          or:
+            - email:
+                is: nathan@nathanbaxter.com
+            - email:
+                is: scroeser@gmail.com
+
+  - <<: *family_route
+    from: https://gatus.pod.haus
+  - <<: *family_route
+    from: https://bugs.pod.haus
+  - <<: *family_route
+    from: https://backup.pod.haus
+  - <<: *family_route
+    from: https://fenwick.pod.haus
+    pass_identity_headers: true
+  - <<: *family_route
+    from: https://kangaroo-backup.pod.haus
+  - <<: *family_route
+    from: https://kangaroo.pod.haus
+
+  - &public_route
+    from: https://komodo.pod.haus
+    to: https://127.0.0.1:8443
+    prefix: /listener/github
+    preserve_host_header: true
+    tls_upstream_server_name: pomerium-origin.pod.haus
+    tls_custom_ca_file: /run/pomerium-secrets/origin-ca.pem
+    tls_client_cert_file: /run/pomerium-secrets/origin-client-cert.pem
+    tls_client_key_file: /run/pomerium-secrets/origin-client-key.pem
+    allow_public_unauthenticated_access: true
+  - <<: *family_route
+    from: https://komodo.pod.haus
+  - <<: *family_route
+    from: https://torrent.pod.haus
+  - <<: *family_route
+    from: https://home.pod.haus
+  - <<: *family_route
+    from: https://plex.pod.haus
+  - <<: *family_route
+    from: https://music.pod.haus
+
+  - <<: *public_route
+    from: https://watch.pod.haus
+    prefix: /api/mcp
+  - <<: *family_route
+    from: https://watch.pod.haus
+  - <<: *family_route
+    from: https://docs.pod.haus
+  - <<: *family_route
+    from: https://minio.pod.haus
+  - <<: *family_route
+    from: https://paperless.pod.haus
+  - <<: *family_route
+    from: https://stats.pod.haus
+
+  - <<: *public_route
+    from: https://git.pod.haus
+    prefix: null
+    regex: '^/[^/]+/[^/]+\.git/info/lfs(/.*)?$'
+  - <<: *family_route
+    from: https://git.pod.haus
+
+  - &nathan_route
+    <<: *family_route
+    from: https://sync.pod.haus
+    policy: &nathan_policy
+      - allow:
+          and:
+            - email:
+                is: nathan@nathanbaxter.com
+  - <<: *nathan_route
+    from: https://dev.nathanbaxter.com
+
+  - from: ssh://numbat
+    to: ssh://127.0.0.1:22
+    policy: &nathan_ssh_policy
+      - allow:
+          and:
+            - email:
+                is: nathan@nathanbaxter.com
+            - ssh_username:
+                is: nathan
+  - from: ssh://bilby
+    to: ssh://127.0.0.1:2201
+    policy: *nathan_ssh_policy
+  - from: ssh://voltaire
+    to: ssh://127.0.0.1:2202
+    policy: *nathan_ssh_policy

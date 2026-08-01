@@ -1,0 +1,25 @@
+services:
+  periphery:
+    container_name: komodo-periphery
+    image: ghcr.io/moghtech/komodo-periphery:${COMPOSE_KOMODO_IMAGE_TAG:-2}
+    restart: unless-stopped
+    init: true
+    environment:
+      PERIPHERY_PRIVATE_KEY: file:/config/keys/periphery.key
+      PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub
+      PERIPHERY_CORE_ADDRESSES: wss://core-connect.pod.haus
+      PERIPHERY_CONNECT_AS: numbat
+      PERIPHERY_SERVER_ENABLED: "true"
+      PERIPHERY_CONFIG_PATHS: /etc/komodo/periphery.config.toml
+      TZ: ${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/proc
+      - /opt/komodo-periphery/etc-komodo:/etc/komodo
+      - /opt/komodo-periphery/keys:/config/keys
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk --max-time 5 -o /dev/null https://localhost:8120/ || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

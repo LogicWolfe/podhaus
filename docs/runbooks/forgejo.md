@@ -13,17 +13,16 @@ git@git.pod.haus:owner/repository.git
 ```
 
 Neither path uses Cloudflare Access or Tailscale. `git.pod.haus` is a DNS-only
-A record to kookaburra's DigitalOcean Reserved IP. Public :443 traverses the
-existing rathole service to bilby's Caddy, which terminates TLS and proxies to
-Forgejo. DigitalOcean delivers Reserved-IP :22 to the droplet's anchor
-interface, where rathole forwards it to Forgejo's embedded SSH server. The
-droplet sees only TLS ciphertext on :443; its own sshd remains bound to the
-ordinary public address on :22.
+A record to Numbat's application address. HTTPS terminates at Pomerium, then
+crosses the private mTLS rathole origin to Caddy and Forgejo. Forgejo still uses
+Pocket ID natively, so browser login is Pomerium followed by Forgejo OIDC.
+Forgejo LFS has an exact public Pomerium route and relies on its short-lived LFS
+token. Port 22 is a separate raw rathole service to Forgejo's embedded SSH
+server, so ordinary `git@git.pod.haus` URLs continue to work.
 
-Signed-out visits to the root go straight to Forgejo's built-in login page. It
-shows the Pocket ID button without Forgejo's marketing homepage, powered-by
-label, version, or template timing. This is configuration in `compose.yaml`, not
-a template override, so Forgejo upgrades don't carry a custom-template seam.
+After Pomerium login, Forgejo shows the Pocket ID button without its marketing
+homepage, powered-by label, version, or template timing. This is configuration
+in `compose.yaml`, not a template override.
 
 ## Storage
 
@@ -134,13 +133,12 @@ Last local restore drill: 2026-07-31. Backrest restored both trees; the restored
 SQLite database passed `PRAGMA integrity_check`, and the repository tree and
 config were present.
 
-## Kookaburra rebuild
+## Edge rebuild
 
-Run Terraform first so the Reserved IP is attached, then run
-`./kookaburra_bootstrap`. The SSH hardening script discovers the ordinary and
-anchor addresses from DigitalOcean metadata, binds host sshd to the ordinary
-address, and reserves anchor port 22 for rathole. Deploy
-`kookaburra-relay` and `bilby-relay`, then verify `ssh -T git@git.pod.haus`.
+Run Terraform to provision Numbat, then run `./numbat_bootstrap` to reconcile
+the host and outbound Periphery. Komodo deploys `numbat-relay` and
+`numbat-pomerium`; `bilby-relay` supplies Forgejo SSH and the private origin.
+Verify browser OIDC, LFS, and `ssh -T git@git.pod.haus`.
 
-Never make rathole listen on `0.0.0.0:22`: that would collide with or replace
-the administrative SSH path.
+Kookaburra and its old rathole path remain live only for rollback until Numbat
+is independently verified.

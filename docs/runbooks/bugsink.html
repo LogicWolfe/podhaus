@@ -48,12 +48,12 @@
           chown its own mount, so this <code>chown -R 14237:14237 /data</code>
           and exits 0. It is in <code>ignore_services</code> — a deliberate
           exit-0 service, not a failure.</li>
-        <li><strong>UI ingress</strong>: <code>bugs.pod.haus</code> →
-          Cloudflare Tunnel → <code>http://bugsink:8000</code>, gated by the
-          default Access chain (Homelab service-token bypass → Family allow).</li>
+        <li><strong>UI ingress</strong>: <code>bugs.pod.haus</code> → Numbat
+          Pomerium → private Caddy → <code>http://bugsink:8000</code>, gated by
+          the Family policy.</li>
         <li><strong>Ingest</strong>: clients send over <code>dockernet</code> to
           <code>http://bugsink:8000</code> directly — <em>never</em> via
-          <code>bugs.pod.haus</code> (that path is behind Cloudflare Access).
+          <code>bugs.pod.haus</code> (that path is behind Pomerium).
           <code>ALLOWED_HOSTS</code> is set explicitly
           (<code>bugs.pod.haus,bugsink,localhost,127.0.0.1</code>) so a request
           with <code>Host: bugsink</code> is accepted while <code>BASE_URL</code>
@@ -150,7 +150,7 @@
           <code>prestart.py</code> sees a user already exists and logs
           <em>"Superuser not created: … already exist(s)"</em> then continues
           — it never re-creates or errors on an existing instance.</li>
-        <li>Browse <code>https://bugs.pod.haus</code> → Cloudflare Access
+        <li>Browse <code>https://bugs.pod.haus</code> → Pomerium
           (Family) → Bugsink login with the superuser credentials (the
           "Bugsink Create Superuser" 1Password item).</li>
         <li>Create a <strong>project</strong> (e.g. <code>fenwick</code>) and

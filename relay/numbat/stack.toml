@@ -1,0 +1,23 @@
+[[stack]]
+name = "numbat-relay"
+description = "rathole server on Numbat for public TLS, Forgejo SSH, protected origins and host SSH"
+tags = ["numbat", "podhaus"]
+
+[stack.config]
+server = "numbat"
+linked_repo = "podhaus-numbat"
+run_directory = "relay/numbat"
+file_paths = ["compose.yaml"]
+run_build = true
+auto_pull = false
+
+environment = """
+RATHOLE_NOISE_LOCAL_PRIVATE_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PRIVATE_KEY]]
+RATHOLE_PUBLIC_TLS_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__PUBLIC_TLS]]
+RATHOLE_FORGEJO_SSH_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__FORGEJO_SSH]]
+RATHOLE_PROTECTED_HTTP_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__PROTECTED_HTTP]]
+RATHOLE_BILBY_SSH_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__BILBY_SSH]]
+RATHOLE_VOLTAIRE_SSH_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__VOLTAIRE_SSH]]
+NUMBAT_APPLICATION_IPV4=103.1.184.88
+NUMBAT_RELAY_IPV4=103.4.235.175
+"""

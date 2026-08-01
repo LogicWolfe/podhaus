@@ -1,0 +1,77 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+NUMBAT_IP="${NUMBAT_IP:-103.1.184.88}"
+SSH_HOST="root@$NUMBAT_IP"
+REMOTE_DIR=/opt/komodo-periphery
+KEYS_DIR="${BILBY_KEYS_DIR:-/opt/komodo/keys}"
+
+SOCK=""
+for candidate in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/op-unlock/agent.sock" /tmp/op-unlock-*.sock; do
+  [ -S "$candidate" ] || continue
+  if SSH_AUTH_SOCK="$candidate" ssh-add -l >/dev/null 2>&1; then
+    SOCK="$candidate"
+    break
+  fi
+done
+[ -n "$SOCK" ] || { echo "run op-unlock first" >&2; exit 1; }
+export SSH_AUTH_SOCK="$SOCK"
+
+KNOWN_HOSTS_FILE="$(mktemp)"
+trap 'find "$KNOWN_HOSTS_FILE" -maxdepth 0 -type f -delete' EXIT
+common=(-o "IdentityAgent=$SOCK" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE" -o ConnectTimeout=10)
+if ssh "${common[@]}" -p 2222 "$SSH_HOST" true 2>/dev/null; then
+  port=2222
+else
+  port=22
+fi
+remote() { ssh "${common[@]}" -p "$port" "$SSH_HOST" "$@"; }
+copy() { scp -q "${common[@]}" -P "$port" "$1" "$SSH_HOST:$2"; }
+
+echo "== host packages and configuration =="
+remote "dnf -y install dnf-plugins-core git nftables policycoreutils-python-utils qemu-guest-agent"
+remote "dnf -y config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo >/dev/null"
+remote "dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
+remote "install -d -m 755 /etc/nftables /etc/docker /etc/NetworkManager/dispatcher.d"
+copy numbat/host/bootstrap-sshd_config /etc/ssh/numbat-bootstrap-sshd_config
+copy numbat/host/bootstrap-sshd.service /etc/systemd/system/numbat-bootstrap-sshd.service
+copy numbat/host/20-relay-ip /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip
+copy numbat/host/podhaus.nft /etc/nftables/podhaus.nft
+copy numbat/host/podhaus-nftables /usr/local/sbin/podhaus-nftables
+copy numbat/host/podhaus-nftables.service /etc/systemd/system/podhaus-nftables.service
+copy numbat/host/docker-daemon.json /etc/docker/daemon.json
+copy pomerium/keys/user-ca.pub /etc/ssh/pomerium-user-ca.pub
+remote "chmod 600 /etc/ssh/numbat-bootstrap-sshd_config; chmod 755 /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip /usr/local/sbin/podhaus-nftables; semanage port -a -t ssh_port_t -p tcp 2222 2>/dev/null || semanage port -m -t ssh_port_t -p tcp 2222; systemctl daemon-reload; systemctl enable --now numbat-bootstrap-sshd.service"
+
+port=2222
+remote true
+copy numbat/host/00-podhaus-final.conf /etc/ssh/sshd_config.d/00-podhaus-final.conf
+remote "/etc/NetworkManager/dispatcher.d/20-numbat-relay-ip eth0 up; systemctl disable --now firewalld.service 2>/dev/null || true; systemctl enable --now podhaus-nftables.service qemu-guest-agent.service docker.service; systemctl mask cockpit.socket 2>/dev/null || true; sshd -t; systemctl restart sshd.service; docker network inspect dockernet >/dev/null 2>&1 || docker network create dockernet"
+
+echo "== Periphery =="
+for key in core.pub numbat-periphery.key; do
+  [ -f "$KEYS_DIR/$key" ] || { echo "missing $KEYS_DIR/$key" >&2; exit 1; }
+done
+remote "install -d -m 700 $REMOTE_DIR/keys; install -d -m 755 $REMOTE_DIR/etc-komodo"
+remote "cat > $REMOTE_DIR/keys/periphery.key && chmod 600 $REMOTE_DIR/keys/periphery.key" < "$KEYS_DIR/numbat-periphery.key"
+remote "cat > $REMOTE_DIR/keys/core.pub && chmod 644 $REMOTE_DIR/keys/core.pub" < "$KEYS_DIR/core.pub"
+copy numbat/periphery/compose.yaml "$REMOTE_DIR/compose.yaml"
+printf 'TZ=Australia/Perth\n' | remote "cat > $REMOTE_DIR/.env && chmod 600 $REMOTE_DIR/.env"
+github_pat="$(op read 'op://Homelab/Homelab GitHub Personal Access Token/token')"
+printf '[[git_provider]]\ndomain = "github.com"\naccounts = [{ username = "LogicWolfe", token = "%s" }]\n' "$github_pat" \
+  | remote "cat > $REMOTE_DIR/etc-komodo/periphery.config.toml && chmod 600 $REMOTE_DIR/etc-komodo/periphery.config.toml"
+remote "cd $REMOTE_DIR && docker compose up -d"
+
+echo "== wait for Komodo =="
+api_key="$(op read 'op://Homelab/Komodo API OnePassword Sync/username')"
+api_secret="$(op read 'op://Homelab/Komodo API OnePassword Sync/credential')"
+for attempt in $(seq 1 30); do
+  state="$(curl -sf -X POST http://localhost:9120/read -H 'Content-Type: application/json' \
+    -H "X-Api-Key: $api_key" -H "X-Api-Secret: $api_secret" \
+    -d '{"type":"ListServers","params":{}}' | jq -r '.[] | select(.name=="numbat") | .info.state' || true)"
+  [ "$state" = Ok ] && { echo "numbat state=Ok"; exit 0; }
+  sleep 4
+done
+echo "numbat did not reach state=Ok" >&2
+exit 1

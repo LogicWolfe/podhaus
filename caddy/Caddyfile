@@ -1,3 +1,11 @@
+{
+	# Pomerium authenticates once with mTLS, then preserves each route's Host
+	# header for Caddy dispatch. The private listener is not reachable directly.
+	servers :4443 {
+		strict_sni_host insecure_off
+	}
+}
+
 # Public TLS front for MinIO's S3 API. Owns its own Let's Encrypt
 # wildcard so the S3 data path never touches Cloudflare's proxy (which
 # rewrites the SigV4-signed Accept-Encoding header and only has a
@@ -11,7 +19,88 @@
 # (no `encode` here, deliberately) — so SigV4 validates for Go and JS
 # SDKs alike.
 
-storage.pod.haus, *.storage.pod.haus {
+(pomerium_origin_tls) {
+	tls /run/podhaus-secrets/pomerium-origin-server-cert.pem /run/podhaus-secrets/pomerium-origin-server-key.pem {
+		client_auth {
+			trust_pool file /run/podhaus-secrets/pomerium-origin-ca.pem
+		}
+	}
+}
+
+# Protected routes are reachable only through Numbat's loopback-bound rathole
+# service. Caddy also requires Pomerium's client certificate on port 4443.
+:4443 {
+	import pomerium_origin_tls
+	@missing_mcp_token {
+		host watch.pod.haus
+		path /api/mcp /api/mcp/*
+		not header X-Podhaus-Gateway-Token {env.HYPERDX_MCP_GATEWAY_TOKEN}
+	}
+	@gatus host edge-canary.pod.haus gatus.pod.haus
+	@bugs host bugs.pod.haus
+	@backup host backup.pod.haus
+	@fenwick host fenwick.pod.haus
+	@kangaroo_backup host kangaroo-backup.pod.haus
+	@kangaroo host kangaroo.pod.haus
+	@komodo host komodo.pod.haus
+	@torrent host torrent.pod.haus
+	@home host home.pod.haus
+	@plex host plex.pod.haus
+	@music host music.pod.haus
+	@watch host watch.pod.haus
+	@docs host docs.pod.haus
+	@minio_console host minio.pod.haus
+	@sync host sync.pod.haus
+	@paperless host paperless.pod.haus
+	@stats host stats.pod.haus
+	@git host git.pod.haus
+	@dev host dev.nathanbaxter.com
+
+	route {
+		respond @missing_mcp_token 401
+		reverse_proxy @gatus gatus:8080
+		reverse_proxy @bugs bugsink:8000
+		reverse_proxy @backup backrest:9898
+		reverse_proxy @fenwick fenwick:8088
+		reverse_proxy @kangaroo_backup 10.0.0.25:9898
+		reverse_proxy @kangaroo 10.0.0.25:8080
+		reverse_proxy @komodo komodo-core:9120
+		reverse_proxy @torrent flood:3000
+		reverse_proxy @home 172.18.0.1:8123
+		reverse_proxy @plex 172.18.0.1:32400
+		reverse_proxy @music 172.18.0.1:8095
+		reverse_proxy @watch hyperdx:8080
+		reverse_proxy @docs docs:8000
+		reverse_proxy @minio_console minio:9001
+		reverse_proxy @sync 10.0.0.25:8384
+		reverse_proxy @paperless paperless:8000
+		reverse_proxy @stats umami:3000
+		reverse_proxy @git forgejo:3000
+		reverse_proxy @dev nathanbaxter-dev:4321
+		respond 404
+	}
+}
+
+# Numbat's outbound Periphery connection returns through the raw TLS relay.
+# Komodo's v2 Noise handshake remains the application-level boundary.
+core-connect.pod.haus, core-connect.pod.haus:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	reverse_proxy komodo-core:9120
+}
+
+logs-ingest.pod.haus, logs-ingest.pod.haus:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		client_auth {
+			trust_pool file /run/podhaus-secrets/log-ingest-ca.pem
+		}
+	}
+	reverse_proxy clickstack-otel:4318
+}
+
+storage.pod.haus, *.storage.pod.haus, storage.pod.haus:4444, *.storage.pod.haus:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -27,10 +116,9 @@ storage.pod.haus, *.storage.pod.haus {
 }
 
 # pouch.pod.haus is the public S3 endpoint for the separate MinIO instance
-# on kangaroo. The existing kookaburra :443 rathole service carries the TLS
-# stream to this Caddy instance; Caddy then crosses the LAN to kangaroo. Keep
-# the proxy free of response encoding so SigV4-signed headers stay intact.
-pouch.pod.haus {
+# on kangaroo. This :443 site remains for LAN access and Kookaburra rollback;
+# Numbat uses the matching :4444 site above.
+pouch.pod.haus, pouch.pod.haus:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -38,11 +126,9 @@ pouch.pod.haus {
 	reverse_proxy 10.0.0.25:9000
 }
 
-# git.pod.haus is Forgejo's single public hostname for both protocols.
-# DNS-only A points at kookaburra: raw :443 traverses the existing
-# rathole service to this Caddy instance, while raw :22 uses the
-# separate rathole service to Forgejo's embedded SSH server. Pocket ID
-# is Forgejo's application-level authentication boundary.
+# This :443 Forgejo site remains for LAN access and Kookaburra rollback.
+# Active HTTPS reaches Forgejo through Pomerium's private :4443 origin;
+# active SSH uses Numbat's separate raw service.
 git.pod.haus {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
@@ -72,13 +158,15 @@ music.pod.haus {
 	reverse_proxy 172.18.0.1:8095
 }
 
-# nathanbaxter.com — public static site, served from the
-# `nathanbaxter-com` bucket (anonymous GetObject). The PUBLIC site is
-# https + Cloudflare-proxied; this `http://` is only the internal
-# cloudflared→Caddy hop (like every other pod.haus tunnel service) and
-# the deliberate signal that Caddy must NOT ACME this name (Cloudflare
-# owns the cert).
-http://nathanbaxter.com, http://www.nathanbaxter.com {
+# nathanbaxter.com is served from the
+# `nathanbaxter-com` bucket (anonymous GetObject). Cloudflare reaches the
+# active Numbat path on :4444. The `http://` site remains for the retained
+# cloudflared path and deliberately does not obtain a certificate.
+http://nathanbaxter.com, http://www.nathanbaxter.com, nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
 	@www host www.nathanbaxter.com
 	redir @www https://nathanbaxter.com{uri} permanent
 
@@ -138,12 +226,15 @@ http://nathanbaxter.com, http://www.nathanbaxter.com {
 # bucket, anonymous GetObject), with the WordPress.com legacy-URL
 # redirects Sky's archive needs.
 #
-# `http://` = the internal cloudflared→Caddy hop only (Cloudflare owns
-# the edge cert); the deliberate signal that Caddy must NOT ACME it.
+# `http://` is the retained cloudflared hop; Numbat reaches :4444.
 #
 # www.skycroeser.net 301s to the apex from its own block below, so only
 # the bare apex serves content (canonical URL).
-http://skycroeser.net {
+http://skycroeser.net, skycroeser.net:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
 	# Styled 404 served from the bucket with a real 404 status (same
 	# pattern as nathanbaxter.com above — replace_status inside the
 	# reverse_proxy block). Terminal theme emits 404.html.
@@ -239,7 +330,68 @@ http://skycroeser.net {
 
 # www.skycroeser.net → 301 to the bare apex (canonical). Kept as a
 # dedicated block rather than joining the site line above so www never
-# serves duplicate content. Reaches Caddy via its own tunnel ingress rule.
-http://www.skycroeser.net {
+# serves duplicate content.
+http://www.skycroeser.net, www.skycroeser.net:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
 	redir https://skycroeser.net{uri} 301
+}
+
+# Public application and machine endpoints on Numbat's relay-only listener.
+# The Cloudflare Tunnel paths remain configured separately for rollback.
+id.pod.haus:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	reverse_proxy pocket-id:1411
+}
+
+unifi.pod.haus, unifi.pod.haus:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	reverse_proxy https://10.0.0.1 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
+paperless-api.pod.haus:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	@api {
+		path /api /api/*
+		header X-Podhaus-Gateway-Token {env.PAPERLESS_API_GATEWAY_TOKEN}
+	}
+	handle @api {
+		reverse_proxy paperless:8000 {
+			header_up Host paperless.pod.haus
+		}
+	}
+	handle {
+		respond 404
+	}
+}
+
+pets.indigopod.au:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	reverse_proxy pets:8000
+}
+
+stats.nathanbaxter.com:4444, stats.skycroeser.net:4444, stats.indigopod.au:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	@tracker path /script.js /api/send /api/send/*
+	handle @tracker {
+		reverse_proxy umami:3000
+	}
+	handle {
+		respond 404
+	}
 }
