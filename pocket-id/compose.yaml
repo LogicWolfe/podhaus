@@ -21,8 +21,9 @@ services:
     environment:
       APP_URL: https://id.pod.haus
       ENCRYPTION_KEY: ${POCKET_ID_ENCRYPTION_KEY}
-      # Only Caddy on dockernet is trusted to supply forwarding headers.
-      TRUST_PROXY: 172.18.0.0/16
+      # v2.9 accepts only a boolean here. Pocket ID is reachable solely on
+      # dockernet, so trust the reverse proxy's forwarding headers.
+      TRUST_PROXY: "true"
       PUID: "1000"
       PGID: "1000"
       # Structured logs for the Alloy → ClickStack pipeline; no outbound
