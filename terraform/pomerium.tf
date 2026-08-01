@@ -310,7 +310,7 @@ resource "pocketid_client" "pomerium" {
 
   launch_url                = "https://edge-canary.pod.haus/"
   is_public                 = false
-  pkce_enabled              = true
+  pkce_enabled              = false
   requires_reauthentication = false
 
   allowed_user_groups = [
