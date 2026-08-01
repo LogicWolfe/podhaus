@@ -61,6 +61,10 @@ them. Migrated DNS points at Numbat, so rollback is a DNS change and does not
 touch application state. Fenwick also needs its Pomerium identity commit
 reverted while Cloudflare Access is primary.
 
+The Komodo handoff and a full Numbat reboot passed. Six minutes after boot the
+1 GB node had 403 MiB available, no swap or OOM activity, and no container
+restarts, so the smallest plan remains the right size.
+
 ## Before retirement
 
 - Nathan verifies Pocket ID login, logout, Family and Nathan-only policies from
@@ -69,12 +73,8 @@ reverted while Cloudflare Access is primary.
   and virtual-host access; WebSockets; and native SSH to Bilby, Numbat, and
   Voltaire.
 - Finish the machine-local Voltaire rathole client and Pomerium CA trust.
-- Reboot Numbat and confirm Pomerium, rathole, Periphery, Alloy, certificates,
-  and linked-repo deployment recover.
 - Run a no-op Terraform plan from outside the LAN through
   `storage.pod.haus`.
-- Measure the 1 GB node. Upgrade only if free memory stays below 25 percent,
-  swap or OOM activity appears, or sustained CPU saturation causes latency.
 
 After those checks and Nathan's explicit approval, remove the old DNS rollback
 values, Kookaburra, migrated Tunnel and Access resources, the old Tailscale
