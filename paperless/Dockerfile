@@ -13,7 +13,7 @@
 # Pinned deliberately — toweosp couples to Paperless internals; bump in
 # lockstep with Paperless upgrades, or delete this RUN to fall back to the
 # stock Gotenberg-rendered mail parser.
-FROM ghcr.io/paperless-ngx/paperless-ngx:latest
+FROM ghcr.io/paperless-ngx/paperless-ngx:2.20.15
 
 RUN uv pip install --no-cache --system paperlessngx-mail-parser==2.0.2
 
