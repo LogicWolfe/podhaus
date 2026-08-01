@@ -68,14 +68,6 @@ Either keep the environment path as the documented design, or migrate one
 credential class at a time with a zero-diff plan between each move. Do not turn
 this into a second Terraform root or a host-specific wrapper.
 
-## Clear Cloudflare Access provider deprecations
-
-`terraform validate` currently succeeds with 16 deprecation warnings, including
-the Access application's `self_hosted_domains` attribute. Resolve these against
-the schema for the pinned Cloudflare provider before the next provider upgrade.
-Migrate one resource shape at a time and require a zero-diff plan so a schema
-cleanup cannot replace Access applications or alter their policy order.
-
 ## Manage MagicDNS settings in Terraform
 
 The Tailscale nodes and Docker daemon forwarding rely on tailnet-wide MagicDNS,

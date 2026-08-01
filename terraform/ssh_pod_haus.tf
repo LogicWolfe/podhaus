@@ -6,8 +6,7 @@
 # Shape mirrors the proven `pine_lake_ssh` app in access.tf: an inline
 # `type = "ssh"` Access application (the type value IS the browser-
 # rendering switch — there is no separate toggle in the API/provider),
-# not the pod_haus_service module (which models HTTP self_hosted apps
-# via `destinations`; SSH apps use `domain`/`self_hosted_domains`).
+# not the pod_haus_service module (which models HTTP self_hosted apps).
 #
 # Auth is passwordless via a short-lived SSH certificate: Cloudflare
 # mints a cert whose principal is the user's email prefix (`nathan` ←
@@ -44,12 +43,12 @@ resource "cloudflare_dns_record" "ssh_pod_haus" {
 }
 
 resource "cloudflare_zero_trust_access_application" "bilby_ssh" {
-  account_id          = var.account_id
-  name                = "Bilby SSH"
-  type                = "ssh"
-  domain              = "ssh.pod.haus"
-  self_hosted_domains = ["ssh.pod.haus"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "Bilby SSH"
+  type             = "ssh"
+  domain           = "ssh.pod.haus"
+  destinations     = [{ type = "public", uri = "ssh.pod.haus" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity  = false
   enable_binding_cookie      = false

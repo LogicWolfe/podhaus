@@ -51,12 +51,12 @@ resource "cloudflare_dns_record" "stats_nathanbaxter_com" {
 # Umami setup API call — can reach it, then Family browser login). The
 # two path apps below override this for their specific routes.
 resource "cloudflare_zero_trust_access_application" "stats_nathanbaxter_host" {
-  account_id          = var.account_id
-  name                = "stats.nathanbaxter.com (dashboard)"
-  type                = "self_hosted"
-  domain              = "stats.nathanbaxter.com"
-  self_hosted_domains = ["stats.nathanbaxter.com"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "stats.nathanbaxter.com (dashboard)"
+  type             = "self_hosted"
+  domain           = "stats.nathanbaxter.com"
+  destinations     = [{ type = "public", uri = "stats.nathanbaxter.com" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity  = false
   enable_binding_cookie      = false
@@ -72,12 +72,12 @@ resource "cloudflare_zero_trust_access_application" "stats_nathanbaxter_host" {
 
 # --- Public hole 1: the tracker script the visitor's browser loads.
 resource "cloudflare_zero_trust_access_application" "stats_nathanbaxter_script" {
-  account_id          = var.account_id
-  name                = "stats.nathanbaxter.com /script.js (public)"
-  type                = "self_hosted"
-  domain              = "stats.nathanbaxter.com/script.js"
-  self_hosted_domains = ["stats.nathanbaxter.com/script.js"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "stats.nathanbaxter.com /script.js (public)"
+  type             = "self_hosted"
+  domain           = "stats.nathanbaxter.com/script.js"
+  destinations     = [{ type = "public", uri = "stats.nathanbaxter.com/script.js" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity = false
   enable_binding_cookie     = false
@@ -93,12 +93,12 @@ resource "cloudflare_zero_trust_access_application" "stats_nathanbaxter_script" 
 
 # --- Public hole 2: the event-collection endpoint the script POSTs to.
 resource "cloudflare_zero_trust_access_application" "stats_nathanbaxter_send" {
-  account_id          = var.account_id
-  name                = "stats.nathanbaxter.com /api/send (public)"
-  type                = "self_hosted"
-  domain              = "stats.nathanbaxter.com/api/send"
-  self_hosted_domains = ["stats.nathanbaxter.com/api/send"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "stats.nathanbaxter.com /api/send (public)"
+  type             = "self_hosted"
+  domain           = "stats.nathanbaxter.com/api/send"
+  destinations     = [{ type = "public", uri = "stats.nathanbaxter.com/api/send" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity  = false
   enable_binding_cookie      = false
@@ -168,12 +168,12 @@ resource "cloudflare_dns_record" "stats_indigopod_au" {
 
 # Host-level lock: dashboard/admin on stats.indigopod.au gated to Family.
 resource "cloudflare_zero_trust_access_application" "stats_indigopod_host" {
-  account_id          = var.account_id
-  name                = "stats.indigopod.au (dashboard)"
-  type                = "self_hosted"
-  domain              = "stats.indigopod.au"
-  self_hosted_domains = ["stats.indigopod.au"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "stats.indigopod.au (dashboard)"
+  type             = "self_hosted"
+  domain           = "stats.indigopod.au"
+  destinations     = [{ type = "public", uri = "stats.indigopod.au" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity  = false
   enable_binding_cookie      = false
@@ -189,12 +189,12 @@ resource "cloudflare_zero_trust_access_application" "stats_indigopod_host" {
 
 # Public hole 1: the tracker script the player's browser loads.
 resource "cloudflare_zero_trust_access_application" "stats_indigopod_script" {
-  account_id          = var.account_id
-  name                = "stats.indigopod.au /script.js (public)"
-  type                = "self_hosted"
-  domain              = "stats.indigopod.au/script.js"
-  self_hosted_domains = ["stats.indigopod.au/script.js"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "stats.indigopod.au /script.js (public)"
+  type             = "self_hosted"
+  domain           = "stats.indigopod.au/script.js"
+  destinations     = [{ type = "public", uri = "stats.indigopod.au/script.js" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity  = false
   enable_binding_cookie      = false
@@ -209,12 +209,12 @@ resource "cloudflare_zero_trust_access_application" "stats_indigopod_script" {
 
 # Public hole 2: the event-collection endpoint the script POSTs to.
 resource "cloudflare_zero_trust_access_application" "stats_indigopod_send" {
-  account_id          = var.account_id
-  name                = "stats.indigopod.au /api/send (public)"
-  type                = "self_hosted"
-  domain              = "stats.indigopod.au/api/send"
-  self_hosted_domains = ["stats.indigopod.au/api/send"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "stats.indigopod.au /api/send (public)"
+  type             = "self_hosted"
+  domain           = "stats.indigopod.au/api/send"
+  destinations     = [{ type = "public", uri = "stats.indigopod.au/api/send" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity  = false
   enable_binding_cookie      = false
@@ -278,12 +278,12 @@ resource "cloudflare_dns_record" "stats_skycroeser_net" {
 
 # Host-level lock: dashboard/admin on stats.skycroeser.net gated to Family.
 resource "cloudflare_zero_trust_access_application" "stats_skycroeser_host" {
-  account_id          = var.account_id
-  name                = "stats.skycroeser.net (dashboard)"
-  type                = "self_hosted"
-  domain              = "stats.skycroeser.net"
-  self_hosted_domains = ["stats.skycroeser.net"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "stats.skycroeser.net (dashboard)"
+  type             = "self_hosted"
+  domain           = "stats.skycroeser.net"
+  destinations     = [{ type = "public", uri = "stats.skycroeser.net" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity  = false
   enable_binding_cookie      = false
@@ -299,12 +299,12 @@ resource "cloudflare_zero_trust_access_application" "stats_skycroeser_host" {
 
 # Public hole 1: the tracker script the visitor's browser loads.
 resource "cloudflare_zero_trust_access_application" "stats_skycroeser_script" {
-  account_id          = var.account_id
-  name                = "stats.skycroeser.net /script.js (public)"
-  type                = "self_hosted"
-  domain              = "stats.skycroeser.net/script.js"
-  self_hosted_domains = ["stats.skycroeser.net/script.js"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "stats.skycroeser.net /script.js (public)"
+  type             = "self_hosted"
+  domain           = "stats.skycroeser.net/script.js"
+  destinations     = [{ type = "public", uri = "stats.skycroeser.net/script.js" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity  = false
   enable_binding_cookie      = false
@@ -319,12 +319,12 @@ resource "cloudflare_zero_trust_access_application" "stats_skycroeser_script" {
 
 # Public hole 2: the event-collection endpoint the script POSTs to.
 resource "cloudflare_zero_trust_access_application" "stats_skycroeser_send" {
-  account_id          = var.account_id
-  name                = "stats.skycroeser.net /api/send (public)"
-  type                = "self_hosted"
-  domain              = "stats.skycroeser.net/api/send"
-  self_hosted_domains = ["stats.skycroeser.net/api/send"]
-  session_duration    = "730h"
+  account_id       = var.account_id
+  name             = "stats.skycroeser.net /api/send (public)"
+  type             = "self_hosted"
+  domain           = "stats.skycroeser.net/api/send"
+  destinations     = [{ type = "public", uri = "stats.skycroeser.net/api/send" }]
+  session_duration = "730h"
 
   auto_redirect_to_identity  = false
   enable_binding_cookie      = false
