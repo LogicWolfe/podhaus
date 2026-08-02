@@ -7,6 +7,7 @@ RUN xcaddy build --with github.com/caddy-dns/cloudflare
 
 FROM caddy:2
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+RUN apk add --no-cache curl jq
 
 # Content-hash build arg from the podhaus mechanism (see AGENTS.md
 # "Content-hash change detection"). Declared purely for cache busting:

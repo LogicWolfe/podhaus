@@ -46,9 +46,14 @@ services:
       - 443:443
     environment:
       TZ: ${TZ}
-      # Cloudflare token for the ACME DNS-01 challenge (wildcard
-      # issuance). DNS-edit scope only; from 1Password via komodo-op.
+      # Cloudflare token for ACME DNS-01 and Sky's cache-tag purge,
+      # from 1Password via komodo-op.
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      NATHANBAXTER_CACHE_TAG: ${NATHANBAXTER_CACHE_TAG}
+      SKY_CACHE_MANIFEST_URL: ${SKY_CACHE_MANIFEST_URL}
+      SKY_CACHE_ZONE: ${SKY_CACHE_ZONE}
+      SKY_CACHE_TAG: ${SKY_CACHE_TAG}
+      SKY_CACHE_STATE_FILE: ${SKY_CACHE_STATE_FILE}
       HYPERDX_MCP_GATEWAY_TOKEN: ${HYPERDX_MCP_GATEWAY_TOKEN}
       PAPERLESS_API_GATEWAY_TOKEN: ${PAPERLESS_API_GATEWAY_TOKEN}
     volumes:
@@ -66,6 +71,9 @@ services:
       - dockernet
     labels:
       autoheal: "true"
+      ofelia.enabled: "true"
+      ofelia.job-exec.sky-cache-invalidate.schedule: "0 * * * * *"
+      ofelia.job-exec.sky-cache-invalidate.command: "/bin/sh /etc/caddy/scripts/sky-cache-invalidate.sh"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # Caddy's localhost admin API answers when the server is up

@@ -66,6 +66,7 @@
           <tr><td><code>forgejo-backup-recover</code></td><td>backrest</td><td>every 5 min</td><td>Recovers the Forgejo backup control path if a prior quiesce or hook was interrupted.</td></tr>
           <tr><td><code>search-index</code></td><td>search-indexer</td><td>every minute</td><td>Refreshes the cross-repository documentation search index.</td></tr>
           <tr><td><code>streamfab-publish</code></td><td>streamfab-publish</td><td>every minute</td><td>Publishes completed StreamFab output into the media library.</td></tr>
+          <tr><td><code>sky-cache-invalidate</code></td><td>caddy</td><td>every minute</td><td>Purges Sky's Cloudflare cache tag when MinIO reports a new version of Publii's completed <code>files.publii.json</code> manifest. See <a href="/caching.md">Public site caching</a>.</td></tr>
         </tbody>
       </table>
 

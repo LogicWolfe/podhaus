@@ -9,7 +9,7 @@ ARG STACK_CONTENT_HASH
 ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates git curl && \
+    apt-get install -y --no-install-recommends ca-certificates git curl jq && \
     rm -rf /var/lib/apt/lists/* && \
     curl -fsSL https://dl.min.io/client/mc/release/linux-arm64/mc \
       -o /usr/local/bin/mcli && \

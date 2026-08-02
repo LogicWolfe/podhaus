@@ -170,6 +170,26 @@ http://nathanbaxter.com, http://www.nathanbaxter.com, nathanbaxter.com:4444, www
 	@www host www.nathanbaxter.com
 	redir @www https://nathanbaxter.com{uri} permanent
 
+	@nathanImmutable {
+		host nathanbaxter.com
+		path /_astro/*
+	}
+	header @nathanImmutable {
+		Cache-Control "public, max-age=31536000, immutable"
+		CDN-Cache-Control "public, max-age=31536000"
+		-Cache-Tag
+	}
+
+	@nathanRelease {
+		host nathanbaxter.com
+		not path /_astro/*
+	}
+	header @nathanRelease {
+		Cache-Control "no-cache"
+		CDN-Cache-Control "public, max-age=31536000"
+		Cache-Tag "{env.NATHANBAXTER_CACHE_TAG}"
+	}
+
 	# Missing-object handling: the route's reverse_proxy detects MinIO's
 	# NoSuchKey 404, raises `error 404`, and this handler serves the
 	# styled 404.html body from the bucket with a real 404 status.
@@ -233,6 +253,11 @@ http://nathanbaxter.com, http://www.nathanbaxter.com, nathanbaxter.com:4444, www
 http://skycroeser.net, skycroeser.net:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	header {
+		Cache-Control "no-cache"
+		CDN-Cache-Control "public, max-age=31536000"
+		Cache-Tag "{env.SKY_CACHE_TAG}"
 	}
 
 	# Styled 404 served from the bucket with a real 404 status (same

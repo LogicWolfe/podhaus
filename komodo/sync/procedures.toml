@@ -178,7 +178,9 @@ executions = [
 # shape + rationale as fenwick-push-deploy above: Stage 0 reconciles
 # the sync, Stage 1 force-deploys (the linked-repo stale-clone deadlock
 # makes IfChanged a permanent no-op; the Docker layer cache makes an
-# unchanged push a container-level no-op). Bound to its own GitHub
+# unchanged push a container-level no-op), and Stage 2 purges the cache
+# zone and tags declared by the deployed stack's container labels. Bound
+# to its own GitHub
 # webhook (.../procedure/pets-push-deploy/main; see
 # ../../terraform/github.tf) and to `deno task deploy` in the repo.
 
@@ -201,6 +203,13 @@ name = "Deploy pets (build + up; layer cache makes an unchanged push a no-op)"
 enabled = true
 executions = [
   { execution.type = "BatchDeployStack", execution.params = { pattern = "pets*" }, enabled = true },
+]
+
+[[procedure.config.stage]]
+name = "Purge Pets cache tags declared by the deployed stack"
+enabled = true
+executions = [
+  { execution.type = "RunAction", execution.params = { action = "podhaus-purge-stack-cache", args = { stack = "pets" } }, enabled = true },
 ]
 
 

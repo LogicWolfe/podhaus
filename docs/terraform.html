@@ -203,6 +203,16 @@ terraform apply</code></pre>
         the retained rollback edge is deliberately retired.
       </p>
 
+      <h2 id="public-site-cache">Public site cache</h2>
+      <p>
+        <code>terraform/cache.tf</code> owns the host-scoped cache rules and Smart Tiered
+        Cache settings for the three public sites. The rules use
+        <code>bypass_by_default</code>, so a response is cached only when its origin sends an
+        explicit <code>CDN-Cache-Control</code> policy. Route classes, tags, and deploy-time
+        invalidation remain with each site stack. See
+        <a href="/caching.md">Public site caching</a>.
+      </p>
+
       <h2 id="workflow">Day-to-day workflow</h2>
       <ol>
         <li><strong>Read the provider docs</strong> for the resource you're about to

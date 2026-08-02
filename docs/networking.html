@@ -108,6 +108,8 @@ networks:
         Cloudflare remains authoritative DNS and the CDN for public websites and their
         Umami ingestion paths. CDN zones use Full (Strict) origin TLS to Caddy. Protected
         services and raw protocols are DNS-only.
+        The origin-directed cache contract and per-site invalidation paths are in
+        <a href="/caching.md">Public site caching</a>.
         Cloudflare Tunnel, Access, Kookaburra, and the Kookaburra Tailscale management
         path remain running as rollback infrastructure until Nathan independently verifies
         Numbat. Their resources are still Terraform-owned; migrated DNS no longer points

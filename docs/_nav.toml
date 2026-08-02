@@ -12,6 +12,8 @@ path = "storage.html"
 [[item]]
 path = "networking.html"
 [[item]]
+path = "caching.md"
+[[item]]
 path = "komodo.html"
 [[item]]
 path = "secrets.html"

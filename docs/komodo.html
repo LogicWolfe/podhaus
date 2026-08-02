@@ -255,14 +255,16 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           <code>podhaus-push-deploy</code> procedure (the single
           push-to-deploy fan-out; see the Auto-deploy note below).</li>
         <li><code>komodo/sync/actions.toml</code> — Komodo Actions
-          referenced by procedures. Today: just
-          <code>podhaus-inject-content-hashes</code> (Stage 1 of the
-          push procedure). Walks every stack at Komodo Core's
+          referenced by procedures. <code>podhaus-inject-content-hashes</code>
+          is Stage 1 of the podhaus push procedure. It walks every stack at Komodo Core's
           <code>/syncs/podhaus</code> mount, hashes each committed stack
           directory plus every build context, stamps the hashes into stored
           env, and directly deploys running stacks whose hash labels are stale
           while compose text is unchanged. The deploy-written <code>.env</code>
-          is the intentional exclusion.</li>
+          is the intentional exclusion.
+          <code>podhaus-purge-stack-cache</code> reads a deployed stack's
+          <code>podhaus.cloudflare-cache-*</code> labels and purges those tags after its
+          deployment stage. See <a href="/caching.md">Public site caching</a>.</li>
         <li><code>komodo/sync/syncs.toml</code> — child ResourceSyncs for the
           separate-repo services (<code>fenwick</code>, <code>pets</code>,
           <code>docs</code>), each a <code>[[resource_sync]]</code> block with its

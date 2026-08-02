@@ -469,3 +469,113 @@ for (const plan of stackPlans) {
 }
 console.log(`[podhaus-inject-content-hashes] reconcile: deployed=${reconciled}`);
 """
+
+[[action]]
+name = "podhaus-purge-stack-cache"
+description = "Purge the Cloudflare cache tags declared by a deployed stack's container labels."
+tags = ["podhaus", "cloudflare"]
+
+[action.config]
+run_at_startup = false
+schedule_enabled = false
+schedule = ""
+failure_alert = true
+webhook_enabled = false
+reload_deno_deps = false
+
+file_contents = """
+const stackName = ARGS.stack;
+if (typeof stackName !== 'string' || stackName.length === 0) {
+  throw new Error('stack argument is required');
+}
+
+const stack = await komodo.read('GetStack', { stack: stackName });
+const serverId = stack.config?.server_id;
+if (!serverId) throw new Error(`${stackName}: deployed server is missing`);
+
+const servers = await komodo.read('ListServers', {});
+const server = servers.find((candidate) => candidate.id === serverId);
+if (!server) throw new Error(`${stackName}: server ${serverId} was not found`);
+
+const services = stack.info?.deployed_services;
+if (!Array.isArray(services) || services.length === 0) {
+  throw new Error(`${stackName}: no deployed services were found`);
+}
+
+const zones = new Set();
+const tags = new Set();
+let labelledContainers = 0;
+
+for (const service of services) {
+  const inspect = await komodo.read('InspectDockerContainer', {
+    server: server.name,
+    container: service.container_name,
+  });
+  if (inspect?.State?.Status !== 'running') continue;
+
+  const labels = inspect?.Config?.Labels ?? {};
+  const zone = labels['podhaus.cloudflare-cache-zone'];
+  const declaredTags = labels['podhaus.cloudflare-cache-tags'];
+  if (zone === undefined && declaredTags === undefined) continue;
+  if (typeof zone !== 'string' || zone.length === 0) {
+    throw new Error(`${service.container_name}: cache zone label is missing`);
+  }
+  if (typeof declaredTags !== 'string' || declaredTags.length === 0) {
+    throw new Error(`${service.container_name}: cache tags label is missing`);
+  }
+
+  zones.add(zone);
+  for (const tag of declaredTags.split(',').map((value) => value.trim())) {
+    if (tag.length === 0) {
+      throw new Error(`${service.container_name}: cache tags contain an empty value`);
+    }
+    tags.add(tag);
+  }
+  labelledContainers++;
+}
+
+if (labelledContainers === 0) {
+  throw new Error(`${stackName}: no running container declares cache labels`);
+}
+if (zones.size !== 1) {
+  throw new Error(`${stackName}: expected one cache zone, found ${zones.size}`);
+}
+if (tags.size === 0) throw new Error(`${stackName}: no cache tags were declared`);
+
+const tokenVariable = await komodo.read('GetVariable', {
+  name: 'OP__KOMODO__CLOUDFLARE_API_TOKEN__CREDENTIAL',
+});
+const token = tokenVariable?.value;
+if (typeof token !== 'string' || token.length === 0) {
+  throw new Error('Cloudflare API token is missing');
+}
+
+async function cloudflare(path, init = {}) {
+  const response = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(init.headers ?? {}),
+    },
+  });
+  const body = await response.json();
+  if (!response.ok || body.success !== true) {
+    throw new Error(`Cloudflare ${path} failed: ${response.status} ${JSON.stringify(body.errors ?? body)}`);
+  }
+  return body;
+}
+
+const [zone] = zones;
+const zoneLookup = await cloudflare(`/zones?name=${encodeURIComponent(zone)}`);
+if (!Array.isArray(zoneLookup.result) || zoneLookup.result.length !== 1) {
+  throw new Error(`${stackName}: expected one Cloudflare zone named ${zone}`);
+}
+
+const purgeTags = [...tags].sort();
+await cloudflare(`/zones/${zoneLookup.result[0].id}/purge_cache`, {
+  method: 'POST',
+  body: JSON.stringify({ tags: purgeTags }),
+});
+console.log(`[podhaus-purge-stack-cache] stack=${stackName} zone=${zone} tags=${purgeTags.join(',')}`);
+"""
