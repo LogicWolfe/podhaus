@@ -18,6 +18,18 @@
 #                                   on transient linked-repo timeouts.
 set -e
 root="$(git rev-parse --show-toplevel)"
-python3 "$root/tools/lint-stack-env.py"
-python3 "$root/tools/lint-stack-content-hash.py"
-python3 "$root/tools/lint-stack-toml.py"
+cd "$root"
+
+if ! command -v mise >/dev/null 2>&1; then
+  echo "podhaus hooks require mise; install it, then follow the Python setup in README.md" >&2
+  exit 1
+fi
+
+if ! mise exec -- pipenv --venv >/dev/null 2>&1; then
+  echo "podhaus Pipenv is not installed; follow the Python setup in README.md" >&2
+  exit 1
+fi
+
+mise exec -- pipenv run python "$root/tools/lint-stack-env.py"
+mise exec -- pipenv run python "$root/tools/lint-stack-content-hash.py"
+mise exec -- pipenv run python "$root/tools/lint-stack-toml.py"

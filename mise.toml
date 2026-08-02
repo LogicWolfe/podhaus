@@ -1,0 +1,7 @@
+[tools]
+python = "latest"
+pipenv = "latest"
+
+[env]
+PIPENV_SKIP_LOCK = "1"
+PIPENV_VENV_IN_PROJECT = "1"

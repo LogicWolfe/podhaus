@@ -45,6 +45,19 @@ job labels.
 Use `./komodo-sync` for local iteration without a push and after editing
 `komodo/sync/procedures.toml`.
 
+Python repository tools use the current stable Python and Pipenv releases from
+`mise.toml`. Install the unpinned development dependencies once per clone:
+
+```sh
+mise install
+mise upgrade --local
+mise exec -- pipenv install --dev --python "$(mise which python)"
+```
+
+The pre-commit hook runs the linters through that environment. No lock file is
+kept. Running those commands again upgrades mise's rolling `latest` aliases;
+use `mise exec -- pipenv remove` first when Python itself has changed.
+
 Bootstrap the remote hosts from bilby:
 
 ```sh
