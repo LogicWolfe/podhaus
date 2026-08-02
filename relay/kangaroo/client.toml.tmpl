@@ -1,0 +1,13 @@
+[client]
+remote_addr = "relay.numbat.pod.haus:2333"
+
+[client.transport]
+type = "noise"
+
+[client.transport.noise]
+remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
+
+[client.services.kangaroo_ssh]
+type = "tcp"
+local_addr = "127.0.0.1:22"
+token = "${RATHOLE_TOKEN}"

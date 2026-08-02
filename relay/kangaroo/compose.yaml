@@ -1,0 +1,23 @@
+services:
+  kangaroo-rathole-client:
+    container_name: kangaroo-rathole-client
+    build:
+      context: ..
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_KANGAROO_RATHOLE_CLIENT:-unset}
+    image: kangaroo-rathole:local
+    pull_policy: never
+    restart: unless-stopped
+    network_mode: host
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      RATHOLE_CONFIG_TEMPLATE: /etc/rathole/client.toml.tmpl
+      RATHOLE_TOKEN: ${RATHOLE_TOKEN}
+      RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}
+    volumes:
+      - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/relay/kangaroo:/etc/rathole:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

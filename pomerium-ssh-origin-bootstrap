@@ -17,12 +17,14 @@ Usage: sudo pomerium-ssh-origin-bootstrap \
   --noise-public-key KEY \
   --ca-file PATH \
   [--local-address 127.0.0.1:PORT] \
-  [--service-manager systemd|qts]
+  [--service-manager systemd|qts] \
+  [--ca-only]
 
 Installs an outbound rathole SSH origin and trusts Pomerium's SSH user CA.
 The service token is read as one line from standard input. The initial SSH
 connection and transfer of this script and the CA file are deliberately left
-to the caller.
+to the caller. --ca-only installs and maintains CA trust without a rathole
+client when the tunnel is managed separately.
 EOF
 }
 
@@ -60,6 +62,7 @@ local_address="127.0.0.1:22"
 noise_public_key=""
 source_ca_file=""
 service_manager="systemd"
+ca_only=0
 
 while (($#)); do
   case "$1" in
@@ -93,6 +96,10 @@ while (($#)); do
       service_manager="$2"
       shift 2
       ;;
+    --ca-only)
+      ca_only=1
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -104,20 +111,27 @@ while (($#)); do
 done
 
 ((EUID == 0)) || die "run as root"
-[[ "$service_name" =~ ^[A-Za-z0-9_]+$ ]] || die "--service must contain only letters, numbers and underscores"
-validate_endpoint "$remote_address" "--remote-address"
 validate_endpoint "$local_address" "--local-address"
 [[ "$local_address" == 127.* ]] || die "--local-address must be loopback"
 [[ "$service_manager" == systemd || "$service_manager" == qts ]] || die "--service-manager must be systemd or qts"
-[[ "$noise_public_key" =~ ^[A-Za-z0-9+/]+={0,2}$ ]] || die "invalid Noise public key"
+((!ca_only)) || [[ "$service_manager" == qts ]] || die "--ca-only is supported only with QTS"
 [[ -f "$source_ca_file" ]] || die "CA file does not exist: $source_ca_file"
-[[ ! -t 0 ]] || die "pipe the service token on standard input"
-IFS= read -r service_token || die "could not read the service token from standard input"
-[[ "$service_token" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid service token"
+if ((!ca_only)); then
+  [[ "$service_name" =~ ^[A-Za-z0-9_]+$ ]] || die "--service must contain only letters, numbers and underscores"
+  validate_endpoint "$remote_address" "--remote-address"
+  [[ "$noise_public_key" =~ ^[A-Za-z0-9+/]+={0,2}$ ]] || die "invalid Noise public key"
+  [[ ! -t 0 ]] || die "pipe the service token on standard input"
+  IFS= read -r service_token || die "could not read the service token from standard input"
+  [[ "$service_token" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid service token"
+fi
 
-for command_name in awk cmp curl install mktemp ssh-keygen sshd unzip; do
+for command_name in awk cmp install mktemp ssh-keygen sshd; do
   require_command "$command_name"
 done
+if ((!ca_only)); then
+  require_command curl
+  require_command unzip
+fi
 
 if [[ "$service_manager" == systemd ]] && systemctl list-unit-files sshd.service --no-legend 2>/dev/null | grep -q '^sshd.service'; then
   sshd_unit="sshd.service"
@@ -158,18 +172,20 @@ trap 'find "$work_dir" -depth -delete' EXIT
 install -d -o 0 -g 0 -m 0755 "$INSTALL_DIR" "$(dirname "$BINARY")"
 
 binary_changed=0
-archive="$work_dir/$asset"
-curl --proto '=https' --tlsv1.2 -fsSL \
-  "https://github.com/rathole-org/rathole/releases/latest/download/$asset" \
-  -o "$archive"
-unzip -q "$archive" rathole -d "$work_dir"
-"$work_dir/rathole" --version >/dev/null
-if [[ ! -x "$BINARY" ]] || ! cmp -s "$work_dir/rathole" "$BINARY"; then
-  install -o 0 -g 0 -m 0755 "$work_dir/rathole" "$BINARY"
-  binary_changed=1
-fi
+config_changed=0
+if ((!ca_only)); then
+  archive="$work_dir/$asset"
+  curl --proto '=https' --tlsv1.2 -fsSL \
+    "https://github.com/rathole-org/rathole/releases/latest/download/$asset" \
+    -o "$archive"
+  unzip -q "$archive" rathole -d "$work_dir"
+  "$work_dir/rathole" --version >/dev/null
+  if [[ ! -x "$BINARY" ]] || ! cmp -s "$work_dir/rathole" "$BINARY"; then
+    install -o 0 -g 0 -m 0755 "$work_dir/rathole" "$BINARY"
+    binary_changed=1
+  fi
 
-cat > "$work_dir/rathole.toml" <<EOF
+  cat > "$work_dir/rathole.toml" <<EOF
 [client]
 remote_addr = "$remote_address"
 
@@ -185,9 +201,9 @@ local_addr = "$local_address"
 token = "$service_token"
 EOF
 
-config_changed=0
-if install_if_changed "$work_dir/rathole.toml" "$CONFIG_FILE" 0600; then
-  config_changed=1
+  if install_if_changed "$work_dir/rathole.toml" "$CONFIG_FILE" 0600; then
+    config_changed=1
+  fi
 fi
 
 if [[ "$service_manager" == systemd ]]; then
@@ -262,7 +278,16 @@ if ((sshd_changed)) && [[ "$service_manager" == systemd ]]; then
   sshd -t
   systemctl reload "$sshd_unit"
 elif [[ "$service_manager" == qts ]]; then
-  cat > "$work_dir/start.sh" <<EOF
+  if ((ca_only)); then
+    cat > "$work_dir/start.sh" <<EOF
+#!/bin/sh
+set -eu
+grep -Fqx 'TrustedUserCAKeys $CA_FILE' '$QTS_SSHD_CONFIG' || printf '\nTrustedUserCAKeys $CA_FILE\n' >> '$QTS_SSHD_CONFIG'
+/usr/sbin/sshd -t -f '$QTS_SSHD_CONFIG'
+[ ! -s /var/run/sshd.pid ] || kill -HUP \$(cat /var/run/sshd.pid)
+EOF
+  else
+    cat > "$work_dir/start.sh" <<EOF
 #!/bin/sh
 set -eu
 grep -Fqx 'TrustedUserCAKeys $CA_FILE' '$QTS_SSHD_CONFIG' || printf '\nTrustedUserCAKeys $CA_FILE\n' >> '$QTS_SSHD_CONFIG'
@@ -276,8 +301,13 @@ fi
 nohup '$BINARY' '$CONFIG_FILE' >> '$INSTALL_DIR/rathole.log' 2>&1 &
 printf '%s\n' "\$!" > '$INSTALL_DIR/rathole.pid'
 EOF
+  fi
   install -o 0 -g 0 -m 0755 "$work_dir/start.sh" "$START_SCRIPT"
   "$START_SCRIPT"
+  if ((ca_only)); then
+    echo "Pomerium SSH CA trust active; tunnel managed separately"
+    exit 0
+  fi
   sleep 2
   qts_pid="$(cat "$INSTALL_DIR/rathole.pid")"
   kill -0 "$qts_pid" 2>/dev/null || die "QTS rathole process did not stay running"

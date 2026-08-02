@@ -120,9 +120,9 @@ IP=/usr/bin/ip
     done
 ) >> /var/log/komodo-periphery-boot.log 2>&1 &
 
-# Host-native recovery and SSH-origin processes are intentionally outside
-# Container Station. Their idempotent launchers also restore the QTS sshd CA
-# directive after firmware regenerates sshd_config.
+# The recovery daemon is outside Container Station. The CA launcher restores
+# QTS sshd trust after firmware regenerates sshd_config; the outbound rathole
+# client itself is the restart-managed kangaroo-relay container.
 for start_script in \
     /share/CACHEDEV2_DATA/.podhaus/pomerium-ssh-origin/start.sh \
     /share/CACHEDEV2_DATA/.podhaus/tailscale-recovery/start.sh; do

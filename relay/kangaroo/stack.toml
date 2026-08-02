@@ -1,0 +1,16 @@
+[[stack]]
+name = "kangaroo-relay"
+description = "Outbound Kangaroo SSH origin for Numbat Pomerium"
+tags = ["kangaroo", "podhaus"]
+
+[stack.config]
+server = "kangaroo"
+linked_repo = "podhaus"
+run_directory = "relay/kangaroo"
+run_build = true
+auto_pull = false
+
+environment = """
+RATHOLE_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__KANGAROO_SSH]]
+RATHOLE_NOISE_REMOTE_PUBLIC_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PUBLIC_KEY]]
+"""

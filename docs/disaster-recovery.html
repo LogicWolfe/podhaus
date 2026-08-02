@@ -191,8 +191,11 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
 
       <h2 id="numbat-rebuild">Fresh Numbat from scratch</h2>
       <ol>
-        <li>Apply the consolidated Terraform root. It provisions the BinaryLane VM,
-          both addresses, DNS, PKI, Pocket ID client, and 1Password handoffs.</li>
+        <li>If replacing a live Numbat, rename it to <code>numbat-old.pod.haus</code> in
+          BinaryLane without stopping it. BinaryLane requires unique hostnames, so this is
+          necessary before <code>terraform apply -replace=binarylane_server.numbat</code> can
+          create the replacement first. Terraform then provisions the VM, both addresses,
+          DNS, PKI, Pocket ID client, and 1Password handoffs.</li>
         <li>Run <code>./numbat_bootstrap</code> with the op-unlock SSH agent active. It
           verifies Terraform's pinned host key, reconciles Rocky, Docker, nftables and
           dockernet, starts the public relay first, then starts outbound Periphery and the

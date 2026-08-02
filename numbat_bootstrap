@@ -11,14 +11,14 @@ REPO_DIR="$REMOTE_DIR/etc-komodo/repos/podhaus-numbat"
 KEYS_DIR="${BILBY_KEYS_DIR:-/opt/komodo/keys}"
 
 SOCK=""
-for candidate in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/op-unlock/agent.sock" /tmp/op-unlock-*.sock; do
+for candidate in "${SSH_AUTH_SOCK:-}" "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/op-unlock/agent.sock" /tmp/op-unlock-*.sock; do
   [ -S "$candidate" ] || continue
   if SSH_AUTH_SOCK="$candidate" ssh-add -l >/dev/null 2>&1; then
     SOCK="$candidate"
     break
   fi
 done
-[ -n "$SOCK" ] || { echo "run op-unlock first" >&2; exit 1; }
+[ -n "$SOCK" ] || { echo "no usable SSH agent; run op-unlock or attach the PIV key" >&2; exit 1; }
 export SSH_AUTH_SOCK="$SOCK"
 
 host_key="$(terraform -chdir="$TF_DIR" output -raw numbat_ssh_host_public_key)"
@@ -55,10 +55,10 @@ echo "== host packages and configuration =="
 root_password="$(op read 'op://Homelab/Numbat Root/password')"
 printf 'root:%s\n' "$root_password" | remote chpasswd
 unset root_password
+remote "packages=\$(rpm -qa 'cockpit*'); [ -z \"\$packages\" ] || dnf -y remove \$packages"
 remote "dnf -y install dnf-plugins-core git nftables policycoreutils-python-utils qemu-guest-agent"
 remote "dnf -y config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo >/dev/null"
 remote "dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
-remote "packages=\$(rpm -qa 'cockpit*'); [ -z \"\$packages\" ] || dnf -y remove \$packages"
 remote "install -d -m 755 /etc/nftables /etc/docker /etc/NetworkManager/dispatcher.d"
 copy numbat/host/bootstrap-sshd_config /etc/ssh/numbat-bootstrap-sshd_config
 copy numbat/host/bootstrap-sshd.service /etc/systemd/system/numbat-bootstrap-sshd.service
@@ -69,7 +69,7 @@ copy numbat/host/podhaus-nftables.service /etc/systemd/system/podhaus-nftables.s
 copy numbat/host/docker-daemon.json /etc/docker/daemon.json
 copy pomerium/keys/user-ca.pub /etc/ssh/pomerium-user-ca.pub
 copy numbat/host/00-podhaus-final.conf /etc/ssh/sshd_config.d/00-podhaus-final.conf
-remote "chmod 600 /etc/ssh/numbat-bootstrap-sshd_config; chmod 755 /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip /usr/local/sbin/podhaus-nftables; semanage port -a -t ssh_port_t -p tcp 2222 2>/dev/null || semanage port -m -t ssh_port_t -p tcp 2222; systemctl daemon-reload; systemctl enable --now numbat-bootstrap-sshd.service qemu-guest-agent.service docker.service; systemctl restart docker.service; /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip eth0 up; docker network inspect dockernet >/dev/null 2>&1 || docker network create dockernet; sshd -t; systemctl restart sshd.service"
+remote "chmod 600 /etc/ssh/numbat-bootstrap-sshd_config; chmod 755 /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip /usr/local/sbin/podhaus-nftables; semanage port -a -t ssh_port_t -p tcp 2222 2>/dev/null || semanage port -m -t ssh_port_t -p tcp 2222; systemctl daemon-reload; systemctl enable --now numbat-bootstrap-sshd.service qemu-guest-agent.service docker.service; systemctl restart docker.service; /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip eth0 up; nft insert rule inet podhaus input ip daddr $RELAY_IP tcp dport \{ 443, 2333 \} accept; docker network inspect dockernet >/dev/null 2>&1 || docker network create dockernet; sshd -t; systemctl restart sshd.service"
 
 echo "== relay first =="
 remote "install -d -m 700 $REMOTE_DIR/keys; install -d -m 755 $REMOTE_DIR/etc-komodo/repos"
@@ -88,6 +88,12 @@ copy "$work_dir/relay.env" "$REPO_DIR/relay/numbat/.env"
 remote "chmod 600 $REPO_DIR/relay/numbat/.env; cd $REPO_DIR/relay/numbat && docker compose -p numbat-relay up -d --build; test \"\$(docker inspect -f '{{.State.Running}}' numbat-rathole-server)\" = true"
 
 echo "== Periphery =="
+for attempt in $(seq 1 30); do
+  code="$(remote "curl -sk --max-time 5 -o /dev/null -w '%{http_code}' 'https://core-connect.pod.haus/ws/periphery?server=numbat'" || true)"
+  [ "$code" = 400 ] && break
+  sleep 2
+done
+[ "$code" = 400 ] || { echo "core-connect did not become ready" >&2; exit 1; }
 for key in core.pub numbat-periphery.key; do
   [ -f "$KEYS_DIR/$key" ] || { echo "missing $KEYS_DIR/$key" >&2; exit 1; }
 done

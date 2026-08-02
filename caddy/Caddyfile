@@ -88,8 +88,12 @@ core-connect.pod.haus, core-connect.pod.haus:4444 {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 	@periphery path /ws/periphery
-	reverse_proxy @periphery komodo-core:9120
-	respond 404
+	handle @periphery {
+		reverse_proxy komodo-core:9120
+	}
+	handle {
+		respond 404
+	}
 }
 
 logs-ingest.pod.haus, logs-ingest.pod.haus:4444 {

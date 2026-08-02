@@ -89,7 +89,10 @@ networks:
         <code>numbat</code>, <code>voltaire</code>, and <code>kangaroo</code>.
         The generic <code>pomerium-ssh-origin-bootstrap</code> installs the
         machine-local outbound relay and CA trust on a target; the operator chooses the
-        initial SSH transport separately. Chezmoi provides <code>bilby.pod</code>,
+        initial SSH transport separately. Kangaroo uses the same CA bootstrap in
+        <code>--ca-only</code> mode because QTS cannot run the current upstream x86_64
+        rathole binary; its outbound client is the Komodo-managed
+        <code>kangaroo-relay</code> container on host networking. Chezmoi provides <code>bilby.pod</code>,
         <code>numbat.pod</code>, <code>voltaire.pod</code>, and
         <code>kangaroo.pod</code> aliases plus <code>user@host.pod</code> rewriting.
         Kangaroo maps the user-facing root shorthand to QTS's real UID 0 account,
