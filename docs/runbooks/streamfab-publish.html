@@ -38,21 +38,25 @@
       </p>
       <ul>
         <li><code>streamfab-publish/compose.yaml</code> — an idle
-          <code>python:3.12-alpine</code> container (<code>sleep infinity</code>, no
-          network, nothing to build). It exists only to host the ofelia tick. Binds
+          <code>python:alpine</code> container (<code>sleep infinity</code>, nothing to
+          build). Docker's init process reaps healthcheck and job children; plain sleep as
+          PID 1 previously accumulated zombies until the container couldn't exec. It joins
+          <code>dockernet</code> only to push its Gatus heartbeat. The stack binds
           <code>${MEDIA_DIR}</code> at <code>/data</code> and the scripts dir.</li>
         <li><code>streamfab-publish/scripts/streamfab-publish.py</code> — the mover. Pure
           stdlib; logs to stdout (ofelia/Alloy capture it); single-flight via
           <code>flock</code> in <code>/tmp</code>. Runs as uid 1000 so moved files and
           created library dirs match the rest of the Pouch tree.</li>
-        <li><code>streamfab-publish/stack.toml</code> — <code>files_on_host</code>, no
-          secrets, no build.</li>
+        <li><code>streamfab-publish/stack.toml</code> — <code>files_on_host</code>, the
+          shared Ofelia heartbeat token, and no build.</li>
       </ul>
       <p>
         Scheduling is the shared host-wide ofelia instance reading the container's
         <code>ofelia.job-exec.streamfab-publish</code> labels (schedule
         <code>0 * * * * *</code>). The push procedure's Stage 3
         <code>RestartStack ofelia</code> makes ofelia re-read the labels on deploy.
+        Each successful tick pushes the shared Ofelia heartbeat to Gatus. Five minutes
+        without a tick alerts through Fenwick.
       </p>
 
       <h2 id="completion">Why no "is it finished?" wait</h2>
@@ -136,8 +140,8 @@
         first-deploys the stack (Stage 2 <code>FullDeploy</code> for a new stack) and
         restarts ofelia (Stage 3). Confirm via the job's stdout in ofelia's container
         logs (<code>moved … -&gt; /data/Kids/TV/…</code>) and by the files appearing in
-        the Plex Kids library. There is no Gatus heartbeat on this job today; add one if
-        silent-stall detection becomes worth the wiring.
+        the Plex Kids library. The <em>Plex / StreamFab Publish</em> Gatus heartbeat
+        confirms the scheduler continues to run it.
       </p>
 
     </main>

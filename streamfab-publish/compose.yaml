@@ -1,16 +1,21 @@
 services:
   # Idle container that exists only to host the ofelia-driven mover tick.
-  # No web service, no network — it walks /data/Downloads and moves finished
+  # No web service. It walks /data/Downloads and moves finished
   # StreamFab captures into the Plex library once a minute. Stock python
   # image (the script is pure stdlib), so nothing to build.
   streamfab-publish:
     container_name: streamfab-publish
-    image: python:3.12-alpine
+    image: python:alpine
     restart: unless-stopped
+    # sleep isn't a real init and can't reap orphaned healthcheck/exec
+    # processes. Docker's init keeps the minute jobs from filling the PID cgroup.
+    init: true
     # uid 1000 so moved files and any created library dirs are owned like the
     # rest of the Pouch download/library tree (nathan:users).
     user: "1000:1001"
     command: ["sleep", "infinity"]
+    environment:
+      GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
     volumes:
       - ${MEDIA_DIR}:/data
       # Script as a directory bind (not a file bind — file binds pin the
@@ -18,6 +23,7 @@ services:
       # docs/stack-conventions.html#bind-mounts).
       - ${PODHAUS_REPO}/streamfab-publish/scripts:/scripts:ro,z
     labels:
+      autoheal: "true"
       # Sweep /data/Downloads -> /data/Kids/{TV,Movies} every minute at :00. The
       # tick re-walks the whole tree, so it clears any backlog on first run
       # and cheaply no-ops once everything is published. See
@@ -27,6 +33,8 @@ services:
       ofelia.job-exec.streamfab-publish.command: "python3 /scripts/streamfab-publish.py"
       ofelia.job-exec.streamfab-publish.user: "1000:1001"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    networks:
+      - dockernet
     healthcheck:
       # Stub-proof: prove /data is the real Pouch NFS via the
       # .podhaus-share-mounted sentinel. A bare-stub /mnt/pouch (NFS
@@ -39,3 +47,7 @@ services:
       timeout: 15s
       retries: 15
       start_period: 30s
+
+networks:
+  dockernet:
+    external: true

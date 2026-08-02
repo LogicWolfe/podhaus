@@ -30,6 +30,7 @@ import os
 import re
 import sys
 import time
+import urllib.request
 
 DOWNLOAD_ROOT = "/data/Downloads"
 # StreamFab is kids-only here, so both destinations live under Kids.
@@ -37,6 +38,10 @@ TV_ROOT = "/data/Kids/TV"
 MOVIE_ROOT = "/data/Kids/Movies"
 SENTINEL = "/data/.podhaus-share-mounted"
 LOCK_FILE = "/tmp/streamfab-publish.lock"
+GATUS_ENDPOINT = (
+    "http://gatus:8080/api/v1/endpoints/"
+    "plex_streamfab-publish/external?success=true"
+)
 
 # Directory names anywhere under Downloads that are StreamFab scratch or a
 # separate domain (YouTube), never Plex TV/Movie output. The scratch dirs
@@ -120,6 +125,18 @@ def publish(src):
     prune_empty(os.path.dirname(src))
 
 
+def heartbeat():
+    req = urllib.request.Request(
+        GATUS_ENDPOINT,
+        data=b"",
+        method="POST",
+        headers={
+            "Authorization": "Bearer " + os.environ["GATUS_OFELIA_PUSH_TOKEN"]
+        },
+    )
+    urllib.request.urlopen(req, timeout=10).read()
+
+
 def main():
     if not os.path.exists(SENTINEL):
         # Pouch isn't mounted: /data is a bare local-disk stub and moving
@@ -152,6 +169,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+        heartbeat()
     except Exception as exc:
         log("FATAL: %s" % exc)
         sys.exit(1)

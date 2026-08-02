@@ -9,6 +9,7 @@ files_on_host = true
 run_directory = "/etc/komodo/repo/streamfab-publish"
 
 environment = """
+GATUS_OFELIA_PUSH_TOKEN=[[OP__KOMODO__GATUS_OFELIA_PUSH_TOKEN__TOKEN]]
 MEDIA_DIR=[[MEDIA_DIR]]
 PODHAUS_REPO=[[PODHAUS_REPO]]
 """

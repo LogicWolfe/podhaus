@@ -855,3 +855,15 @@ external-endpoints:
         failure-threshold: 2
         success-threshold: 1
         send-on-resolved: true
+
+  - name: StreamFab Publish
+    group: Plex
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
+    heartbeat:
+      interval: 5m
+    alerts:
+      - type: custom
+        description: "The StreamFab publisher hasn't ticked in 5 minutes. Check the streamfab-publish container health and Ofelia logs; completed captures will remain under Pouch/Downloads until it resumes."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
