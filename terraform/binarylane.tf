@@ -8,6 +8,11 @@ resource "binarylane_ssh_key" "numbat" {
   public_key = file("${path.module}/ssh_authorized_key.pub")
 }
 
+resource "binarylane_ssh_key" "numbat_piv" {
+  name       = "numbat-piv"
+  public_key = file("${path.module}/numbat_piv_authorized_key.pub")
+}
+
 # Stable across VPS replacement so numbat_bootstrap can verify the new host
 # before sending any credentials. The private half exists only in Terraform
 # state and the replacement's first-boot metadata.
@@ -48,7 +53,7 @@ resource "binarylane_server" "numbat" {
   # replaces it with the distinct 1Password-held root credential.
   password      = random_password.numbat_bootstrap.result
   port_blocking = true
-  ssh_keys      = [binarylane_ssh_key.numbat.id]
+  ssh_keys      = [binarylane_ssh_key.numbat.id, binarylane_ssh_key.numbat_piv.id]
   user_data = templatefile("${path.module}/numbat/cloud-init.yaml.tftpl", {
     bootstrap_sshd_config  = indent(6, file("${path.module}/../numbat/host/bootstrap-sshd_config"))
     bootstrap_sshd_service = indent(6, file("${path.module}/../numbat/host/bootstrap-sshd.service"))
