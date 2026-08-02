@@ -24,7 +24,7 @@ done
 IFS= read -r auth_key || die "could not read auth key"
 [[ "$auth_key" == tskey-auth-* ]] || die "invalid auth key"
 
-for command_name in curl install mktemp tar; do
+for command_name in curl head install mktemp tar; do
   command -v "$command_name" >/dev/null 2>&1 || die "missing required command: $command_name"
 done
 
@@ -53,8 +53,8 @@ curl --proto '=https' --tlsv1.2 -fsSL \
   "https://pkgs.tailscale.com/stable/tailscale_latest_${asset_arch}.tgz" \
   -o "$work_dir/tailscale.tgz"
 tar -xzf "$work_dir/tailscale.tgz" -C "$work_dir"
-tailscale_source="$(find "$work_dir" -type f -name tailscale -perm -0100 -print -quit)"
-tailscaled_source="$(find "$work_dir" -type f -name tailscaled -perm -0100 -print -quit)"
+tailscale_source="$(find "$work_dir" -type f -name tailscale -perm -0100 -print | head -1)"
+tailscaled_source="$(find "$work_dir" -type f -name tailscaled -perm -0100 -print | head -1)"
 [[ -n "$tailscale_source" && -n "$tailscaled_source" ]] || die "release archive is missing binaries"
 install -o 0 -g 0 -m 0755 "$tailscale_source" "$install_dir/tailscale"
 install -o 0 -g 0 -m 0755 "$tailscaled_source" "$install_dir/tailscaled"
