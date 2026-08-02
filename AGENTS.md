@@ -157,7 +157,7 @@ and their Tailscale path remain live only for rollback. A planned host
 | `komodo/sync/servers.toml` | Server definitions (bilby, kangaroo, kookaburra, numbat) |
 | `komodo/sync/repos.toml` | Per-host Linked Repo definitions, including `podhaus-numbat` |
 | `komodo/sync/procedures.toml` | `podhaus-push-deploy` procedure: Stage 0 RunSync (reconcile defs) → Stage 1 RunAction `podhaus-inject-content-hashes` (stamp content hashes into stored env **and** force-deploy stacks with stale hash labels — the actual config-only/build-context trigger) → Stage 2 BatchDeployStackIfChanged "*" (owns compose-text changes + new stacks; does NOT see hash changes) → Stage 3 RestartStack ofelia (label re-read; the released ofelia image has no live label refresh). |
-| `komodo/sync/actions.toml` | Komodo Actions invoked by procedures. `podhaus-inject-content-hashes` is Stage 1 of the push procedure. For every stack visible at `/syncs/podhaus`, it hashes (a) the stack directory (committed files; `.env` excluded) → `STACK_CONTENT_HASH`, and (b) each service's resolved build context → `BUILD_HASH_<UPPER_SERVICE>`; injects both into stored env. **Then it force-deploys any stack whose running container's `podhaus.*` hash labels are stale while its compose text is unchanged**. This reconcile is the load-bearing trigger for podhaus's "any in-stack file change → recreate; any build-context change → image rebuild + recreate" property, because Komodo's IfChanged (Stage 2) only diffs compose text and never sees a hash change. `podhaus-purge-stack-cache` reads a deployed stack's `podhaus.cloudflare-cache-*` labels and purges those tags after the stack's deployment stage. See the Stage-1/content-hash notes in "When adding a new service" and [`docs/caching.md`](docs/caching.md). |
+| `komodo/sync/actions.toml` | Komodo Actions invoked by procedures. `podhaus-inject-content-hashes` is Stage 1 of the push procedure. For every stack visible at `/syncs/podhaus`, it hashes (a) the stack directory (committed files; `.env` excluded) → `STACK_CONTENT_HASH`, and (b) each service's resolved build context → `BUILD_HASH_<UPPER_SERVICE>`; injects both into stored env. **Then it force-deploys any stack whose running container has stale `podhaus.*` labels or, for a build service, a stale baked `STACK_CONTENT_HASH`, while its compose text is unchanged**. This reconcile is the load-bearing trigger for podhaus's "any in-stack file change → recreate; any build-context change → image rebuild + recreate" property, because Komodo's IfChanged (Stage 2) only diffs compose text and never sees a hash change. `podhaus-purge-stack-cache` reads a deployed stack's `podhaus.cloudflare-cache-*` labels and purges those tags after the stack's deployment stage. See the Stage-1/content-hash notes in "When adding a new service" and [`docs/caching.md`](docs/caching.md). |
 | `tools/lint-stack-content-hash.py` | Pre-commit consumer-wiring lint for the content-hash mechanism: every service has the `podhaus.stack-content-hash` label; every build service has `build.args.STACK_CONTENT_HASH` referencing its own `BUILD_HASH_<self>` + the matching `ARG`/`ENV` pair in its Dockerfile; every service that `depends_on` a build service has the `podhaus.depends-on-<dep>` label. Run via `tools/pre-commit` alongside `lint-stack-env.py`. |
 | `komodo-start` | Bootstrap-only script: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_REPO`), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync). Idempotent — safe to re-run. |
 | `komodo-sync` | Steady-state debug-iterate tool, **and** the recovery path for procedure-stage edits the push webhook can't apply by itself. Step 1: unfiltered `RunSync(podhaus)` directly via the API (out-of-procedure, so Komodo's `resource::update::<Procedure>` busy guard doesn't fire — procedure-definition changes land cleanly here, surgically — only stacks whose files actually changed get redeployed). Step 2–3: invokes `podhaus-push-deploy` + `fenwick-push-deploy` procedures (whose own Stage 0 RunSync is now a no-op because step 1 already reconciled state). Use when iterating locally without pushing, or after a push that touches `komodo/sync/procedures.toml`. |
@@ -301,7 +301,7 @@ and their Tailscale path remain live only for rollback. A planned host
 
    - **Every service** has a `podhaus.stack-content-hash` label that
      references `${STACK_CONTENT_HASH:-unset}`. **This label is the
-     ground-truth the Stage-1 reconcile reads** to decide whether the
+     ground truth for in-stack content** that Stage 1 reads to decide whether the
      running container is stale — NOT a trigger by itself. (Compose
      *does* fold the label into its per-service config-hash, so when a
      deploy actually runs, a changed label forces the recreate; but
@@ -315,7 +315,9 @@ and their Tailscale path remain live only for rollback. A planned host
      STACK_CONTENT_HASH=${STACK_CONTENT_HASH}` pair in their Dockerfile.
      A different ARG value produces a different layer fingerprint from
      that point down — docker's build-layer cache busts on
-     build-context change.
+     build-context change. Stage 1 compares that baked environment value
+     with the fresh build-context hash, which is the build service's
+     force-deploy trigger when compose text is unchanged.
    - **Services that depend on a build service** have a
      `podhaus.depends-on-<dep>: ${BUILD_HASH_<DEP>:-unset}` label per
      dependent. Without this, an init image rebuild wouldn't recreate

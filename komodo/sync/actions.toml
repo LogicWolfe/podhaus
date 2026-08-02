@@ -21,7 +21,7 @@ description = """
 Compute per-service content hashes from the bilby-side repo, inject \
 STACK_CONTENT_HASH + per-service BUILD_HASH_<name> into each podhaus \
 stack's stored env, then force-deploy any stack whose running container \
-carries a stale hash label while its compose text is unchanged — the \
+carries a stale label or baked build hash while its compose text is unchanged — the \
 config-only / build-context changes Komodo's DeployStackIfChanged can't \
 see. Stage 1 of `podhaus-push-deploy`. See AGENTS.md \"Content-hash \
 change detection\" for the architectural rationale.\
@@ -49,7 +49,7 @@ file_contents = """
 // Two responsibilities, run as Stage 1 of `podhaus-push-deploy`:
 //   (1) inject per-stack content hashes into stored env, and
 //   (2) force-deploy stacks whose running containers carry a stale hash
-//       label but whose compose text is unchanged (the reconcile at the
+//       label or baked build hash but whose compose text is unchanged (the reconcile at the
 //       bottom). (2) is what actually makes the hashes load-bearing —
 //       see the long note above that pass.
 //
@@ -338,7 +338,11 @@ for (const s of stacksSummary) {
         if (dep in buildHashes) expectedLabels[key] = buildHashes[dep];
       }
     }
-    planServices.push({ containerName: meta.containerName, expectedLabels });
+    planServices.push({
+      containerName: meta.containerName,
+      expectedLabels,
+      expectedBuildHash: buildHashes[svc] ?? null,
+    });
   }
   // Tell apart \"Stage 2 will handle this\" (compose TEXT changed → its
   // IfChanged fires) from \"only Stage 2 misses it\" (config-only /
@@ -398,7 +402,8 @@ console.log(
 );
 
 // --- reconcile: force-deploy stacks whose running containers carry a
-// stale content-hash label, but ONLY where the compose TEXT is unchanged.
+// stale content/dependency label or baked build hash, but ONLY where the
+// compose TEXT is unchanged.
 //
 // This closes the gap that makes the hashes load-bearing. Komodo's
 // DeployStackIfChanged (the procedure's Stage 2) decides \"changed\" by
@@ -411,12 +416,12 @@ console.log(
 // env is NOT a deploy trigger on its own.
 //
 // So this pass reads each stack's running containers and compares their
-// podhaus.* hash labels to the freshly computed hashes; on a mismatch it
-// force-deploys (DeployStack, not IfChanged), which renders the new
-// label into the container. We deploy ONLY stacks whose compose text is
+// podhaus.* hash labels and baked build hash to the freshly computed hashes;
+// on a mismatch it force-deploys (DeployStack, not IfChanged), which renders
+// the new values into the container. We deploy ONLY stacks whose compose text is
 // unchanged — compose-text changes and brand-new stacks are Stage 2's
 // job, and deploying them here too would double-recreate. The deployed
-// container label is the only ground truth: stored env and
+// running container metadata is the only ground truth: stored env and
 // `deployed_contents` don't reflect what's actually running.
 const servers = await komodo.read('ListServers', {});
 const serverNameById = new Map(servers.map((sv) => [sv.id, sv.name]));
@@ -431,7 +436,8 @@ for (const plan of stackPlans) {
   }
   let stale = null;
   for (const svc of plan.services) {
-    if (!svc.containerName || Object.keys(svc.expectedLabels).length === 0) continue;
+    if (!svc.containerName ||
+        (Object.keys(svc.expectedLabels).length === 0 && !svc.expectedBuildHash)) continue;
     let inspect;
     try {
       inspect = await komodo.read('InspectDockerContainer', {
@@ -449,6 +455,15 @@ for (const plan of stackPlans) {
     // stopped repro harness (deploy=false). Bringing a stack up is not
     // the reconcile's job. Exited one-shot inits are skipped the same way.
     if (((inspect && inspect.State && inspect.State.Status) || '') !== 'running') continue;
+    if (svc.expectedBuildHash) {
+      const env = (inspect && inspect.Config && inspect.Config.Env) || [];
+      const baked = env.find((entry) => entry.startsWith('STACK_CONTENT_HASH='));
+      const actualBuildHash = baked ? baked.substring('STACK_CONTENT_HASH='.length) : null;
+      if (actualBuildHash !== svc.expectedBuildHash) {
+        stale = `${svc.containerName} baked STACK_CONTENT_HASH=${actualBuildHash} want ${svc.expectedBuildHash}`;
+        break;
+      }
+    }
     const labels = (inspect && inspect.Config && inspect.Config.Labels) || {};
     for (const [key, want] of Object.entries(svc.expectedLabels)) {
       if (labels[key] !== want) {
