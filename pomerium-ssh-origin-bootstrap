@@ -298,7 +298,7 @@ if [ -f '$INSTALL_DIR/rathole.pid' ]; then
   kill "\$old_pid" 2>/dev/null || true
 fi
 : > '$INSTALL_DIR/rathole.log'
-nohup '$BINARY' '$CONFIG_FILE' >> '$INSTALL_DIR/rathole.log' 2>&1 &
+'$BINARY' '$CONFIG_FILE' </dev/null >> '$INSTALL_DIR/rathole.log' 2>&1 &
 printf '%s\n' "\$!" > '$INSTALL_DIR/rathole.pid'
 EOF
   fi
