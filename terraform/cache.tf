@@ -47,3 +47,10 @@ resource "cloudflare_tiered_cache" "public_site_cache" {
   zone_id = each.value.zone_id
   value   = "on"
 }
+
+resource "cloudflare_argo_tiered_caching" "public_site_cache" {
+  for_each = local.public_site_cache
+
+  zone_id = each.value.zone_id
+  value   = "on"
+}

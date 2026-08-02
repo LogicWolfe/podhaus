@@ -8,7 +8,8 @@ services stay outside the CDN.
 
 Terraform makes `GET` and `HEAD` responses for each site eligible for caching,
 uses `bypass_by_default`, respects the browser policy from the origin, and
-enables Smart Tiered Cache. The origin remains authoritative for each response:
+enables Tiered Caching with Smart topology. The origin remains authoritative for
+each response:
 
 | Response | `Cache-Control` | `CDN-Cache-Control` | `Cache-Tag` |
 |---|---|---|---|
