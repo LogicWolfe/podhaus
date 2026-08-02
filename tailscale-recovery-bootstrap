@@ -45,7 +45,9 @@ else
 fi
 install -d -o 0 -g 0 -m 0700 "$install_dir" "$state_dir" "$runtime_dir"
 
-work_dir="$(mktemp -d)"
+# QTS keeps /tmp on a small root filesystem. Build beside the persistent
+# installation so the current release archive cannot exhaust it.
+work_dir="$(mktemp -d "$install_dir/.bootstrap.XXXXXX")"
 trap 'find "$work_dir" -depth -delete' EXIT
 curl --proto '=https' --tlsv1.2 -fsSL \
   "https://pkgs.tailscale.com/stable/tailscale_latest_${asset_arch}.tgz" \
