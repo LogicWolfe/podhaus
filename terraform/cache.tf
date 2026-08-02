@@ -58,9 +58,19 @@ resource "cloudflare_argo_tiered_caching" "public_site_cache" {
 # The public site origins accept TLS only from Cloudflare's shared
 # Authenticated Origin Pull certificate. Direct-to-Numbat requests cannot
 # bypass the CDN's cache and edge controls.
+# Keep zone-level custom-certificate AOP disabled: it takes precedence over
+# the global certificate and is a separate Cloudflare setting.
 resource "cloudflare_authenticated_origin_pulls_settings" "public_site_cache" {
   for_each = local.public_site_cache
 
   zone_id = each.value.zone_id
-  enabled = true
+  enabled = false
+}
+
+resource "cloudflare_zone_setting" "public_site_authenticated_origin_pulls" {
+  for_each = local.public_site_cache
+
+  zone_id    = each.value.zone_id
+  setting_id = "tls_client_auth"
+  value      = "on"
 }

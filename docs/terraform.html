@@ -207,7 +207,7 @@ terraform apply</code></pre>
       <h2 id="public-site-cache">Public site cache</h2>
       <p>
         <code>terraform/cache.tf</code> owns the host-scoped cache rules, Tiered Caching,
-        Smart topology, and Authenticated Origin Pulls for the three public sites. The rules use
+        Smart topology, and global shared-certificate Authenticated Origin Pulls for the three public sites. The rules use
         <code>bypass_by_default</code>, so a response is cached only when its origin sends an
         explicit <code>CDN-Cache-Control</code> policy. Route classes, tags, and deploy-time
         invalidation remain with each site stack. See

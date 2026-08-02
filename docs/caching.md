@@ -4,7 +4,8 @@ Cloudflare caches only the three public sites that opt into this contract:
 `nathanbaxter.com`, `pets.indigopod.au`, and `skycroeser.net`. Protected
 services stay outside the CDN.
 
-All three zones use Cloudflare Authenticated Origin Pulls. Caddy trusts the
+All three zones use Cloudflare's global shared-certificate Authenticated Origin
+Pulls; zone-level custom-certificate AOP stays disabled. Caddy trusts the
 Cloudflare origin-pull CA on these virtual hosts, so direct requests to Numbat
 cannot bypass the CDN.
 
