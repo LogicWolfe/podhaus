@@ -182,26 +182,29 @@
       <h2 id="numbat">numbat</h2>
       <p>
         BinaryLane Perth, Rocky Linux 10, 1 vCPU, 1 GB RAM, 20 GB NVMe. Numbat is the active
-        public gateway. Terraform owns server <code>644361</code>, both IPv4 addresses, DNS,
+        public gateway. Terraform owns the VM, both IPv4 address roles, DNS,
         Pocket ID configuration, PKI, and 1Password handoffs.
       </p>
       <ul>
-        <li><strong>Application address <code>103.1.184.88</code>:</strong> Forgejo SSH on
+        <li><strong><code>app.numbat.pod.haus</code>:</strong> Forgejo SSH on
           port 22, Pomerium redirect and ACME on 80, Pomerium HTTPS on 443.</li>
-        <li><strong>Relay address <code>103.4.235.175</code>:</strong> Pomerium native SSH on
+        <li><strong><code>relay.numbat.pod.haus</code>:</strong> Pomerium native SSH on
           port 22, public TLS rathole on 443, and rathole control on 2333.</li>
         <li><strong>Bootstrap-managed:</strong> host nftables, loopback-only sshd,
-          temporary key-only recovery sshd on application port 2222, and outbound Periphery.
-          Reconcile with <code>./numbat_bootstrap</code>.</li>
+          a first-boot-only key-pinned sshd on application port 2222, outbound Periphery,
+          and the SSH-only Tailscale recovery daemon. <code>./numbat_bootstrap</code> starts
+          the relay before Periphery, installs the final firewall, then closes port 2222.</li>
         <li><strong>Komodo-managed:</strong> <code>numbat-pomerium</code>,
-          <code>numbat-relay</code>, and <code>numbat-logging</code> through linked repo
+          <code>numbat-relay</code>, <code>numbat-pomerium</code>,
+          <code>numbat-logging</code>, and <code>numbat-autoheal</code> through linked repo
           <code>podhaus-numbat</code>.</li>
       </ul>
       <p>
         Periphery returns through <code>core-connect.pod.haus</code> with Komodo Noise auth.
         Alloy returns through <code>logs-ingest.pod.haus</code> with per-host mTLS. There is no
-        Tailscale client and no routed path into either home network. The recovery listener
-        and BinaryLane console remain available until independent verification.
+        routed path into either home network. Its userspace Tailscale daemon publishes only
+        loopback sshd to <code>tag:recovery</code>; it installs no host route. The BinaryLane
+        console remains the final break-glass path.
       </p>
 
       <h2 id="kookaburra">kookaburra</h2>

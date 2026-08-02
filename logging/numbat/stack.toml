@@ -7,8 +7,9 @@ tags = ["numbat", "podhaus"]
 server = "numbat"
 linked_repo = "podhaus-numbat"
 run_directory = "logging/numbat"
-file_paths = ["compose.yaml", "../compose.shared.yaml"]
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
 ignore_services = ["alloy-secrets-init"]
+run_build = true
 
 environment = """
 CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]

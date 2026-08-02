@@ -87,7 +87,9 @@ core-connect.pod.haus, core-connect.pod.haus:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
-	reverse_proxy komodo-core:9120
+	@periphery path /ws/periphery
+	reverse_proxy @periphery komodo-core:9120
+	respond 404
 }
 
 logs-ingest.pod.haus, logs-ingest.pod.haus:4444 {
@@ -160,13 +162,10 @@ music.pod.haus {
 
 # nathanbaxter.com is served from the
 # `nathanbaxter-com` bucket (anonymous GetObject). Cloudflare reaches the
-# active Numbat path on :4444. The `http://` site remains for the retained
-# cloudflared path and deliberately does not obtain a certificate.
-http://nathanbaxter.com, http://www.nathanbaxter.com, nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
-	tls {
-		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-	}
-
+# active Numbat path on :4444. The shared route stays available to the
+# retained HTTP cloudflared origin, while only :4444 requires Cloudflare's
+# origin-pull client certificate.
+(nathan_site) {
 	@www host www.nathanbaxter.com
 	redir @www https://nathanbaxter.com{uri} permanent
 
@@ -241,19 +240,31 @@ http://nathanbaxter.com, http://www.nathanbaxter.com, nathanbaxter.com:4444, www
 	}
 }
 
+http://nathanbaxter.com, http://www.nathanbaxter.com {
+	import nathan_site
+}
+
+nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		client_auth {
+			trust_pool file /etc/caddy/pki/cloudflare-origin-pull-ca.pem
+		}
+	}
+	import nathan_site
+}
+
 # skycroeser.net — Sky Croeser's site. Same serving shape as
 # nathanbaxter.com above (Publii static output in the `skycroeser-net`
 # bucket, anonymous GetObject), with the WordPress.com legacy-URL
 # redirects Sky's archive needs.
 #
-# `http://` is the retained cloudflared hop; Numbat reaches :4444.
+# `http://` is the retained cloudflared hop; Numbat reaches :4444. Both use
+# the same site snippet, but only the Numbat listener requires AOP.
 #
 # www.skycroeser.net 301s to the apex from its own block below, so only
 # the bare apex serves content (canonical URL).
-http://skycroeser.net, skycroeser.net:4444 {
-	tls {
-		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-	}
+(sky_site) {
 	header {
 		Cache-Control "no-cache"
 		CDN-Cache-Control "public, max-age=31536000"
@@ -353,12 +364,33 @@ http://skycroeser.net, skycroeser.net:4444 {
 	}
 }
 
+http://skycroeser.net {
+	import sky_site
+}
+
+skycroeser.net:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		client_auth {
+			trust_pool file /etc/caddy/pki/cloudflare-origin-pull-ca.pem
+		}
+	}
+	import sky_site
+}
+
 # www.skycroeser.net → 301 to the bare apex (canonical). Kept as a
 # dedicated block rather than joining the site line above so www never
 # serves duplicate content.
-http://www.skycroeser.net, www.skycroeser.net:4444 {
+http://www.skycroeser.net {
+	redir https://skycroeser.net{uri} 301
+}
+
+www.skycroeser.net:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		client_auth {
+			trust_pool file /etc/caddy/pki/cloudflare-origin-pull-ca.pem
+		}
 	}
 	redir https://skycroeser.net{uri} 301
 }
@@ -404,6 +436,9 @@ paperless-api.pod.haus:4444 {
 pets.indigopod.au:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		client_auth {
+			trust_pool file /etc/caddy/pki/cloudflare-origin-pull-ca.pem
+		}
 	}
 	reverse_proxy pets:8000
 }
@@ -411,6 +446,9 @@ pets.indigopod.au:4444 {
 stats.nathanbaxter.com:4444, stats.skycroeser.net:4444, stats.indigopod.au:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		client_auth {
+			trust_pool file /etc/caddy/pki/cloudflare-origin-pull-ca.pem
+		}
 	}
 	@tracker path /script.js /api/send /api/send/*
 	handle @tracker {

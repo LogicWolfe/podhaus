@@ -134,15 +134,16 @@ terraform apply</code></pre>
         constraints (no cross-platform hash drift, zero maintenance).
       </p>
       <aside class="callout note">
-        <span class="callout-title">Tailscale DNS and auth-key rotation live in this root</span>
-        <code>terraform/tailscale.tf</code> owns the tailnet DNS configuration and mints the
-        <code>tag:podnet</code> tailnet auth key via the
+        <span class="callout-title">Tailscale policy, DNS, and auth keys live in this root</span>
+        <code>terraform/tailscale.tf</code> owns the whole imported tailnet ACL, DNS, and the
+        rotating <code>tag:podnet</code> and <code>tag:recovery</code> auth keys via the
         <code>tailscale/tailscale</code> provider, drives an 80-day
         rotation via a <code>time_rotating</code> resource, and writes
         the key value back to the existing
         <code>op://Homelab/Tailscale Auth Key</code> 1P item via a
         <code>terraform_data</code> + <code>local-exec</code> provisioner
-        invoking <code>op item edit</code>. Provisioner is used here
+        invoking <code>op item edit</code>. The recovery key is a normal Terraform-managed
+        1Password login consumed only by host bootstraps. Provisioner is used for podnet
         because the 1P item is category <code>API_CREDENTIAL</code>,
         which the 1Password TF provider's <code>onepassword_item</code>
         resource does not manage. The key value is passed via env var,
@@ -173,7 +174,7 @@ terraform apply</code></pre>
         external clients (Publii on a laptop, remote
         <code>terraform</code>), traffic arrives via the
         <strong>Numbat BinaryLane rathole relay</strong>:
-        <code>storage.pod.haus</code> A → <code>103.4.235.175</code>
+        <code>storage.pod.haus</code> A → Numbat's Terraform-derived relay address
         → rathole reverse tunnel (bilby
         dials out, noise+token) → bilby Caddy → MinIO. The UDM Pro SE
         binds WAN:443 itself, so direct port-forward is a dead path —
@@ -206,7 +207,7 @@ terraform apply</code></pre>
       <h2 id="public-site-cache">Public site cache</h2>
       <p>
         <code>terraform/cache.tf</code> owns the host-scoped cache rules, Tiered Caching,
-        and Smart topology for the three public sites. The rules use
+        Smart topology, and Authenticated Origin Pulls for the three public sites. The rules use
         <code>bypass_by_default</code>, so a response is cached only when its origin sends an
         explicit <code>CDN-Cache-Control</code> policy. Route classes, tags, and deploy-time
         invalidation remain with each site stack. See

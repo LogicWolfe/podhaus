@@ -42,10 +42,10 @@ locals {
 resource "cloudflare_dns_record" "this" {
   zone_id = var.zone_id
   name    = local.fqdn
-  type    = var.edge_ipv4 == null ? "CNAME" : "A"
-  content = coalesce(var.edge_ipv4, var.tunnel_target)
-  proxied = var.edge_ipv4 == null
-  ttl     = var.edge_ipv4 == null ? 1 : 300
+  type    = var.use_edge ? "A" : "CNAME"
+  content = var.use_edge ? var.edge_ipv4 : var.tunnel_target
+  proxied = !var.use_edge
+  ttl     = var.use_edge ? 300 : 1
 }
 
 resource "cloudflare_zero_trust_access_application" "this" {

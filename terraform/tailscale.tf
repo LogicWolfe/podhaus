@@ -32,6 +32,62 @@ resource "tailscale_dns_configuration" "podnet" {
   search_paths       = []
 }
 
+# Recovery is deliberately not a bridged network. Members may reach only SSH
+# on tagged recovery nodes; those nodes cannot initiate traffic to anything in
+# the tailnet. Host daemons run in userspace mode and publish only local sshd.
+resource "tailscale_acl" "podhaus" {
+  reset_acl_on_destroy       = false
+  overwrite_existing_content = true
+
+  acl = jsonencode({
+    tagOwners = {
+      "tag:podnet" = ["autogroup:admin"]
+      # The Terraform OAuth client is tagged podnet, so it also needs tag
+      # ownership to mint the recovery enrolment key.
+      "tag:recovery" = ["autogroup:admin", "tag:podnet"]
+    }
+    grants = [
+      {
+        src = ["autogroup:member"]
+        dst = ["autogroup:member"]
+        ip  = ["*"]
+      },
+      {
+        src = ["autogroup:member"]
+        dst = ["tag:podnet"]
+        ip  = ["*"]
+      },
+      {
+        src = ["tag:podnet"]
+        dst = ["tag:podnet"]
+        ip  = ["*"]
+      },
+      {
+        src = ["autogroup:member"]
+        dst = ["tag:recovery"]
+        ip  = ["tcp:22"]
+      },
+    ]
+    ssh = [{
+      action = "check"
+      src    = ["autogroup:member"]
+      dst    = ["autogroup:self"]
+      users  = ["autogroup:nonroot", "root"]
+    }]
+    tests = [
+      {
+        src    = "nathan@nathanbaxter.com"
+        accept = ["tag:recovery:22"]
+        deny   = ["tag:recovery:80"]
+      },
+      {
+        src  = "tag:recovery"
+        deny = ["tag:podnet:22", "tag:recovery:22"]
+      },
+    ]
+  })
+}
+
 resource "time_rotating" "tailscale_authkey" {
   # 80 days < the Tailscale OAuth-minted key max (90 days). 10-day
   # buffer means a `terraform plan` past day-80 schedules a replace
@@ -40,6 +96,33 @@ resource "time_rotating" "tailscale_authkey" {
   # rotation only matters when a fresh node tries to enrol (e.g. the
   # kookaburra cattle-rebuild path).
   rotation_days = 80
+}
+
+resource "time_rotating" "tailscale_recovery_authkey" {
+  rotation_days = 80
+}
+
+resource "tailscale_tailnet_key" "recovery" {
+  reusable            = true
+  ephemeral           = false
+  preauthorized       = true
+  expiry              = 7776000
+  tags                = ["tag:recovery"]
+  description         = "recovery TF managed"
+  recreate_if_invalid = "always"
+
+  lifecycle {
+    replace_triggered_by = [time_rotating.tailscale_recovery_authkey.id]
+  }
+}
+
+resource "onepassword_item" "tailscale_recovery_authkey" {
+  vault    = data.onepassword_vault.homelab.uuid
+  title    = "Tailscale Recovery Auth Key"
+  category = "login"
+  username = "tag:recovery"
+  password = tailscale_tailnet_key.recovery.key
+  tags     = ["terraform-managed"]
 }
 
 resource "tailscale_tailnet_key" "podnet" {

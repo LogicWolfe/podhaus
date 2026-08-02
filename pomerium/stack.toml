@@ -9,6 +9,7 @@ linked_repo = "podhaus-numbat"
 run_directory = "pomerium"
 file_paths = ["compose.yaml"]
 ignore_services = ["pomerium-secrets-init"]
+run_build = true
 auto_pull = true
 
 environment = """

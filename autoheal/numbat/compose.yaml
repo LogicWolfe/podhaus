@@ -1,0 +1,8 @@
+# Rocky Linux enforces SELinux on Numbat, so the Docker socket needs the same
+# label exception as Bilby's host-level autoheal instance.
+services:
+  autoheal:
+    security_opt:
+      - label:disable
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

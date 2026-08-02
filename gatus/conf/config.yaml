@@ -282,6 +282,11 @@ endpoints:
     <<: *defaults
     group: Storage
 
+  - name: MinIO S3 (via Numbat relay, external path)
+    url: https://numbat-probe.storage.pod.haus/minio/health/live
+    <<: *defaults
+    group: Storage
+
   # nathanbaxter.com: Cloudflare CDN → Numbat relay → rathole → Caddy →
   # nathanbaxter-com bucket.
   - name: nathanbaxter.com
@@ -654,6 +659,18 @@ external-endpoints:
   # left these heartbeats as event-only — they could only ever alert on a
   # received-but-failed push, never on missing pushes. See Gatus README
   # → External Endpoints.
+
+  - name: Sky invalidation
+    group: Cache
+    token: ${GATUS_HEARTBEAT_PUSH_TOKEN}
+    heartbeat:
+      interval: 3m
+    alerts:
+      - type: custom
+        description: "Sky's release monitor has not checked in for 3 minutes. The minute job may be stopped or unable to read the MinIO manifest; inspect the caddy/ofelia logs before trusting the edge cache."
+        failure-threshold: 1
+        success-threshold: 1
+        send-on-resolved: true
 
   # Brinno construction time-lapse downloader (the fenwick-brinno-downloader
   # stack). It pushes a heartbeat per archived video — roughly daily, since

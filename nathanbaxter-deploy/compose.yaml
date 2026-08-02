@@ -38,13 +38,11 @@ services:
       TZ: ${TZ}
       MINIO_ACCESS_KEY: ${NATHANBAXTER_MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${NATHANBAXTER_MINIO_SECRET_KEY}
-      GITHUB_TOKEN: ${NATHANBAXTER_GITHUB_TOKEN}
-      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
-      CLOUDFLARE_CACHE_ZONE: ${CLOUDFLARE_CACHE_ZONE}
-      CLOUDFLARE_CACHE_TAG: ${CLOUDFLARE_CACHE_TAG}
     networks:
       - dockernet
     labels:
+      podhaus.cloudflare-cache-zone: ${CLOUDFLARE_CACHE_ZONE}
+      podhaus.cloudflare-cache-tags: ${CLOUDFLARE_CACHE_TAG}
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
 networks:

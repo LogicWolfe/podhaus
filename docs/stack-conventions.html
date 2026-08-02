@@ -540,7 +540,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
       </p>
       <ol>
         <li>A module in <code>terraform/services_pod_haus.tf</code> with
-          <code>pomerium_ipv4 = local.numbat_application_ipv4</code>. The module publishes
+          <code>edge_ipv4 = local.numbat_application_ipv4</code>. The module publishes
           active DNS to Numbat while retaining its Tunnel and Access rollback resources.</li>
         <li>A policy route in <code>pomerium/config.yaml</code>.</li>
         <li>A host matcher and backend in Caddy's private <code>:4443</code> listener.</li>

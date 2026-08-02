@@ -67,10 +67,10 @@ networks:
         home network.
       </p>
       <table>
-        <thead><tr><th>Address</th><th>TCP 22</th><th>TCP 80</th><th>TCP 443</th><th>TCP 2333</th></tr></thead>
+        <thead><tr><th>Address role</th><th>TCP 22</th><th>TCP 80</th><th>TCP 443</th><th>TCP 2333</th></tr></thead>
         <tbody>
-          <tr><td><code>103.1.184.88</code></td><td>Forgejo SSH relay</td><td>Pomerium redirect and ACME</td><td>Pomerium</td><td>Closed</td></tr>
-          <tr><td><code>103.4.235.175</code></td><td>Pomerium native SSH</td><td>Closed</td><td>Public TLS relay</td><td>rathole control</td></tr>
+          <tr><td><code>app.numbat.pod.haus</code></td><td>Forgejo SSH relay</td><td>Pomerium redirect and ACME</td><td>Pomerium</td><td>Closed</td></tr>
+          <tr><td><code>relay.numbat.pod.haus</code></td><td>Pomerium native SSH</td><td>Closed</td><td>Public TLS relay</td><td>rathole control</td></tr>
         </tbody>
       </table>
       <p>
@@ -86,10 +86,14 @@ networks:
         mTLS log ingestion. Forgejo uses Pomerium for HTTPS and the application address on
         port 22 for ordinary <code>git@git.pod.haus</code> SSH. Host SSH uses Pomerium on
         <code>ssh.pod.haus:22</code>; routes are named <code>bilby</code>,
-        <code>numbat</code>, and <code>voltaire</code>.
+        <code>numbat</code>, <code>voltaire</code>, and <code>kangaroo</code>.
         The generic <code>pomerium-ssh-origin-bootstrap</code> installs the
         machine-local outbound relay and CA trust on a target; the operator chooses the
-        initial SSH transport separately.
+        initial SSH transport separately. Chezmoi provides <code>bilby.pod</code>,
+        <code>numbat.pod</code>, <code>voltaire.pod</code>, and
+        <code>kangaroo.pod</code> aliases plus <code>user@host.pod</code> rewriting.
+        Kangaroo maps the user-facing root shorthand to QTS's real UID 0 account,
+        <code>admin</code>.
       </p>
 
       <h2 id="identity">Identity and machine exceptions</h2>
@@ -102,11 +106,19 @@ networks:
         <code>Pomerium Gateway Tokens</code> 1Password item, followed by the application's
         own credential.
       </p>
+      <p>
+        Umami's per-site tracker hosts expose only <code>/script.js</code> and
+        <code>/api/send</code>. Read-only views stay behind Pomerium at
+        <code>stats.pod.haus/share/BRudfaqCQRTlnGYa/nathanbaxter.com</code>,
+        <code>stats.pod.haus/share/xc2sfWOKuH3EbeXy/pets.indigopod.au</code>, and
+        <code>stats.pod.haus/share/akYfaxpJqfylsF7D/skycroeser.net</code>.
+      </p>
 
       <h2 id="cloudflare">Cloudflare scope and rollback</h2>
       <p>
         Cloudflare remains authoritative DNS and the CDN for public websites and their
-        Umami ingestion paths. CDN zones use Full (Strict) origin TLS to Caddy. Protected
+        Umami ingestion paths. CDN zones use Full (Strict) TLS plus Authenticated Origin
+        Pulls, so Caddy rejects direct requests that bypass Cloudflare. Protected
         services and raw protocols are DNS-only.
         The origin-directed cache contract and per-site invalidation paths are in
         <a href="/caching.md">Public site caching</a>.
@@ -118,11 +130,15 @@ networks:
 
       <h2 id="management">Management and logs</h2>
       <p>
-        Numbat Periphery dials <code>wss://core-connect.pod.haus</code> through the public
-        TLS relay; Komodo's Noise keys authenticate it. Numbat Alloy sends OTLP to
+        Numbat Periphery dials <code>wss://core-connect.pod.haus/ws/periphery</code> through
+        the public TLS relay; Caddy exposes that exact path and Komodo's Noise keys
+        authenticate it. Numbat Alloy sends OTLP to
         <code>https://logs-ingest.pod.haus</code>; Caddy requires Numbat's client
         certificate and ClickStack requires its ingestion key. Neither path uses Tailscale
-        or exposes an internal management listener.
+        or exposes an internal management listener. Separately, Bilby, Numbat, and Kangaroo
+        run host-native Tailscale in userspace mode as an SSH-only recovery plane. The
+        <code>tag:recovery</code> ACL permits member devices to TCP 22 and no reverse reach;
+        containers receive no socket, route, state, or network capability.
       </p>
 
       <h2 id="dns">DNS</h2>

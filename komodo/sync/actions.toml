@@ -471,6 +471,78 @@ console.log(`[podhaus-inject-content-hashes] reconcile: deployed=${reconciled}`)
 """
 
 [[action]]
+name = "podhaus-run-oneshot-stack"
+description = "Deploy a stack and fail unless the requested one-shot service is replaced and exits successfully."
+tags = ["podhaus"]
+
+[action.config]
+run_at_startup = false
+schedule_enabled = false
+schedule = ""
+failure_alert = true
+webhook_enabled = false
+reload_deno_deps = false
+
+file_contents = """
+const stackName = ARGS.stack;
+const serviceName = ARGS.service;
+if (typeof stackName !== 'string' || stackName.length === 0) throw new Error('stack argument is required');
+if (typeof serviceName !== 'string' || serviceName.length === 0) throw new Error('service argument is required');
+
+const stack = await komodo.read('GetStack', { stack: stackName });
+const serverId = stack.config?.server_id;
+if (!serverId) throw new Error(`${stackName}: deployed server is missing`);
+const servers = await komodo.read('ListServers', {});
+const server = servers.find((candidate) => candidate.id === serverId);
+if (!server) throw new Error(`${stackName}: server ${serverId} was not found`);
+const service = stack.info?.deployed_services?.find((candidate) => candidate.service_name === serviceName);
+if (!service) throw new Error(`${stackName}: deployed service ${serviceName} was not found`);
+
+let previousId = null;
+let previousStartedAt = null;
+try {
+  const previous = await komodo.read('InspectDockerContainer', {
+    server: server.name,
+    container: service.container_name,
+  });
+  previousId = previous?.Id ?? null;
+  previousStartedAt = previous?.State?.StartedAt ?? null;
+} catch (_) {}
+
+await komodo.execute('DeployStack', { stack: stackName });
+const deadline = Date.now() + 30 * 60 * 1000;
+let sawExecution = false;
+while (Date.now() < deadline) {
+  let inspect;
+  try {
+    inspect = await komodo.read('InspectDockerContainer', {
+      server: server.name,
+      container: service.container_name,
+    });
+  } catch (_) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    continue;
+  }
+  if (!previousId || inspect?.Id !== previousId || inspect?.State?.StartedAt !== previousStartedAt) sawExecution = true;
+  if (!sawExecution) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    continue;
+  }
+  const state = inspect?.State;
+  if (state?.Status === 'exited') {
+    if (state.ExitCode !== 0) throw new Error(`${stackName}/${serviceName} exited ${state.ExitCode}: ${state.Error ?? ''}`);
+    console.log(`[podhaus-run-oneshot-stack] ${stackName}/${serviceName} exited successfully`);
+    return;
+  }
+  if (state?.Status === 'dead' || state?.OOMKilled === true) {
+    throw new Error(`${stackName}/${serviceName} failed in state ${state.Status}`);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+}
+throw new Error(`${stackName}/${serviceName} did not exit within 30 minutes`);
+"""
+
+[[action]]
 name = "podhaus-purge-stack-cache"
 description = "Purge the Cloudflare cache tags declared by a deployed stack's container labels."
 tags = ["podhaus", "cloudflare"]
@@ -511,7 +583,8 @@ for (const service of services) {
     server: server.name,
     container: service.container_name,
   });
-  if (inspect?.State?.Status !== 'running') continue;
+  const status = inspect?.State?.Status;
+  if (status !== 'running' && !(status === 'exited' && inspect?.State?.ExitCode === 0)) continue;
 
   const labels = inspect?.Config?.Labels ?? {};
   const zone = labels['podhaus.cloudflare-cache-zone'];
@@ -535,7 +608,7 @@ for (const service of services) {
 }
 
 if (labelledContainers === 0) {
-  throw new Error(`${stackName}: no running container declares cache labels`);
+  throw new Error(`${stackName}: no successful container declares cache labels`);
 }
 if (zones.size !== 1) {
   throw new Error(`${stackName}: expected one cache zone, found ${zones.size}`);

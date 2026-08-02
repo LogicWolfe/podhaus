@@ -248,14 +248,21 @@ executions = [
 
 [[procedure]]
 name = "nathanbaxter-deploy"
-description = "Push-to-deploy for nathanbaxter.com. Force-deploys the nathanbaxter-deploy stack, whose one-shot builder clones, builds, and mirrors dist/ to the nathanbaxter-com bucket."
+description = "Build and mirror nathanbaxter.com, verify the one-shot exit, then purge its Cloudflare cache tag."
 tags = ["nathanbaxter", "podhaus"]
 config.webhook_enabled = true
 config.schedule_enabled = false
 
 [[procedure.config.stage]]
-name = "Build and mirror nathanbaxter.com"
+name = "Build and verify nathanbaxter.com"
 enabled = true
 executions = [
-  { execution.type = "DeployStack", execution.params = { stack = "nathanbaxter-deploy" }, enabled = true }
+  { execution.type = "RunAction", execution.params = { action = "podhaus-run-oneshot-stack", args = { stack = "nathanbaxter-deploy", service = "builder" } }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Purge nathanbaxter.com cache tag"
+enabled = true
+executions = [
+  { execution.type = "RunAction", execution.params = { action = "podhaus-purge-stack-cache", args = { stack = "nathanbaxter-deploy" } }, enabled = true }
 ]

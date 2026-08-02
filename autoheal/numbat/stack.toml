@@ -1,0 +1,10 @@
+[[stack]]
+name = "numbat-autoheal"
+description = "Restart unhealthy autoheal-labelled containers on Numbat"
+tags = ["numbat", "podhaus"]
+
+[stack.config]
+server = "numbat"
+linked_repo = "podhaus-numbat"
+run_directory = "autoheal/numbat"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]

@@ -101,7 +101,8 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           Home Assistant), or the LAN IP for off-host targets (the QNAP web UI at
           <code>https://10.0.0.25/</code>). External probes are reserved for paths that
           genuinely need full-path coverage (<code>storage.pod.haus</code>,
-          <code>kookaburra-probe.storage.pod.haus</code>, <code>nathanbaxter.com</code>,
+          <code>kookaburra-probe.storage.pod.haus</code>,
+          <code>numbat-probe.storage.pod.haus</code>, <code>nathanbaxter.com</code>,
           <code>voice.pod.haus</code>) that are intentionally public.
           Probing protected public URLs is deliberately avoided: Pomerium returns a login
           <code>302</code>
@@ -110,7 +111,7 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           (see <a href="/postmortems/postmortem-viewer.html?file=2026-05-30-power-outage-nfs-recovery.md">postmortem</a>).</li>
         <li><strong>Push (external endpoints)</strong> — bearer-token-protected URLs that
           jobs/scripts POST to with <code>success=true|false&amp;error=...</code>. Used for
-          Backrest nightly heartbeats and the RAR-extraction backlog scan.</li>
+          Backrest nightly heartbeats, Sky cache invalidation, and the RAR-extraction backlog scan.</li>
         <li><strong>Komodo-API check</strong> — Gatus calls Komodo Core's <code>/read</code>
           API and asserts a downstream state. Used for both Periphery reachability
           (<code>GetServerState</code> → assert <code>status == Ok</code>) and for

@@ -54,3 +54,13 @@ resource "cloudflare_argo_tiered_caching" "public_site_cache" {
   zone_id = each.value.zone_id
   value   = "on"
 }
+
+# The public site origins accept TLS only from Cloudflare's shared
+# Authenticated Origin Pull certificate. Direct-to-Numbat requests cannot
+# bypass the CDN's cache and edge controls.
+resource "cloudflare_authenticated_origin_pulls_settings" "public_site_cache" {
+  for_each = local.public_site_cache
+
+  zone_id = each.value.zone_id
+  enabled = true
+}

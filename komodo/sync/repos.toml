@@ -65,8 +65,6 @@ tags = ["podhaus", "numbat"]
 
 [repo.config]
 server = "numbat"
-git_provider = "github.com"
-git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"
 branch = "main"
 

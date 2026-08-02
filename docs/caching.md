@@ -4,6 +4,10 @@ Cloudflare caches only the three public sites that opt into this contract:
 `nathanbaxter.com`, `pets.indigopod.au`, and `skycroeser.net`. Protected
 services stay outside the CDN.
 
+All three zones use Cloudflare Authenticated Origin Pulls. Caddy trusts the
+Cloudflare origin-pull CA on these virtual hosts, so direct requests to Numbat
+cannot bypass the CDN.
+
 ## Contract
 
 Terraform makes `GET` and `HEAD` responses for each site eligible for caching,
@@ -28,9 +32,9 @@ classes and cache tags stay with the site stack.
 
 | Site | Origin policy | Invalidation boundary |
 |---|---|---|
-| `nathanbaxter.com` | Caddy treats `/_astro/*` as immutable and tags all other apex content `nathanbaxter`. | `nathanbaxter-deploy/build.sh` purges after the MinIO mirror completes. |
+| `nathanbaxter.com` | Caddy treats `/_astro/*` as immutable and tags all other apex content `nathanbaxter`. | The reusable Komodo one-shot action waits for the builder to exit 0, then the shared cache-purge action reads the builder's labels. |
 | `pets.indigopod.au` | Pets treats `/dist/*` and generated `/api/assets/*` objects as immutable, `/` and `/defaults/*` as release content tagged `pets`, and `/studio` plus every other `/api/*` response as `no-store`. | The Pets stack exposes its zone and tag through `podhaus.cloudflare-cache-*` labels. `podhaus-purge-stack-cache` discovers those labels and purges after deployment. |
-| `skycroeser.net` | Caddy tags all apex content `skycroeser`. Publii output is not assumed to be content-addressed. | An Ofelia job checks MinIO's version ID for `files.publii.json` every minute. A new version means Publii finished its upload and deletion pass, so the job purges and then records that version. |
+| `skycroeser.net` | Caddy tags all apex content `skycroeser`. Publii output is not assumed to be content-addressed. | An Ofelia job checks MinIO's version ID for `files.publii.json` every minute. It purges a new release and pushes a Gatus heartbeat on every successful poll. |
 
 All three paths use the existing Cloudflare API token from 1Password. A missing
 zone or tag, an ambiguous zone lookup, or a rejected purge is an error. Nathan's

@@ -1,5 +1,5 @@
-address: 103.1.184.88:443
-http_redirect_addr: 103.1.184.88:80
+address: app.numbat.pod.haus:443
+http_redirect_addr: app.numbat.pod.haus:80
 
 authenticate_service_url: https://authenticate.pod.haus
 idp_provider: oidc
@@ -13,7 +13,7 @@ databroker_storage_type: memory
 log_level: info
 signing_key_file: /run/pomerium-secrets/signing-key.pem
 
-ssh_address: 103.4.235.175:22
+ssh_address: relay.numbat.pod.haus:22
 ssh_user_ca_key_file: /run/pomerium-secrets/ssh-user-ca-key
 ssh_host_key_files: [/run/pomerium-secrets/ssh-host-key]
 
@@ -118,3 +118,12 @@ routes:
   - from: ssh://voltaire
     to: ssh://127.0.0.1:2202
     policy: *nathan_ssh_policy
+  - from: ssh://kangaroo
+    to: ssh://127.0.0.1:2203
+    policy:
+      - allow:
+          and:
+            - email:
+                is: nathan@nathanbaxter.com
+            - ssh_username:
+                is: admin

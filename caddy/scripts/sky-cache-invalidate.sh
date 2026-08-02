@@ -6,6 +6,15 @@ set -eu
 : "${SKY_CACHE_ZONE:?SKY_CACHE_ZONE is required}"
 : "${SKY_CACHE_TAG:?SKY_CACHE_TAG is required}"
 : "${SKY_CACHE_STATE_FILE:?SKY_CACHE_STATE_FILE is required}"
+: "${GATUS_BASE_URL:?GATUS_BASE_URL is required}"
+: "${GATUS_HEARTBEAT_PUSH_TOKEN:?GATUS_HEARTBEAT_PUSH_TOKEN is required}"
+
+heartbeat() {
+  curl -fsS -X POST \
+    -H "Authorization: Bearer $GATUS_HEARTBEAT_PUSH_TOKEN" \
+    "$GATUS_BASE_URL/api/v1/endpoints/cache_sky-invalidation/external?success=true" \
+    >/dev/null
+}
 
 version=$(
   curl -fsSI "$SKY_CACHE_MANIFEST_URL" |
@@ -21,6 +30,7 @@ version=$(
 }
 
 if [ -f "$SKY_CACHE_STATE_FILE" ] && [ "$(cat "$SKY_CACHE_STATE_FILE")" = "$version" ]; then
+  heartbeat
   exit 0
 fi
 
@@ -51,3 +61,4 @@ mkdir -p "$(dirname "$SKY_CACHE_STATE_FILE")"
 printf '%s\n' "$version" >"$SKY_CACHE_STATE_FILE.tmp"
 mv "$SKY_CACHE_STATE_FILE.tmp" "$SKY_CACHE_STATE_FILE"
 echo "Purged $SKY_CACHE_TAG for Sky release $version"
+heartbeat

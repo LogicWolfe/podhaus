@@ -22,6 +22,7 @@ resource "random_password" "numbat_rathole_tokens" {
   for_each = toset([
     "bilby_ssh",
     "forgejo_ssh",
+    "kangaroo_ssh",
     "protected_http",
     "public_tls",
     "voltaire_ssh",
@@ -33,6 +34,13 @@ resource "random_password" "numbat_rathole_tokens" {
 
 resource "tls_private_key" "pomerium_ssh_user_ca" {
   algorithm = "ED25519"
+}
+
+check "pomerium_ssh_user_ca_public_key" {
+  assert {
+    condition     = trimspace(file("${path.module}/../pomerium/keys/user-ca.pub")) == trimspace(tls_private_key.pomerium_ssh_user_ca.public_key_openssh)
+    error_message = "pomerium/keys/user-ca.pub must match Terraform's Pomerium SSH user CA."
+  }
 }
 
 resource "tls_private_key" "pomerium_ssh_host" {
@@ -245,10 +253,6 @@ resource "onepassword_item" "pomerium_origin_pki" {
           type  = "CONCEALED"
           value = base64encode(tls_self_signed_cert.pomerium_origin_ca.cert_pem)
         }
-        ca_key_b64 = {
-          type  = "CONCEALED"
-          value = base64encode(tls_private_key.pomerium_origin_ca.private_key_pem)
-        }
         server_cert_b64 = {
           type  = "CONCEALED"
           value = base64encode(tls_locally_signed_cert.pomerium_origin_server.cert_pem)
@@ -274,10 +278,6 @@ resource "onepassword_item" "log_ingest_pki" {
         ca_cert_b64 = {
           type  = "CONCEALED"
           value = base64encode(tls_self_signed_cert.log_ingest_ca.cert_pem)
-        }
-        ca_key_b64 = {
-          type  = "CONCEALED"
-          value = base64encode(tls_private_key.log_ingest_ca.private_key_pem)
         }
         numbat_cert_b64 = {
           type  = "CONCEALED"
@@ -351,6 +351,33 @@ resource "cloudflare_dns_record" "pomerium_authenticate" {
   name    = "authenticate.pod.haus"
   type    = "A"
   content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
+}
+
+resource "cloudflare_dns_record" "numbat_application" {
+  zone_id = local.zones["pod.haus"]
+  name    = "app.numbat.pod.haus"
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
+}
+
+resource "cloudflare_dns_record" "numbat_relay" {
+  zone_id = local.zones["pod.haus"]
+  name    = "relay.numbat.pod.haus"
+  type    = "A"
+  content = local.numbat_relay_ipv4
+  proxied = false
+  ttl     = 300
+}
+
+resource "cloudflare_dns_record" "numbat_storage_probe" {
+  zone_id = local.zones["pod.haus"]
+  name    = "numbat-probe.storage.pod.haus"
+  type    = "A"
+  content = local.numbat_relay_ipv4
   proxied = false
   ttl     = 300
 }

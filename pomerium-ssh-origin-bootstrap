@@ -13,10 +13,11 @@ usage() {
   cat <<'EOF'
 Usage: sudo pomerium-ssh-origin-bootstrap \
   --service NAME \
-  --remote-address IPV4:PORT \
+  --remote-address HOST:PORT \
   --noise-public-key KEY \
   --ca-file PATH \
-  [--local-address 127.0.0.1:PORT]
+  [--local-address 127.0.0.1:PORT] \
+  [--service-manager systemd|qts]
 
 Installs an outbound rathole SSH origin and trusts Pomerium's SSH user CA.
 The service token is read as one line from standard input. The initial SSH
@@ -34,16 +35,13 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
-validate_ipv4_address() {
-  local value="$1" label="$2" host port a b c d
-  [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+$ ]] \
-    || die "$label must be an IPv4 address and port"
+validate_endpoint() {
+  local value="$1" label="$2" host port
+  [[ "$value" =~ ^[A-Za-z0-9.-]+:[0-9]+$ ]] \
+    || die "$label must be a hostname or IPv4 address followed by a port"
   host="${value%:*}"
   port="${value##*:}"
-  IFS=. read -r a b c d <<< "$host"
-  for octet in "$a" "$b" "$c" "$d"; do
-    ((10#$octet >= 0 && 10#$octet <= 255)) || die "$label contains an invalid IPv4 address"
-  done
+  [[ "$host" != .* && "$host" != *. && "$host" != *..* ]] || die "$label contains an invalid host"
   ((10#$port >= 1 && 10#$port <= 65535)) || die "$label contains an invalid port"
 }
 
@@ -52,7 +50,7 @@ install_if_changed() {
   if [[ -f "$destination" ]] && cmp -s "$source" "$destination"; then
     return 1
   fi
-  install -o root -g root -m "$mode" "$source" "$destination"
+  install -o 0 -g 0 -m "$mode" "$source" "$destination"
   return 0
 }
 
@@ -61,6 +59,7 @@ remote_address=""
 local_address="127.0.0.1:22"
 noise_public_key=""
 source_ca_file=""
+service_manager="systemd"
 
 while (($#)); do
   case "$1" in
@@ -89,6 +88,11 @@ while (($#)); do
       source_ca_file="$2"
       shift 2
       ;;
+    --service-manager)
+      (($# >= 2)) || die "--service-manager requires a value"
+      service_manager="$2"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -101,28 +105,40 @@ done
 
 ((EUID == 0)) || die "run as root"
 [[ "$service_name" =~ ^[A-Za-z0-9_]+$ ]] || die "--service must contain only letters, numbers and underscores"
-validate_ipv4_address "$remote_address" "--remote-address"
-validate_ipv4_address "$local_address" "--local-address"
+validate_endpoint "$remote_address" "--remote-address"
+validate_endpoint "$local_address" "--local-address"
 [[ "$local_address" == 127.* ]] || die "--local-address must be loopback"
+[[ "$service_manager" == systemd || "$service_manager" == qts ]] || die "--service-manager must be systemd or qts"
 [[ "$noise_public_key" =~ ^[A-Za-z0-9+/]+={0,2}$ ]] || die "invalid Noise public key"
 [[ -f "$source_ca_file" ]] || die "CA file does not exist: $source_ca_file"
 [[ ! -t 0 ]] || die "pipe the service token on standard input"
 IFS= read -r service_token || die "could not read the service token from standard input"
 [[ "$service_token" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid service token"
 
-for command_name in awk cmp curl install mktemp ssh-keygen sshd systemctl unzip; do
+for command_name in awk cmp curl install mktemp ssh-keygen sshd unzip; do
   require_command "$command_name"
 done
 
-if systemctl list-unit-files sshd.service --no-legend 2>/dev/null | grep -q '^sshd.service'; then
+if [[ "$service_manager" == systemd ]] && systemctl list-unit-files sshd.service --no-legend 2>/dev/null | grep -q '^sshd.service'; then
   sshd_unit="sshd.service"
-elif systemctl list-unit-files ssh.service --no-legend 2>/dev/null | grep -q '^ssh.service'; then
+elif [[ "$service_manager" == systemd ]] && systemctl list-unit-files ssh.service --no-legend 2>/dev/null | grep -q '^ssh.service'; then
   sshd_unit="ssh.service"
+elif [[ "$service_manager" == qts ]]; then
+  INSTALL_DIR="/share/CACHEDEV2_DATA/.podhaus/pomerium-ssh-origin"
+  CONFIG_FILE="$INSTALL_DIR/rathole.toml"
+  CA_FILE="$INSTALL_DIR/pomerium-ssh-user-ca.pub"
+  BINARY="$INSTALL_DIR/rathole"
+  START_SCRIPT="$INSTALL_DIR/start.sh"
+  QTS_SSHD_CONFIG="/etc/config/ssh/sshd_config"
 else
   die "could not find the systemd SSH service"
 fi
 
-sshd -t
+if [[ "$service_manager" == systemd ]]; then
+  sshd -t
+else
+  sshd -t -f "$QTS_SSHD_CONFIG"
+fi
 ssh-keygen -l -f "$source_ca_file" >/dev/null
 
 case "$(uname -m)" in
@@ -139,7 +155,7 @@ esac
 
 work_dir="$(mktemp -d)"
 trap 'find "$work_dir" -depth -delete' EXIT
-install -d -o root -g root -m 0755 "$INSTALL_DIR" "$(dirname "$BINARY")"
+install -d -o 0 -g 0 -m 0755 "$INSTALL_DIR" "$(dirname "$BINARY")"
 
 binary_changed=0
 archive="$work_dir/$asset"
@@ -149,7 +165,7 @@ curl --proto '=https' --tlsv1.2 -fsSL \
 unzip -q "$archive" rathole -d "$work_dir"
 "$work_dir/rathole" --version >/dev/null
 if [[ ! -x "$BINARY" ]] || ! cmp -s "$work_dir/rathole" "$BINARY"; then
-  install -o root -g root -m 0755 "$work_dir/rathole" "$BINARY"
+  install -o 0 -g 0 -m 0755 "$work_dir/rathole" "$BINARY"
   binary_changed=1
 fi
 
@@ -174,8 +190,9 @@ if install_if_changed "$work_dir/rathole.toml" "$CONFIG_FILE" 0600; then
   config_changed=1
 fi
 
-remote_host="${remote_address%:*}"
-cat > "$work_dir/unit" <<EOF
+if [[ "$service_manager" == systemd ]]; then
+  require_command systemctl
+  cat > "$work_dir/unit" <<EOF
 [Unit]
 Description=Outbound Pomerium SSH origin
 After=network-online.target $sshd_unit
@@ -208,28 +225,30 @@ RestrictAddressFamilies=AF_INET AF_INET6
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
-IPAddressDeny=any
-IPAddressAllow=127.0.0.0/8
-IPAddressAllow=$remote_host
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-unit_changed=0
-if install_if_changed "$work_dir/unit" "$UNIT_FILE" 0644; then
-  unit_changed=1
+  unit_changed=0
+  if install_if_changed "$work_dir/unit" "$UNIT_FILE" 0644; then
+    unit_changed=1
+  fi
 fi
 
 ca_key="$(awk 'NF && $1 !~ /^#/ {print; exit}' "$source_ca_file")"
-effective_ca_file="$(sshd -T | awk '$1 == "trustedusercakeys" {print $2; exit}')"
+if [[ "$service_manager" == systemd ]]; then
+  effective_ca_file="$(sshd -T | awk '$1 == "trustedusercakeys" {print $2; exit}')"
+else
+  effective_ca_file="$(sshd -T -f "$QTS_SSHD_CONFIG" | awk '$1 == "trustedusercakeys" {print $2; exit}')"
+fi
 sshd_changed=0
 if [[ "$effective_ca_file" == "none" || "$effective_ca_file" == "$CA_FILE" ]]; then
   printf '%s\n' "$ca_key" > "$work_dir/ca.pub"
   if install_if_changed "$work_dir/ca.pub" "$CA_FILE" 0644; then
     sshd_changed=1
   fi
-  if [[ "$effective_ca_file" == "none" ]]; then
+  if [[ "$effective_ca_file" == "none" && "$service_manager" == systemd ]]; then
     printf 'TrustedUserCAKeys %s\n' "$CA_FILE" > "$work_dir/sshd-drop-in"
     if install_if_changed "$work_dir/sshd-drop-in" "$SSHD_DROP_IN" 0644; then
       sshd_changed=1
@@ -239,9 +258,31 @@ elif ! grep -Fqx "$ca_key" "$effective_ca_file"; then
   die "sshd already trusts a different CA file: $effective_ca_file"
 fi
 
-if ((sshd_changed)); then
+if ((sshd_changed)) && [[ "$service_manager" == systemd ]]; then
   sshd -t
   systemctl reload "$sshd_unit"
+elif [[ "$service_manager" == qts ]]; then
+  cat > "$work_dir/start.sh" <<EOF
+#!/bin/sh
+set -eu
+grep -Fqx 'TrustedUserCAKeys $CA_FILE' '$QTS_SSHD_CONFIG' || printf '\nTrustedUserCAKeys $CA_FILE\n' >> '$QTS_SSHD_CONFIG'
+/usr/sbin/sshd -t -f '$QTS_SSHD_CONFIG'
+[ ! -s /var/run/sshd.pid ] || kill -HUP \$(cat /var/run/sshd.pid)
+if [ -f '$INSTALL_DIR/rathole.pid' ]; then
+  old_pid=\$(cat '$INSTALL_DIR/rathole.pid')
+  kill "\$old_pid" 2>/dev/null || true
+fi
+: > '$INSTALL_DIR/rathole.log'
+nohup '$BINARY' '$CONFIG_FILE' >> '$INSTALL_DIR/rathole.log' 2>&1 &
+printf '%s\n' "\$!" > '$INSTALL_DIR/rathole.pid'
+EOF
+  install -o 0 -g 0 -m 0755 "$work_dir/start.sh" "$START_SCRIPT"
+  "$START_SCRIPT"
+  sleep 2
+  qts_pid="$(cat "$INSTALL_DIR/rathole.pid")"
+  kill -0 "$qts_pid" 2>/dev/null || die "QTS rathole process did not stay running"
+  echo "$service_name service active for $remote_address"
+  exit 0
 fi
 
 systemctl daemon-reload

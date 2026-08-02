@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+die() { echo "tailscale recovery bootstrap: $*" >&2; exit 1; }
+
+hostname=""
+service_manager="systemd"
+while (($#)); do
+  case "$1" in
+    --hostname) hostname="$2"; shift 2 ;;
+    --service-manager) service_manager="$2"; shift 2 ;;
+    --help|-h)
+      echo "Usage: sudo tailscale-recovery-bootstrap --hostname NAME [--service-manager systemd|qts] < auth-key"
+      exit 0
+      ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+((EUID == 0)) || die "run as root"
+[[ "$hostname" =~ ^[a-z0-9-]+$ ]] || die "--hostname is required and must be DNS-safe"
+[[ "$service_manager" == systemd || "$service_manager" == qts ]] || die "invalid service manager"
+[[ ! -t 0 ]] || die "pipe the recovery auth key on standard input"
+IFS= read -r auth_key || die "could not read auth key"
+[[ "$auth_key" == tskey-auth-* ]] || die "invalid auth key"
+
+for command_name in curl install mktemp tar; do
+  command -v "$command_name" >/dev/null 2>&1 || die "missing required command: $command_name"
+done
+
+case "$(uname -m)" in
+  x86_64) asset_arch=amd64 ;;
+  aarch64|arm64) asset_arch=arm64 ;;
+  *) die "unsupported architecture: $(uname -m)" ;;
+esac
+
+if [[ "$service_manager" == systemd ]]; then
+  install_dir=/usr/local/libexec/podhaus-tailscale-recovery
+  state_dir=/var/lib/podhaus-tailscale-recovery
+  runtime_dir=/run/podhaus-tailscale-recovery
+else
+  install_dir=/share/CACHEDEV2_DATA/.podhaus/tailscale-recovery
+  state_dir="$install_dir/state"
+  runtime_dir="$install_dir/run"
+fi
+install -d -o 0 -g 0 -m 0700 "$install_dir" "$state_dir" "$runtime_dir"
+
+work_dir="$(mktemp -d)"
+trap 'find "$work_dir" -depth -delete' EXIT
+curl --proto '=https' --tlsv1.2 -fsSL \
+  "https://pkgs.tailscale.com/stable/tailscale_latest_${asset_arch}.tgz" \
+  -o "$work_dir/tailscale.tgz"
+tar -xzf "$work_dir/tailscale.tgz" -C "$work_dir"
+tailscale_source="$(find "$work_dir" -type f -name tailscale -perm -0100 -print -quit)"
+tailscaled_source="$(find "$work_dir" -type f -name tailscaled -perm -0100 -print -quit)"
+[[ -n "$tailscale_source" && -n "$tailscaled_source" ]] || die "release archive is missing binaries"
+install -o 0 -g 0 -m 0755 "$tailscale_source" "$install_dir/tailscale"
+install -o 0 -g 0 -m 0755 "$tailscaled_source" "$install_dir/tailscaled"
+
+socket="$runtime_dir/tailscaled.sock"
+state="$state_dir/tailscaled.state"
+if [[ "$service_manager" == systemd ]]; then
+  cat > "$work_dir/unit" <<EOF
+[Unit]
+Description=podhaus userspace Tailscale SSH recovery plane
+After=network-online.target sshd.service
+Wants=network-online.target
+
+[Service]
+ExecStart=$install_dir/tailscaled --tun=userspace-networking --state=$state --socket=$socket --port=0
+Restart=always
+RestartSec=5s
+RuntimeDirectory=podhaus-tailscale-recovery
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=$state_dir $runtime_dir
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  install -o 0 -g 0 -m 0644 "$work_dir/unit" /etc/systemd/system/podhaus-tailscale-recovery.service
+  systemctl daemon-reload
+  systemctl enable podhaus-tailscale-recovery.service
+  systemctl restart podhaus-tailscale-recovery.service
+else
+  cat > "$work_dir/start.sh" <<EOF
+#!/bin/sh
+set -eu
+mkdir -p '$runtime_dir'
+if [ -f '$install_dir/tailscaled.pid' ] && kill -0 \$(cat '$install_dir/tailscaled.pid') 2>/dev/null; then
+  kill \$(cat '$install_dir/tailscaled.pid')
+  i=0
+  while kill -0 \$(cat '$install_dir/tailscaled.pid') 2>/dev/null && [ "\$i" -lt 30 ]; do sleep 1; i=\$((i + 1)); done
+  ! kill -0 \$(cat '$install_dir/tailscaled.pid') 2>/dev/null
+fi
+rm -f '$socket'
+nohup '$install_dir/tailscaled' --tun=userspace-networking --state='$state' --socket='$socket' --port=0 >> '$install_dir/tailscaled.log' 2>&1 &
+printf '%s\n' "\$!" > '$install_dir/tailscaled.pid'
+i=0
+while [ ! -S '$socket' ] && [ "\$i" -lt 30 ]; do sleep 1; i=\$((i + 1)); done
+EOF
+  install -o 0 -g 0 -m 0755 "$work_dir/start.sh" "$install_dir/start.sh"
+  "$install_dir/start.sh"
+fi
+
+for _ in $(seq 1 30); do [[ -S "$socket" ]] && break; sleep 1; done
+[[ -S "$socket" ]] || die "tailscaled socket did not appear"
+key_file="$work_dir/auth-key"
+printf '%s\n' "$auth_key" > "$key_file"
+chmod 0600 "$key_file"
+
+backend="$($install_dir/tailscale --socket="$socket" status --json 2>/dev/null | sed -n 's/.*"BackendState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1 || true)"
+if [[ "$backend" != Running ]]; then
+  "$install_dir/tailscale" --socket="$socket" up \
+    --auth-key="file:$key_file" \
+    --hostname="$hostname" \
+    --advertise-tags=tag:recovery \
+    --accept-dns=false \
+    --accept-routes=false \
+    --ssh=false
+else
+  "$install_dir/tailscale" --socket="$socket" set \
+    --hostname="$hostname" \
+    --advertise-tags=tag:recovery \
+    --accept-dns=false \
+    --accept-routes=false \
+    --ssh=false
+fi
+"$install_dir/tailscale" --socket="$socket" serve --bg --tcp=22 tcp://127.0.0.1:22
+"$install_dir/tailscale" --socket="$socket" status

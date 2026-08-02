@@ -25,9 +25,15 @@ variable "tunnel_target" {
 }
 
 variable "edge_ipv4" {
-  description = "Optional DNS-only IPv4 target used during the Pomerium migration. Null retains the proxied Cloudflare Tunnel record for rollback."
+  description = "DNS-only IPv4 target for the Pomerium edge."
   type        = string
   default     = null
+}
+
+variable "use_edge" {
+  description = "Use the Pomerium edge. Set false on a service to point its DNS back at the retained Cloudflare Tunnel."
+  type        = bool
+  default     = true
 }
 
 variable "hostname" {

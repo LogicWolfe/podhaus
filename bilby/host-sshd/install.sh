@@ -9,7 +9,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CF_CA_SRC="$HERE/cloudflare_ca.pub"
-POMERIUM_CA_SRC="$HERE/pomerium_ca.pub"
+POMERIUM_CA_SRC="$HERE/../../pomerium/keys/user-ca.pub"
 CA_DST="/etc/ssh/podhaus_user_ca.pub"
 SSHD_CONFIG="/etc/ssh/sshd_config"
 MARKER="# --- podhaus: Cloudflare Access browser-SSH CA (ssh.pod.haus) ---"

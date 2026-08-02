@@ -23,6 +23,18 @@ packages:
   - qemu-guest-agent
 
 write_files:
+  - path: /etc/ssh/ssh_host_ed25519_key
+    owner: root:root
+    permissions: "0600"
+    content: |
+      ${ssh_host_private_key}
+
+  - path: /etc/ssh/ssh_host_ed25519_key.pub
+    owner: root:root
+    permissions: "0644"
+    content: |
+      ${ssh_host_public_key}
+
   - path: /etc/ssh/sshd_config.d/00-podhaus.conf
     owner: root:root
     permissions: "0644"
@@ -48,9 +60,8 @@ write_files:
           ct state established,related accept
           iifname "lo" accept
           ip protocol icmp accept
-          ip daddr ${application_ipv4} tcp dport { 22, 80, 443, 2222 } accept
-          ip daddr ${relay_ipv4} tcp dport { 22, 443, 2333 } accept
-          ip daddr { ${application_ipv4}, ${relay_ipv4} } drop
+          tcp dport 2222 accept
+          iifname "eth0" drop
         }
       }
 
@@ -93,12 +104,6 @@ write_files:
         }
       }
 
-  - path: /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip
-    owner: root:root
-    permissions: "0755"
-    content: |
-      ${relay_ip_dispatcher}
-
   - path: /etc/ssh/numbat-bootstrap-sshd_config
     owner: root:root
     permissions: "0600"
@@ -112,7 +117,6 @@ write_files:
       ${bootstrap_sshd_service}
 
 runcmd:
-  - [/etc/NetworkManager/dispatcher.d/20-numbat-relay-ip, eth0, up]
   - [dnf, -y, config-manager, --add-repo, "https://download.docker.com/linux/rhel/docker-ce.repo"]
   - [dnf, -y, install, docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
   - [systemctl, disable, --now, firewalld.service]

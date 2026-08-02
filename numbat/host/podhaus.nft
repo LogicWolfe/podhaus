@@ -4,8 +4,8 @@ table inet podhaus {
     ct state established,related accept
     iifname "lo" accept
     ip protocol icmp accept
-    ip daddr 103.1.184.88 tcp dport { 22, 80, 443, 2222 } accept
-    ip daddr 103.4.235.175 tcp dport { 22, 443, 2333 } accept
-    ip daddr { 103.1.184.88, 103.4.235.175 } drop
+    ip daddr ${NUMBAT_APPLICATION_IPV4} tcp dport { 22, 80, 443 } accept
+    ip daddr ${NUMBAT_RELAY_IPV4} tcp dport { 22, 443, 2333 } accept
+    ip daddr { ${NUMBAT_APPLICATION_IPV4}, ${NUMBAT_RELAY_IPV4} } drop
   }
 }

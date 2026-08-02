@@ -1,6 +1,11 @@
 services:
   alloy-secrets-init:
-    image: alpine:3.22
+    build:
+      context: ../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_ALLOY_SECRETS_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
     restart: "no"
     environment:
       NUMBAT_CERT_B64: ${NUMBAT_CERT_B64}
@@ -26,6 +31,9 @@ services:
     volumes:
       - ${NUMBAT_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-numbat}/logging/numbat/alloy-conf:/etc/alloy:ro
       - alloy-secrets:/run/podhaus-secrets:ro
+    labels:
+      podhaus.depends-on-alloy-secrets-init: ${BUILD_HASH_ALLOY_SECRETS_INIT:-unset}
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
 volumes:
   alloy-secrets:

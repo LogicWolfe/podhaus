@@ -1,5 +1,5 @@
 [server]
-bind_addr = "${NUMBAT_RELAY_IPV4}:2333"
+bind_addr = "relay.numbat.pod.haus:2333"
 
 [server.transport]
 type = "noise"
@@ -9,12 +9,12 @@ local_private_key = "${RATHOLE_NOISE_LOCAL_PRIVATE_KEY}"
 
 [server.services.public_tls]
 type = "tcp"
-bind_addr = "${NUMBAT_RELAY_IPV4}:443"
+bind_addr = "relay.numbat.pod.haus:443"
 token = "${RATHOLE_PUBLIC_TLS_TOKEN}"
 
 [server.services.forgejo_ssh]
 type = "tcp"
-bind_addr = "${NUMBAT_APPLICATION_IPV4}:22"
+bind_addr = "app.numbat.pod.haus:22"
 token = "${RATHOLE_FORGEJO_SSH_TOKEN}"
 
 [server.services.protected_http]
@@ -31,3 +31,8 @@ token = "${RATHOLE_BILBY_SSH_TOKEN}"
 type = "tcp"
 bind_addr = "127.0.0.1:2202"
 token = "${RATHOLE_VOLTAIRE_SSH_TOKEN}"
+
+[server.services.kangaroo_ssh]
+type = "tcp"
+bind_addr = "127.0.0.1:2203"
+token = "${RATHOLE_KANGAROO_SSH_TOKEN}"

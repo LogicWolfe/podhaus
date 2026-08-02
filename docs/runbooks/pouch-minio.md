@@ -97,7 +97,7 @@ restic check
 An external-path check can force the Numbat route from bilby:
 
 ```sh
-curl --resolve pouch.pod.haus:443:103.4.235.175 \
+curl --resolve pouch.pod.haus:443:$(terraform -chdir=terraform output -raw numbat_relay_ipv4) \
   -fsS https://pouch.pod.haus/minio/health/live
 ```
 

@@ -9,9 +9,9 @@
 #     adblock / third-party-cookie heuristics). This file wires the
 #     nathanbaxter.com, pets.indigopod.au, and skycroeser.net trackers.
 #
-# Per-site pattern (repeated inline per site below): DNS CNAME → tunnel,
-# a host-level Family Access app, two path-scoped public-bypass apps
-# (/script.js + /api/send), and a root → share-view redirect ruleset.
+# Per-site pattern: DNS to Numbat, a host-level Family Access rollback app,
+# and path-scoped public bypasses for /script.js and /api/send. Share views use
+# stats.pod.haus behind Pomerium; tracker hosts expose nothing else.
 # The tracker host is one level under the registrable domain so it stays
 # inside Cloudflare's single-level Universal SSL wildcard — pets uses
 # stats.indigopod.au (not stats.pets.indigopod.au, which the *.indigopod.au
@@ -106,41 +106,6 @@ resource "cloudflare_zero_trust_access_application" "stats_nathanbaxter_send" {
   ]
 }
 
-# --- Make stats.<site> the no-login viewing entry: redirect ONLY the
-# bare root to that site's Umami Share URL. Umami's /share/<id>/<domain>
-# page is unauthenticated (self-fetches a read-only scoped token), so
-# behind the Family-gated host it gives "Cloudflare login → stats, no
-# Umami prompt". The match is path == "/" exactly, so the tracker
-# (/script.js, /api/send) and the share page itself (/share/*, /api/*,
-# /_next/*) are untouched. stats.pod.haus is deliberately NOT redirected
-# — it stays the admin dashboard (Umami login for management).
-#
-# The shareId is Umami DB state (set via the API, backed up in pgdata).
-# If it's ever regenerated, update this value + the site's snippet.
-resource "cloudflare_ruleset" "nathanbaxter_stats_redirect" {
-  zone_id = local.zones["nathanbaxter.com"]
-  name    = "stats.nathanbaxter.com root → share view"
-  kind    = "zone"
-  phase   = "http_request_dynamic_redirect"
-
-  rules = [{
-    ref         = "stats_nathanbaxter_root_to_share"
-    description = "Bare root of the tracker host → the read-only share dashboard"
-    expression  = "(http.host eq \"stats.nathanbaxter.com\" and http.request.uri.path eq \"/\")"
-    action      = "redirect"
-    enabled     = true
-    action_parameters = {
-      from_value = {
-        status_code           = 302
-        preserve_query_string = false
-        target_url = {
-          value = "https://stats.nathanbaxter.com/share/BRudfaqCQRTlnGYa/nathanbaxter.com"
-        }
-      }
-    }
-  }]
-}
-
 # =============================================================================
 # pets.indigopod.au — Indigo's pet game (public, no Access on the game
 # itself). Tracker host is stats.indigopod.au (second-level, Universal-SSL
@@ -215,33 +180,6 @@ resource "cloudflare_zero_trust_access_application" "stats_indigopod_send" {
   policies = [
     { precedence = 1, id = cloudflare_zero_trust_access_policy.public_bypass.id },
   ]
-}
-
-# Root → the pets share view (read-only, Family-gated). shareId is Umami
-# DB state (set via API, backed up in pgdata); regenerating it means
-# updating this value + the game's snippet.
-resource "cloudflare_ruleset" "indigopod_stats_redirect" {
-  zone_id = local.zones["indigopod.au"]
-  name    = "stats.indigopod.au root → share view"
-  kind    = "zone"
-  phase   = "http_request_dynamic_redirect"
-
-  rules = [{
-    ref         = "stats_indigopod_root_to_share"
-    description = "Bare root of the tracker host → the read-only share dashboard"
-    expression  = "(http.host eq \"stats.indigopod.au\" and http.request.uri.path eq \"/\")"
-    action      = "redirect"
-    enabled     = true
-    action_parameters = {
-      from_value = {
-        status_code           = 302
-        preserve_query_string = false
-        target_url = {
-          value = "https://stats.indigopod.au/share/xc2sfWOKuH3EbeXy/pets.indigopod.au"
-        }
-      }
-    }
-  }]
 }
 
 # =============================================================================
@@ -320,31 +258,4 @@ resource "cloudflare_zero_trust_access_application" "stats_skycroeser_send" {
   policies = [
     { precedence = 1, id = cloudflare_zero_trust_access_policy.public_bypass.id },
   ]
-}
-
-# Root → the skycroeser.net share view (read-only, Family-gated). shareId
-# is Umami DB state (set via API, backed up in pgdata); regenerating it
-# means updating this value + the site's snippet.
-resource "cloudflare_ruleset" "skycroeser_stats_redirect" {
-  zone_id = local.zones["skycroeser.net"]
-  name    = "stats.skycroeser.net root → share view"
-  kind    = "zone"
-  phase   = "http_request_dynamic_redirect"
-
-  rules = [{
-    ref         = "stats_skycroeser_root_to_share"
-    description = "Bare root of the tracker host → the read-only share dashboard"
-    expression  = "(http.host eq \"stats.skycroeser.net\" and http.request.uri.path eq \"/\")"
-    action      = "redirect"
-    enabled     = true
-    action_parameters = {
-      from_value = {
-        status_code           = 302
-        preserve_query_string = false
-        target_url = {
-          value = "https://stats.skycroeser.net/share/akYfaxpJqfylsF7D/skycroeser.net"
-        }
-      }
-    }
-  }]
 }

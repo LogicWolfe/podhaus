@@ -1,6 +1,11 @@
 services:
   pomerium-secrets-init:
-    image: alpine:3.22
+    build:
+      context: ../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_POMERIUM_SECRETS_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
     restart: "no"
     environment:
       SSH_USER_CA_KEY_B64: ${SSH_USER_CA_KEY_B64}
@@ -27,7 +32,7 @@ services:
 
   pomerium:
     container_name: pomerium
-    image: pomerium/pomerium:v0.32.7
+    image: pomerium/pomerium:latest
     restart: unless-stopped
     network_mode: host
     cap_drop:
@@ -50,6 +55,7 @@ services:
       - pomerium-secrets:/run/pomerium-secrets:ro
       - pomerium-autocert:/data/autocert
     labels:
+      podhaus.depends-on-pomerium-secrets-init: ${BUILD_HASH_POMERIUM_SECRETS_INIT:-unset}
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
 volumes:
