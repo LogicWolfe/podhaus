@@ -177,6 +177,12 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
         </li>
         <li>Run <code>./komodo-sync</code> — Komodo Core picks up the new Server and begins
           polling. Verify kangaroo shows <code>state: Ok</code> in the Komodo UI.</li>
+        <li>Using the chosen initial SSH transport, run
+          <code>pomerium-ssh-origin-bootstrap --service-manager qts --ca-only --ca-file PATH</code>
+          with Terraform's Pomerium SSH CA file, then run
+          <code>tailscale-recovery-bootstrap --service-manager qts --hostname kangaroo-recovery</code>
+          with the 1Password recovery auth key. The transport and file transfer stay outside
+          both generic scripts.</li>
         <li>If repos.toml + git_provider haven't already been declared (true on a true greenfield
           rebuild), they're declared in <code>komodo/sync/repos.toml</code> and a
           <code>[[git_provider]]</code> block in kangaroo's
@@ -184,7 +190,8 @@ chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
           provider config; the repo block is committed in the repo.</li>
         <li>Run <code>./komodo-sync</code> to deploy kangaroo's stacks: <code>syncthing</code>,
           <code>kangaroo-backup</code>, <code>kangaroo-autoheal</code>, and
-          <code>kangaroo-logging</code>.</li>
+          <code>kangaroo-logging</code>, <code>kangaroo-relay</code>, and
+          <code>pouch-minio</code>.</li>
         <li>Restore kangaroo's state from
           <code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo/</code> if state was lost.</li>
       </ol>
