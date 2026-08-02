@@ -1,5 +1,5 @@
-address: app.numbat.pod.haus:443
-http_redirect_addr: app.numbat.pod.haus:80
+address: ${NUMBAT_APPLICATION_IPV4}:443
+http_redirect_addr: ${NUMBAT_APPLICATION_IPV4}:80
 
 authenticate_service_url: https://authenticate.pod.haus
 idp_provider: oidc
@@ -13,7 +13,7 @@ databroker_storage_type: memory
 log_level: info
 signing_key_file: /run/pomerium-secrets/signing-key.pem
 
-ssh_address: relay.numbat.pod.haus:22
+ssh_address: ${NUMBAT_RELAY_IPV4}:22
 ssh_user_ca_key_file: /run/pomerium-secrets/ssh-user-ca-key
 ssh_host_key_files: [/run/pomerium-secrets/ssh-host-key]
 

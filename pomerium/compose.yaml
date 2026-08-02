@@ -19,6 +19,12 @@ services:
       - -ec
       - |
         umask 077
+        NUMBAT_APPLICATION_IPV4="$$(getent hosts app.numbat.pod.haus | awk 'NR == 1 { print $$1 }')"
+        NUMBAT_RELAY_IPV4="$$(getent hosts relay.numbat.pod.haus | awk 'NR == 1 { print $$1 }')"
+        test -n "$${NUMBAT_APPLICATION_IPV4}"
+        test -n "$${NUMBAT_RELAY_IPV4}"
+        export NUMBAT_APPLICATION_IPV4 NUMBAT_RELAY_IPV4
+        envsubst '$$NUMBAT_APPLICATION_IPV4 $$NUMBAT_RELAY_IPV4' < /source/config.yaml > /config/config.yaml
         printf '%s' "$${SSH_USER_CA_KEY_B64}" | base64 -d > /secrets/ssh-user-ca-key
         printf '%s' "$${SSH_HOST_KEY_B64}" | base64 -d > /secrets/ssh-host-key
         printf '%s' "$${ORIGIN_CLIENT_CERT_B64}" | base64 -d > /secrets/origin-client-cert.pem
@@ -26,6 +32,8 @@ services:
         printf '%s' "$${ORIGIN_CA_CERT_B64}" | base64 -d > /secrets/origin-ca.pem
         printf '%s' "$${SIGNING_KEY_B64}" | base64 -d > /secrets/signing-key.pem
     volumes:
+      - ${NUMBAT_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-numbat}/pomerium:/source:ro
+      - pomerium-config:/config
       - pomerium-secrets:/secrets
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -51,7 +59,7 @@ services:
       IDP_CLIENT_SECRET: ${IDP_CLIENT_SECRET}
       TZ: ${TZ}
     volumes:
-      - ${NUMBAT_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-numbat}/pomerium:/pomerium:ro
+      - pomerium-config:/pomerium:ro
       - pomerium-secrets:/run/pomerium-secrets:ro
       - pomerium-autocert:/data/autocert
     labels:
@@ -59,5 +67,6 @@ services:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
 volumes:
+  pomerium-config:
   pomerium-secrets:
   pomerium-autocert:
