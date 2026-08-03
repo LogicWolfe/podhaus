@@ -12,7 +12,7 @@
 # accepted that 302 as healthy, so backend death was invisible.
 # See docs/postmortems/2026-05-30-power-outage-nfs-recovery.md.
 # Full-path checks remain only where the path is genuinely external
-# (storage.pod.haus, kookaburra-probe.storage.pod.haus,
+# (storage.pod.haus, numbat-probe.storage.pod.haus,
 # nathanbaxter.com, voice.pod.haus) that are intentionally public.
 
 # Expose Prometheus metrics at :8080/metrics (same port as the UI +
@@ -264,21 +264,9 @@ endpoints:
   # --- storage.pod.haus paths ---
   # On-bilby probe (LAN/split-horizon resolves to bilby:443 directly):
   # tests Caddy + MinIO. Independent of the relay. Catches a
-  # Caddy/MinIO/cert failure on-box. See docs/hosts.html#kookaburra.
+  # Caddy/MinIO/cert failure on-box.
   - name: MinIO S3 (storage.pod.haus, on-bilby)
     url: https://storage.pod.haus/minio/health/live
-    <<: *defaults
-    group: Storage
-
-  # THE GAP-CLOSER: external-path probe via the kookaburra relay.
-  # gatus/compose.yaml `extra_hosts` pins kookaburra-probe.storage.pod.haus
-  # to the relay's reserved IP (170.64.241.136) ONLY inside this gatus
-  # container — the rest of bilby keeps using split-horizon. Hostname is
-  # under *.storage.pod.haus so the LE wildcard cert validates. Catches
-  # exactly the failure mode that hid the UDM WAN:443 incident: bilby/
-  # Caddy itself is fine but external clients can't reach it.
-  - name: MinIO S3 (via kookaburra relay — external path)
-    url: https://kookaburra-probe.storage.pod.haus/minio/health/live
     <<: *defaults
     group: Storage
 
@@ -344,27 +332,6 @@ endpoints:
       X-Api-Secret: ${KOMODO_API_SECRET}
       Content-Type: application/json
     body: '{"type":"GetServerState","params":{"server":"kangaroo"}}'
-    conditions:
-      - "[STATUS] == 200"
-      - "[BODY].status == Ok"
-
-  # kookaburra is the off-LAN relay; its Periphery dials Core OUTBOUND over
-  # the tailnet (no inbound :8120). Server-state Ok = the noise handshake is
-  # live, the authoritative "periphery reachable" signal for an outbound
-  # periphery — the container's own :8120 healthcheck is local-only and not
-  # surfaced here. Closes the gap that hid a 5-week-stale periphery
-  # (2026-06-19): there was no kookaburra periphery check at all.
-  - name: Kookaburra Periphery (via Komodo)
-    url: http://komodo-core:9120/read
-    method: POST
-    group: Komodo
-    interval: 60s
-    alerts: *alerts
-    headers:
-      X-Api-Key: ${KOMODO_API_KEY}
-      X-Api-Secret: ${KOMODO_API_SECRET}
-      Content-Type: application/json
-    body: '{"type":"GetServerState","params":{"server":"kookaburra"}}'
     conditions:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
@@ -470,34 +437,6 @@ endpoints:
         success-threshold: 2
         send-on-resolved: true
 
-  - name: Kookaburra Telemetry Pipeline (heartbeat)
-    url: http://clickstack-clickhouse:8123/
-    method: POST
-    group: Observability
-    interval: 5m
-    headers:
-      X-ClickHouse-User: default
-      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    # Symmetric with the kangaroo heartbeat above. kookaburra's Alloy
-    # scrapes its own self-metrics every 60 s and ships them cross-tailnet
-    # (MagicDNS → bilby-podnet:4318) through the same batch+exporter as the
-    # logs, so a fresh kookaburra Alloy metric proves that ship-path is
-    # alive on a fixed cadence. `host` is stamped by the svc_alloy
-    # transform in logging/kookaburra/alloy-conf/config.alloy. Same
-    # count()>0 / TimeUnix-windowed rationale as kangaroo (the Map
-    # predicate defeats PK pruning). 15-min window @ 60 s cadence; the
-    # 30 m bounded retry rides out a transient collector restart.
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='kookaburra'"
-    conditions:
-      - "[STATUS] == 200"
-      - "[BODY] == 1"
-    alerts:
-      - type: custom
-        description: "No kookaburra Alloy metrics reached ClickHouse in 15+ min — the cross-tailnet Alloy->collector pipeline is down (the 60 s self-metric heartbeat stopped). Check `GetContainerLog kookaburra alloy`: an exporter wedge (silence, no errors) clears with `RestartStack kookaburra-logging`; if the log shows the collector unreachable, confirm the podnet tailnet is up (MagicDNS to bilby-podnet) before restarting. Full runbook: docs/monitoring.html#known-issues."
-        failure-threshold: 2
-        success-threshold: 2
-        send-on-resolved: true
-
   - name: Numbat Telemetry Pipeline (heartbeat)
     url: http://clickstack-clickhouse:8123/
     method: POST
@@ -534,31 +473,6 @@ endpoints:
     alerts:
       - type: custom
         description: "No bilby logs in 10+ min — the whole observability pipeline is down (collector / ClickHouse / Alloy on bilby). High severity: nothing is being captured anywhere."
-        failure-threshold: 2
-        success-threshold: 2
-        send-on-resolved: true
-
-  - name: Kookaburra Log Ingest (staleness)
-    url: http://clickstack-clickhouse:8123/
-    method: POST
-    group: Observability
-    interval: 5m
-    headers:
-      X-ClickHouse-User: default
-      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    # 30-minute window: kookaburra ships a steady ~250 lines/hour (~4/min)
-    # over the cross-tailnet Alloy->collector path — never organically empty
-    # (unlike low-volume kangaroo, which needs 60), so a tighter window gives
-    # faster detection of a wedged exporter / dead bilby<->kookaburra tailnet
-    # path with no false-positive risk. See Kangaroo check for the count()
-    # windowed-scan rationale.
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 30 MINUTE AND LogAttributes['host']='kookaburra'"
-    conditions:
-      - "[STATUS] == 200"
-      - "[BODY] == 1"
-    alerts:
-      - type: custom
-        description: "No kookaburra logs reached ClickHouse in 30+ min — the cross-tailnet Alloy->collector pipeline from the relay is down (exporter wedge or a broken bilby<->kookaburra tailnet path). `RestartStack kookaburra-logging` clears an exporter wedge. Runbook: docs/monitoring.html#known-issues."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true

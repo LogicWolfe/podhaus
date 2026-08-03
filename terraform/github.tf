@@ -24,9 +24,8 @@
 # makes Komodo act only on main pushes. `webhook_enabled` defaults
 # true on the procedure (pinned true in procedures.toml).
 #
-# Delivery path is bypassed in Access by the path-scoped app
-# (cloudflare_zero_trust_access_application.komodo_webhook in
-# access.tf), scoped to the /listener/github prefix. Komodo validates
+# Pomerium allows only the path-scoped /listener/github prefix without
+# browser auth. Komodo validates
 # the X-Hub-Signature-256 HMAC against KOMODO_WEBHOOK_SECRET itself
 # (the procedure's webhook_secret is empty → global secret is used).
 #
@@ -59,8 +58,8 @@ resource "github_repository_webhook" "komodo_deploy" {
 }
 
 # Sibling webhook for the fenwick repo. Same global secret, same
-# Access bypass (the path-scoped /listener/github application covers
-# both — see access.tf). Fires the fenwick-push-deploy procedure
+# Pomerium machine exception (the path-scoped /listener/github route covers
+# both). Fires the fenwick-push-deploy procedure
 # (komodo/sync/procedures.toml): RunSync(fenwick) then a force
 # BatchDeployStack "fenwick*" — both fenwick stacks are linked_repo +
 # run_build, so Komodo builds the images on bilby; the Docker layer
@@ -82,8 +81,7 @@ resource "github_repository_webhook" "fenwick_deploy" {
 
 # Sibling webhook for the nathanbaxter repo. Replaces the repo's
 # previous .github/workflows/deploy.yml. Same global webhook secret,
-# same Access bypass (the path-scoped /listener/github application
-# covers it). Fires the nathanbaxter-deploy procedure
+# same Pomerium machine exception. Fires the nathanbaxter-deploy procedure
 # (komodo/sync/procedures.toml) → DeployStack nathanbaxter-deploy →
 # the one-shot builder container clones, builds, and mcli mirrors
 # dist/ to the nathanbaxter-com bucket.
@@ -101,7 +99,7 @@ resource "github_repository_webhook" "nathanbaxter_deploy" {
 }
 
 # Sibling webhook for the pets engine repo. Same global secret +
-# Access bypass (path-scoped /listener/github app in access.tf). Fires
+# Pomerium machine exception for /listener/github. Fires
 # pets-push-deploy (komodo/sync/procedures.toml): RunSync then a
 # force BatchDeployStack "pets*" — linked_repo + run_build, so
 # Komodo builds the image on bilby; the layer cache makes an unchanged
@@ -120,7 +118,7 @@ resource "github_repository_webhook" "pets_deploy" {
 }
 
 # Sibling webhook for the docs-server repo (the central docs.pod.haus
-# service). Same global secret + Access bypass (path-scoped
+# service). Same global secret + Pomerium machine exception (path-scoped
 # /listener/github app in access.tf). Fires docs-push-deploy
 # (komodo/sync/procedures.toml): RunSync(docs) then a force
 # BatchDeployStack "docs" — linked_repo + run_build, so Komodo builds

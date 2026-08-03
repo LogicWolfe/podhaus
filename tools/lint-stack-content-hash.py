@@ -62,7 +62,6 @@ def _interp_re(varname: str) -> re.Pattern[str]:
 SKIP_PATH_FRAGMENTS = (
     "fractal/periphery",
     "kangaroo/periphery",
-    "kookaburra/periphery",
     "numbat/periphery",
 )
 
@@ -302,8 +301,8 @@ def main() -> int:
                     )
 
     # Catch any compose files we didn't visit via a stack.toml (shouldn't
-    # happen for podhaus stacks, but kookaburra-periphery / kangaroo-
-    # periphery compose.yamls would land here — those are skipped above).
+    # happen for podhaus stacks, but kangaroo-periphery would land here;
+    # bootstrap-only compose files are skipped above).
     for f in sorted(REPO_ROOT.rglob("compose*.yaml")):
         if is_skipped(f):
             continue

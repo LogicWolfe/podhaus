@@ -60,7 +60,7 @@ Hosts are grouped twice: by **migration state** and by **role**.
 
 - `provisioned` — fully Ansible-owned. Currently fractal alone.
   `site.yml` targets this group and nothing else.
-- `pending_migration` — bilby, numbat, voltaire, kookaburra. Present so
+- `pending_migration` — bilby, numbat, voltaire. Present so
   the inventory is honest about the fleet, each carrying a
   `podhaus_bootstrap_script` var naming the script that still owns it.
   **No playbook targets this group.** Migrating a host means moving it

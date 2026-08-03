@@ -44,11 +44,6 @@
         to bilby. It has no routed access to the home network.
       </p>
       <p>
-        <strong>kookaburra</strong> is the former Fedora DigitalOcean relay in Sydney. It,
-        Cloudflare Tunnel and Access, and their Tailscale management path remain live only
-        for rollback until Numbat is independently verified.
-      </p>
-      <p>
         <strong>pinelake</strong> is a planned fourth host for the second household. It will use
         the same linked-repo and outbound-Periphery model as the existing remote targets.
       </p>
@@ -61,18 +56,16 @@
         <li>Multi-host shared services use the <code>&lt;service&gt;/{compose.shared.yaml,
           &lt;host&gt;/...}</code> layout. Each host's <code>stack.toml</code> lists the shared and
           host-specific compose files in <code>file_paths</code>. Applies to
-          <code>backup/</code>, <code>autoheal/</code>, <code>logging/</code>,
-          and <code>tailscale/</code>.</li>
+          <code>backup/</code>, <code>autoheal/</code>, and <code>logging/</code>.</li>
         <li>Komodo's own infrastructure lives in <code>komodo/</code>
           (<code>ferretdb.compose.yaml</code>, ResourceSync TOML files).</li>
         <li>Bootstrap scripts (<code>komodo-start</code>, <code>komodo-sync</code>,
-          <code>kangaroo_bootstrap</code>, <code>kookaburra_bootstrap</code>,
-          <code>numbat_bootstrap</code>) sit at the
+          <code>kangaroo_bootstrap</code>, <code>numbat_bootstrap</code>) sit at the
           repo root.</li>
         <li><code>terraform/</code> is the ONE consolidated Terraform root for everything
-          outside Docker: BinaryLane and Numbat edge material, Cloudflare DNS plus retained
-          Access and Tunnel rollback resources, UniFi LAN DNS, the GitHub webhook that drives
-          Komodo auto-deploy, DigitalOcean, Tailscale auth-key rotation, and MinIO IAM for
+          outside Docker: BinaryLane and Numbat edge material, Cloudflare DNS, CDN, AOP, and
+          Pine Lake's current Access and Tunnel resources, UniFi LAN DNS, the GitHub webhook
+          that drives Komodo auto-deploy, Tailscale recovery auth-key rotation, and MinIO IAM for
           Publii tenants. State at <code>s3://terraform-state/podhaus.tfstate</code> in
           MinIO (backend via <code>https://storage.pod.haus</code>). Stock
           <code>terraform</code> runs from any machine — no wrapper. See
@@ -80,7 +73,7 @@
       </ul>
       <p>
         The repo is bind-mounted into bilby's Komodo Core (for ResourceSync) and bilby's
-        Periphery (for stack compose files). Kangaroo's, kookaburra's, and numbat's Peripheries clone
+        Periphery (for stack compose files). Kangaroo's, numbat's, and fractal's Peripheries clone
         the repo themselves via Komodo's Linked Repo resource (different Repo names per
         host since each clone is independent state) — see
         <a href="/komodo.html#operating-models">Komodo → operating models</a>.

@@ -17,7 +17,7 @@ podhaus_dockernet_gateway: 172.18.0.1
 # Auth to every host rides the operator's agent. On bilby that is op-unlock;
 # pinned explicitly rather than left ambient so a future `Host *`
 # IdentityAgent line in ~/.ssh/config cannot silently redirect it (the same
-# trap the opssh procedure and kookaburra_bootstrap already guard against).
+# trap the opssh procedure and numbat bootstrap already guard against).
 ansible_ssh_common_args: >-
   -o IdentityAgent={{ lookup('env', 'SSH_AUTH_SOCK') }}
   -o ConnectTimeout=15

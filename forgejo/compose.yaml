@@ -1,7 +1,7 @@
 # Forgejo runs on bilby. Latency-sensitive state stays on local NVMe;
 # repositories and large object stores live on Jump. Public HTTPS and
-# SSH both arrive at git.pod.haus through kookaburra's rathole relay:
-# TLS goes to Caddy then forgejo:3000; SSH goes directly to
+# SSH both arrive at git.pod.haus through Numbat. HTTPS passes through
+# Pomerium and Caddy to forgejo:3000; SSH goes directly to
 # forgejo:2222. Pocket ID is the only interactive identity source.
 
 x-forgejo-environment: &forgejo-environment

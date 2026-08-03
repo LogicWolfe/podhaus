@@ -35,7 +35,7 @@ podhaus_repos_dir: /home/nathan/repos
 
 # Komodo Periphery ------------------------------------------------------
 # Outbound v2: Periphery dials Core, so nothing listens publicly. Same
-# contract numbat and kookaburra use.
+# contract numbat uses.
 podhaus_periphery_dir: /opt/komodo-periphery
 podhaus_periphery_connect_as: fractal
 podhaus_periphery_core_address: wss://core-connect.pod.haus

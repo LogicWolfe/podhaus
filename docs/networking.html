@@ -120,7 +120,7 @@ networks:
         <code>stats.pod.haus/share/akYfaxpJqfylsF7D/skycroeser.net</code>.
       </p>
 
-      <h2 id="cloudflare">Cloudflare scope and rollback</h2>
+      <h2 id="cloudflare">Cloudflare scope</h2>
       <p>
         Cloudflare remains authoritative DNS and the CDN for public websites and their
         Umami ingestion paths. CDN zones use Full (Strict) TLS plus Authenticated Origin
@@ -128,10 +128,9 @@ networks:
         services and raw protocols are DNS-only.
         The origin-directed cache contract and per-site invalidation paths are in
         <a href="/caching.md">Public site caching</a>.
-        Cloudflare Tunnel, Access, Kookaburra, and the Kookaburra Tailscale management
-        path remain running as rollback infrastructure until Nathan independently verifies
-        Numbat. Their resources are still Terraform-owned; migrated DNS no longer points
-        at them.
+        Podhaus no longer uses Cloudflare Tunnel or Access. Voltaire retains its independent
+        tunnel, and Pine Lake retains its existing Tunnel and Access estate until that host
+        migrates to the Numbat pattern.
       </p>
 
       <h2 id="management">Management and logs</h2>
@@ -155,7 +154,7 @@ networks:
       <ul>
         <li><strong>Cloudflare</strong> public zones: DNS-only A records to Numbat for
           protected and raw services; proxied A records to Numbat's relay address for
-          the public CDN sites. The old Tunnel CNAME targets remain available for rollback.</li>
+          the public CDN sites. Voltaire and Pine Lake retain their explicit tunnel records.</li>
         <li><strong>UniFi</strong> LAN-side split-horizon. <code>unifi.pod.haus</code> and
           <code>bilby.pod.haus</code> resolve to Bilby at <code>10.0.0.119</code>.
           Kangaroo stays on public DNS so its browser path remains behind Pomerium.</li>

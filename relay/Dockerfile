@@ -1,9 +1,8 @@
 # rathole has no published arm64 image (bilby is M1) and building from
 # source via `cargo install` is slow/fragile in the rootless builder.
 # Instead pull the official static release binary for the build host's
-# arch — arm64 (bilby client) or x86_64 (kookaburra server). Same
-# "build locally because upstream's arch story is wrong" pattern as
-# komodo-op. run_build = true in the stack.toml builds per host.
+# arch. The same image runs clients on arm64 origins and the server on
+# Numbat. run_build = true in each stack.toml builds it per host.
 FROM debian:stable-slim
 ARG STACK_CONTENT_HASH=unset
 RUN apt-get update \

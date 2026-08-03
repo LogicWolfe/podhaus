@@ -71,7 +71,7 @@ the `Forgejo OIDC` login item in 1Password from the Pocket client; komodo-op
 exports its standard login fields as
 `OP__KOMODO__FORGEJO_OIDC__USERNAME` and
 `OP__KOMODO__FORGEJO_OIDC__PASSWORD`, and feeds them to the init service.
-`Rathole Git Relay` owns the SSH relay token.
+`Numbat Rathole` owns the SSH relay token.
 
 To refresh Nathan's keys from GitHub:
 

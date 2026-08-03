@@ -1,6 +1,6 @@
 [[stack]]
 name = "relay"
-description = "rathole CLIENT — bilby dials out to kookaburra:2333 over the public internet, forwards tunneled traffic to caddy:443 over dockernet. TLS still terminates at Caddy; the droplet only ever sees ciphertext."
+description = "Bilby rathole client for Numbat public TLS, protected HTTP, Forgejo SSH, and host SSH"
 tags = ["podhaus"]
 
 [stack.config]
@@ -12,8 +12,6 @@ auto_pull = false
 
 environment = """
 PODHAUS_REPO=[[PODHAUS_REPO]]
-RATHOLE_TOKEN=[[OP__KOMODO__RATHOLE_RELAY__TOKEN]]
-RATHOLE_GIT_TOKEN=[[OP__KOMODO__RATHOLE_GIT_RELAY__TOKEN]]
 RATHOLE_NOISE_REMOTE_PUBLIC_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PUBLIC_KEY]]
 RATHOLE_PUBLIC_TLS_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__PUBLIC_TLS]]
 RATHOLE_FORGEJO_SSH_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__FORGEJO_SSH]]

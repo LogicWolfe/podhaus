@@ -38,7 +38,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Bootstrap-only compose files outside the podhaus deploy surface.
 SKIP_PATH_FRAGMENTS = (
     "kangaroo/periphery",
-    "kookaburra/periphery",
 )
 
 

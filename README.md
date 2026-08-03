@@ -1,6 +1,6 @@
 # podhaus
 
-Docker infrastructure for three managed hosts. Compose stacks live in this
+Docker infrastructure for four managed hosts. Compose stacks live in this
 repo, Komodo deploys them, 1Password supplies secrets, and Terraform owns the
 external infrastructure.
 
@@ -8,10 +8,12 @@ external infrastructure.
   and the primary services.
 - **kangaroo:** QNAP NAS running QTS and Container Station. It hosts Syncthing,
   Backrest, Autoheal, Alloy, and Pouch MinIO.
-- **kookaburra:** DigitalOcean Fedora droplet in Sydney. It is the stateless
-  public relay for storage and Forgejo, with management traffic over Tailscale.
+- **numbat:** BinaryLane Rocky Linux VM in Perth. It is the public Pomerium and
+  rathole gateway.
+- **fractal:** Fedora under WSL2. It is an outbound-only remote development and
+  podhaus service host.
 
-**pinelake** is a planned fourth host for the second household.
+**pinelake** is a planned host for the second household.
 
 ## Documentation
 
@@ -62,13 +64,13 @@ Bootstrap the remote hosts from bilby:
 
 ```sh
 ./kangaroo_bootstrap
-./kookaburra_bootstrap
+./numbat_bootstrap
 ```
 
 ## Terraform
 
-`terraform/` is the single Terraform root for Cloudflare, UniFi, GitHub,
-DigitalOcean, Tailscale, MinIO, and Pocket ID. Run stock Terraform from that
+`terraform/` is the single Terraform root for BinaryLane, Cloudflare, UniFi,
+GitHub, Tailscale, MinIO, and Pocket ID. Run stock Terraform from that
 directory. Credentials come from the chezmoi-installed, repository-scoped shell
 hook, which runs `op inject` when the shell enters this repository.
 
@@ -89,11 +91,10 @@ been retired.
 | `komodo/` | Core infrastructure, ResourceSync definitions, procedures, and actions |
 | `terraform/` | Consolidated external infrastructure root |
 | `onepassword/` | 1Password Connect and `komodo-op` |
-| `cloudflare-tunnel/` | Bilby's remotely configured Cloudflare connector |
-| `caddy/`, `relay/` | Public TLS and raw relay path through Kookaburra |
-| `tailscale/` | Bilby and Kookaburra management-plane nodes |
+| `pomerium/`, `caddy/`, `relay/` | Authenticated and raw ingress through Numbat |
+| `tailscale-recovery-bootstrap` | SSH-only host recovery plane |
 | `backup/`, `autoheal/`, `logging/` | Multi-host shared services |
 | `clickstack/`, `gatus/` | Observability, health checks, and alerting |
-| `bilby/`, `kangaroo/`, `kookaburra/` | Host bootstrap and host-level configuration |
+| `bilby/`, `kangaroo/`, `numbat/`, `fractal/` | Host bootstrap and host-level configuration |
 | `docs/` | Current-state documentation and live plans |
 | `<service>/compose.yaml` | A single-host service stack |

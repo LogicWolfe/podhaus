@@ -9,7 +9,7 @@
 # Public TLS front for MinIO's S3 API. Owns its own Let's Encrypt
 # wildcard so the S3 data path never touches Cloudflare's proxy (which
 # rewrites the SigV4-signed Accept-Encoding header and only has a
-# single-level Universal SSL cert). See docs/hosts.html#kookaburra.
+# single-level Universal SSL cert). See docs/hosts.html#numbat.
 #
 # One endpoint serves every S3 client:
 #   - path-style   https://storage.pod.haus            (Terraform)
@@ -150,11 +150,11 @@ git.pod.haus {
 }
 
 # music.pod.haus — Music Assistant web UI, served LAN-direct by Caddy so
-# Home Assistant's server-to-server websocket to MA bypasses Cloudflare
-# Access (which blocks non-browser clients carrying no Access cookie).
+# Home Assistant's server-to-server websocket to MA stays on the LAN and
+# bypasses browser authentication.
 # Pairs with the split-horizon A record (dns_unifi_split_horizon.tf): on
 # the LAN this name resolves to bilby → Caddy → MA; off-LAN it resolves
-# to the public CF record → tunnel → MA. MA's base_url is
+# to Numbat and Pomerium. MA's base_url is
 # https://music.pod.haus so every client is told to use this name. MA is
 # host-network, so Caddy reaches it over the dockernet bridge gateway.
 music.pod.haus {
@@ -166,9 +166,8 @@ music.pod.haus {
 
 # nathanbaxter.com is served from the
 # `nathanbaxter-com` bucket (anonymous GetObject). Cloudflare reaches the
-# active Numbat path on :4444. The shared route stays available to the
-# retained HTTP cloudflared origin, while only :4444 requires Cloudflare's
-# origin-pull client certificate.
+# active Numbat path on :4444. Only :4444 requires Cloudflare's origin-pull
+# client certificate.
 (nathan_site) {
 	@www host www.nathanbaxter.com
 	redir @www https://nathanbaxter.com{uri} permanent
@@ -263,8 +262,7 @@ nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
 # bucket, anonymous GetObject), with the WordPress.com legacy-URL
 # redirects Sky's archive needs.
 #
-# `http://` is the retained cloudflared hop; Numbat reaches :4444. Both use
-# the same site snippet, but only the Numbat listener requires AOP.
+# Numbat reaches :4444, where AOP is mandatory.
 #
 # www.skycroeser.net 301s to the apex from its own block below, so only
 # the bare apex serves content (canonical URL).

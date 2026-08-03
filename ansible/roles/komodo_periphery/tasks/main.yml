@@ -3,7 +3,7 @@
 # Bootstrap-managed on purpose: Core reaches this host only through the
 # connection this container makes, so letting Komodo redeploy it would sever
 # the path it runs on. Replaces the equivalent blocks in kangaroo_bootstrap,
-# kookaburra_bootstrap and numbat_bootstrap.
+# numbat_bootstrap.
 #
 # Key material is streamed from the control node's /opt/komodo/keys and never
 # written to an intermediate file, matching what those scripts already do.

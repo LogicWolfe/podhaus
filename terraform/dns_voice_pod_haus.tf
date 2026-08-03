@@ -2,8 +2,8 @@
 # record points at the home WAN IP; UDM port-forwards in
 # terraform/unifi.tf send tcp+udp 64738 to bilby; the mumble stack
 # binds the published ports. Mumble is not HTTP, so it does not use
-# the Cloudflare Tunnel + Access pattern that handles the rest of
-# pod.haus. UDP is required for voice quality and Tunnel can't carry
+# Pomerium HTTP path used by browser services. UDP is required for voice
+# quality and that path can't carry
 # arbitrary UDP. See docs/runbooks/mumble.md.
 #
 # DNS-only (grey-cloud): Cloudflare's HTTP proxy doesn't apply to a

@@ -21,15 +21,15 @@
 
       <h1>Hosts</h1>
       <p class="lead text-lg text-text-muted">
-        Five active hosts and one planned. Bilby's Komodo Core manages bilby, kangaroo,
-        Numbat, fractal, and the retained Kookaburra rollback host.
+        Four active hosts and one planned. Bilby's Komodo Core manages bilby, kangaroo,
+        Numbat, and fractal.
       </p>
 
       <h2 id="bilby">bilby</h2>
       <p>
         Apple M1 Mac mini, 8 cores, 15 GB RAM, aarch64, Fedora Asahi Linux. Primary host. Runs
-        Komodo Core (Postgres + FerretDB + Core + Periphery), the primary podhaus stacks, the
-        the retained Cloudflare Tunnel, and the 1Password Connect API. LAN IP
+        Komodo Core (Postgres + FerretDB + Core + Periphery), the primary podhaus stacks,
+        and the 1Password Connect API. LAN IP
         <code>10.0.0.119</code>.
       </p>
       <p>
@@ -207,66 +207,6 @@
         console remains the final break-glass path.
       </p>
 
-      <h2 id="kookaburra">kookaburra</h2>
-      <p>
-        DigitalOcean droplet, syd1 region, 1 vCPU / 1 GB RAM, Fedora 43 x86_64.
-        <strong>Retained rollback gateway.</strong> Before Numbat it terminated raw TCP for
-        <code>storage.pod.haus</code>, <code>pouch.pod.haus</code>, and
-        <code>git.pod.haus</code> on its public reserved IP
-        <code>170.64.241.136</code>, then passed the bytes through rathole to bilby. HTTPS
-        terminates at Caddy on bilby; the droplet only sees ciphertext. Forgejo SSH terminates
-        in Forgejo itself. Migrated DNS no longer targets it, but nothing has been shut down.
-        <strong>Stateless by design</strong> (see the AGENTS hard rule).
-      </p>
-      <p>
-        Why it exists: the UDM Pro SE binds WAN tcp/443 with UniFi OS itself and shadows any
-        direct WAN port-forward, so genuine external clients never reached bilby's Caddy via the
-        home WAN IP. The relay sidesteps the UDM entirely: bilby <em>dials out</em> to kookaburra,
-        no home inbound.
-      </p>
-      <ul>
-        <li><strong>Public surface:</strong> :443 on the Reserved IP for storage + Forgejo
-          HTTPS, :22 on the Reserved IP's anchor interface for Forgejo SSH, and :2333 (rathole control,
-          noise+token). Nothing else inbound from the internet (DO firewall). Public SSH on :22
-          is kept open as a recovery path; the host's nftables ruleset rate-limits non-trusted
-          sources and auto-allowlists any IP that successfully authenticates (no banning — agents
-          fumbling keys aren't punished). All persisted in
-          <code>kookaburra/ssh-hardening/apply.sh</code> so it survives any rebuild. Host sshd
-          listens on :22 only at the droplet's ordinary public address; rathole owns :22 only
-          at the anchor address, so both protocols retain the standard port.</li>
-        <li><strong>Management plane:</strong> Tailscale (<code>tag:podnet</code>); kookaburra
-          appears as <code>kookaburra-podnet</code>. Komodo Periphery dials Core <em>outbound</em>
-          at <code>ws://bilby-podnet.tail9ceb.ts.net:9120</code> (Komodo v2 PKI, X25519 noise
-          handshake; port 8120 is not published on kookaburra). The MagicDNS FQDN resolves
-          to whatever tailnet IP <code>bilby-podnet</code> currently holds; containers on
-          dockernet forward unknown names through MagicDNS via the host
-          <code>/etc/docker/daemon.json</code>.</li>
-        <li><strong>Bootstrap-launched services</strong> (run before Komodo can manage them
-          because Komodo→Periphery depends on Periphery being reachable):
-          <code>kookaburra-podnet</code> (tailscale) and <code>komodo-periphery</code>. Brought
-          up by <code>kookaburra_bootstrap</code> via SSH + <code>docker compose</code>;
-          reboot-persistent via <code>restart: unless-stopped</code>. The tailscale container is
-          subsequently <em>adopted</em> by the <code>kookaburra-tailscale</code> Komodo stack
-          (same compose project name + container name + state volume) — Komodo manages it
-          steady-state. Periphery stays bootstrap-managed.</li>
-        <li><strong>Komodo-managed stacks:</strong> <code>kookaburra-tailscale</code> (adopts
-          the bootstrap-launched tailscale; ships a <code>tailscale-cleanup</code> init that
-          deletes stale tailnet ghosts so the bare hostname is reclaimable on rebuild),
-          <code>kookaburra-relay</code> (rathole server), and <code>kookaburra-logging</code>
-          (alloy → bilby ClickStack cross-tailnet). Linked-repo clone
-          (<code>podhaus-kookaburra</code>) at
-          <code>/opt/komodo-periphery/etc-komodo/repos/podhaus-kookaburra/</code>. The normal
-          content-hash reconcile and deploy-if-changed stages cover these stacks on each push.</li>
-      </ul>
-      <p>
-        Disaster recovery: <code>terraform apply -replace=digitalocean_droplet.kookaburra</code>
-        in <code>terraform/</code> rebuilds the droplet (reserved IP survives the reassignment),
-        <code>./kookaburra_bootstrap</code> reinstalls SSH hardening + dockernet bridge +
-        tailscale + Periphery, push-deploy fans the rest out. The droplet is intentionally
-        excluded from backups; if meaningful state ever lands on it, that hard rule (AGENTS.md)
-        is voided — reopen the backup decision then.
-      </p>
-
       <h2 id="fractal">fractal</h2>
       <p>
         Fedora 44 under WSL2 on a Windows desktop. Ryzen 9 9950X3D, 32 vCPU / 15 GB RAM,
@@ -295,12 +235,12 @@
           linked repos <code>podhaus-fractal</code> and <code>docs-server-fractal</code>.</li>
         <li><strong>Bootstrap-managed:</strong> Komodo Periphery only — Core reaches this
           host solely through the connection Periphery makes, so a Komodo-driven redeploy of
-          it would sever the path it runs on. Same reasoning as kangaroo and kookaburra.
+          it would sever the path it runs on. Same reasoning as kangaroo.
           Ansible owns it instead of a script.</li>
       </ul>
       <p>
-        Ingress is an outbound rathole client to numbat, mirroring the bilby→kookaburra
-        pattern: <code>fractal.docs.pod.haus</code> lands on Pomerium, which forwards to
+        Ingress is an outbound rathole client to numbat, following the same pattern as bilby:
+        <code>fractal.docs.pod.haus</code> lands on Pomerium, which forwards to
         <code>127.0.0.1:8444</code> on numbat, through the tunnel to fractal's Caddy on
         <code>:4443</code> (mTLS origin), and on to the docs container. SSH takes the same
         route via <code>127.0.0.1:2204</code> and the <code>ssh://fractal</code> Pomerium

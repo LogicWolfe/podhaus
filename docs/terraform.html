@@ -43,8 +43,8 @@
         <tbody>
           <tr>
             <td><a href="https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs"><code>cloudflare/cloudflare</code></a> v5</td>
-            <td>Public DNS (11 zones), Zero Trust Access apps + policies + groups + service tokens,
-              cloudflared tunnel config + ingress</td>
+            <td>Public DNS (11 zones), public-site CDN and Authenticated Origin Pulls,
+              Voltaire's tunnel, and Pine Lake's current Tunnel and Access estate</td>
             <td><code>terraform/dns_*.tf</code>, <code>terraform/access.tf</code>,
               <code>terraform/services_pod_haus.tf</code>, <code>terraform/tunnel.tf</code></td>
           </tr>
@@ -88,7 +88,7 @@
       <p>
         MinIO runs as a Komodo-managed single-node stack on bilby
         (<code>minio/compose.yaml</code>, data at <code>/var/lib/minio</code>, API on
-        loopback <code>127.0.0.1:9000</code> + console via the tunnel). The S3 backend
+        loopback <code>127.0.0.1:9000</code> + console through Numbat and Pomerium). The S3 backend
         uses <strong>native lockfile-in-S3</strong> (provider feature
         <code>use_lockfile = true</code>) — no DynamoDB sidecar needed; concurrent
         <code>terraform apply</code> attempts block on a <code>.tflock</code> object with
@@ -135,20 +135,12 @@ terraform apply</code></pre>
       </p>
       <aside class="callout note">
         <span class="callout-title">Tailscale policy, DNS, and auth keys live in this root</span>
-        <code>terraform/tailscale.tf</code> owns the whole imported tailnet ACL, DNS, and the
-        rotating <code>tag:podnet</code> and <code>tag:recovery</code> auth keys via the
-        <code>tailscale/tailscale</code> provider, drives an 80-day
-        rotation via a <code>time_rotating</code> resource, and writes
-        the key value back to the existing
-        <code>op://Homelab/Tailscale Auth Key</code> 1P item via a
-        <code>terraform_data</code> + <code>local-exec</code> provisioner
-        invoking <code>op item edit</code>. The recovery key is a normal Terraform-managed
-        1Password login consumed only by host bootstraps. Provisioner is used for podnet
-        because the 1P item is category <code>API_CREDENTIAL</code>,
-        which the 1Password TF provider's <code>onepassword_item</code>
-        resource does not manage. The key value is passed via env var,
-        not the command line, so it never surfaces in TF's
-        command-echo.
+        <code>terraform/tailscale.tf</code> owns the tailnet ACL, DNS, and the rotating
+        <code>tag:recovery</code> auth key through the <code>tailscale/tailscale</code>
+        provider. The key rotates every 80 days and is stored in a Terraform-managed
+        1Password login consumed only by <code>tailscale-recovery-bootstrap</code>.
+        Recovery nodes expose local OpenSSH on TCP 22 only. They install no routes and
+        receive no access to one another.
       </aside>
       <aside class="callout note">
         <span class="callout-title">Credential split is intentional</span>
@@ -187,21 +179,18 @@ terraform apply</code></pre>
         same valid certificate and from-anywhere provider contract.
       </p>
 
-      <h2 id="service-module">Protected-service module</h2>
+      <h2 id="service-module">Protected-service DNS</h2>
       <p>
-        Each protected <code>*.pod.haus</code> service keeps one module block in
-        <code>terraform/services_pod_haus.tf</code>. The module still owns its
-        Cloudflare Tunnel ingress and Access application for rollback. When
-        <code>edge_ipv4</code> is set, its active DNS record is instead a DNS-only A
-        record to Numbat.
+        <code>terraform/services_pod_haus.tf</code> maps each protected
+        <code>*.pod.haus</code> name to Numbat's application or relay address and creates
+        DNS-only A records. Pomerium and Caddy own authentication and route policy beside
+        the active edge stack.
       </p>
       <p>
-        Adding a protected service therefore has three parts: add the module block with
-        Numbat's application address, add the route to <code>pomerium/config.yaml</code>,
-        and add the matching private-origin host in <code>caddy/Caddyfile</code>. Run
-        <code>terraform apply</code> for DNS and push the stack configuration through the
-        normal Komodo procedure. Do not remove the module's Tunnel or Access resources until
-        the retained rollback edge is deliberately retired.
+        Adding a protected service has three parts: add its DNS map entry, add the route to
+        <code>pomerium/config.yaml</code>, and add the matching private-origin host in
+        <code>caddy/Caddyfile</code>. Run <code>terraform apply</code> for DNS and push the
+        stack configuration through the normal Komodo procedure.
       </p>
 
       <h2 id="public-site-cache">Public site cache</h2>

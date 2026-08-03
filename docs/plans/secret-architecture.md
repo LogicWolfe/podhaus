@@ -45,13 +45,11 @@ replacement for it.
 | Host | Class | Secret path | Rests on |
 |---|---|---|---|
 | bilby | Asahi (Apple Silicon), YubiKey PIV | 1P Homelab vault, direct | hardware + FDE *(gap)* |
-| kookaburra | Disposable cloud relay | Komodo variable interpolation | provider disk controls + cattle rebuild |
 | kangaroo | QNAP QTS appliance | Komodo variable interpolation | network auth only |
 
-kookaburra and kangaroo already receive service secrets through the
+Kangaroo already receives service secrets through the
 `1P Homelab → komodo-op → Komodo Variables → [[VARIABLE]]` path
-documented in [`docs/secrets.html`](../secrets.html). "Source secrets
-from bilby" is already true for both.
+documented in [`docs/secrets.html`](../secrets.html).
 
 ## Workstreams
 
@@ -99,9 +97,7 @@ Komodo writes a rendered `.env` — resolved secrets plus the stamped
 So the Komodo path distributes secrets from 1Password without a bespoke
 channel, but it **does not keep them off disk**.
 
-For kookaburra, the physical-theft threat model doesn't map cleanly to a
-DigitalOcean VM. Keep it disposable and avoid durable application state. For
-kangaroo, rendered environment files are the main at-rest exposure because the
+For kangaroo, rendered environment files are the main at-rest exposure because the
 appliance can't use guest-managed full-disk encryption.
 
 Candidate fix: a **tmpfs `run_directory`** on kangaroo, so resolved
@@ -125,7 +121,7 @@ Removing it is wider than it looks — **13+ files consume it**, including
 running infrastructure: `komodo-start` / `komodo-sync` / `komodo-upgrade`
 (each `cat`s it directly), `onepassword/compose.yaml` and `stack.toml`,
 `terraform/backend.tf` and `tailscale.tf`, five `paperless/*` scripts,
-and both `kangaroo_bootstrap` and `kookaburra_bootstrap`.
+and `kangaroo_bootstrap`.
 
 The token grants exactly the **Homelab** vault and nothing else
 (verified: the service account sees one vault). That scoping is already

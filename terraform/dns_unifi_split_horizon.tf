@@ -42,7 +42,7 @@ resource "unifi_dns_record" "storage_pod_haus" {
 }
 
 # Pouch MinIO follows the same split path as the primary storage endpoint.
-# LAN clients reach bilby's Caddy directly; remote clients use kookaburra.
+# LAN clients reach bilby's Caddy directly; remote clients use Numbat.
 resource "unifi_dns_record" "pouch_pod_haus" {
   name        = "pouch.pod.haus"
   record_type = "A"
@@ -76,7 +76,7 @@ resource "unifi_dns_record" "voice_pod_haus" {
 
 # music.pod.haus → bilby (Caddy) on LAN. Home Assistant runs on bilby and
 # its server-to-server websocket to Music Assistant can't carry a
-# Cloudflare Access cookie, so it must reach MA without traversing the
+# browser session, so it must reach MA without traversing the
 # CF edge. This split-horizon record points LAN clients (and bilby's own
 # host resolver, which HA shares via network_mode: host) at Caddy, which
 # fronts MA with a real LE cert. Off-LAN browsers use the public CF
@@ -85,21 +85,6 @@ resource "unifi_dns_record" "music_pod_haus" {
   name        = "music.pod.haus"
   record_type = "A"
   value       = "10.0.0.119"
-  ttl         = "5m0s"
-  enabled     = true
-}
-
-# Gatus external-path probe — UniFi returns the kookaburra relay
-# reserved IP for this *.storage.pod.haus subdomain so the on-bilby
-# gatus container (which uses host DNS via UniFi) reaches the relay
-# instead of the LAN split-horizon target. The hostname is under
-# *.storage.pod.haus so Caddy's wildcard LE cert validates the TLS.
-# Source of truth: the digitalocean_reserved_ip.kookaburra resource
-# (intra-root reference; was terraform_remote_state pre-consolidation).
-resource "unifi_dns_record" "kookaburra_probe_storage" {
-  name        = "kookaburra-probe.storage.pod.haus"
-  record_type = "A"
-  value       = digitalocean_reserved_ip.kookaburra.ip_address
   ttl         = "5m0s"
   enabled     = true
 }

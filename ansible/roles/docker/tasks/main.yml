@@ -1,6 +1,6 @@
 # Docker engine + the shared dockernet bridge.
 #
-# Replaces the hand-rolled equivalents in numbat_bootstrap, kookaburra_bootstrap,
+# Replaces the hand-rolled equivalents in numbat_bootstrap,
 # kangaroo_bootstrap and komodo-start's ensure_network — four implementations of
 # the same two ideas.
 ---

@@ -58,7 +58,7 @@
           directory. Bilby is also where the master copies of all four
           keypairs live; the pubkeys are committed to
           <code>komodo/keys/*.pub</code> in the repo for reference + rebuild.</li>
-        <li><strong>kangaroo, kookaburra, numbat</strong>: Each host has its own
+        <li><strong>kangaroo, numbat, fractal</strong>: Each host has its own
           keys directory (bootstrap-managed bind, separate from
           <code>etc-komodo</code>). The bootstrap script SCPs that host's
           <code>periphery.key</code> + Core's <code>core.pub</code> from
@@ -85,14 +85,12 @@
         <li><strong>kangaroo</strong>: outbound. Periphery dials
           <code>ws://10.0.0.119:9120</code> (bilby LAN). No inbound
           <code>:8120</code> listener exposed on kangaroo.</li>
-        <li><strong>kookaburra</strong>: outbound. Periphery dials
-          <code>ws://bilby-podnet.tail9ceb.ts.net:9120</code> over the
-          tailnet (kookaburra Periphery on dockernet; daemon.json forwards
-          MagicDNS via <code>100.100.100.100</code>). No inbound listener.</li>
         <li><strong>numbat</strong>: outbound. Periphery dials
           <code>wss://core-connect.pod.haus</code> through the public TLS rathole
           path. Komodo Noise keys authenticate the connection; no inbound listener
           is exposed.</li>
+        <li><strong>fractal</strong>: outbound. Periphery dials the same public
+          <code>wss://core-connect.pod.haus</code> endpoint.</li>
       </ul>
       <p>
         Off-host Peripheries use outbound on attack-surface grounds:
@@ -112,8 +110,8 @@
             <td>Operating model</td>
             <td><code>files_on_host = true</code></td>
             <td>Linked Repo (<code>linked_repo = "podhaus"</code> for kangaroo,
-              <code>podhaus-kookaburra</code> for kookaburra, and
-              <code>podhaus-numbat</code> for Numbat;
+              <code>podhaus-numbat</code> for Numbat, and
+              <code>podhaus-fractal</code> for fractal;
               Repo resources are per-Periphery, each host's clone is independent state)</td>
           </tr>
           <tr>
@@ -144,8 +142,7 @@
               <strong>Convention still useful:</strong> the
               <code>&lt;host&gt;-</code> prefix on a stack name signals
               "lives on this remote host" at a glance
-              (<code>kookaburra-tailscale</code>,
-              <code>kangaroo-backup</code>), but it's a readability
+              (<code>numbat-pomerium</code>, <code>kangaroo-backup</code>), but it's a readability
               convention now, not a deploy-routing contract.</td>
           </tr>
           <tr>
@@ -157,9 +154,9 @@
       </table>
       <p>
         Three linked-repo hosts exist today: <strong>kangaroo</strong> (QNAP NAS,
-        repo <code>podhaus</code>), <strong>kookaburra</strong> (retained DigitalOcean
-        rollback, repo <code>podhaus-kookaburra</code>), and <strong>Numbat</strong>
-        (active BinaryLane gateway, repo <code>podhaus-numbat</code>). Future deploy targets
+        repo <code>podhaus</code>), <strong>Numbat</strong> (active BinaryLane gateway,
+        repo <code>podhaus-numbat</code>), and <strong>fractal</strong> (remote development
+        host, repo <code>podhaus-fractal</code>). Future deploy targets
         (e.g. pinelake) should follow the same pattern. Bilby stays on
         <code>files_on_host</code> because tight save-and-deploy beats the
         commit-roundtrip when the editor is on the same host.

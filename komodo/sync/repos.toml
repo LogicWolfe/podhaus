@@ -43,21 +43,6 @@ git_account = "LogicWolfe"     # PAT covers the org, includes fenwick
 repo = "LogicWolfe/fenwick"
 branch = "main"
 
-# kookaburra clone — separate Komodo Repo resource because Repo
-# resources are per-Periphery (each host's clone is independent
-# state). kookaburra stacks reference linked_repo = "podhaus-kookaburra".
-[[repo]]
-name = "podhaus-kookaburra"
-description = "Komodo-managed clone of this monorepo on kookaburra's Periphery (off-LAN DigitalOcean relay host)"
-tags = ["podhaus", "kookaburra"]
-
-[repo.config]
-server = "kookaburra"
-git_provider = "github.com"
-git_account = "LogicWolfe"
-repo = "LogicWolfe/podhaus"
-branch = "main"
-
 [[repo]]
 name = "podhaus-numbat"
 description = "Komodo-managed podhaus clone on the BinaryLane gateway"

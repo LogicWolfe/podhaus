@@ -37,7 +37,7 @@ services:
     restart: unless-stopped
     # SELinux enforcing on Fedora Asahi denies cross-label reads into
     # the bind-mounted Caddyfile; same pattern as every other bilby
-    # stack (docs-server / gatus / cloudflare-tunnel).
+    # stack (docs-server / gatus).
     security_opt:
       - label:disable
     depends_on:

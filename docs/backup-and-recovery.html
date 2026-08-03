@@ -134,15 +134,7 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
         to produce the first snapshot.
       </p>
 
-      <h2 id="gateway-no-backup">Gateway hosts are intentionally unbacked</h2>
-      <p>
-        <code>kookaburra</code> (the off-LAN DigitalOcean public-ingress relay; see
-        <a href="/hosts.html#kookaburra">hosts → kookaburra</a>) has <strong>no backup
-        plan by design</strong>. It is a ciphertext-only rathole passthrough — no MinIO data,
-        no certificates, no credentials; all state lives on bilby. Disaster recovery is
-        <code>terraform apply</code>, and the DigitalOcean reserved IP keeps DNS stable across a
-        rebuild, so there is nothing recoverable to snapshot.
-      </p>
+      <h2 id="gateway-no-backup">The gateway is intentionally unbacked</h2>
       <p>
         Numbat has the same conditional exemption. Its Pomerium Autocert cache and Docker
         volumes are replaceable; PKI and long-lived secrets are recoverable from Terraform
@@ -152,7 +144,7 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
       </p>
       <p>
         <strong>This exemption is conditional, not permanent.</strong> If any meaningful state
-        ever lands on either gateway, such as a persistent volume, local-only key/cert, or app data
+        ever lands on Numbat, such as a persistent volume, local-only key/cert, or app data
         that is not reconstructible from <code>terraform apply</code>, the backup decision <em>must</em> be
         reopened and that host added to <code>backup/</code> with its own plan. A future reader
         who finds irreplaceable gateway state with no backup should treat that as a bug, not a deliberate

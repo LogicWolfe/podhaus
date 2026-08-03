@@ -13,7 +13,8 @@ done.
 - Komodo Periphery running as a container on pinelake, registered in
   Core (linked-repo mode like kangaroo).
 - `pmset` + `caffeinate` belt-and-braces so the host stays awake.
-- No Tailscale or cloudflared dependency in the target state.
+- Tailscale is an SSH-only recovery path with no subnet routes, DNS override,
+  or container access. Cloudflared is absent from the target state.
 
 ## Step 1 — back up everything stateful
 
@@ -228,9 +229,10 @@ contradicts the goal.
 Configure Periphery for `wss://core-connect.pod.haus`. Add Pinelake's
 log-ingest client certificate and Alloy endpoint in the platform stack. Add
 named rathole services only for the browser or SSH routes selected in the
-service workstreams. Do not install a podhaus Tailscale node or migrate the
-existing cloudflared daemon; remove those old runtimes only after the new paths
-are verified.
+service workstreams. Reconcile the existing Tailscale installation to the
+`tag:recovery` SSH-only contract, without routes or DNS override. Do not
+migrate the existing cloudflared daemon; remove it only after the new paths are
+verified.
 
 ## Step 7: install `docker compose` plugin
 

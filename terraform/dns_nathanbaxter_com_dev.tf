@@ -1,7 +1,7 @@
 # dev.nathanbaxter.com — live-reload Astro dev preview of the
 # nathanbaxter.com site, served by the nathanbaxter-dev container on
-# bilby (see podhaus/nathanbaxter-dev/). Cloudflare Tunnel + Access-
-# gated; not a production endpoint. Separate file from
+# bilby (see podhaus/nathanbaxter-dev/). Pomerium protects it; it isn't a
+# production endpoint. Separate file from
 # dns_nathanbaxter_com{,_web}.tf so production CNAMEs are never
 # touched alongside dev-cycle changes.
 

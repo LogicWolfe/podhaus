@@ -13,7 +13,7 @@ services:
       # view because NFS can't provide the consistency MinIO requires.
       - /share/CACHEDEV1_DATA/Pouch/minio:/data
     ports:
-      # LAN only in practice: kookaburra reaches bilby's Caddy, and Caddy
+      # LAN only in practice: Numbat reaches bilby's Caddy, and Caddy
       # crosses the home LAN to this port. The console remains unpublished.
       - 9000:9000
     labels:

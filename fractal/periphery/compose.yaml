@@ -3,7 +3,7 @@
 # Bootstrap-managed (by ansible/roles/komodo_periphery), not Komodo-managed:
 # Core reaches this host only through the connection this container makes, so
 # a Komodo-driven redeploy of it would sever the path it runs on. Same reason
-# kangaroo's and kookaburra's Peripheries stay outside Komodo.
+# kangaroo's Periphery stays outside Komodo.
 #
 # Dials core-connect.pod.haus directly over the internet — deliberately not
 # through fractal's own rathole client, which would make Periphery depend on

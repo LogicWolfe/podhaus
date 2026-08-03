@@ -34,8 +34,7 @@ terraform {
       version = "~> 6.0"
     }
     tailscale = {
-      # Mints the rotating tag:podnet tailnet auth key (cloudflare/
-      # was the interim home; now native here).
+      # Owns the recovery-plane ACL, DNS, and rotating enrolment key.
       # Docs: https://registry.terraform.io/providers/tailscale/tailscale/latest/docs
       source  = "tailscale/tailscale"
       version = "~> 0.21"
@@ -55,11 +54,6 @@ terraform {
       # Generates the Pomerium SSH keys and private-origin mTLS material.
       source  = "hashicorp/tls"
       version = "~> 4.1"
-    }
-    digitalocean = {
-      # kookaburra relay droplet + reserved IP + firewall + project.
-      source  = "digitalocean/digitalocean"
-      version = "~> 2.0"
     }
     binarylane = {
       # numbat, the Perth replacement gateway.

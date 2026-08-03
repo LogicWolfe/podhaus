@@ -101,7 +101,6 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           Home Assistant), or the LAN IP for off-host targets (the QNAP web UI at
           <code>https://10.0.0.25/</code>). External probes are reserved for paths that
           genuinely need full-path coverage (<code>storage.pod.haus</code>,
-          <code>kookaburra-probe.storage.pod.haus</code>,
           <code>numbat-probe.storage.pod.haus</code>, <code>nathanbaxter.com</code>,
           <code>voice.pod.haus</code>) that are intentionally public.
           Probing protected public URLs is deliberately avoided: Pomerium returns a login
@@ -213,31 +212,26 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
       <pre><code>SELECT toUInt8(count() &gt; 0) FROM default.otel_logs
 WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']='&lt;host&gt;'</code></pre>
       <p>
-        Five live endpoints in <code>gatus/conf/config.yaml</code>, of two kinds:
+        Three live endpoints in <code>gatus/conf/config.yaml</code>, of two kinds:
         <em>heartbeats</em> (assert a fresh Alloy <strong>self-metric</strong> reached
         ClickHouse, i.e. the host's whole telemetry ship-path Alloy → collector → ClickHouse
         is alive) and <em>log-volume</em> checks (count <code>otel_logs</code> rows). Named for
         what they measure:
       </p>
       <ul>
-        <li><strong>Kangaroo Telemetry Pipeline</strong>,
-          <strong>Kookaburra Telemetry Pipeline</strong>, and
+        <li><strong>Kangaroo Telemetry Pipeline</strong> and
           <strong>Numbat Telemetry Pipeline</strong> are heartbeats. Each host's Alloy
           scrapes its own self-metrics every 60 s and ships them through the same exporter as
-          the logs (kangaroo cross-LAN, kookaburra cross-tailnet), so the query asserts a fresh
+          the logs, so the query asserts a fresh
           per-host Alloy metric in a 15-minute window (<code>otel_metrics_gauge</code> where
           <code>ResourceAttributes['host']='&lt;host&gt;'</code>; the <code>host</code>
           attribute is stamped by the <code>svc_alloy</code> transform in each host's
           <code>config.alloy</code>). A fixed 60 s cadence means a genuine stall alerts in
           ~10 min.</li>
-        <li><strong>Pipeline Log Ingest (bilby / total)</strong> (10-minute) and
-          <strong>Kookaburra Log Ingest (staleness)</strong> (30-minute) — log-volume
-          <code>count()</code> checks per host. These verify logs <em>specifically</em> flow,
-          which a heartbeat can't (it only proves the exporter moves data). bilby/total detects
-          total pipeline failure (collector / ClickHouse / Alloy down); kookaburra's steady
-          ~250 lines/hour make a log-volume window reliable there, so it keeps a log check
-          <em>in addition to</em> the heartbeat (low-volume kangaroo can't, which is why it uses
-          a heartbeat alone).</li>
+        <li><strong>Pipeline Log Ingest (bilby / total)</strong> is a 10-minute
+          <code>count()</code> check that detects total collector, ClickHouse, or Alloy failure.
+          The remote-host heartbeats cover their complete shipping paths without assuming a
+          minimum log volume.</li>
       </ul>
       <p>
         These are service checks, so their alerts ride the default Gatus → Fenwick chain.
@@ -278,9 +272,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
       <p>
         Alloy runs on all four active hosts as the multi-host
         <code>logging</code> service: <code>logging</code> on bilby,
-        <code>kangaroo-logging</code> on kangaroo, and
-        <code>kookaburra-logging</code> on kookaburra, and
-        <code>numbat-logging</code> on Numbat. They share
+        <code>kangaroo-logging</code> on kangaroo, <code>numbat-logging</code> on Numbat,
+        and <code>fractal-logging</code> on fractal. They share
         <code>logging/compose.shared.yaml</code>. Alloy scrapes each host's
         Docker socket, bridges Loki-format input to
         OTLP (<code>otelcol.receiver.loki</code> → batch → <code>otelcol.exporter.otlphttp</code>)
@@ -291,10 +284,9 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
           container name.</li>
         <li><strong>kangaroo</strong> — cross-LAN to <code>http://10.0.0.119:4318</code>
           (plaintext, LAN-only).</li>
-        <li><strong>kookaburra</strong>: cross-tailnet to
-          <code>http://bilby-podnet.tail9ceb.ts.net:4318</code> by MagicDNS.</li>
         <li><strong>Numbat</strong>: HTTPS to <code>logs-ingest.pod.haus</code> through
           rathole and Caddy, with a dedicated client certificate.</li>
+        <li><strong>fractal</strong>: the same HTTPS ingress with its own client certificate.</li>
       </ul>
       <p>
         Every request carries a HyperDX <strong>ingestion API key</strong> in the

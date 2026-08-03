@@ -37,23 +37,6 @@ disk_warning = 85.0
 disk_critical = 95.0
 
 [[server]]
-name = "kookaburra"
-description = "DigitalOcean droplet (syd1, Fedora) — off-LAN public-ingress relay host. v2 outbound: Periphery dials Core over tailnet."
-tags = ["kookaburra", "podhaus"]
-
-[server.config]
-# Outbound mode (v2 PKI noise handshake). kookaburra Periphery dials Core
-# at ws://bilby-podnet:9120 over tailnet (its PERIPHERY_CORE_ADDRESSES).
-# Auth is the X25519 keypair handshake. Port 8120 is not published on
-# kookaburra; its internal listener is healthcheck-only. The public surface is
-# just :443 (rathole data) +
-# :2333 (rathole control); the management plane is tailnet-only.
-address = ""
-enabled = true
-disk_warning = 85.0
-disk_critical = 95.0
-
-[[server]]
 name = "numbat"
 description = "BinaryLane Perth gateway. v2 outbound Periphery returns through rathole."
 tags = ["numbat", "podhaus"]

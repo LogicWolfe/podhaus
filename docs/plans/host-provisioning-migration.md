@@ -66,13 +66,6 @@ verification through Pomerium and was not chased. **Establish access
 first**; the migration can't be scoped until then. It has a TPM-resident
 machine key, so its chezmoi half differs from fractal's.
 
-### kookaburra (`kookaburra_bootstrap`)
-
-Lowest value, lowest risk. The script is already idempotent and the host
-is stateless by design, so there is little to gain beyond consistency.
-Do it last, or accept it staying scripted if the cost/benefit doesn't
-hold up on closer look.
-
 ## Deliberately not in scope
 
 - **kangaroo.** No Python, ever. Not a deferral.

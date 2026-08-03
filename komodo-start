@@ -12,11 +12,8 @@ export COMPOSE_KOMODO_REPO_PATH="$PWD"
 # certs there (the image doesn't mkdir -p the ssl subdir on its own).
 sudo mkdir -p /etc/komodo/ssl
 
-# v2 PKI keys volume. Holds the 4 X25519 keypairs (core, bilby-periphery,
-# kangaroo-periphery, kookaburra-periphery). Pubkeys mirrored in
-# komodo/keys/*.pub for repo reference. Privkeys live ONLY on the host
-# they belong to: bilby's keys here, kangaroo/kookaburra on their own
-# hosts (SCPed by their bootstrap scripts).
+# v2 PKI keys volume. Pubkeys are mirrored in komodo/keys/*.pub for repo
+# reference. Private keys live only on the host they belong to.
 sudo mkdir -p /opt/komodo/keys
 sudo chmod 0700 /opt/komodo/keys
 
@@ -24,7 +21,7 @@ sudo chmod 0700 /opt/komodo/keys
 # any compose `up`. This is the only config-as-code path to create them:
 # Komodo has no CreateNetwork execution (only DeleteNetwork/PruneNetworks),
 # and Compose refuses to adopt a pre-existing external network — so the
-# host provisions them, exactly as kangaroo/kookaburra do for their own
+# host provisions them, exactly as remote hosts do for their own
 # dockernet. Idempotent: inspect-or-create leaves an existing network
 # (and its live attachments) untouched, so this is a no-op on every host
 # that already has them. dockernet must exist before the Komodo compose

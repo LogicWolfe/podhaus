@@ -1,6 +1,6 @@
 [[stack]]
 name = "forgejo"
-description = "Forgejo — private Git hosting; local SQLite state, repositories on Jump, public SSH through kookaburra"
+description = "Forgejo — private Git hosting; local SQLite state, repositories on Jump, public SSH through Numbat"
 tags = ["podhaus"]
 
 [stack.config]

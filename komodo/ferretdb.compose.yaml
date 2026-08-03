@@ -98,7 +98,7 @@ services:
       # bilby periphery service below (same compose, same bind), so Core
       # auto-trusts bilby's periphery via file:/config/keys/bilby-periphery.pub
       # and bilby's periphery auto-trusts Core via file:/config/keys/core.pub.
-      # Kangaroo + kookaburra peripheries have their own keys dirs on their
+      # Remote peripheries have their own keys dirs on their
       # respective hosts; their pubkeys live alongside in this dir so Core
       # trusts them too.
       - ${COMPOSE_KOMODO_KEYS_PATH}:/config/keys

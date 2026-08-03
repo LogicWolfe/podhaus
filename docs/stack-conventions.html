@@ -298,8 +298,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
         <code>[stack.config]</code> so Komodo excludes it from the health
         rollup. Reference: <code>plex/stack.toml</code>,
         <code>backup/{bilby,kangaroo}/stack.toml</code>,
-        <code>flood/stack.toml</code>,
-        <code>tailscale/{bilby,kookaburra}/stack.toml</code>.
+        <code>flood/stack.toml</code>.
         (Gatus black-box endpoint checks
         remain the authoritative health signal regardless — this just keeps
         Komodo's at-a-glance view honest too.)
@@ -401,7 +400,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
       </p>
       <ul>
         <li><strong><code>security_opt: label:disable</code></strong> on the service — lifts
-          confinement entirely. Used by <code>cloudflare-tunnel</code>, <code>gatus</code>,
+          confinement entirely. Used by <code>gatus</code>,
           <code>ofelia</code>, <code>autoheal</code>, <code>backrest</code>, <code>alloy</code>,
           <code>clickstack</code>.</li>
         <li><strong><code>:z</code> or <code>:Z</code> on the volume</strong> — labels the
@@ -421,8 +420,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
       </p>
       <p>
         Skip the healthcheck (and the autoheal label) when the image is distroless and has no
-        shell/curl/wget to probe with — pattern documented in <code>cloudflare-tunnel</code>,
-        <code>paperless-tika</code>, and others. Liveness for those services comes from a
+        shell/curl/wget to probe with, such as <code>paperless-tika</code>. Liveness for those services comes from a
         downstream service's logs surfacing the dependency failure, plus external Gatus
         monitoring of the public hostname.
       </p>

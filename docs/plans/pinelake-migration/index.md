@@ -17,9 +17,10 @@ narrow outbound connections to Numbat:
   ClickStack ingestion key.
 - Named rathole services only for browser or SSH endpoints that are intentionally
   exposed. Pomerium and Pocket ID apply the Nathan-only policy.
-- No Tailscale node, subnet route, bridged network, or Pinelake cloudflared
-  runtime. Cloudflare remains authoritative DNS; Pinelake service records are
-  DNS-only.
+- Tailscale is limited to the SSH-only recovery contract: no subnet route,
+  bridged network, DNS override, or container access. Pinelake runs no
+  cloudflared runtime. Cloudflare remains authoritative DNS; Pinelake service
+  records are DNS-only.
 
 ## Workstreams
 
@@ -32,8 +33,8 @@ narrow outbound connections to Numbat:
    `MachineIdentifier`.
 5. Add [platform stacks](platform-stacks.md), including Alloy through Numbat,
    then add [monitoring](monitoring.md).
-6. Replace the old Tunnel/Tailscale workstreams with the Numbat route and DNS
-   changes above.
+6. Replace the old Tunnel and routed-Tailscale workstreams with the Numbat route,
+   DNS changes, and SSH-only recovery plane above.
 
 ## Decisions still needed
 
