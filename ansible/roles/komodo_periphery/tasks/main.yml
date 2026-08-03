@@ -1,0 +1,117 @@
+# Komodo Periphery, v2 outbound.
+#
+# Bootstrap-managed on purpose: Core reaches this host only through the
+# connection this container makes, so letting Komodo redeploy it would sever
+# the path it runs on. Replaces the equivalent blocks in kangaroo_bootstrap,
+# kookaburra_bootstrap and numbat_bootstrap.
+#
+# Key material is streamed from the control node's /opt/komodo/keys and never
+# written to an intermediate file, matching what those scripts already do.
+---
+- name: Assert the keypair exists on the control node
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ podhaus_keys_dir }}/core.pub"
+    - "{{ podhaus_keys_dir }}/{{ inventory_hostname }}-periphery.key"
+  delegate_to: localhost
+  become: false
+  register: keypair_stat
+  failed_when: not keypair_stat.stat.exists
+
+- name: Create the Periphery directory layout
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ podhaus_periphery_dir }}", mode: "0755"}
+    - {path: "{{ podhaus_periphery_dir }}/etc-komodo", mode: "0755"}
+    - {path: "{{ podhaus_periphery_dir }}/keys", mode: "0700"}
+
+- name: Install this host's Periphery private key
+  ansible.builtin.copy:
+    src: "{{ podhaus_keys_dir }}/{{ inventory_hostname }}-periphery.key"
+    dest: "{{ podhaus_periphery_dir }}/keys/periphery.key"
+    mode: "0600"
+  no_log: true
+  notify: Restart periphery
+
+- name: Install Core's public key
+  ansible.builtin.copy:
+    src: "{{ podhaus_keys_dir }}/core.pub"
+    dest: "{{ podhaus_periphery_dir }}/keys/core.pub"
+    mode: "0644"
+  notify: Restart periphery
+
+- name: Render periphery.config.toml
+  # Carries the GitHub PAT that Komodo's Linked Repo uses to clone over
+  # HTTPS (Komodo does not support SSH cloning). Read from 1Password at run
+  # time so the credential never lands in the repo.
+  ansible.builtin.copy:
+    dest: "{{ podhaus_periphery_dir }}/etc-komodo/periphery.config.toml"
+    mode: "0600"
+    content: |
+      # Rendered by ansible/roles/komodo_periphery. Do not edit on the host.
+      [[git_provider]]
+      domain = "github.com"
+      [[git_provider.accounts]]
+      username = "LogicWolfe"
+      token = "{{ lookup('community.general.onepassword',
+                          'Homelab GitHub Personal Access Token',
+                          field='token', vault='Homelab') }}"
+  no_log: true
+  notify: Restart periphery
+
+- name: Install the Periphery compose file
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../{{ inventory_hostname }}/periphery/compose.yaml"
+    dest: "{{ podhaus_periphery_dir }}/compose.yaml"
+    mode: "0644"
+  notify: Restart periphery
+
+- name: Render the Periphery .env
+  # TZ only — outbound auth is the X25519 keypair, not a shared secret.
+  ansible.builtin.copy:
+    dest: "{{ podhaus_periphery_dir }}/.env"
+    mode: "0600"
+    content: |
+      TZ={{ podhaus_timezone }}
+  notify: Restart periphery
+
+- name: Bring Periphery up
+  community.docker.docker_compose_v2:
+    project_src: "{{ podhaus_periphery_dir }}"
+    project_name: komodo-periphery
+    state: present
+  register: periphery_up
+
+- name: Flush handlers so a config change is live before the readiness check
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for Core to report this server as Ok
+  # The only honest health signal in outbound mode: there is no inbound
+  # listener to probe, so "healthy" means Core has an established connection.
+  # Checked against Core's API rather than the container's own state, which
+  # would go green even if the handshake were being rejected.
+  ansible.builtin.uri:
+    url: "{{ podhaus_komodo_core_url }}/read"
+    method: POST
+    body_format: json
+    headers:
+      X-Api-Key: "{{ podhaus_komodo_api_key }}"
+      X-Api-Secret: "{{ podhaus_komodo_api_secret }}"
+    body:
+      type: ListServers
+      params: {}
+  delegate_to: localhost
+  become: false
+  no_log: true
+  register: komodo_servers
+  until: >-
+    komodo_servers.json
+    | selectattr('name', 'equalto', inventory_hostname)
+    | map(attribute='info.state')
+    | first | default('') == 'Ok'
+  retries: 30
+  delay: 4

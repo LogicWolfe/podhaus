@@ -68,6 +68,33 @@ server = "numbat"
 repo = "LogicWolfe/podhaus"
 branch = "main"
 
+[[repo]]
+name = "podhaus-fractal"
+description = "Komodo-managed podhaus clone on fractal"
+tags = ["podhaus", "fractal"]
+
+[repo.config]
+server = "fractal"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/podhaus"
+branch = "main"
+
+# fractal's own clone of the docs-server repo. A separate Repo resource from
+# bilby's `docs-server` because Repo resources are per-Periphery — each host's
+# clone is independent state.
+[[repo]]
+name = "docs-server-fractal"
+description = "Komodo-managed clone of the docs-server repo on fractal's Periphery"
+tags = ["podhaus", "fractal", "docs"]
+
+[repo.config]
+server = "fractal"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/docs-server"
+branch = "main"
+
 # Bilby clone of the pets engine repo (the father–daughter pet
 # simulator). Standalone private repo, same linked_repo + run_build
 # pattern as fenwick — Komodo builds the image on bilby. The shared

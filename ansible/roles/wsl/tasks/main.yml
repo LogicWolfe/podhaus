@@ -1,0 +1,45 @@
+# WSL2 guest specifics.
+#
+# A WSL guest is not a normal host in two ways that matter here:
+#   - its lifecycle is owned by Windows (no real boot; an autostart task on
+#     the Windows side starts the instance), and
+#   - /etc/wsl.conf is read only at instance start, so changes here need a
+#     `wsl --shutdown` from Windows before they fully take effect.
+# Neither is reachable from inside the guest — `[interop] enabled=false`
+# deliberately severs that path. Anything requiring a Windows action is
+# surfaced to the operator rather than attempted.
+---
+- name: Assert this really is a WSL guest
+  ansible.builtin.assert:
+    that: "'microsoft' in ansible_facts['kernel'] | lower"
+    fail_msg: >-
+      {{ inventory_hostname }} is in the wsl role but its kernel
+      ({{ ansible_facts['kernel'] }}) is not a WSL kernel.
+
+- name: Set the guest hostname in /etc/wsl.conf
+  # WSL rewrites /etc/hostname from this key on every instance start, so
+  # hostnamectl alone does not survive. This is the persistent half.
+  ansible.builtin.lineinfile:
+    path: /etc/wsl.conf
+    regexp: '^hostname\s*='
+    line: "hostname={{ podhaus_hostname }}"
+    insertafter: '^\[network\]'
+    state: present
+  register: wsl_hostname_conf
+
+- name: Apply the hostname to the running instance
+  # The immediate half, so the current session and anything provisioned in
+  # this run already sees the right name.
+  ansible.builtin.hostname:
+    name: "{{ podhaus_hostname }}"
+
+- name: Report that a Windows-side restart is needed
+  # Not a failure: the running instance already has the name applied above.
+  # This exists so the operator knows the persistent path is untested until
+  # the next `wsl --shutdown`.
+  ansible.builtin.debug:
+    msg: >-
+      /etc/wsl.conf changed. Run `wsl --shutdown` from Windows and restart the
+      instance to confirm the hostname persists across an instance restart.
+      This cannot be done from inside the guest (interop is disabled).
+  when: wsl_hostname_conf is changed

@@ -21,8 +21,8 @@
 
       <h1>Hosts</h1>
       <p class="lead text-lg text-text-muted">
-        Four active hosts and one planned. Bilby's Komodo Core manages bilby, kangaroo,
-        Numbat, and the retained Kookaburra rollback host.
+        Five active hosts and one planned. Bilby's Komodo Core manages bilby, kangaroo,
+        Numbat, fractal, and the retained Kookaburra rollback host.
       </p>
 
       <h2 id="bilby">bilby</h2>
@@ -267,6 +267,55 @@
         is voided — reopen the backup decision then.
       </p>
 
+      <h2 id="fractal">fractal</h2>
+      <p>
+        Fedora 44 under WSL2 on a Windows desktop. Ryzen 9 9950X3D, 32 vCPU / 15 GB RAM,
+        1 TB ext4 root plus a LUKS <code>/home</code>. It is two things at once: Nathan's
+        remote development machine and an ordinary podhaus host. <strong>The first host
+        provisioned entirely by <a href="/host-provisioning.md">Ansible</a></strong>
+        — it has no bootstrap script and never had one.
+      </p>
+      <p>
+        Everything in and out is a connection fractal makes. Its LAN address
+        <code>10.0.0.70</code> is the <em>Windows</em> host, which forwards only :22 into the
+        guest; the guest itself sits behind WSL's NAT on a subnet that changes across reboots.
+        So there is no inbound path to depend on, and none is used.
+      </p>
+      <ul>
+        <li><strong>Ansible-managed (root state):</strong> hostname via
+          <code>/etc/wsl.conf</code>, timezone, Docker CE + <code>dockernet</code>,
+          the developer toolchain, the Pomerium SSH user-CA trust, and Komodo Periphery.
+          Run <code>ansible/playbooks/fractal.yml</code>.</li>
+        <li><strong>chezmoi-managed (user state):</strong> everything under
+          <code>$HOME</code> — shell, dotfiles, the machine SSH key. Applied by Nathan as
+          himself; Ansible never invokes it.</li>
+        <li><strong>Komodo-managed:</strong> <code>fractal-relay</code> (rathole client),
+          <code>fractal-caddy</code> (mTLS origin), <code>fractal-logging</code> (Alloy),
+          and <code>fractal-docs</code> (the docs-server over <code>~/repos</code>) through
+          linked repos <code>podhaus-fractal</code> and <code>docs-server-fractal</code>.</li>
+        <li><strong>Bootstrap-managed:</strong> Komodo Periphery only — Core reaches this
+          host solely through the connection Periphery makes, so a Komodo-driven redeploy of
+          it would sever the path it runs on. Same reasoning as kangaroo and kookaburra.
+          Ansible owns it instead of a script.</li>
+      </ul>
+      <p>
+        Ingress is an outbound rathole client to numbat, mirroring the bilby→kookaburra
+        pattern: <code>fractal.docs.pod.haus</code> lands on Pomerium, which forwards to
+        <code>127.0.0.1:8444</code> on numbat, through the tunnel to fractal's Caddy on
+        <code>:4443</code> (mTLS origin), and on to the docs container. SSH takes the same
+        route via <code>127.0.0.1:2204</code> and the <code>ssh://fractal</code> Pomerium
+        route; <code>ssh fractal.pod.haus</code> resolves through a chezmoi
+        <code>Match originalhost</code> rule, not a DNS record.
+      </p>
+      <p>
+        There is no TPM and no USB passthrough under WSL, so fractal cannot hold a
+        hardware-resident machine key the way voltaire (TPM) and bilby (YubiKey PIV) do.
+        Its machine key is a soft ed25519 key on the LUKS <code>/home</code>. A YubiKey was
+        considered and rejected: <code>usbipd attach</code> is manual and does not survive a
+        reboot, which forfeits the unattended-agent property the key exists for and deepens
+        exactly the Windows coupling the outbound-only design avoids.
+      </p>
+
       <h2 id="pinelake">pinelake (planned)</h2>
       <p>
         A second household's primary host, paralleling bilby's role for that environment.
@@ -280,23 +329,35 @@
 
       <h2 id="adding-host">Adding another host</h2>
       <p>
-        The kangaroo bring-up doubled as the runbook for "add a host to the existing Komodo
-        Core". The same path applies for pinelake:
+        <strong>Any host that can run Python: use Ansible.</strong> fractal is the worked
+        example — see <a href="/host-provisioning.md">Host provisioning</a> for the role
+        layout and the chezmoi boundary. In outline:
       </p>
       <ol>
-        <li>Bring up a Periphery agent on the new host
-          (template at <code>kangaroo/periphery/compose.yaml</code>).</li>
-        <li>Use <code>kangaroo_bootstrap</code> or <code>numbat_bootstrap</code> as the model
-          that matches the host's connectivity.</li>
-          New Peripheries use v2 keypair authentication and dial Core outbound. Host-native boot
-          integration keeps the Docker engine and bootstrap-managed Periphery alive.</li>
-        <li>Declare a Linked Repo for the host in <code>komodo/sync/repos.toml</code> (kangaroo
-          uses one — push-to-deploy via git clone) <strong>or</strong> use
-          <code>files_on_host</code> if the repo is going to live directly on the host
-          (bilby-style — save-and-deploy).</li>
+        <li>Add the host to <code>ansible/inventory/hosts.yml</code> and give it an
+          <code>inventory/host_vars/&lt;host&gt;.yml</code>. Put it in the role groups it
+          belongs to (<code>docker_hosts</code>, <code>komodo_periphery_hosts</code>,
+          <code>devboxes</code>).</li>
+        <li>Generate its X25519 Periphery keypair on bilby, drop the pubkey at
+          <code>komodo/keys/&lt;host&gt;-periphery.pub</code>, and append
+          <code>file:/config/keys/&lt;host&gt;-periphery.pub</code> to
+          <code>KOMODO_PERIPHERY_PUBLIC_KEYS</code> in <code>komodo/compose.env</code>.
+          Never commit the private half.</li>
+        <li>Declare the Server in <code>komodo/sync/servers.toml</code> with
+          <code>address = ""</code> (new Peripheries dial Core outbound) and a Linked Repo
+          in <code>komodo/sync/repos.toml</code>. Use <code>files_on_host</code> only if the
+          repo will live directly on the host, bilby-style.</li>
+        <li>Write <code>&lt;host&gt;/periphery/compose.yaml</code> and run the playbook.
+          The <code>komodo_periphery</code> role ships the keys, brings the container up, and
+          blocks until Core reports the Server <code>Ok</code>.</li>
         <li>Add the host's per-host overlays to <code>backup/</code>, <code>autoheal/</code>,
-          <code>logging/</code> following the existing kangaroo/bilby pattern.</li>
+          <code>logging/</code> following the existing pattern.</li>
       </ol>
+      <p>
+        kangaroo is the exception and stays script-provisioned: QTS ships no Python at all,
+        so it can never be an Ansible target. <code>kangaroo_bootstrap</code> remains its
+        runbook.
+      </p>
 
     </main>
     <aside id="toc"

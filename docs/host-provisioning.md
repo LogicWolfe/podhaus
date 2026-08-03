@@ -1,0 +1,141 @@
+# Host provisioning
+
+How a podhaus host gets from a bare OS to a working member of the fleet.
+
+Two tools own two disjoint halves of a machine, and the split is the
+whole design:
+
+| Layer | Tool | Owns | Runs as |
+|---|---|---|---|
+| Machine | **Ansible** (`ansible/`) | Everything outside `$HOME`: packages, systemd, Docker, sshd, Komodo Periphery | root, from a control node |
+| User | **chezmoi** (`~/repos/dotfiles`) | Everything inside `$HOME`: shell, dotfiles, editor, SSH client config, machine key | the user, on the machine |
+
+The boundary is **root state vs user state**, not infrastructure vs
+personal. It is drawn there because it is the only line that stays
+crisp: anything needing `sudo` is Ansible's, anything that doesn't is
+chezmoi's. The practical consequence is that **chezmoi never prompts for
+a password**. Its macOS branch was already sudo-free; the Linux branches
+move under Ansible as each host migrates.
+
+A host can take both. fractal does — it is a podhaus host *and* Nathan's
+development machine, so Ansible gives it Docker and Periphery while
+chezmoi gives it fish and dotfiles. Neither layer knows about the other,
+and `playbooks/fractal.yml` deliberately does **not** invoke chezmoi:
+that would put user state under root's control and dissolve the boundary
+the layer exists to draw.
+
+## What is Ansible-managed today
+
+Only **fractal**. Every other host is still owned by its bootstrap
+script, and those scripts remain the runbook until each host is
+migrated deliberately. See
+[the migration plan](plans/host-provisioning-migration.md) for what
+is left.
+
+## Layout
+
+```
+ansible/
+  ansible.cfg              control-node config
+  requirements.yml         collection pins (community.general, community.docker)
+  inventory/
+    hosts.yml              the whole fleet, grouped by state and by role
+    group_vars/all.yml     fleet-wide facts (timezone, dockernet)
+    host_vars/<host>.yml   per-host facts
+  playbooks/
+    site.yml               targets the `provisioned` group
+    fractal.yml            single-host entry point
+  roles/
+    base/                  timezone, baseline packages, dirs
+    wsl/                   /etc/wsl.conf, hostname
+    docker/                Docker CE, daemon.json, dockernet
+    devbox/                the root-requiring half of a developer machine
+    komodo_periphery/      keys, compose, and a wait-for-Ok gate
+    sshd_pomerium_ca/      trust Pomerium's SSH user CA
+```
+
+### Inventory groups
+
+Hosts are grouped twice: by **migration state** and by **role**.
+
+- `provisioned` — fully Ansible-owned. Currently fractal alone.
+  `site.yml` targets this group and nothing else.
+- `pending_migration` — bilby, numbat, voltaire, kookaburra. Present so
+  the inventory is honest about the fleet, each carrying a
+  `podhaus_bootstrap_script` var naming the script that still owns it.
+  **No playbook targets this group.** Migrating a host means moving it
+  between the two groups by hand, after its check-mode pass comes back
+  clean.
+- `excluded` — kangaroo. QTS ships no Python interpreter at all (no
+  `python3`, no `/opt/bin/python3`, only the MalwareRemover and
+  Container Station QPKGs), so it can never be an Ansible target.
+  `kangaroo_bootstrap` is permanent, not interim.
+- `docker_hosts`, `komodo_periphery_hosts`, `devboxes` — role groups.
+  `site.yml` gates each role on membership.
+
+## Running it
+
+Ansible is a control-node dependency only; nothing is installed on
+targets beyond a Python interpreter, which Fedora already has. It lives
+in the repo's `.venv`.
+
+```
+cd ansible
+ansible-playbook playbooks/fractal.yml --check --diff   # read first
+ansible-playbook playbooks/fractal.yml
+```
+
+Authentication is the op-unlock agent — `group_vars/all.yml` passes
+`IdentityAgent` through from `$SSH_AUTH_SOCK`, so the same unlock that
+lets you `ssh` a host lets Ansible reach it. No key material is
+configured anywhere in the layer.
+
+> **Ansible is not wired into push-to-deploy.** The GitHub webhook fires
+> `podhaus-push-deploy`, which touches Komodo stacks only. Host state
+> changes when a human runs a playbook, deliberately. Pushing a role
+> edit deploys nothing.
+
+Idempotency is the contract, and it is checked by machine rather than
+asserted: a second run of `playbooks/fractal.yml` reports `changed=0`
+across all 34 tasks. Treat a non-zero second run as a bug in the role.
+
+## Roles worth knowing about
+
+**`base`** opens with a `raw` task that installs `python3-libdnf5` if
+missing. This is the one deliberate `check_mode: false` in the layer:
+without those bindings `--check` fails outright rather than reporting a
+diff, so the task installs a read-only prerequisite *of the dry run
+itself*. Everything after it is a normal module.
+
+**`docker`** installs `python3-requests` alongside Docker because
+`community.docker.docker_network` needs it on the target. The
+alternative — a `docker network inspect || create` shell line — would
+have forfeited idempotency and check-mode diffs to save one package.
+`daemon.json` deliberately carries **no `dns:` key**; per-container DNS
+overrides replace Docker's embedded resolver and break service-name
+resolution, so DNS forwarding is a daemon-wide setting where a host
+needs it.
+
+**`komodo_periphery`** ships the host's X25519 private key (`no_log`,
+mode 0600) and Core's public key, renders `periphery.config.toml`,
+brings the container up, and then **polls Core's `ListServers` API until
+the Server reports `Ok`**. That last gate is the point: a Periphery
+container being healthy proves only that it started, not that Core
+trusts its key or can reach it. The playbook fails if the handshake
+doesn't complete.
+
+Periphery is deliberately *not* Komodo-managed on any outbound host —
+Core reaches the host only through the connection Periphery makes, so a
+Komodo-driven redeploy of it would sever the path it runs on. Ansible
+owns it instead of a bootstrap script.
+
+**`sshd_pomerium_ca`** writes a drop-in under `sshd_config.d/` rather
+than editing `sshd_config`, validates the file with `sshd -t -f %s`,
+re-checks the *combined* config afterwards, and **reloads rather than
+restarts**. A reload does not drop established connections, so the
+session running the playbook survives a bad edit long enough to fix it.
+
+## Adding a host
+
+See [Hosts → Adding another host](hosts.html#adding-host) for the
+end-to-end sequence including the Komodo-side resources.

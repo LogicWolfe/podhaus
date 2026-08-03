@@ -1,0 +1,28 @@
+# Fleet entry point.
+#
+# Targets the `provisioned` group only — hosts still owned by their bootstrap
+# scripts are in `pending_migration` and are not touched. Migrating one means
+# moving it between those groups deliberately, after its check-mode
+# equivalence pass comes back clean.
+---
+- name: Provision podhaus hosts
+  hosts: provisioned
+  gather_facts: true
+
+  roles:
+    - role: wsl
+      when: podhaus_is_wsl | default(false)
+      tags: [wsl]
+    - role: base
+      tags: [base]
+    - role: docker
+      when: inventory_hostname in groups['docker_hosts']
+      tags: [docker]
+    - role: devbox
+      when: inventory_hostname in groups['devboxes']
+      tags: [devbox]
+    - role: sshd_pomerium_ca
+      tags: [ssh]
+    - role: komodo_periphery
+      when: inventory_hostname in groups['komodo_periphery_hosts']
+      tags: [periphery]

@@ -47,13 +47,14 @@
       <h3 id="getting-started">Getting started</h3>
       <ul>
         <li><a href="/architecture.html">Architecture</a>: system overview, host topology, secrets flow.</li>
-        <li><a href="/hosts.html">Hosts</a>: bilby, kangaroo, Numbat, retained Kookaburra, and planned Pinelake.</li>
+        <li><a href="/hosts.html">Hosts</a>: bilby, kangaroo, Numbat, fractal, retained Kookaburra, and planned Pinelake.</li>
         <li><a href="/storage.html">Storage</a> — three-tier rule: local NVMe, Jump SSD, Pouch HDD.</li>
         <li><a href="/networking.html">Networking</a>: dockernet, Pomerium, rathole, Caddy, DNS, and rollback edge.</li>
       </ul>
 
       <h3 id="platform">Platform</h3>
       <ul>
+        <li><a href="/host-provisioning.md">Host provisioning</a> — Ansible owns the machine, chezmoi owns <code>$HOME</code>.</li>
         <li><a href="/komodo.html">Komodo</a> — Core/Periphery, ResourceSync, <code>files_on_host</code> vs Linked Repo.</li>
         <li><a href="/secrets.html">Secrets &amp; variables</a> — 1Password → komodo-op → Komodo Variables → <code>[[VAR]]</code>.</li>
         <li><a href="/stack-conventions.html">Stack conventions</a> — adding a service, multi-host pattern, customization primitives.</li>

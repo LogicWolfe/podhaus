@@ -33,6 +33,7 @@ Consult these pages before acting:
 | Gatus alerts, log pipeline, autoheal | [`docs/monitoring.html`](docs/monitoring.html) |
 | Cron / ofelia jobs | [`docs/scheduling.html`](docs/scheduling.html) |
 | DR rebuild runbooks | [`docs/disaster-recovery.html`](docs/disaster-recovery.html) |
+| Provisioning a host; the Ansible / chezmoi boundary | [`docs/host-provisioning.md`](docs/host-provisioning.md) |
 | Service-specific quirks | [`docs/runbooks/<service>.html`](docs/runbooks/) |
 | Current or recent migrations, design context | [`docs/plans/`](docs/plans/) |
 
@@ -45,7 +46,7 @@ aren't obvious from the compose files alone.
 
 ## What podhaus is
 
-Docker container infrastructure for **four** active hosts:
+Docker container infrastructure for **five** active hosts:
 - **bilby** (Apple M1 Mac mini, primary; Fedora Asahi Linux) — runs
   Komodo Core, MinIO, Caddy, every primary service.
 - **kangaroo** (QNAP NAS, QTS + Container Station) — secondary LAN
@@ -56,6 +57,13 @@ Docker container infrastructure for **four** active hosts:
   outbound Periphery, and mTLS log shipping. It has no route into the LAN.
 - **kookaburra** (DigitalOcean syd1, Fedora 43, x86_64) is the retained
   rollback relay. Do not remove it before Nathan verifies Numbat.
+- **fractal** (Fedora 44 under WSL2 on a Windows desktop, x86_64) is
+  Nathan's remote dev machine *and* an ordinary podhaus host. It has no
+  inbound path at all — `10.0.0.70` is the Windows host and forwards only
+  :22 — so it reaches the fleet exclusively by dialing out: Periphery to
+  `core-connect.pod.haus`, rathole to Numbat for `fractal.docs.pod.haus`
+  and `ssh://fractal`, Alloy to `logs-ingest.pod.haus`. **The only host
+  provisioned by Ansible** rather than a bootstrap script.
 
 Managed as Docker Compose stacks under a single Komodo Core; secrets
 flow from 1Password. Protected names resolve to Numbat Pomerium; public
@@ -176,6 +184,9 @@ and their Tailscale path remain live only for rollback. A planned host
 | `komodo-upgrade` | Pull latest images + restart Komodo |
 | `bilby/host-systemd/` | bilby host-level systemd units (not Komodo-managed): `wait-for-qnap-nfs.service` oneshot that gates `docker.service` on QNAP TCP/2049 reachability, plus `StartLimit*=0` drop-ins on `mnt-{pouch,jump}.automount` so the automount units can't go to permanently-failed state on a boot-time burst. **Also stages `bilby/firewalld/` and the NFS tripwire/sentinels.** Install / reinstall idempotently via `sudo ./bilby/host-systemd/install.sh`. See [`docs/postmortems/2026-05-30-power-outage-nfs-recovery.md`](docs/postmortems/2026-05-30-power-outage-nfs-recovery.md). |
 | `bilby/firewalld/` | **Source of truth for bilby's firewalld** — `zones/public.xml` (LAN `end0` zone) + `services/*.xml` (custom port groups). Staged onto the host by `bilby/host-systemd/install.sh` (installs services, then zone, `--check-config`, reload). **Never** run `firewall-cmd --add-*` (even `--permanent`) — it diverges from this dir and the next `install.sh` reverts it; edit the XML and re-run the installer. The `public` zone trusts the whole home LAN (`10.0.0.0/24 → accept`), so LAN-only services (e.g. HA's HomeKit bridge `tcp/21063`) need no explicit rule; only services needing non-LAN reach (cloudflared via dockernet `172.18.0.1`, tailnet) get an explicit `services/*.xml` (plex, music-assistant). See [`docs/hosts.html#bilby-firewall`](docs/hosts.html#bilby-firewall). |
+| `ansible/` | **Host provisioning — the machine half of a host.** Roles for base packages, WSL, Docker + dockernet, the developer toolchain, Komodo Periphery, and Pomerium SSH CA trust. Ansible owns root state; chezmoi owns `$HOME`; the boundary is "needs sudo" and it means chezmoi never prompts for a password. Applied to **fractal only** — every other host is in the `pending_migration` inventory group and still owned by its bootstrap script, and kangaroo is permanently `excluded` (QTS has no Python). **Not wired into push-to-deploy:** host state changes when a human runs a playbook, never on a push. Second run must report `changed=0`. See [`docs/host-provisioning.md`](docs/host-provisioning.md) + [`docs/plans/host-provisioning-migration.md`](docs/plans/host-provisioning-migration.md). |
+| `fractal/periphery/` | fractal's bootstrap-managed outbound Periphery, dialing `wss://core-connect.pod.haus`. Installed by the `komodo_periphery` Ansible role, not by a script. |
+| `relay/fractal/`, `caddy/fractal/`, `logging/fractal/` | fractal's outbound ingress + observability: rathole client → Numbat (`fractal_http` → `127.0.0.1:8444`, `fractal_ssh` → `127.0.0.1:2204`), Caddy mTLS origin on `:4443`, Alloy to `logs-ingest.pod.haus`. The `fractal-docs` stack (docs-server over `~/repos`) is defined in the **docs repo's** `stack.toml`, beside its compose. |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
 | `kookaburra_bootstrap` | Idempotent kookaburra bring-up: SSH hardening → dockernet bridge → tailscale (Komodo adopts it post-handoff) → Periphery. Defaults `DROPLET_IP` to the reserved IP (`170.64.241.136`) so it stays correct across `terraform apply -replace`. |
 | `numbat_bootstrap` | Idempotent Rocky reconciliation. It verifies Terraform's pinned host key, installs the two address roles and firewall, starts rathole before outbound Periphery, enrolls the userspace SSH recovery daemon, then closes first-boot port 2222. Numbat application stacks are Komodo-managed. |
@@ -586,6 +597,7 @@ The full set of pages on `docs.pod.haus`:
 - [Networking](docs/networking.html)
 
 **Platform**
+- [Host provisioning](docs/host-provisioning.md)
 - [Komodo](docs/komodo.html)
 - [Secrets & variables](docs/secrets.html)
 - [Stack conventions](docs/stack-conventions.html)

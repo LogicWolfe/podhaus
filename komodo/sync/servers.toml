@@ -63,3 +63,22 @@ address = ""
 enabled = true
 disk_warning = 85.0
 disk_critical = 95.0
+
+[[server]]
+name = "fractal"
+description = "Fedora 44 under WSL2 on a Windows desktop. Remote dev machine + docs host. v2 outbound: Periphery dials Core at core-connect.pod.haus."
+tags = ["fractal", "podhaus"]
+
+[server.config]
+# Outbound mode (v2 PKI noise handshake). fractal has no reachable inbound
+# address at all — its LAN address is the Windows host, which forwards only
+# :22 into the guest — so every path in and out is a connection fractal
+# makes. Port 8120 is not published.
+address = ""
+enabled = true
+# A developer machine running builds and test suites hits 100% CPU as normal
+# behaviour, the same argument as kangaroo. Real failures still surface via
+# ServerUnreachable and StackStateChange.
+send_cpu_alerts = false
+disk_warning = 85.0
+disk_critical = 95.0

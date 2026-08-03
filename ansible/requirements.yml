@@ -1,0 +1,14 @@
+# Galaxy collections these roles depend on.
+#   ansible-galaxy collection install -r requirements.yml
+#
+# ansible-core itself is a dev dependency of the repo venv (Pipfile), so a
+# fresh clone gets the control-node tooling the same way it gets the lint
+# scripts' pyyaml.
+---
+collections:
+  # community.general.timezone — sets the host clock in roles/base.
+  - name: community.general
+    version: ">=10.0.0"
+  # community.docker.docker_network — the dockernet bridge in roles/docker.
+  - name: community.docker
+    version: ">=4.0.0"

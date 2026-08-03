@@ -60,6 +60,7 @@ def _interp_re(varname: str) -> re.Pattern[str]:
 # Compose files outside the podhaus deploy surface (bootstrap-only,
 # not Komodo-managed by the podhaus sync).
 SKIP_PATH_FRAGMENTS = (
+    "fractal/periphery",
     "kangaroo/periphery",
     "kookaburra/periphery",
     "numbat/periphery",

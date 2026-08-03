@@ -1,0 +1,38 @@
+# fractal rathole CLIENT — dials OUT to Numbat's control port and publishes
+# two services: host SSH and the local mTLS origin.
+#
+# This is what makes fractal reachable at all. Its LAN address is the Windows
+# host, which forwards only :22 into the guest, and the guest's own address is
+# WSL NAT. Everything inbound therefore arrives through this outbound tunnel.
+services:
+  fractal-rathole-client:
+    container_name: fractal-rathole-client
+    build:
+      context: ..
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_FRACTAL_RATHOLE_CLIENT:-unset}
+    image: fractal-rathole:local
+    pull_policy: never
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      RATHOLE_CONFIG_TEMPLATE: /etc/rathole/client.toml.tmpl
+      RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}
+      RATHOLE_FRACTAL_SSH_TOKEN: ${RATHOLE_FRACTAL_SSH_TOKEN}
+      RATHOLE_FRACTAL_HTTP_TOKEN: ${RATHOLE_FRACTAL_HTTP_TOKEN}
+    volumes:
+      # Directory bind, never a single file — an atomic-rename save on the
+      # host would otherwise leave the container on the orphaned inode.
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-fractal/relay/fractal:/etc/rathole:ro
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+networks:
+  dockernet:
+    external: true

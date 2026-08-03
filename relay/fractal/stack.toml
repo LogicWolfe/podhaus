@@ -1,0 +1,18 @@
+[[stack]]
+name = "fractal-relay"
+description = "Outbound fractal SSH + mTLS HTTP origins for Numbat Pomerium"
+tags = ["fractal", "podhaus"]
+
+[stack.config]
+server = "fractal"
+linked_repo = "podhaus-fractal"
+run_directory = "relay/fractal"
+file_paths = ["compose.yaml"]
+run_build = true
+auto_pull = false
+
+environment = """
+RATHOLE_NOISE_REMOTE_PUBLIC_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PUBLIC_KEY]]
+RATHOLE_FRACTAL_SSH_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__FRACTAL_SSH]]
+RATHOLE_FRACTAL_HTTP_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__FRACTAL_HTTP]]
+"""

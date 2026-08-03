@@ -1,0 +1,7 @@
+---
+- name: Reload sshd
+  # Reload, never restart: reloads do not drop established connections, so
+  # the session running this playbook survives a bad edit long enough to fix it.
+  ansible.builtin.systemd_service:
+    name: sshd
+    state: reloaded

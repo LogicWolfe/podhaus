@@ -21,6 +21,8 @@ services:
       RATHOLE_BILBY_SSH_TOKEN: ${RATHOLE_BILBY_SSH_TOKEN}
       RATHOLE_VOLTAIRE_SSH_TOKEN: ${RATHOLE_VOLTAIRE_SSH_TOKEN}
       RATHOLE_KANGAROO_SSH_TOKEN: ${RATHOLE_KANGAROO_SSH_TOKEN}
+      RATHOLE_FRACTAL_SSH_TOKEN: ${RATHOLE_FRACTAL_SSH_TOKEN}
+      RATHOLE_FRACTAL_HTTP_TOKEN: ${RATHOLE_FRACTAL_HTTP_TOKEN}
     volumes:
       - ${NUMBAT_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-numbat}/relay/numbat:/etc/rathole:ro
     labels:

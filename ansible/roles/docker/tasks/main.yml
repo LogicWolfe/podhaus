@@ -1,0 +1,70 @@
+# Docker engine + the shared dockernet bridge.
+#
+# Replaces the hand-rolled equivalents in numbat_bootstrap, kookaburra_bootstrap,
+# kangaroo_bootstrap and komodo-start's ensure_network — four implementations of
+# the same two ideas.
+---
+- name: Add the Docker CE repository
+  ansible.builtin.get_url:
+    url: "https://download.docker.com/linux/fedora/docker-ce.repo"
+    dest: /etc/yum.repos.d/docker-ce.repo
+    mode: "0644"
+
+- name: Install Docker CE
+  ansible.builtin.dnf:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+      # community.docker talks to the daemon's HTTP API through requests.
+      # Named here rather than shelling out to `docker network inspect ||
+      # create`, so the network task keeps its idempotency and check-mode
+      # diff — the properties this layer exists to provide.
+      - python3-requests
+    state: present
+
+- name: Configure the Docker daemon
+  # `local` log driver with rotation, matching every other podhaus host.
+  # Deliberately no `dns:` key — fractal has no Tailscale node, so there is
+  # nothing to forward to. Never set per-container `dns:` in compose instead;
+  # that replaces 127.0.0.11 and breaks service-name resolution.
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+    content: |
+      {
+        "log-driver": "local",
+        "log-opts": {"max-size": "50m", "max-file": "3"}
+      }
+  notify: Restart docker
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker.service
+    enabled: true
+    state: started
+
+- name: Flush handlers so the daemon config is live before the network is created
+  ansible.builtin.meta: flush_handlers
+
+- name: Add the operator to the docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+
+- name: Create the dockernet bridge
+  # Inspect-or-create. Compose declares this `external: true` and refuses to
+  # adopt a network it did not make, so the host owns it. The subnet is not
+  # incidental: 172.18.0.1 is the documented gateway address host-network
+  # services are reached on.
+  community.docker.docker_network:
+    name: "{{ podhaus_dockernet_name }}"
+    driver: bridge
+    attachable: true
+    ipam_config:
+      - subnet: "{{ podhaus_dockernet_subnet }}"
+        gateway: "{{ podhaus_dockernet_gateway }}"
+    state: present

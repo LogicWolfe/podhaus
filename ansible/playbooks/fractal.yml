@@ -1,0 +1,41 @@
+# Provision fractal: podhaus host + Nathan's remote development machine.
+#
+# Run from any machine with the op-unlock agent active:
+#   cd ansible
+#   ansible-playbook playbooks/fractal.yml --check --diff   # read first
+#   ansible-playbook playbooks/fractal.yml
+#
+# chezmoi is applied separately, by Nathan, as himself. This playbook
+# deliberately does not invoke it — that would put user state under root's
+# control and break the boundary the whole layer exists to draw.
+---
+- name: Provision fractal
+  hosts: fractal
+  gather_facts: true
+
+  roles:
+    - role: wsl
+      tags: [wsl]
+    - role: base
+      tags: [base]
+    - role: docker
+      tags: [docker]
+    - role: devbox
+      tags: [devbox]
+    - role: sshd_pomerium_ca
+      tags: [ssh]
+    - role: komodo_periphery
+      tags: [periphery]
+
+  post_tasks:
+    - name: Summarize what the operator still has to do by hand
+      # These are genuinely outside Ansible's reach, not unfinished work.
+      ansible.builtin.debug:
+        msg: >-
+          Host provisioning complete. Remaining manual steps:
+          (1) `wsl --shutdown` from Windows to confirm the hostname persists;
+          (2) run `chezmoi init --apply` as {{ ansible_user }} to lay down user
+          state and mint the soft machine key;
+          (3) register the resulting ~/.ssh/id_fractal.pub on git.pod.haus
+          (LogicWolfe) and github.com (logicwolfe);
+          (4) `gh auth login` for the HTTPS credential helper.

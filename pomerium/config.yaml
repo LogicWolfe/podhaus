@@ -106,6 +106,13 @@ routes:
   - <<: *nathan_route
     from: https://dev.nathanbaxter.com
 
+  # fractal's docs server. Same mTLS origin contract as every other protected
+  # route, but terminating on fractal's Caddy through its own loopback rathole
+  # service rather than bilby's.
+  - <<: *nathan_route
+    from: https://fractal.docs.pod.haus
+    to: https://127.0.0.1:8444
+
   - from: ssh://numbat
     to: ssh://127.0.0.1:22
     policy: &nathan_ssh_policy
@@ -120,6 +127,9 @@ routes:
     policy: *nathan_ssh_policy
   - from: ssh://voltaire
     to: ssh://127.0.0.1:2202
+    policy: *nathan_ssh_policy
+  - from: ssh://fractal
+    to: ssh://127.0.0.1:2204
     policy: *nathan_ssh_policy
   - from: ssh://kangaroo
     to: ssh://127.0.0.1:2203

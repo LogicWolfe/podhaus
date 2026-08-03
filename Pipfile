@@ -7,3 +7,6 @@ name = "pypi"
 
 [dev-packages]
 pyyaml = "*"
+# Control-node only. Nothing is installed on Ansible targets beyond the
+# Python interpreter Fedora already ships. See docs/host-provisioning.md.
+ansible-core = "*"

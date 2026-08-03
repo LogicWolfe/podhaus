@@ -1,0 +1,83 @@
+# System packages for a host that is also a development machine.
+#
+# This is the root-requiring half of chezmoi's run_onchange_04-packages.sh:
+# vendor repositories and dnf installs. Under the Ansible/chezmoi boundary
+# those are machine state. What stays in chezmoi is everything user-scoped —
+# mise, cargo-binstall, starship, lefthook, zellij, the claude and codex
+# installers — none of which needs root.
+#
+# During the transition both run. chezmoi's checks are `command -v` guards,
+# so once these are present its sudo branches short-circuit to no-ops. That
+# is the point: fractal proves this role is a superset before anything is
+# removed from chezmoi.
+#
+# Deliberately absent: the TPM (tpm2-pkcs11) and YubiKey (opensc/pcsc-lite)
+# provider stacks. Both are hardware-gated in chezmoi and fractal has neither
+# — no TPM device, no USB passthrough into the WSL guest.
+---
+- name: Import the 1Password signing key
+  ansible.builtin.get_url:
+    url: https://downloads.1password.com/linux/keys/1password.asc
+    dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-1password
+    mode: "0644"
+
+- name: Add the 1Password repository
+  ansible.builtin.yum_repository:
+    name: 1password
+    description: 1Password Stable Channel
+    baseurl: https://downloads.1password.com/linux/rpm/stable/$basearch
+    gpgcheck: true
+    repo_gpgcheck: true
+    gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-1password
+
+- name: Add the HashiCorp repository
+  # Not Fedora's repos (Terraform was dropped after the 2023 BSL relicense)
+  # and not OpenTofu — podhaus Terraform state must stay compatible with
+  # stock HashiCorp Terraform, which any machine is expected to run.
+  ansible.builtin.get_url:
+    url: https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
+    dest: /etc/yum.repos.d/hashicorp.repo
+    mode: "0644"
+
+- name: Install development packages
+  ansible.builtin.dnf:
+    name:
+      # Shell and terminal
+      - fish
+      - tmux
+      - micro
+      # Search and file tools
+      - ripgrep
+      - fd-find
+      - bat
+      - eza
+      - zoxide
+      - uutils-coreutils
+      # Git and forge access
+      - git-lfs
+      - git-delta
+      - gh
+      # Toolchains and build deps
+      - golang
+      - nodejs
+      - gcc
+      - make
+      - pkgconf-pkg-config
+      - openssl-devel
+      # Cloud and infra CLIs
+      - 1password-cli
+      - terraform
+      - awscli2
+      # Misc
+      - direnv
+      - glow
+      - htop
+      - fortune-mod
+    state: present
+
+- name: Verify the 1Password CLI is usable
+  # `op` is the entry point for the opt-in op-unlock developer path, so a
+  # broken install should surface here rather than the first time Nathan
+  # needs a secret.
+  ansible.builtin.command: op --version
+  changed_when: false

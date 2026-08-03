@@ -1,0 +1,38 @@
+# Trust Pomerium's SSH user CA.
+#
+# Pomerium mints a short-lived certificate for the authenticated user and
+# presents it to this host, so `ssh://<host>` routes work without any
+# long-lived key being distributed. Without this the route authenticates
+# fine at the edge and then fails at the target.
+#
+# Replaces the CA half of pomerium-ssh-origin-bootstrap and
+# bilby/host-sshd/install.sh.
+---
+- name: Install the Pomerium SSH user CA
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../pomerium/keys/user-ca.pub"
+    dest: /etc/ssh/pomerium-user-ca.pub
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload sshd
+
+- name: Trust the CA in sshd
+  # A drop-in, not an edit to sshd_config: the main file stays vendor-owned
+  # and this is removable in one step.
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/00-podhaus-pomerium-ca.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by ansible/roles/sshd_pomerium_ca. Do not edit on the host.
+      TrustedUserCAKeys /etc/ssh/pomerium-user-ca.pub
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd
+
+- name: Verify sshd accepts the resulting configuration
+  # Belt-and-braces beyond the per-file validate: proves the *combined*
+  # config parses before a reload can lock anyone out.
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false

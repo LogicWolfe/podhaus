@@ -1,0 +1,23 @@
+[client]
+remote_addr = "relay.numbat.pod.haus:2333"
+
+[client.transport]
+type = "noise"
+
+[client.transport.noise]
+remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
+
+# Host sshd, reached across the dockernet bridge gateway. fractal is a WSL
+# guest behind NAT, so this outbound tunnel — not the Windows :22 forward —
+# is what makes `ssh fractal.pod.haus` work from anywhere.
+[client.services.fractal_ssh]
+type = "tcp"
+local_addr = "172.18.0.1:22"
+token = "${RATHOLE_FRACTAL_SSH_TOKEN}"
+
+# fractal's own mTLS origin. Pomerium's client certificate is verified by
+# fractal-caddy, so the tunnel carries TLS rather than terminating it.
+[client.services.fractal_http]
+type = "tcp"
+local_addr = "fractal-caddy:4443"
+token = "${RATHOLE_FRACTAL_HTTP_TOKEN}"

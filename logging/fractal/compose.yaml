@@ -1,0 +1,37 @@
+services:
+  alloy-secrets-init:
+    build:
+      context: ../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_ALLOY_SECRETS_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
+    restart: "no"
+    environment:
+      FRACTAL_CERT_B64: ${FRACTAL_CERT_B64}
+      FRACTAL_KEY_B64: ${FRACTAL_KEY_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf '%s' "$${FRACTAL_CERT_B64}" | base64 -d > /secrets/fractal-cert.pem
+        printf '%s' "$${FRACTAL_KEY_B64}" | base64 -d > /secrets/fractal-key.pem
+    volumes:
+      - alloy-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  alloy:
+    depends_on:
+      alloy-secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - ${FRACTAL_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-fractal}/logging/fractal/alloy-conf:/etc/alloy:ro
+      - alloy-secrets:/run/podhaus-secrets:ro
+    labels:
+      podhaus.depends-on-alloy-secrets-init: ${BUILD_HASH_ALLOY_SECRETS_INIT:-unset}
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+volumes:
+  alloy-secrets:

@@ -1,0 +1,18 @@
+---
+# Where the fleet's X25519 keypairs live on the control node. Private keys
+# never leave the host they belong to except for this one hop, and are never
+# written to the repo (komodo/keys/.gitignore blocks *.key).
+podhaus_keys_dir: /opt/komodo/keys
+
+podhaus_periphery_dir: /opt/komodo-periphery
+
+# Core's API, reached from the control node. Loopback because the control
+# node today is bilby; a remote control node would point this at
+# https://komodo.pod.haus instead.
+podhaus_komodo_core_url: http://localhost:9120
+podhaus_komodo_api_key: >-
+  {{ lookup('community.general.onepassword',
+            'Komodo API OnePassword Sync', field='username', vault='Homelab') }}
+podhaus_komodo_api_secret: >-
+  {{ lookup('community.general.onepassword',
+            'Komodo API OnePassword Sync', field='credential', vault='Homelab') }}

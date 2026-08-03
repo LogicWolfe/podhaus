@@ -1,0 +1,177 @@
+// fractal ships container telemetry to Bilby over HTTPS. Caddy requires
+// fractal's dedicated client certificate before forwarding OTLP.
+// No per-service parsers yet; fractal runs Periphery, rathole, Caddy, the docs server
+// and Alloy. The same generic severity-enrich +
+// service.name-from-container as bilby/kangaroo so logs are
+// queryable identically in HyperDX.
+
+// Internal-pipeline tracing — unified `alloy` service in HyperDX
+// (same name on every host; one row per host).
+tracing {
+  sampling_fraction = 0.1
+  write_to          = [otelcol.processor.batch.clickstack.input]
+}
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "30s"
+}
+
+discovery.relabel "container_logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.container_logs.output
+  forward_to    = [loki.process.containers.receiver]
+  relabel_rules = discovery.relabel.container_logs.rules
+  labels        = {"host" = "fractal"}
+}
+
+// ANSI strip — generic pre-shaping.
+loki.process "containers" {
+  forward_to = [otelcol.receiver.loki.clickstack.receiver]
+
+  stage.decolorize {}
+}
+
+// ---- ClickStack OTLP sink (mTLS to bilby) ----
+
+otelcol.receiver.loki "clickstack" {
+  output {
+    logs = [otelcol.processor.transform.enrich.input]
+  }
+}
+
+// Same enrich logic bilby/kangaroo use — service.name from container,
+// severity_text from the leading level token.
+otelcol.processor.transform "enrich" {
+  error_mode = "ignore"
+
+  log_statements {
+    context = "log"
+    statements = [
+      `set(resource.attributes["service.name"], attributes["container"]) where attributes["container"] != nil`,
+
+      `set(severity_text, "TRACE") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
+      `set(severity_number, 1) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
+
+      `set(severity_text, "DEBUG") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
+      `set(severity_number, 5) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
+
+      `set(severity_text, "INFO") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
+      `set(severity_number, 9) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
+
+      `set(severity_text, "WARN") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
+      `set(severity_number, 13) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
+
+      `set(severity_text, "ERROR") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
+      `set(severity_number, 17) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
+
+      `set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+      `set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+    ]
+  }
+
+  output {
+    logs = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
+// Alloy self metrics — Prometheus→OTLP bridge (mirrors kangaroo). The
+// 60 s self-scrape rides the same mTLS exporter as the logs, so
+// a fresh fractal Alloy metric in ClickHouse is the log-pipeline
+// liveness heartbeat (symmetric with kangaroo). Surfaces this host's
+// pipeline throughput, queue depth and exporter-retry counters too.
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy_self" {
+  targets         = prometheus.exporter.self.alloy.targets
+  scrape_interval = "60s"
+  forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
+}
+
+otelcol.receiver.prometheus "alloy_self" {
+  output {
+    metrics = [otelcol.processor.transform.svc_alloy.input]
+  }
+}
+
+// The Prometheus→OTLP bridge carries no service.name resource attribute.
+// Stamp a constant (mirrors kangaroo/bilby). `host` makes each host's
+// Alloy self-metrics distinguishable — without it the only per-host key
+// is the ephemeral container ID (service.instance.id). The unified
+// `alloy` service view is set by service.name, not host, so adding the
+// dimension costs nothing.
+otelcol.processor.transform "svc_alloy" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context = "metric"
+    statements = [
+      `set(resource.attributes["service.name"], "alloy")`,
+      `set(resource.attributes["host"], "fractal")`,
+    ]
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
+otelcol.processor.batch "clickstack" {
+  output {
+    logs    = [otelcol.exporter.otlphttp.clickstack.input]
+    metrics = [otelcol.exporter.otlphttp.clickstack.input]
+    traces  = [otelcol.exporter.otlphttp.clickstack.input]
+  }
+}
+
+// Public DNS terminates at Bilby Caddy. Per-host mTLS and the ClickStack
+// ingestion key are both required.
+otelcol.exporter.otlphttp "clickstack" {
+  client {
+    endpoint = "https://logs-ingest.pod.haus"
+    headers  = {
+      "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
+    }
+    tls {
+      cert_file = "/run/podhaus-secrets/fractal-cert.pem"
+      key_file  = "/run/podhaus-secrets/fractal-key.pem"
+    }
+    // No keepalive — same root cause as kangaroo: cross-network push to a
+    // fixed endpoint behind bilby's published :4318 + NAT. A collector
+    // recreate leaves the old keepalive TCP connection mapped to the dead
+    // container, so the next send hangs silently. fractal is a low-volume
+    // host, which is the worst case for this wedge: long idle gaps between
+    // batches are exactly when a stale keepalive goes unnoticed. A fresh
+    // connection per batch always hits the current collector. See
+    // kangaroo/config.alloy for the full rationale.
+    disable_keep_alives = true
+  }
+
+  // Bounded retry (was `0s`/forever — the infinite-retry footgun that
+  // turned a hung connection into a permanent silent wedge). See
+  // kangaroo/config.alloy.
+  retry_on_failure {
+    max_elapsed_time = "30m"
+  }
+  sending_queue {
+    queue_size = 100000
+  }
+}

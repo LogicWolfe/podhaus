@@ -36,3 +36,16 @@ token = "${RATHOLE_VOLTAIRE_SSH_TOKEN}"
 type = "tcp"
 bind_addr = "127.0.0.1:2203"
 token = "${RATHOLE_KANGAROO_SSH_TOKEN}"
+
+[server.services.fractal_ssh]
+type = "tcp"
+bind_addr = "127.0.0.1:2204"
+token = "${RATHOLE_FRACTAL_SSH_TOKEN}"
+
+# fractal terminates its own mTLS origin, so this carries TLS end-to-end
+# from Pomerium to fractal's Caddy — the same contract protected_http has
+# with bilby, just a second origin.
+[server.services.fractal_http]
+type = "tcp"
+bind_addr = "127.0.0.1:8444"
+token = "${RATHOLE_FRACTAL_HTTP_TOKEN}"

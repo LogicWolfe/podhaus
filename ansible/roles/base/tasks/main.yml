@@ -1,0 +1,66 @@
+# Baseline machine state every podhaus host shares.
+---
+- name: Assert a supported package manager
+  # Fail loudly rather than silently skipping package tasks on an unexpected
+  # distro — a host that quietly gets no packages is worse than one that stops.
+  ansible.builtin.assert:
+    that: ansible_facts['pkg_mgr'] in ['dnf', 'dnf5']
+    fail_msg: >-
+      {{ inventory_hostname }} reports pkg_mgr={{ ansible_facts['pkg_mgr'] }}.
+      Only dnf hosts are supported today; add the branch deliberately rather
+      than letting this role no-op.
+
+- name: Ensure the dnf5 Python bindings are present
+  # The dnf module needs python3-libdnf5 to inspect package state. A normal
+  # run auto-installs it, but check mode cannot — so without this, `--check`
+  # fails on a fresh host and the read-before-apply pass is unavailable
+  # exactly when it is most useful.
+  #
+  # `check_mode: false` is the one deliberate exception in this layer: it
+  # makes the task run even during a dry run. Justified because it installs
+  # a read-only prerequisite *of the dry run itself*, and it is idempotent —
+  # on any host that already has the bindings it changes nothing.
+  ansible.builtin.raw: |
+    set -e
+    rpm -q python3-libdnf5 >/dev/null 2>&1 || dnf -y install python3-libdnf5
+  args:
+    executable: /bin/bash
+  register: libdnf5_bootstrap
+  changed_when: "'Installing' in libdnf5_bootstrap.stdout"
+  check_mode: false
+
+- name: Set the system timezone
+  community.general.timezone:
+    name: "{{ podhaus_timezone }}"
+
+- name: Install baseline packages
+  ansible.builtin.dnf:
+    name:
+      - curl
+      - git
+      - jq
+      - rsync
+      - tar
+      - unzip
+    state: present
+
+- name: Ensure the operator's SSH directory exists
+  # chezmoi owns the *contents*; the directory and its mode are machine state,
+  # and several later steps (known_hosts pinning, the machine key) assume it.
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.ssh"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0700"
+
+- name: Ensure the repos directory exists
+  # Deliberately empty. The docs server serves whatever is here; populating it
+  # is ordinary dev workflow, not provisioning.
+  ansible.builtin.file:
+    path: "{{ podhaus_repos_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  when: podhaus_repos_dir is defined

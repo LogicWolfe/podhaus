@@ -1,0 +1,29 @@
+{
+	# Pomerium authenticates once with mTLS, then preserves each route's Host
+	# header for dispatch. This listener is reachable only through fractal's
+	# outbound rathole service — never directly.
+	servers :4443 {
+		strict_sni_host insecure_off
+	}
+}
+
+# fractal's protected origin. Deliberately a mirror of bilby's :4443 block,
+# not a variation on it: same cert material, same client_auth trust pool, so
+# Pomerium's route config is identical apart from the upstream port.
+:4443 {
+	tls /run/podhaus-secrets/pomerium-origin-server-cert.pem /run/podhaus-secrets/pomerium-origin-server-key.pem {
+		client_auth {
+			trust_pool file /run/podhaus-secrets/pomerium-origin-ca.pem
+		}
+	}
+
+	@docs host fractal.docs.pod.haus
+
+	route {
+		# `docs`, not `fractal-docs`: the container name comes from the
+		# docs-server repo's own compose, which this host shares with bilby.
+		# Container names are per-host, so there is no collision.
+		reverse_proxy @docs docs:8000
+		respond 404
+	}
+}

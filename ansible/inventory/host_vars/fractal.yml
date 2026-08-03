@@ -1,0 +1,41 @@
+# fractal — Fedora 44 under WSL2 on a Windows desktop (Ryzen 9 9950X3D).
+#
+# Both a podhaus host and Nathan's remote development machine, so it takes
+# Ansible (machine state) and chezmoi (user state) together.
+---
+# 10.0.0.70 is the WINDOWS host, which forwards only :22 into the guest.
+# The guest's own address (172.19.x/20) is WSL NAT and unreachable from the
+# LAN. Once the rathole SSH origin is live this becomes fractal.pod.haus
+# through Pomerium, which removes the dependency on that Windows forward.
+ansible_host: 10.0.0.70
+ansible_user: nathan
+
+# WSL2 specifics -------------------------------------------------------
+podhaus_is_wsl: true
+
+# The image ships as `fedora-wsl`. Renamed so the machine's identity is
+# consistent everywhere it surfaces: the chezmoi machine-key filename
+# (id_fractal.pub), Alloy's `host` log label, the Komodo server name, and
+# the rathole service names. Persisted in /etc/wsl.conf; a running instance
+# also gets it applied immediately.
+podhaus_hostname: fractal
+
+# There is no TPM and no USB passthrough in this guest (verified: /dev/tpm*
+# absent, /sys/class/tpm empty, no USB devices exposed). Hardware-resident
+# machine keys are therefore impossible here; the identity is a soft
+# ed25519 key on the LUKS-encrypted /home. chezmoi mints and holds it —
+# Ansible only installs the tooling, never key material.
+podhaus_machine_key_mode: soft
+
+# Development machine ---------------------------------------------------
+# Nathan clones what he works on; nothing here manufactures a repo manifest
+# that would immediately drift from reality. The docs server serves whatever
+# is present.
+podhaus_repos_dir: /home/nathan/repos
+
+# Komodo Periphery ------------------------------------------------------
+# Outbound v2: Periphery dials Core, so nothing listens publicly. Same
+# contract numbat and kookaburra use.
+podhaus_periphery_dir: /opt/komodo-periphery
+podhaus_periphery_connect_as: fractal
+podhaus_periphery_core_address: wss://core-connect.pod.haus

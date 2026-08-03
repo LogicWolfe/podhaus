@@ -1,0 +1,23 @@
+# Fleet-wide defaults.
+---
+# Every podhaus host runs on Perth time. Matches komodo/sync/variables.toml's
+# TZ; declared again here because Ansible sets the *host* clock, which is
+# upstream of the container TZ Komodo injects.
+podhaus_timezone: Australia/Perth
+
+# The cross-stack bridge every Komodo stack declares as `external: true`.
+# Compose refuses to adopt a pre-existing external network and Komodo has no
+# CreateNetwork execution, so the host must provision it — the same reason
+# komodo-start's ensure_network exists. 172.18.0.0/16 is load-bearing: the
+# service-name convention and the 172.18.0.1 gateway address both assume it.
+podhaus_dockernet_name: dockernet
+podhaus_dockernet_subnet: 172.18.0.0/16
+podhaus_dockernet_gateway: 172.18.0.1
+
+# Auth to every host rides the operator's agent. On bilby that is op-unlock;
+# pinned explicitly rather than left ambient so a future `Host *`
+# IdentityAgent line in ~/.ssh/config cannot silently redirect it (the same
+# trap the opssh procedure and kookaburra_bootstrap already guard against).
+ansible_ssh_common_args: >-
+  -o IdentityAgent={{ lookup('env', 'SSH_AUTH_SOCK') }}
+  -o ConnectTimeout=15
