@@ -38,13 +38,6 @@ resource "tls_private_key" "pomerium_ssh_user_ca" {
   algorithm = "ED25519"
 }
 
-check "pomerium_ssh_user_ca_public_key" {
-  assert {
-    condition     = trimspace(file("${path.module}/../pomerium/keys/user-ca.pub")) == trimspace(tls_private_key.pomerium_ssh_user_ca.public_key_openssh)
-    error_message = "pomerium/keys/user-ca.pub must match Terraform's Pomerium SSH user CA."
-  }
-}
-
 resource "tls_private_key" "pomerium_ssh_host" {
   algorithm = "ED25519"
 }
@@ -252,6 +245,19 @@ resource "onepassword_item" "pomerium_secrets" {
         ssh_host_key_b64 = {
           type  = "CONCEALED"
           value = base64encode(tls_private_key.pomerium_ssh_host.private_key_openssh)
+        }
+        # Public halves, published so consumers derive them from the one
+        # producer instead of carrying copies: the sshd_pomerium_ca Ansible
+        # role and numbat_bootstrap read the CA; chezmoi's 00-ssh-hostkeys
+        # pins ssh.pod.haus from the host key. The committed
+        # pomerium/keys/user-ca.pub copy this replaces is gone.
+        ssh_user_ca_pub = {
+          type  = "STRING"
+          value = trimspace(tls_private_key.pomerium_ssh_user_ca.public_key_openssh)
+        }
+        ssh_host_key_pub = {
+          type  = "STRING"
+          value = trimspace(tls_private_key.pomerium_ssh_host.public_key_openssh)
         }
         origin_client_cert_b64 = {
           type  = "CONCEALED"

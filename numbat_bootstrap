@@ -67,7 +67,8 @@ copy "$work_dir/podhaus.nft" /etc/nftables/podhaus.nft
 copy numbat/host/podhaus-nftables /usr/local/sbin/podhaus-nftables
 copy numbat/host/podhaus-nftables.service /etc/systemd/system/podhaus-nftables.service
 copy numbat/host/docker-daemon.json /etc/docker/daemon.json
-copy pomerium/keys/user-ca.pub /etc/ssh/pomerium-user-ca.pub
+op read 'op://Homelab/Pomerium Secrets/Secrets/ssh_user_ca_pub' > "$work_dir/pomerium-user-ca.pub"
+copy "$work_dir/pomerium-user-ca.pub" /etc/ssh/pomerium-user-ca.pub
 copy numbat/host/00-podhaus-final.conf /etc/ssh/sshd_config.d/00-podhaus-final.conf
 remote "chmod 600 /etc/ssh/numbat-bootstrap-sshd_config; chmod 755 /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip /usr/local/sbin/podhaus-nftables; semanage port -a -t ssh_port_t -p tcp 2222 2>/dev/null || semanage port -m -t ssh_port_t -p tcp 2222; systemctl daemon-reload; systemctl enable --now numbat-bootstrap-sshd.service qemu-guest-agent.service docker.service; systemctl restart docker.service; /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip eth0 up; nft insert rule inet podhaus input ip daddr $RELAY_IP tcp dport \{ 443, 2333 \} accept; docker network inspect dockernet >/dev/null 2>&1 || docker network create dockernet; sshd -t; systemctl restart sshd.service"
 

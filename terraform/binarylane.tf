@@ -38,6 +38,30 @@ resource "onepassword_item" "numbat_root" {
   username = "root"
   password = random_password.numbat_root.result
   tags     = ["terraform-managed", "break-glass"]
+
+  # Host facts the numbat Ansible plays consume, published beside the
+  # break-glass credential so they ride the one distribution channel
+  # instead of a `terraform output` shell-out on the control node.
+  # Deliberately not DNS-derived: a lookup would reconstruct these from
+  # records that are themselves consumers of the same locals.
+  section_map = {
+    Host = {
+      field_map = {
+        application_ipv4 = {
+          type  = "STRING"
+          value = local.numbat_application_ipv4
+        }
+        relay_ipv4 = {
+          type  = "STRING"
+          value = local.numbat_relay_ipv4
+        }
+        ssh_host_key_pub = {
+          type  = "STRING"
+          value = trimspace(tls_private_key.numbat_ssh_host.public_key_openssh)
+        }
+      }
+    }
+  }
 }
 
 # Numbat is the Perth gateway replacing Kookaburra after cutover.

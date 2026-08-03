@@ -1,88 +1,279 @@
-# Host provisioning migration
+# Host bootstrap — target state and migration
 
-Move the remaining fleet from bootstrap shell scripts onto the Ansible
-layer. The layer itself is built and documented in
-[Host provisioning](../host-provisioning.md) — this plan tracks only
-what has not moved yet.
+Retire the bootstrap shell scripts into the Ansible layer and make host
+bootstrap a three-layer, three-command story. The layer itself is built
+and documented in [Host provisioning](../host-provisioning.md); this
+plan carries the design for what has not moved yet, and the cleanup that
+has to travel with it.
 
-**Goal:** every host that can run Python is provisioned by
-`ansible/`, and its bootstrap script is deleted rather than left as a
-second source of truth.
+**Goal:** provisioning or rebuilding any host is exactly
 
-## Done so far
+1. `terraform apply` — cloud and edge resources, identities, PKI; every
+   cross-host value it generates is published to 1Password.
+2. `ansible-playbook` — all machine state, from first SSH to a Periphery
+   that Core reports `Ok`. The host's bootstrap script is deleted, not
+   kept as a second source of truth.
+3. `chezmoi init --apply` — user state, probing capabilities rather than
+   declaring them.
 
-- The `ansible/` layer exists: inventory, group/host vars, and the
-  `base`, `wsl`, `docker`, `devbox`, `komodo_periphery`, and
-  `sshd_pomerium_ca` roles.
-- **fractal** is fully provisioned by it, from bare WSL to a Periphery
-  that Core reports `Ok`. It never had a bootstrap script.
-- The chezmoi/Ansible boundary is fixed at root state vs user state and
-  verified safe to enforce: chezmoi's darwin branch is already sudo-free.
-- **kangaroo is permanently excluded** — verified to have no Python
-  interpreter of any kind under QTS.
+kangaroo is the sole permanent exception (QTS has no Python;
+`kangaroo_bootstrap` stays). Komodo continues to own everything
+containerized; a push still deploys stacks and never host state.
 
-## Remaining
+## Design rules
 
-Each host below is migrated the same way, and the order between them
-does not matter. What does matter is the order *within* a host:
+The simplicity target is **one producer, one channel, zero copies** for
+every piece of cross-host state:
 
-1. Write or extend roles until `--check --diff` against the live host
-   reports **no changes** — that is the equivalence proof that Ansible
-   would reproduce what the script built.
-2. Move the host from `pending_migration` to `provisioned` in
-   `inventory/hosts.yml`.
-3. Run for real, then run again and confirm `changed=0`.
-4. Delete the bootstrap script and its references in `AGENTS.md` and
-   `docs/`.
+- **One producer.** Values Terraform generates (PKI, addresses, tokens)
+  live in Terraform state and nowhere else. Values a host generates
+  (Forgejo's host key, Periphery private keys) stay on the host that
+  made them, with only the public half committed or documented.
+- **One channel.** 1Password is the only distribution path for anything
+  that crosses hosts. Terraform already publishes there in thirteen
+  places; Ansible already reads there (`community.general.onepassword`
+  in `komodo_periphery`); chezmoi reads there via `op-homelab`. No new
+  mechanism on either end — the work is moving stragglers onto the
+  existing wire.
+- **Zero copies.** The repo carries no file whose content is derivable
+  from Terraform state. `pomerium/keys/user-ca.pub` (and the `check`
+  block that nags about its drift) is the one such file today; it goes.
+  The narrow exception is a **root-of-trust literal a fresh machine
+  needs before it can reach any channel** — the Forgejo host key in the
+  dotfiles README, and now the Pomerium SSH host-key *fingerprint*
+  there for human TOFU verification on non-homelab machines.
+- **Terraform feeds, never drives.** Rejected: having `terraform apply`
+  run playbooks. Provisioners are invisible to `plan` (breaking the
+  from-anywhere contract), a failed playbook would taint and replace
+  the resource it ran on, most of the fleet is not TF-created, and
+  AGENTS.md already fixes the cadence: host state changes when a human
+  runs a playbook. Terraform's job ends at publishing values; cloud-init
+  templating TF's own values into a first boot is fine and stays.
 
-### numbat (`numbat_bootstrap`)
+## What does not change
 
-The hardest, so worth doing early — it is the one that will shape the
-roles. Its bootstrap has genuine ordering constraints: the relay must
-be up before Periphery, the final nftables ruleset lands after that,
-and port 2222 closes last. That sequence is a property of the *host
-being remote and self-firewalling*, not of the script, so it has to
-survive the move. Needs new roles for nftables and the recovery-path
-Tailscale daemon.
+- The push-to-deploy procedure, content hashes, Komodo's ownership of
+  stacks, `komodo-sync`.
+- `terraform/numbat/cloud-init.yaml.tftpl` — TF templating its own
+  outputs at create time is the pattern working correctly.
+- `kangaroo_bootstrap` (permanent) and `tailscale-recovery-bootstrap`
+  (must run on kangaroo, so it stays ONE script; Ansible invokes it on
+  systemd hosts rather than growing a parallel role).
+- The chezmoi/Ansible boundary: root state vs user state.
 
-### bilby (`bilby/host-systemd/install.sh`, `bilby/host-sshd/install.sh`)
+## State-ownership ledger
 
-bilby is the control node, so it provisions itself over the local
-connection. Its installer already stages firewalld from
-`bilby/firewalld/` declaratively — that model is close to Ansible's and
-should map onto a role cleanly. The `wait-for-qnap-nfs.service` oneshot,
-the automount `StartLimit*` drop-ins, and the `chattr +i` tripwires and
-share sentinels all come across as a single `nfs_binds` role; they are
-load-bearing (see the 2026-05-30 postmortem) and must keep working
-identically.
+| Value | Producer | Channel | Consumers after migration |
+|---|---|---|---|
+| Pomerium SSH user CA (public) | TF `tls_private_key.pomerium_ssh_user_ca` | 1P `Pomerium Secrets` (new field) | `sshd_pomerium_ca` role; cloud-init (TF-direct); kangaroo_bootstrap (op read on the bilby side) |
+| Pomerium SSH host key (public) | TF `tls_private_key.pomerium_ssh_host` | 1P `Pomerium Secrets` (new field) | chezmoi `00-ssh-hostkeys` upsert; README fingerprint for TOFU |
+| numbat application + relay IPv4 | TF (BinaryLane) | 1P (new fields beside the other numbat handoffs) | numbat host_vars → nft/dispatcher templates |
+| numbat host SSH key | TF `tls_private_key.numbat_ssh_host` | 1P (public half) | numbat bootstrap play pins first contact |
+| Rathole tokens, noise keys | TF `random_password` | 1P `Numbat Rathole` (existing) | relay `.env` renders via lookup |
+| Periphery X25519 private keys | generated on bilby | `/opt/komodo/keys` on the control node only | `komodo_periphery` role (already) |
+| Forgejo SSH host key | Forgejo container | committed literal in dotfiles (root of trust) | unchanged |
 
-The `sshd_pomerium_ca` role already replaces the CA half of
-`bilby/host-sshd/install.sh`.
+## Slices
 
-### voltaire
+Ordered by dependency. Slice 1 unblocks everything; 2–4 are then
+independent of each other.
 
-Specs and current state unconfirmed — `voltaire.pod.haus` failed host-key
-verification through Pomerium and was not chased. **Establish access
-first**; the migration can't be scoped until then. It has a TPM-resident
-machine key, so its chezmoi half differs from fractal's.
+### 1. Move key distribution onto the channel
+
+- Terraform: add plaintext public-half fields to the existing
+  `Pomerium Secrets` item (`ssh_user_ca_pub`, `ssh_host_key_pub`) and
+  publish numbat's two addresses beside the existing numbat handoffs.
+  No new items, no new storage location — the item already holds both
+  private halves.
+- `sshd_pomerium_ca`: replace the `copy: src=pomerium/keys/user-ca.pub`
+  with the 1P lookup the layer already uses.
+- chezmoi `00-ssh-hostkeys`: derive the `ssh.pod.haus` host key via
+  `op-homelab`, gated on the `op-homelab-ready` probe, and **upsert**
+  (`ssh-keygen -R` first) so a rotation replaces rather than accumulates.
+  Non-homelab machines (voltaire) get a documented fingerprint in the
+  README and a human TOFU check, same stance as the Forgejo key.
+  Rotation consequence: homelab machines self-heal on next apply;
+  non-homelab machines fail loudly and are fixed by hand.
+- Delete `pomerium/keys/user-ca.pub` and the `check` block once
+  `numbat_bootstrap` (its last file consumer besides the role) is
+  migrated in slice 3 — or switch that one `copy` line to an `op read`
+  immediately and delete the file in this slice. Prefer the latter:
+  the file's absence is what proves the channel is complete.
+- ~~fractal `homelab = true`~~ mechanism shipped in dotfiles
+  (`op-homelab-ready` probe); flipping the flag needs Nathan at fractal.
+
+### 2. bilby into `provisioned`
+
+The gate for everything bilby-hosted, and the first host where
+check-mode equivalence is proven against a live, loaded machine.
+
+**Fix the docker role first — it is wrong for bilby today:**
+
+- bilby runs `moby-engine`, not docker-ce. Add
+  `podhaus_docker_engine_managed: false` (bilby host_var) gating the
+  repo + package tasks. Engine choice is pre-existing state, not part
+  of this migration.
+- `daemon.json` becomes a template, and **bilby adopts `live-restore`**
+  (decided): daemon restarts stop taking every container down with
+  them. The flip itself requires one last unprotected daemon restart —
+  scheduled in the 04:00 window, done deliberately by a human, never
+  as a handler side effect. Until that restart has happened, the role
+  must not touch bilby's `daemon.json` outside the window: a
+  semantically-equal-but-byte-different file still fires the restart
+  handler, and without `live-restore` active that bounces the fleet.
+- Add `podhaus_extra_networks` so bilby declares `fenwick-net` and
+  `fenwick-webagent-net` (labels included, subnets omitted so the
+  auto-assigned ones stand). This removes dockernet's dual ownership:
+  the role owns networks on provisioned hosts, and `komodo-start`'s
+  `ensure_network` block is deleted when bilby migrates.
+
+**New roles, from the two installers:**
+
+- `nfs_binds` — `wait-for-qnap-nfs.service`, the docker drop-in, the
+  automount `StartLimit` drop-ins, share sentinels + Forgejo directory
+  ownership (`file:`, `state: touch` with `modification_time: preserve`
+  so re-runs stay `changed=0`), and the `chattr +i` tripwire. The
+  tripwire's bind-mount-of-`/` trick has no Ansible primitive and stays
+  a `script:` task with an honest `changed_when`. Unit files move into
+  the role; `bilby/host-systemd/` is deleted.
+- `firewalld` — stages zone + service XML from role files (moving
+  `bilby/firewalld/` in), validates with `--check-config`, reloads via
+  handler. Same declarative model the installer already had.
+- `sshd_pomerium_ca` grows one migration task: remove the marker block
+  `bilby/host-sshd/install.sh` appended to `sshd_config` (the role's
+  drop-in replaces it). Then `bilby/host-sshd/` is deleted — the role's
+  header already declares it replaced.
+
+**komodo-start shrinks to Komodo-only.** The `ensure_network` calls and
+the two `sudo mkdir`s (`/etc/komodo/ssl`, `/opt/komodo/keys`) are host
+state and move to bilby's play. Result: `komodo-start` needs no sudo and
+touches nothing but Komodo itself.
+
+bilby connects as `ansible_connection: local`. Verification: `--check
+--diff` to zero before joining `provisioned`; real run; second run
+`changed=0`; then the postmortem-derived spot checks (`systemctl cat
+wait-for-qnap-nfs`, `firewall-cmd --list-services`, sentinel files,
+`sshd -T | grep trustedusercakeys`, dockernet/fenwick subnets unchanged).
+
+### 3. numbat, as two plays
+
+`numbat_bootstrap` is a hand-rolled Ansible run; its real content is
+sequencing. That sequencing is a property of a remote, self-firewalling
+host and survives the move as **play order**, not as shell.
+
+**Bootstrap play** (`playbooks/numbat-bootstrap.yml`, fresh VM only):
+
+- Connects to the application IP on **2222** (the only port cloud-init's
+  nft ruleset opens) as `nathan` (cloud-init grants NOPASSWD sudo — no
+  root transport needed; the break-glass root password still gets set
+  from 1P). First contact is pinned: a pre-task writes a throwaway
+  `known_hosts` from the 1P-published host key — same channel as
+  everything, no `terraform output` shelling.
+- Then, in order: package/config residue cloud-init doesn't cover
+  (cockpit removal, selinux port, dispatcher script + final `podhaus.nft`
+  from **jinja templates** replacing the `sed`-substituted
+  `numbat/host/*` files), docker role, **relay before Periphery**
+  (clone the linked repo, render `relay/.env` from 1P lookups,
+  `docker_compose_v2` up, wait for the rathole server), the existing
+  `komodo_periphery` role unchanged (its wait-for-`Ok` gate is the
+  health signal), `tailscale-recovery-bootstrap` invoked via `command`
+  with the auth key on stdin, and **close 2222 last** — replicating the
+  `systemd-run --on-active` trick so the play can schedule the death of
+  its own transport.
+- Honest limitation, same as the script's: the bootstrap play is only
+  truly exercised by the next rebuild. The steady-state play is what
+  check-mode equivalence can prove against the live host.
+
+**Steady state:** numbat joins `provisioned` and `site.yml`, reached via
+`ssh.pod.haus` like fractal (its sshd is loopback-only behind Pomerium).
+Roles: base, docker (engine managed, `live-restore: true`),
+sshd_pomerium_ca, komodo_periphery, plus the nftables/dispatcher
+config as a small `numbat_edge` role shared by both plays.
+
+Delete `numbat_bootstrap` and `numbat/host/` (files become role
+files/templates); update `docs/disaster-recovery.html` to name the two
+plays as the rebuild path.
+
+### 4. voltaire — a full homelab member
+
+Decided: voltaire is an owned piece of the homelab, not a minimal SSH
+target — the earlier "it's a work machine" carve-out is retired. Target
+is the **fractal profile**: Ansible for machine state (base, devbox,
+docker, sshd_pomerium_ca, komodo_periphery), Komodo for containers
+(`relay/voltaire` origin, `logging/voltaire`, `autoheal/voltaire`), and
+chezmoi with `homelab = true` — which the `op-homelab-ready` probe now
+makes safe to answer truthfully on a machine where op is not signed in
+yet.
+
+Making it a full docker + Periphery host **deletes a planned role**:
+its SSH origin becomes a Komodo-managed rathole *container* at
+`172.18.0.1:22` (the bilby/fractal/kangaroo pattern), so no systemd
+`rathole_ssh_origin` role is needed — by anyone, ever. Every host's
+origin ends up managed the same one way.
+
+- **Audit first** (via the tunnel, while it exists): specs, sshd state,
+  the TPM machine key, and docker-ce coexistence with the existing
+  podman install (expected fine on Fedora; verify before committing).
+- Provision: keypair on bilby, `komodo/keys/voltaire-periphery.pub`,
+  servers/repos TOML entries, the three stacks, the playbook run.
+- Verify `ssh voltaire.pod.haus` through Pomerium end to end, then
+  **tear down the tunnel** (decided):
+  `cloudflare_zero_trust_tunnel_cloudflared.voltaire`, the CNAME, and
+  the host-side cloudflared service + `/etc/cloudflared`.
+- Then `pomerium-ssh-origin-bootstrap` has one consumer left: kangaroo's
+  ~20-line QTS `--ca-only` branch. Fold that into `kangaroo_bootstrap`
+  (CA text supplied by `op read` on the bilby side) and delete the
+  332-line generic script.
+
+### 5. pinelake lands on Ansible
+
+Forward guidance, superseding the pinelake plan's open item
+("separate script vs parameterised `kangaroo_bootstrap`"): **neither —
+a playbook.** pinelake is infrastructure and macOS has a Python;
+`community.general.homebrew`, launchd via `template:` + `command:`,
+Colima sizing per the pinelake host-bootstrap stream, and the same
+`komodo_periphery` role with a host_var'd docker socket. The pinelake
+plan's host-bootstrap page should be updated to point here when that
+work starts.
+
+## Verification
+
+- Per host: check-mode-to-zero before joining `provisioned`; second
+  real run `changed=0`; a config-level signal per subsystem (Komodo
+  `state=Ok`, rathole control channels, `sshd -T`, Gatus staying green)
+  — never "container healthy".
+- Slice 1 end state is provable by absence: `git grep user-ca.pub`
+  returns only cloud-init and docs.
+- The two postmortem-hardened bilby subsystems (`nfs_binds`,
+  firewalld) get their spot checks run after the first real apply, not
+  assumed from `changed=0`.
+
+## Decisions (settled 2026-08-03)
+
+1. **bilby adopts `live-restore`**, flipped in a scheduled 04:00-window
+   restart, not by handler.
+2. **voltaire tunnel is torn down** once Pomerium SSH is verified, and
+   voltaire becomes a full homelab member (fractal profile) rather than
+   a minimal SSH target.
+3. **numbat addresses ride 1P**, not DNS derivation — a DNS lookup
+   would derive the value from one of its own consumers (reverse
+   dependency, proxied-flip footgun, cache lag during the exact rebuild
+   window the play exists for).
 
 ## Deliberately not in scope
 
 - **kangaroo.** No Python, ever. Not a deferral.
-- **The MacBook.** chezmoi only. The discriminator is personal device vs
-  infrastructure, not OS — pinelake is a Mac and *is* infrastructure, so
-  it will take Ansible when it lands.
-- **Wiring Ansible into push-to-deploy.** Host state should change when
-  a human runs a playbook. A push must not reconfigure a machine.
+- **The MacBook.** chezmoi only — personal device, not infrastructure.
+- **Wiring Ansible into push-to-deploy.** Host state changes when a
+  human runs a playbook. A push must not reconfigure a machine.
+- **Engine swaps** (bilby moby→docker-ce) and **FDE** — the latter is
+  tracked in [secret-architecture.md](secret-architecture.md).
 
 ## Open questions
 
-- **Should uncommitted work in fractal's `~/repos` be backed up?** Nothing
-  else on the host needs it — see the fractal section in
-  [Hosts](../hosts.html#fractal) — but a dev machine accumulates
-  work-in-progress that exists nowhere else, which is exactly the
-  category backups are for. Needs a decision, not a default.
-- Should `pending_migration` hosts eventually get a read-only
-  `--check`-in-CI pass, so drift between a script and its future role is
-  visible before the migration rather than during it? Cheap, but only
-  worth it if migrations are going to be spread out.
+- Should uncommitted work in fractal's `~/repos` be backed up? Nothing
+  else on the host needs it, but a dev machine accumulates
+  work-in-progress that exists nowhere else. Needs a decision, not a
+  default.
+- Should `pending_migration` hosts get a read-only `--check` drift pass
+  while they wait? Only worth it if the remaining migrations spread out.

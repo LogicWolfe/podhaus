@@ -5,16 +5,22 @@
 # long-lived key being distributed. Without this the route authenticates
 # fine at the edge and then fails at the target.
 #
-# Replaces the CA half of pomerium-ssh-origin-bootstrap and
-# bilby/host-sshd/install.sh.
+# Replaced bilby/host-sshd/install.sh (deleted) and the CA half of
+# pomerium-ssh-origin-bootstrap.
 ---
 - name: Install the Pomerium SSH user CA
+  # Read from 1Password, where Terraform (the CA's producer) publishes the
+  # public half — the repo carries no copy to drift. The lookup runs on the
+  # control node with its ambient op auth; the target needs nothing.
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../pomerium/keys/user-ca.pub"
+    content: |
+      {{ lookup('community.general.onepassword', 'Pomerium Secrets',
+                field='ssh_user_ca_pub', section='Secrets', vault='Homelab') }}
     dest: /etc/ssh/pomerium-user-ca.pub
     owner: root
     group: root
     mode: "0644"
+    validate: ssh-keygen -l -f %s
   notify: Reload sshd
 
 - name: Trust the CA in sshd
