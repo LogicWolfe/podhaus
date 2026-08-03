@@ -120,11 +120,18 @@ sudo-free.
 
 Remaining — each a deliberate human act, in order:
 
-- [ ] Live equivalence pass:
-  `ansible-playbook playbooks/bilby.yml --check --diff` to zero.
-  Expected wrinkle to verify here: whether `file:`-asserted ownership
-  on the QNAP shares (`/mnt/jump/forgejo` trees) reports stable under
-  `all_squash`, or shows a perpetual diff the role must adapt to.
+- [x] Live equivalence pass (2026-08-03): `--check --diff` came back
+  `ok=23 changed=5 failed=0`, every change an intended migration delta —
+  the new `sshd_config.d` drop-in, removal of the legacy appended CA
+  block (+ its reload handler), and two comment-only firewalld XML
+  updates. Everything dangerous compared clean: `daemon.json`
+  byte-identical, dockernet + fenwick nets untouched, sentinels/units
+  `ok`. The `all_squash` wrinkle resolved itself: `file:`-asserted
+  ownership on the `/mnt/jump/forgejo` trees compares stable (`ok`).
+  Two fixes came out of the pass and are in the role:
+  `ansible_python_interpreter: /usr/bin/python3` for the local
+  connection, and `/var/lib/forgejo/config` at 0700 (Forgejo's runtime
+  tightens it; asserting 0750 would flip-flop).
 - [ ] Real run; second run `changed=0`; then the postmortem-derived
   spot checks (`systemctl cat wait-for-qnap-nfs`, `firewall-cmd
   --list-services`, sentinel files, `sshd -T | grep
@@ -156,9 +163,10 @@ Remaining:
   the distro-derived `linux/rhel` repo URL, and takes a one-time
   byte-normalising `daemon.json` restart (safe: live-restore is already
   active there). Expected first-run deltas beyond that: the
-  `sshd_pomerium_ca` drop-in (new file, same trust) and possibly
-  dockernet options if the script-era `docker network create` picked a
-  different subnet — verify before letting the role touch it.
+  `sshd_pomerium_ca` drop-in (new file, same trust). The dockernet
+  question is settled — inspected live via Komodo (2026-08-03):
+  172.18.0.0/16, gateway 172.18.0.1, bridge, no labels — exactly what
+  the role declares, so no recreate risk.
 - [ ] Then move numbat from `pending_migration` to `provisioned`
   (`site.yml` covers it via the role groups it already joined).
 - [ ] The bootstrap play itself is only truly exercised by the next
