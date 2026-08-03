@@ -76,8 +76,13 @@ cd ~/repos/podhaus
 echo &lt;token&gt; &gt; OP_SERVICE_ACCOUNT_TOKEN
 chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
         </li>
-        <li>Create the dockernet external bridge if it doesn't already exist:
-          <pre><code>docker network create --driver bridge --subnet 172.18.0.0/16 dockernet</code></pre>
+        <li>Lay down host state with the bilby playbook (Docker daemon config,
+          dockernet + fenwick networks, NFS-bind hardening, firewall, Komodo
+          host directories) — bootstrap the repo venv per <code>README.md</code>
+          first:
+          <pre><code>cd ansible
+ansible-playbook playbooks/bilby.yml --check --diff   # read first
+ansible-playbook playbooks/bilby.yml</code></pre>
         </li>
         <li>Run <code>./komodo-start</code>. This:
           <ul>

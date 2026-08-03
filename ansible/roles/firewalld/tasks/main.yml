@@ -1,0 +1,52 @@
+# Declarative firewalld config. The XML under files/ is the source of
+# truth: services/*.xml (custom port groups) + zones/public.xml (the
+# LAN-facing zone). Absorbed bilby/firewalld/ and the staging half of
+# bilby/host-systemd/install.sh (both deleted).
+#
+# Never edit the firewall imperatively (`firewall-cmd --add-*`, even
+# --permanent) — that diverges from these files and the next play run
+# reverts it. Edit the XML, re-run the play.
+---
+- name: Assert firewalld is present and running
+  # Fail fast rather than skip: this role is only applied to hosts that run
+  # firewalld, so its absence is a wrong-host error, not a condition to
+  # tolerate. `--state` also fails if the daemon is down, which the reload
+  # handler would need anyway.
+  ansible.builtin.command: firewall-cmd --state
+  changed_when: false
+
+- name: Ensure the custom-services directory exists
+  ansible.builtin.file:
+    path: /etc/firewalld/services
+    state: directory
+    mode: "0755"
+
+- name: Install the custom service definitions
+  # Services before the zone, so the zone never references an undefined
+  # service.
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/firewalld/services/{{ item | basename }}"
+    mode: "0644"
+  loop: "{{ query('ansible.builtin.fileglob', 'services/*.xml') }}"
+  loop_control:
+    label: "{{ item | basename }}"
+  notify: Reload firewalld
+
+- name: Install the public zone
+  ansible.builtin.copy:
+    src: zones/public.xml
+    dest: /etc/firewalld/zones/public.xml
+    mode: "0644"
+  notify: Reload firewalld
+
+- name: Validate the staged configuration
+  # Every run, not only on change — a bad hand edit on the host is caught
+  # here too. A failure aborts the play before the reload handler can fire.
+  # (Reloads don't drop established connections, so ssh survives
+  # regardless.)
+  ansible.builtin.command: firewall-cmd --check-config
+  changed_when: false
+
+- name: Flush handlers so a validated change is live before the play moves on
+  ansible.builtin.meta: flush_handlers

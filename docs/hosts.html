@@ -109,23 +109,24 @@
 
       <h3 id="bilby-firewall">Firewall (firewalld)</h3>
       <p>
-        bilby runs <strong>firewalld</strong>. The source of truth is
-        <code>bilby/firewalld/</code> in the repo —
-        <code>zones/public.xml</code> (the LAN-facing <code>end0</code> zone) plus
-        <code>services/*.xml</code> (custom port groups). It is staged onto the host
-        by <code>bilby/host-systemd/install.sh</code>, which installs the service XML
-        first, then the zone, runs <code>firewall-cmd --check-config</code>, and only
-        then reloads. To change the firewall: edit the XML under
-        <code>bilby/firewalld/</code> and run
-        <code>sudo ./bilby/host-systemd/install.sh</code>.
+        bilby runs <strong>firewalld</strong>. The source of truth is the
+        <code>firewalld</code> Ansible role —
+        <code>ansible/roles/firewalld/files/zones/public.xml</code> (the LAN-facing
+        <code>end0</code> zone) plus <code>files/services/*.xml</code> (custom port
+        groups). The role installs the service XML first, then the zone, runs
+        <code>firewall-cmd --check-config</code>, and only then reloads. To change
+        the firewall: edit the XML under
+        <code>ansible/roles/firewalld/files/</code> and run
+        <code>ansible-playbook playbooks/bilby.yml --tags firewall</code> from
+        <code>ansible/</code>.
       </p>
       <aside class="callout warn">
         <span class="callout-title">Never edit the firewall imperatively</span>
         Do <em>not</em> use <code>firewall-cmd --add-port</code>/<code>--add-service</code>
         (even <code>--permanent</code>). That writes straight to
-        <code>/etc/firewalld/</code> and diverges from <code>bilby/firewalld/</code>;
-        the next <code>install.sh</code> silently overwrites and reverts it. Change the
-        XML, re-run <code>install.sh</code>.
+        <code>/etc/firewalld/</code> and diverges from the role's files;
+        the next playbook run silently overwrites and reverts it. Change the
+        XML, re-run the play.
       </aside>
       <p>
         The <code>public</code> zone allows <code>ssh</code>, <code>mdns</code>,

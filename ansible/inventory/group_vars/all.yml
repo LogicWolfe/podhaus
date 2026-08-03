@@ -7,8 +7,8 @@ podhaus_timezone: Australia/Perth
 
 # The cross-stack bridge every Komodo stack declares as `external: true`.
 # Compose refuses to adopt a pre-existing external network and Komodo has no
-# CreateNetwork execution, so the host must provision it — the same reason
-# komodo-start's ensure_network exists. 172.18.0.0/16 is load-bearing: the
+# CreateNetwork execution, so the host must provision it — the docker role
+# does, on every docker host. 172.18.0.0/16 is load-bearing: the
 # service-name convention and the 172.18.0.1 gateway address both assume it.
 podhaus_dockernet_name: dockernet
 podhaus_dockernet_subnet: 172.18.0.0/16

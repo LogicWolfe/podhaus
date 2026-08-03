@@ -506,7 +506,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
         in that path first: <code>sudo touch /mnt/pouch/&lt;subpath&gt;/.podhaus-share-mounted</code>.
         The marker is written to the QNAP share, so it persists across reboots and is visible
         to every container that binds that path. The full set is also codified in
-        <code>bilby/host-systemd/install.sh</code> (re-touched on each run — e.g. to restore
+        <code>ansible/roles/nfs_binds/</code> (re-touched on each play run — e.g. to restore
         markers after a share rebuild wipes them); add new sub-paths to that list too.
       </p>
       <aside class="callout note">
@@ -514,7 +514,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
         The healthcheck is the last line of defence — the first is the host-level tripwire.
         Bare <code>/mnt/pouch</code> and <code>/mnt/jump</code> have <code>chattr +i</code>
         set on their underlying btrfs dirs (applied idempotently by
-        <code>bilby/host-systemd/install.sh</code> via a non-recursive <code>mount --bind /</code>
+        <code>ansible/roles/nfs_binds/</code> via a non-recursive <code>mount --bind /</code>
         that reaches the bare dir under the NFS overlay). If NFS isn't mounted, Docker can't auto-create
         bind-source subdirs at container start (the immutable bit blocks the mkdir) — so
         affected stacks fail loudly at deploy rather than silently running on bare-stub binds.

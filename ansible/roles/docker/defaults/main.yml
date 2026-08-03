@@ -1,0 +1,26 @@
+---
+# Whether this role owns the engine itself (vendor repo + packages). bilby
+# runs Fedora's moby-engine — pre-existing state, deliberately not part of
+# the provisioning migration — and installing docker-ce beside it would be a
+# second engine fighting over the same daemon; bilby sets this false so the
+# role manages only daemon config and networks there.
+podhaus_docker_engine_managed: true
+
+# Docker's dnf repo flavour per distro (download.docker.com/linux/<flavour>).
+# Rocky uses Docker's rhel repo — matching what numbat's cloud-init installs.
+# A distribution missing from this map fails the repo task loudly rather
+# than silently getting the wrong repo.
+podhaus_docker_repo_flavors:
+  Fedora: fedora
+  Rocky: rhel
+
+# live-restore is the fleet target: daemon restarts stop taking every
+# container down with them, and new hosts get it from day one. bilby
+# overrides to false until its one scheduled unprotected daemon restart —
+# see inventory/host_vars/bilby.yml.
+podhaus_docker_live_restore: true
+
+# Additional external bridge networks this host provisions beyond dockernet,
+# as {name, labels} pairs. Labels only — see the network task for why ipam
+# and attachable must stay unspecified.
+podhaus_extra_networks: []

@@ -16,8 +16,8 @@
              server-to-server connection stays on the LAN and bypasses browser auth.
 
   Discovery (mDNS/5353) is already allowed by the `mdns` service. If
-  AirPlay timing/control needs inbound UDP, add it here and re-run
-  install.sh.
+  AirPlay timing/control needs inbound UDP, add it here and re-run the
+  bilby playbook.
 -->
 <service>
   <short>Music Assistant</short>

@@ -1,0 +1,56 @@
+# Provision bilby: primary podhaus host, Komodo control node — and the
+# Ansible control node, so it provisions itself (ansible_connection: local).
+#
+# Run on bilby:
+#   cd ansible
+#   ansible-playbook playbooks/bilby.yml --check --diff   # read first
+#   ansible-playbook playbooks/bilby.yml
+#
+# bilby is not in `provisioned` yet. That move is a deliberate human act
+# after the live check-mode equivalence pass comes back clean — see
+# docs/plans/host-provisioning-migration.md. Until the scheduled
+# live-restore flip has happened, a real run outside the 04:00 window must
+# come back with the docker daemon-config task unchanged (host_vars pins
+# podhaus_docker_live_restore: false for exactly that reason).
+---
+- name: Provision bilby
+  hosts: bilby
+  gather_facts: true
+
+  roles:
+    - role: docker
+      tags: [docker]
+    - role: sshd_pomerium_ca
+      tags: [ssh]
+    - role: nfs_binds
+      tags: [nfs]
+    - role: firewalld
+      tags: [firewall]
+
+  tasks:
+    # Komodo Core host prerequisites, moved out of komodo-start so that
+    # script needs no sudo and touches nothing but Komodo itself.
+    - name: Create Komodo Core's ssl directory
+      # komodo-periphery writes its self-signed certs here; the image does
+      # not mkdir the ssl subdir on its own.
+      ansible.builtin.file:
+        path: /etc/komodo/ssl
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [komodo]
+
+    - name: Create the v2 PKI keys directory
+      # Private keys for Core and every Periphery live here; pubkeys are
+      # mirrored in komodo/keys/*.pub. Owned by the operator, not root: the
+      # komodo_periphery role reads key material from this directory on the
+      # control node with become: false, and 0700 already keeps everyone
+      # else out. Matches the live directory.
+      ansible.builtin.file:
+        path: /opt/komodo/keys
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0700"
+      tags: [komodo]

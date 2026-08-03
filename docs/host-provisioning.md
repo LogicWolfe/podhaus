@@ -26,9 +26,14 @@ the layer exists to draw.
 
 ## What is Ansible-managed today
 
-Only **fractal**. Every other host is still owned by its bootstrap
-script, and those scripts remain the runbook until each host is
-migrated deliberately. See
+**fractal** is fully migrated (`provisioned`). **bilby** has a complete
+playbook — `playbooks/bilby.yml` covers its Docker daemon config and
+networks, the NFS-bind hardening, the firewall, the Pomerium CA trust,
+and Komodo Core's host directories — but stays in `pending_migration`
+until its live check-mode equivalence pass comes back clean; that pass,
+the real run, and the scheduled live-restore flip are deliberate human
+acts. Every other host is still owned by its bootstrap script, and those
+scripts remain the runbook until each host is migrated deliberately. See
 [the migration plan](plans/host-provisioning-migration.md) for what
 is left.
 
@@ -45,13 +50,16 @@ ansible/
   playbooks/
     site.yml               targets the `provisioned` group
     fractal.yml            single-host entry point
+    bilby.yml              single-host entry point (+ Komodo host dirs)
   roles/
     base/                  timezone, baseline packages, dirs
     wsl/                   /etc/wsl.conf, hostname
-    docker/                Docker CE, daemon.json, dockernet
+    docker/                engine (where managed), daemon.json, host networks
     devbox/                the root-requiring half of a developer machine
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
+    nfs_binds/             QNAP NFS-bind hardening (bilby)
+    firewalld/             declarative zone + service XML (bilby)
 ```
 
 ### Inventory groups
@@ -61,11 +69,12 @@ Hosts are grouped twice: by **migration state** and by **role**.
 - `provisioned` — fully Ansible-owned. Currently fractal alone.
   `site.yml` targets this group and nothing else.
 - `pending_migration` — bilby, numbat, voltaire. Present so
-  the inventory is honest about the fleet, each carrying a
-  `podhaus_bootstrap_script` var naming the script that still owns it.
-  **No playbook targets this group.** Migrating a host means moving it
-  between the two groups by hand, after its check-mode pass comes back
-  clean.
+  the inventory is honest about the fleet. numbat and voltaire carry a
+  `podhaus_bootstrap_script` var naming the script that still owns them;
+  bilby's script is already absorbed into `playbooks/bilby.yml`, which
+  targets it by name. **No playbook targets this group.** Migrating a
+  host means moving it between the two groups by hand, after its
+  check-mode pass comes back clean.
 - `excluded` — kangaroo. QTS ships no Python interpreter at all (no
   `python3`, no `/opt/bin/python3`, only the MalwareRemover and
   Container Station QPKGs), so it can never be an Ansible target.
@@ -97,7 +106,7 @@ configured anywhere in the layer.
 
 Idempotency is the contract, and it is checked by machine rather than
 asserted: a second run of `playbooks/fractal.yml` reports `changed=0`
-across all 34 tasks. Treat a non-zero second run as a bug in the role.
+across every task. Treat a non-zero second run as a bug in the role.
 
 ## Roles worth knowing about
 
@@ -107,14 +116,42 @@ without those bindings `--check` fails outright rather than reporting a
 diff, so the task installs a read-only prerequisite *of the dry run
 itself*. Everything after it is a normal module.
 
-**`docker`** installs `python3-requests` alongside Docker because
-`community.docker.docker_network` needs it on the target. The
-alternative — a `docker network inspect || create` shell line — would
-have forfeited idempotency and check-mode diffs to save one package.
-`daemon.json` deliberately carries **no `dns:` key**; per-container DNS
-overrides replace Docker's embedded resolver and break service-name
-resolution, so DNS forwarding is a daemon-wide setting where a host
-needs it.
+**`docker`** owns the engine only where
+`podhaus_docker_engine_managed` is true — bilby runs Fedora's
+moby-engine (pre-existing state; an engine swap is out of scope), so
+there the role manages only daemon config and networks. `daemon.json`
+is a template whose byte layout is load-bearing: on a host without
+live-restore active, the restart handler bounces every container, so
+the `podhaus_docker_live_restore: false` render must byte-match bilby's
+live file, and flipping bilby to true is a scheduled human act, never a
+handler side effect. The dockernet task deliberately leaves
+`attachable` unspecified (`docker_network` recreates a network over any
+specified-and-different option — fatal on a live host), and
+`podhaus_extra_networks` declares label-only bridges (bilby's fenwick
+nets) whose auto-assigned subnets must stand. The role installs
+`python3-requests` because `community.docker.docker_network` needs it
+on the target; the alternative — a `docker network inspect || create`
+shell line — would have forfeited idempotency and check-mode diffs to
+save one package. `daemon.json` deliberately carries **no `dns:` key**;
+per-container DNS overrides replace Docker's embedded resolver and
+break service-name resolution, so DNS forwarding is a daemon-wide
+setting where a host needs it.
+
+**`nfs_binds`** carries bilby's postmortem-hardened NFS defences: the
+pre-dockerd QNAP reachability gate, the automount `StartLimit*=0`
+drop-ins, the `chattr +i` tripwire on the bare mountpoints (a `script:`
+task — the non-recursive `mount --bind /` trick has no Ansible
+primitive — with an honest `changed_when` on its output), the
+`.podhaus-share-mounted` sentinels (touched with
+`modification_time: preserve` so re-runs stay `changed=0`), and the
+Forgejo directory ownership. The role header carries the incident
+history; the postmortems are the full record.
+
+**`firewalld`** stages the declarative zone + service XML from role
+files — services before the zone, so the zone never references an
+undefined service — validates with `firewall-cmd --check-config` on
+every run, and reloads via handler only after validation passes. It
+fails fast if firewalld is absent rather than skipping.
 
 **`komodo_periphery`** ships the host's X25519 private key (`no_log`,
 mode 0600) and Core's public key, renders `periphery.config.toml`,

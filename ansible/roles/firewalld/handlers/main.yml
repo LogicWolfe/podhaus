@@ -1,0 +1,5 @@
+---
+- name: Reload firewalld
+  # Runtime state reloads from the permanent config just staged. Reloads
+  # don't drop established connections.
+  ansible.builtin.command: firewall-cmd --reload

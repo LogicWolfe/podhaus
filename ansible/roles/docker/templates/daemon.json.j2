@@ -1,0 +1,24 @@
+{# BYTE PARITY IS LOAD-BEARING. On a host where live-restore is not active,
+   the notified restart handler bounces every container — so with
+   podhaus_docker_live_restore: false this template must render bilby's
+   pre-Ansible file exactly: this key order, 2-space indent, trailing
+   newline. Any byte drift fires the handler and takes the fleet down.
+
+   The true-render differs from two pre-template files, both acceptably:
+   - numbat's on-disk file has the log-opts keys in the other order —
+     harmless, because live-restore is already active there and a one-time
+     normalising daemon restart doesn't touch containers.
+   - fractal's file (written by this role's old inline content) had compact
+     one-line log-opts and no live-restore — fractal takes one planned
+     handler restart on its next real run and comes out with live-restore.
+#}
+{
+{% if podhaus_docker_live_restore %}
+  "live-restore": true,
+{% endif %}
+  "log-driver": "local",
+  "log-opts": {
+    "max-size": "50m",
+    "max-file": "3"
+  }
+}

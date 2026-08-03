@@ -37,6 +37,20 @@
     validate: /usr/sbin/sshd -t -f %s
   notify: Reload sshd
 
+- name: Remove the legacy CA block appended to sshd_config
+  # bilby's pre-role installer (bilby/host-sshd/install.sh, deleted) wrote
+  # the trust straight into sshd_config as a marker comment + directive;
+  # the drop-in above replaces it. Removing it keeps the main file
+  # vendor-owned again. Matches nothing on hosts that never had the
+  # installer; changed only when the block is actually removed.
+  ansible.builtin.replace:
+    path: /etc/ssh/sshd_config
+    regexp: >-
+      \n{1,2}# --- podhaus: Pomerium SSH user CA ---\nTrustedUserCAKeys /etc/ssh/pomerium-user-ca\.pub\n
+    replace: "\n"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd
+
 - name: Verify sshd accepts the resulting configuration
   # Belt-and-braces beyond the per-file validate: proves the *combined*
   # config parses before a reload can lock anyone out.

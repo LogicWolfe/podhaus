@@ -142,7 +142,7 @@
         silently writing container data to local disk:</p>
         <ul>
           <li><strong>Pre-dockerd reachability gate:</strong>
-            <code>bilby/host-systemd/wait-for-qnap-nfs.service</code> is a oneshot ordered
+            <code>wait-for-qnap-nfs.service</code> (from <code>ansible/roles/nfs_binds/</code>) is a oneshot ordered
             <code>After=network-online.target</code> and before <code>docker.service</code>.
             It polls TCP/2049 on the QNAP for up to 180 s before declaring success. The
             matching <code>docker.service.d/</code> drop-in <code>Wants=</code>+<code>After=</code>
@@ -170,8 +170,9 @@
             <a href="/stack-conventions.html#nfs-bind-healthcheck">stack conventions →
             NFS-bind healthcheck pattern</a>.</li>
         </ul>
-        <p>Install / reinstall the host-systemd defences idempotently with
-        <code>sudo ./bilby/host-systemd/install.sh</code>. Full incident records:
+        <p>Install / reinstall these defences idempotently with
+        <code>ansible-playbook playbooks/bilby.yml --tags nfs</code> (the
+        <code>nfs_binds</code> role, run from <code>ansible/</code>). Full incident records:
         <a href="/postmortems/postmortem-viewer.html?file=2026-05-30-power-outage-nfs-recovery.md">2026-05-30 postmortem</a>
         (the pre-dockerd gate + rate-limit removal),
         <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>

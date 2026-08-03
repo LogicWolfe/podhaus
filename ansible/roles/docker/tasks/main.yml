@@ -1,16 +1,24 @@
-# Docker engine + the shared dockernet bridge.
+# Docker engine + the host-provisioned bridge networks.
 #
-# Replaces the hand-rolled equivalents in numbat_bootstrap,
-# kangaroo_bootstrap and komodo-start's ensure_network — four implementations of
-# the same two ideas.
+# Replaces the hand-rolled equivalents in numbat_bootstrap and
+# kangaroo_bootstrap, and absorbed komodo-start's ensure_network — the host,
+# not Komodo, owns external networks (Komodo has no CreateNetwork execution
+# and Compose refuses to adopt a pre-existing external network).
 ---
 - name: Add the Docker CE repository
+  # Flavour is distro-derived (podhaus_docker_repo_flavors) so the same task
+  # serves Fedora hosts and Rocky/numbat, whose cloud-init installs Docker's
+  # rhel repo at this same dest — a hardcoded fedora URL would overwrite it.
   ansible.builtin.get_url:
-    url: "https://download.docker.com/linux/fedora/docker-ce.repo"
+    url: "https://download.docker.com/linux/{{ podhaus_docker_repo_flavors[ansible_facts['distribution']] }}/docker-ce.repo"
     dest: /etc/yum.repos.d/docker-ce.repo
     mode: "0644"
+  when: podhaus_docker_engine_managed
 
 - name: Install Docker CE
+  # Gated on podhaus_docker_engine_managed: bilby runs Fedora's moby-engine
+  # (pre-existing state, not part of the provisioning migration), and
+  # installing docker-ce beside it would be a second engine.
   ansible.builtin.dnf:
     name:
       - docker-ce
@@ -18,26 +26,35 @@
       - containerd.io
       - docker-buildx-plugin
       - docker-compose-plugin
-      # community.docker talks to the daemon's HTTP API through requests.
-      # Named here rather than shelling out to `docker network inspect ||
-      # create`, so the network task keeps its idempotency and check-mode
-      # diff — the properties this layer exists to provide.
-      - python3-requests
+    state: present
+  when: podhaus_docker_engine_managed
+
+- name: Install the daemon-API Python bindings
+  # community.docker talks to the daemon's HTTP API through requests. A task
+  # of its own, outside the engine gate, because the network tasks below need
+  # it on every docker host — including those whose engine this role does not
+  # manage. Named here rather than shelling out to `docker network inspect ||
+  # create`, so the network tasks keep their idempotency and check-mode
+  # diff — the properties this layer exists to provide.
+  ansible.builtin.dnf:
+    name: python3-requests
     state: present
 
 - name: Configure the Docker daemon
-  # `local` log driver with rotation, matching every other podhaus host.
-  # Deliberately no `dns:` key — fractal has no Tailscale node, so there is
-  # nothing to forward to. Never set per-container `dns:` in compose instead;
-  # that replaces 127.0.0.11 and breaks service-name resolution.
-  ansible.builtin.copy:
+  # `local` log driver with rotation on every podhaus host; live-restore per
+  # podhaus_docker_live_restore. The template's byte layout is load-bearing —
+  # see templates/daemon.json.j2 before touching either. Flipping bilby to
+  # live-restore is a deliberate human act in a 04:00 maintenance window (one
+  # unprotected daemon restart), never a handler side effect — which is why
+  # the false-render must byte-match bilby's existing file.
+  #
+  # Deliberately no `dns:` key — and never set per-container `dns:` in
+  # compose either; that replaces 127.0.0.11 and breaks service-name
+  # resolution.
+  ansible.builtin.template:
+    src: daemon.json.j2
     dest: /etc/docker/daemon.json
     mode: "0644"
-    content: |
-      {
-        "log-driver": "local",
-        "log-opts": {"max-size": "50m", "max-file": "3"}
-      }
   notify: Restart docker
 
 - name: Enable and start Docker
@@ -60,11 +77,33 @@
   # adopt a network it did not make, so the host owns it. The subnet is not
   # incidental: 172.18.0.1 is the documented gateway address host-network
   # services are reached on.
+  #
+  # `attachable` is deliberately unspecified. docker_network treats any
+  # specified-and-different option as cause to RECREATE the network, and
+  # bilby's live dockernet (created flagless, so attachable=false) would be
+  # torn down with every running stack still attached. Omitted options are
+  # never compared — and attachable is a swarm-overlay concept anyway,
+  # meaningless for the bridge driver.
   community.docker.docker_network:
     name: "{{ podhaus_dockernet_name }}"
     driver: bridge
-    attachable: true
     ipam_config:
       - subnet: "{{ podhaus_dockernet_subnet }}"
         gateway: "{{ podhaus_dockernet_gateway }}"
     state: present
+
+- name: Create the additional host-provisioned bridge networks
+  # podhaus_extra_networks: bridges that stacks reference as `external: true`
+  # beyond dockernet (bilby: the two fenwick nets). Labels only — no ipam and
+  # no attachable, because the live networks carry auto-assigned subnets
+  # (fenwick: 172.27/172.28) that must stand; specifying different ipam would
+  # recreate them under running containers, and nothing depends on specific
+  # ranges (services resolve by name).
+  community.docker.docker_network:
+    name: "{{ item.name }}"
+    driver: bridge
+    labels: "{{ item.labels }}"
+    state: present
+  loop: "{{ podhaus_extra_networks }}"
+  loop_control:
+    label: "{{ item.name }}"

@@ -8,42 +8,10 @@ export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
 # stack that interpolates [[PODHAUS_REPO]] points at this checkout.
 export COMPOSE_KOMODO_REPO_PATH="$PWD"
 
-# Pre-create /etc/komodo/ssl so komodo-periphery can write its self-signed
-# certs there (the image doesn't mkdir -p the ssl subdir on its own).
-sudo mkdir -p /etc/komodo/ssl
-
-# v2 PKI keys volume. Pubkeys are mirrored in komodo/keys/*.pub for repo
-# reference. Private keys live only on the host they belong to.
-sudo mkdir -p /opt/komodo/keys
-sudo chmod 0700 /opt/komodo/keys
-
-# Ensure the external Docker networks the stacks reference exist before
-# any compose `up`. This is the only config-as-code path to create them:
-# Komodo has no CreateNetwork execution (only DeleteNetwork/PruneNetworks),
-# and Compose refuses to adopt a pre-existing external network — so the
-# host provisions them, exactly as remote hosts do for their own
-# dockernet. Idempotent: inspect-or-create leaves an existing network
-# (and its live attachments) untouched, so this is a no-op on every host
-# that already has them. dockernet must exist before the Komodo compose
-# below (Core attaches to it); the two fenwick-* nets are prerequisites
-# for the fenwick stacks that deploy later. Subnets are left to Docker's
-# default pool — nothing depends on specific ranges (services resolve by
-# name). Topology + rationale for the fenwick nets: fenwick repo
-# docs/networking.html; per-container membership is config-as-code in
-# each stack's compose.yaml.
-ensure_network() {
-  local name="$1"; shift
-  if docker network inspect "$name" >/dev/null 2>&1; then
-    echo "  network ${name} (exists)"
-  else
-    docker network create "$@" "$name" >/dev/null
-    echo "  network ${name} (created)"
-  fi
-}
-echo "Ensuring host Docker networks..."
-ensure_network dockernet
-ensure_network fenwick-net --label fenwick.net=private --label managed-by=fenwick-repo
-ensure_network fenwick-webagent-net --label fenwick.net=webagent-quarantine --label managed-by=fenwick-repo
+# Host prerequisites — /etc/komodo/ssl, /opt/komodo/keys, dockernet and the
+# fenwick-* networks — are provisioned by ansible/playbooks/bilby.yml. This
+# script assumes them (the compose below attaches Core to dockernet and
+# fails loudly if it is missing) and needs no sudo.
 
 # Render Komodo Core's extra config from 1Password into the gitignored
 # komodo/.runtime/ directory (bind-mounted into Core at

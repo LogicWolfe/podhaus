@@ -1,0 +1,39 @@
+# bilby — Apple M1 Mac mini, Fedora Asahi. Primary host: Komodo Core, every
+# primary service — and the Ansible control node, so it provisions itself.
+---
+ansible_connection: local
+ansible_user: nathan
+# With connection: local, modules would otherwise run under whatever Python
+# ansible itself runs from — the project's pipenv venv, which doesn't carry
+# the daemon-API bindings the docker role installs as a SYSTEM package.
+# Pinning the system interpreter makes local module execution identical to
+# every remote host, where discovery picks /usr/bin/python3 anyway.
+ansible_python_interpreter: /usr/bin/python3
+
+# bilby runs Fedora's moby-engine, not docker-ce — pre-existing state,
+# deliberately not part of the provisioning migration (an engine swap is
+# explicitly out of scope). The docker role manages only daemon config and
+# networks here.
+podhaus_docker_engine_managed: false
+
+# live-restore is not active on bilby yet, and flipping it requires the one
+# remaining UNPROTECTED daemon restart — every container bounces. The flip
+# to true is a deliberate human act in a 04:00 maintenance window (edit
+# this line, run the play, take the restart), never a handler side effect.
+# Until then this stays false, which renders daemon.json byte-identical to
+# the live file so the restart handler can never fire on bilby.
+podhaus_docker_live_restore: false
+
+# The two fenwick-private bridges (browser-quarantine topology; rationale in
+# the fenwick repo's docs/networking.html). Labels match the live networks
+# exactly; subnets stay auto-assigned (172.27/172.28 today) — see the docker
+# role's network task for why they must not be specified.
+podhaus_extra_networks:
+  - name: fenwick-net
+    labels:
+      fenwick.net: private
+      managed-by: fenwick-repo
+  - name: fenwick-webagent-net
+    labels:
+      fenwick.net: webagent-quarantine
+      managed-by: fenwick-repo

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   bilby firewalld `public` zone — declarative source of truth, installed
-  to /etc/firewalld/zones/public.xml by bilby/host-systemd/install.sh.
+  to /etc/firewalld/zones/public.xml by ansible/roles/firewalld.
   This file is authoritative: it captures the full allowed set, so a
   rebuilt host reproduces the firewall exactly.
 

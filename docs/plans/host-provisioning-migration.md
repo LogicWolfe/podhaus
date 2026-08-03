@@ -107,53 +107,36 @@ independent of each other.
 The gate for everything bilby-hosted, and the first host where
 check-mode equivalence is proven against a live, loaded machine.
 
-**Fix the docker role first — it is wrong for bilby today:**
+Done so far: the repo side is complete. The docker role is bilby-safe
+(`podhaus_docker_engine_managed`, templated `daemon.json` whose
+false-render is byte-identical to bilby's live file, `attachable`
+unspecified on dockernet, `podhaus_extra_networks` for the fenwick
+nets); the two installers are absorbed into the `nfs_binds` and
+`firewalld` roles (`bilby/host-systemd/` and `bilby/firewalld/`
+deleted); `sshd_pomerium_ca` removes the legacy appended `sshd_config`
+block; `playbooks/bilby.yml` + `host_vars/bilby.yml` exist
+(`ansible_connection: local`); `komodo-start` is Komodo-only and
+sudo-free.
 
-- bilby runs `moby-engine`, not docker-ce. Add
-  `podhaus_docker_engine_managed: false` (bilby host_var) gating the
-  repo + package tasks. Engine choice is pre-existing state, not part
-  of this migration.
-- `daemon.json` becomes a template, and **bilby adopts `live-restore`**
-  (decided): daemon restarts stop taking every container down with
-  them. The flip itself requires one last unprotected daemon restart —
-  scheduled in the 04:00 window, done deliberately by a human, never
-  as a handler side effect. Until that restart has happened, the role
-  must not touch bilby's `daemon.json` outside the window: a
-  semantically-equal-but-byte-different file still fires the restart
-  handler, and without `live-restore` active that bounces the fleet.
-- Add `podhaus_extra_networks` so bilby declares `fenwick-net` and
-  `fenwick-webagent-net` (labels included, subnets omitted so the
-  auto-assigned ones stand). This removes dockernet's dual ownership:
-  the role owns networks on provisioned hosts, and `komodo-start`'s
-  `ensure_network` block is deleted when bilby migrates.
+Remaining — each a deliberate human act, in order:
 
-**New roles, from the two installers:**
-
-- `nfs_binds` — `wait-for-qnap-nfs.service`, the docker drop-in, the
-  automount `StartLimit` drop-ins, share sentinels + Forgejo directory
-  ownership (`file:`, `state: touch` with `modification_time: preserve`
-  so re-runs stay `changed=0`), and the `chattr +i` tripwire. The
-  tripwire's bind-mount-of-`/` trick has no Ansible primitive and stays
-  a `script:` task with an honest `changed_when`. Unit files move into
-  the role; `bilby/host-systemd/` is deleted.
-- `firewalld` — stages zone + service XML from role files (moving
-  `bilby/firewalld/` in), validates with `--check-config`, reloads via
-  handler. Same declarative model the installer already had.
-- `sshd_pomerium_ca` grows one migration task: remove the marker block
-  `bilby/host-sshd/install.sh` appended to `sshd_config` (the role's
-  drop-in replaces it). Then `bilby/host-sshd/` is deleted — the role's
-  header already declares it replaced.
-
-**komodo-start shrinks to Komodo-only.** The `ensure_network` calls and
-the two `sudo mkdir`s (`/etc/komodo/ssl`, `/opt/komodo/keys`) are host
-state and move to bilby's play. Result: `komodo-start` needs no sudo and
-touches nothing but Komodo itself.
-
-bilby connects as `ansible_connection: local`. Verification: `--check
---diff` to zero before joining `provisioned`; real run; second run
-`changed=0`; then the postmortem-derived spot checks (`systemctl cat
-wait-for-qnap-nfs`, `firewall-cmd --list-services`, sentinel files,
-`sshd -T | grep trustedusercakeys`, dockernet/fenwick subnets unchanged).
+- [ ] Live equivalence pass:
+  `ansible-playbook playbooks/bilby.yml --check --diff` to zero.
+  Expected wrinkle to verify here: whether `file:`-asserted ownership
+  on the QNAP shares (`/mnt/jump/forgejo` trees) reports stable under
+  `all_squash`, or shows a perpetual diff the role must adapt to.
+- [ ] Real run; second run `changed=0`; then the postmortem-derived
+  spot checks (`systemctl cat wait-for-qnap-nfs`, `firewall-cmd
+  --list-services`, sentinel files, `sshd -T | grep
+  trustedusercakeys`, dockernet/fenwick subnets unchanged).
+- [ ] The 04:00-window live-restore flip: set
+  `podhaus_docker_live_restore: true` in `host_vars/bilby.yml`, run
+  the play in the window, take the one unprotected daemon restart,
+  then confirm a subsequent daemon restart leaves containers running.
+- [ ] Move bilby from `pending_migration` to `provisioned`, and decide
+  how `site.yml` covers the bilby-only roles (`nfs_binds`,
+  `firewalld`) — group-gated like `docker_hosts`, or `bilby.yml`
+  stays the entry point.
 
 ### 3. numbat, as two plays
 

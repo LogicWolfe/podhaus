@@ -34,7 +34,8 @@ in `compose.yaml`, not a template override.
 
 `forgejo-preflight` refuses to start the service unless Jump is mounted, its
 sentinel exists, and every required directory is writable. Host directories
-and the sentinel are owned by `bilby/host-systemd/install.sh`.
+and the sentinel are owned by the `nfs_binds` Ansible role
+(`ansible/roles/nfs_binds/`).
 
 ## Identity and keys
 
@@ -119,8 +120,8 @@ failed heartbeat. This covers interruption between the stop and end hooks.
    expected bare repositories under `jump/repositories`.
 4. Move the existing host trees aside, then restore the local tree to
    `/var/lib/forgejo` and the Jump tree to `/mnt/jump/forgejo`.
-5. Re-run `sudo ./bilby/host-systemd/install.sh` to assert ownership,
-   permissions, and the Jump sentinel.
+5. Re-run `ansible-playbook playbooks/bilby.yml --tags nfs` (from `ansible/`)
+   to assert ownership, permissions, and the Jump sentinel.
 6. Start the stack. `forgejo-auth-init` reconciles the Pocket source from
    1Password after Forgejo becomes healthy.
 7. Run `forgejo doctor check`, sign in through Pocket ID, then clone and

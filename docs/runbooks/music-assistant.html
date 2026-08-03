@@ -122,8 +122,8 @@
         bilby's default-drop zone killed the handshake
         (<code>"Playback failed to start"</code> after a 10s timeout). The
         firewall is declarative config-as-code under
-        <code>bilby/firewalld/</code> (installed by
-        <code>bilby/host-systemd/install.sh</code>):
+        <code>ansible/roles/firewalld/files/</code> (installed by the bilby
+        playbook):
       </p>
       <ul>
         <li><code>services/music-assistant.xml</code> — TCP <code>8095</code>
@@ -163,8 +163,9 @@
       <ul>
         <li><code>music-assistant/{compose.yaml,stack.toml}</code> — the MA
           stack (host-network, named volume, autoheal).</li>
-        <li><code>bilby/firewalld/</code> — declarative firewall (MA ports +
-          LAN-trust), installed by <code>bilby/host-systemd/install.sh</code>.</li>
+        <li><code>ansible/roles/firewalld/files/</code> — declarative firewall
+          (MA ports + LAN-trust), installed by
+          <code>ansible-playbook playbooks/bilby.yml --tags firewall</code>.</li>
         <li><code>caddy/Caddyfile</code> — the <code>music.pod.haus</code> vhost
           (LAN-direct TLS front for MA).</li>
         <li><code>terraform/services_pod_haus.tf</code> — the <code>music</code>
