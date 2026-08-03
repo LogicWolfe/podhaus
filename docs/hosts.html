@@ -308,6 +308,13 @@
         <code>Match originalhost</code> rule, not a DNS record.
       </p>
       <p>
+        <strong>fractal has no backup stack.</strong> Everything Ansible and chezmoi put
+        there is reproducible from the repos, and its Periphery private key also exists on
+        bilby under <code>/opt/komodo/keys/</code>. The one category that is <em>not</em>
+        covered is uncommitted work in <code>~/repos</code> — that is a developer-discipline
+        boundary today, not a backed-up one. Revisit if anything else lands on the host.
+      </p>
+      <p>
         There is no TPM and no USB passthrough under WSL, so fractal cannot hold a
         hardware-resident machine key the way voltaire (TPM) and bilby (YubiKey PIV) do.
         Its machine key is a soft ed25519 key on the LUKS <code>/home</code>. A YubiKey was

@@ -1,0 +1,10 @@
+[[stack]]
+name = "fractal-autoheal"
+description = "Restart unhealthy autoheal-labelled containers on fractal"
+tags = ["fractal", "podhaus"]
+
+[stack.config]
+server = "fractal"
+linked_repo = "podhaus-fractal"
+run_directory = "autoheal/fractal"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]

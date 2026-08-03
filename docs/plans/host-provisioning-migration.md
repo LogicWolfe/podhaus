@@ -84,6 +84,11 @@ hold up on closer look.
 
 ## Open questions
 
+- **Should uncommitted work in fractal's `~/repos` be backed up?** Nothing
+  else on the host needs it — see the fractal section in
+  [Hosts](../hosts.html#fractal) — but a dev machine accumulates
+  work-in-progress that exists nowhere else, which is exactly the
+  category backups are for. Needs a decision, not a default.
 - Should `pending_migration` hosts eventually get a read-only
   `--check`-in-CI pass, so drift between a script and its future role is
   visible before the migration rather than during it? Cheap, but only

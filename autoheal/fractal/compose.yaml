@@ -1,0 +1,2 @@
+# fractal's autoheal overlay. Pulls the shared service spec verbatim —
+# SELinux is disabled under WSL, so no label:disable needed.
