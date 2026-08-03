@@ -132,18 +132,31 @@ Remaining — each a deliberate human act, in order:
   `ansible_python_interpreter: /usr/bin/python3` for the local
   connection, and `/var/lib/forgejo/config` at 0700 (Forgejo's runtime
   tightens it; asserting 0750 would flip-flop).
-- [ ] Real run; second run `changed=0`; then the postmortem-derived
-  spot checks (`systemctl cat wait-for-qnap-nfs`, `firewall-cmd
-  --list-services`, sentinel files, `sshd -T | grep
-  trustedusercakeys`, dockernet/fenwick subnets unchanged).
+- [x] Real run (2026-08-04): `ok=28 changed=6 failed=0`, matching the
+  check-mode preview exactly. Second run: `changed=0`. Postmortem spot
+  checks all clean: `wait-for-qnap-nfs.service` enabled; `firewall-cmd
+  --list-services` → `dhcpv6-client mdns music-assistant plex ssh`;
+  sentinels present on pouch/jump/jump-forgejo; `sshd -T` trusts
+  `pomerium-user-ca.pub`; dockernet/fenwick subnets unchanged. The
+  tripwire task itself reported `ok` (bit already set, verified via its
+  bind-mount check) — `lsattr` against the live mountpoint can't see it
+  because NFS shadows the underlying inode, which is expected, not a
+  failure.
 - [ ] The 04:00-window live-restore flip: set
   `podhaus_docker_live_restore: true` in `host_vars/bilby.yml`, run
   the play in the window, take the one unprotected daemon restart,
   then confirm a subsequent daemon restart leaves containers running.
-- [ ] Move bilby from `pending_migration` to `provisioned`, and decide
-  how `site.yml` covers the bilby-only roles (`nfs_binds`,
-  `firewalld`) — group-gated like `docker_hosts`, or `bilby.yml`
-  stays the entry point.
+- [x] Moved bilby from `pending_migration` to `provisioned` (2026-08-04).
+  Decided: group-gated like `docker_hosts` — `site.yml` gained
+  `komodo_core_host`/`nfs_binds`/`firewalld` roles behind new
+  `komodo_core_hosts`/`nfs_binds_hosts`/`firewalld_hosts` groups, so a
+  future host inherits bilby's roles by group membership alone, matching
+  every other role in that file. The two Komodo Core directory tasks
+  moved out of `bilby.yml`'s inline `tasks:` into a new `komodo_core_host`
+  role for the same reason. `bilby.yml` stays as a single-host entry
+  point (fractal.yml's precedent) but now just calls that role too.
+  Proven equivalent: `ansible-playbook playbooks/site.yml --limit bilby`
+  → `changed=0`.
 
 ### 3. numbat, as two plays
 

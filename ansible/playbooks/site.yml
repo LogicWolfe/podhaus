@@ -26,3 +26,12 @@
     - role: komodo_periphery
       when: inventory_hostname in groups['komodo_periphery_hosts']
       tags: [periphery]
+    - role: komodo_core_host
+      when: inventory_hostname in groups['komodo_core_hosts']
+      tags: [komodo]
+    - role: nfs_binds
+      when: inventory_hostname in groups['nfs_binds_hosts']
+      tags: [nfs]
+    - role: firewalld
+      when: inventory_hostname in groups['firewalld_hosts']
+      tags: [firewall]

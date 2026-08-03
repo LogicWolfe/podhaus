@@ -26,16 +26,13 @@ the layer exists to draw.
 
 ## What is Ansible-managed today
 
-**fractal** is fully migrated (`provisioned`). **bilby** has a complete
-playbook — `playbooks/bilby.yml` covers its Docker daemon config and
-networks, the NFS-bind hardening, the firewall, the Pomerium CA trust,
-and Komodo Core's host directories — but stays in `pending_migration`
-until its live check-mode equivalence pass comes back clean; that pass,
-the real run, and the scheduled live-restore flip are deliberate human
-acts. **numbat**'s two plays exist and its bootstrap script is gone; it
-likewise joins `provisioned` once its live check-mode pass comes back
-clean. voltaire is still owned by hand and kangaroo by its bootstrap
-script. See
+**fractal** and **bilby** are fully migrated (`provisioned`/`site.yml`).
+bilby's real run landed 2026-08-04 (`site.yml --limit bilby` →
+`changed=0`); its one remaining item is the scheduled 04:00-window
+live-restore flip, a deliberate human act tracked in the migration plan.
+**numbat**'s two plays exist and its bootstrap script is gone; it joins
+`provisioned` once its live check-mode pass comes back clean. voltaire is
+still owned by hand and kangaroo by its bootstrap script. See
 [the migration plan](plans/host-provisioning-migration.md) for what
 is left.
 
@@ -64,6 +61,7 @@ ansible/
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
     nfs_binds/             QNAP NFS-bind hardening (bilby)
     firewalld/             declarative zone + service XML (bilby)
+    komodo_core_host/      Komodo Core's host directories (bilby)
     numbat_edge/           numbat's nftables ruleset, relay-IP dispatcher, loopback sshd
 ```
 
@@ -71,8 +69,11 @@ ansible/
 
 Hosts are grouped twice: by **migration state** and by **role**.
 
-- `provisioned` — fully Ansible-owned. Currently fractal alone.
-  `site.yml` targets this group and nothing else.
+- `provisioned` — fully Ansible-owned: fractal and bilby. `site.yml`
+  targets this group and nothing else, gating each role (including
+  bilby-only ones like `nfs_binds` and `firewalld`) on the matching
+  role group rather than on hostname, so a future host inherits the
+  right roles from group membership alone.
 - `pending_migration` — bilby, numbat, voltaire. Present so
   the inventory is honest about the fleet. bilby's and numbat's scripts
   are already absorbed into their playbooks, which target them by name —
