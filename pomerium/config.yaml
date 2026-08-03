@@ -14,6 +14,7 @@ log_level: info
 signing_key_file: /run/pomerium-secrets/signing-key.pem
 
 ssh_address: ${NUMBAT_RELAY_IPV4}:22
+ssh_routes_portal: true
 ssh_user_ca_key_file: /run/pomerium-secrets/ssh-user-ca-key
 ssh_host_key_files: [/run/pomerium-secrets/ssh-host-key]
 

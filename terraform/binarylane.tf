@@ -10,7 +10,7 @@ resource "binarylane_ssh_key" "numbat" {
 
 resource "binarylane_ssh_key" "numbat_piv" {
   name       = "numbat-piv"
-  public_key = file("${path.module}/numbat_piv_authorized_key.pub")
+  public_key = file("${path.module}/operator_piv_authorized_key.pub")
 }
 
 # Stable across VPS replacement so numbat_bootstrap can verify the new host

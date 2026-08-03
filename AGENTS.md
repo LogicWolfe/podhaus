@@ -128,6 +128,12 @@ and their Tailscale path remain live only for rollback. A planned host
 - Protected names are DNS-only A records to Numbat's application IP.
   Pomerium authenticates with Pocket ID and reaches Caddy's private
   `:4443` listener through loopback rathole plus client mTLS.
+- Managed devices use `<host>.pod.haus` for SSH. Chezmoi sends Bilby and
+  Kangaroo directly on the home LAN and rewrites every other case through
+  Pomerium at `ssh.pod.haus`; its route portal covers unmanaged devices.
+  Kangaroo's direct SSH selection belongs in chezmoi, not split DNS, because
+  HTTPS must remain behind Pomerium. Tailscale keeps separate `*-recovery`
+  names for explicit break-glass use.
 - Public and raw endpoints use Numbat's relay IP and Caddy `:4444`.
   Cloudflare proxies only public CDN sites. Tunnel and Access resources
   remain Terraform-owned rollback paths.

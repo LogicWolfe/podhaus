@@ -22,6 +22,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 # --- Config ---
 KANGAROO_SSH="${KANGAROO_SSH:-admin@10.0.0.25}"
+KANGAROO_OPERATOR_KEY="${KANGAROO_OPERATOR_KEY:-terraform/operator_piv_authorized_key.pub}"
 # Container state lives on CACHEDEV2 (Jump, the backed-up volume) per the
 # placement rule in docs/storage.html — never CACHEDEV1/Pouch.
 KANGAROO_DIR="/share/CACHEDEV2_DATA/Container/komodo-periphery"
@@ -45,6 +46,11 @@ log "Preflight: verifying SSH + Docker on kangaroo ($KANGAROO_SSH)"
 ssh_kangaroo "echo OK" >/dev/null || fail "SSH to $KANGAROO_SSH failed. Check the host's reachable + your key is loaded."
 ssh_kangaroo "$KANGAROO_DOCKER info >/dev/null 2>&1" || fail "Docker not available at $KANGAROO_DOCKER on kangaroo. Container Station running? Override KANGAROO_DOCKER if path differs."
 ok "kangaroo reachable, Docker responsive"
+
+[[ -s "$KANGAROO_OPERATOR_KEY" ]] || fail "Missing operator public key: $KANGAROO_OPERATOR_KEY"
+log "Ensuring the operator PIV key is authorized"
+ssh_kangaroo 'IFS= read -r key; grep -Fqx "$key" /root/.ssh/authorized_keys || printf "%s\n" "$key" >> /root/.ssh/authorized_keys' < "$KANGAROO_OPERATOR_KEY"
+ok "operator PIV key authorized"
 
 log "Preflight: verifying v2 keypair material on bilby ($BILBY_KEYS_DIR)"
 for f in core.pub kangaroo-periphery.key; do

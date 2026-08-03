@@ -67,7 +67,6 @@ resource "unifi_client" "kangaroo_10g" {
   fixed_ip = local.kangaroo_ip_10g
   # No network_id, same as the 1G client: this reservation predated TF with
   # a redundant Default-LAN virtual-network override, which UniFi rejects
-  # setting on the default network — so TF clears it (client stays on .25 /
-  # Default LAN). It also carries a Local DNS record (kangaroo.pod → .25)
-  # that the provider preserves through updates.
+  # setting on the default network. SSH selects this active address locally;
+  # DNS stays on Pomerium so the HTTPS identity boundary remains consistent.
 }
