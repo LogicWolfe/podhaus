@@ -6,17 +6,15 @@ resource "tailscale_dns_configuration" "tailnet" {
   search_paths       = []
 }
 
-moved {
-  from = tailscale_dns_configuration.podnet
-  to   = tailscale_dns_configuration.tailnet
-}
-
 resource "tailscale_acl" "podhaus" {
   reset_acl_on_destroy       = false
   overwrite_existing_content = true
 
   acl = jsonencode({
     tagOwners = {
+      # Terraform's broad OAuth client carries this legacy credential tag.
+      # Declaring ownership keeps the client usable; no grant names the tag.
+      "tag:podnet" = ["autogroup:admin"]
       # The Terraform OAuth client is tagged podnet and needs ownership to
       # mint recovery enrolment keys. The tag has no network grants.
       "tag:recovery" = ["autogroup:admin", "tag:podnet"]

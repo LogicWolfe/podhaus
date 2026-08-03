@@ -142,19 +142,12 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
   HTTPS must remain behind Pomerium. Tailscale keeps separate `*-recovery`
   names for explicit break-glass use.
 - Public and raw endpoints use Numbat's relay IP and Caddy `:4444`.
-  Cloudflare proxies only public CDN sites. Tunnel and Access resources
-  remain Terraform-owned rollback paths.
-- **bilby's `/etc/docker/daemon.json` sets
-  `"dns": ["100.100.100.100", "1.1.1.1"]`**, so Docker's embedded DNS
-  resolver (`127.0.0.11`) forwards unknown names to Tailscale's MagicDNS
-  first, then 1.1.1.1. This lets Kookaburra Periphery and Alloy dial back
-  to bilby by MagicDNS name without pinning a drifting tailnet IP.
-  Service-name resolution (`ferretdb`,
-  `caddy`, etc.) is still handled internally by the embedded resolver
-  before forwarding. **Never reintroduce per-container `dns: [...]`
-  in compose** — that replaces `127.0.0.11` entirely and breaks
-  service-name resolution (this exact mistake bit Komodo Core earlier
-  in 2026-05). Daemon-wide is the only correct knob.
+  Cloudflare proxies only public CDN sites. Voltaire and Pine Lake retain
+  their explicitly scoped Cloudflare Tunnel resources.
+- **Do not set per-container `dns: [...]` in compose.** It replaces Docker's
+  embedded resolver (`127.0.0.11`) and breaks service-name resolution such as
+  `ferretdb` and `caddy`. Bilby's daemon configuration has no DNS override;
+  containers use Docker DNS and the host's ordinary upstream resolver.
 
 ---
 
