@@ -134,8 +134,9 @@ branch = "main"
 
 ### Pinelake side (host)
 
-Use `numbat_bootstrap` as the connectivity reference for a
-new idempotent `pinelake_bootstrap`. Pinelake differs in these ways:
+Use the numbat plays (`ansible/playbooks/numbat-bootstrap.yml`) as the
+connectivity reference — per the host-provisioning migration plan, pinelake
+lands as a playbook, not a new script. Pinelake differs in these ways:
 
 - Runs on macOS, not QTS — paths under `/Users/baxter/` not
   `/share/CACHEDEV*_DATA/`.

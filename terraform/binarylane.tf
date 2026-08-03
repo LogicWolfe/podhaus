@@ -13,9 +13,9 @@ resource "binarylane_ssh_key" "numbat_piv" {
   public_key = file("${path.module}/operator_piv_authorized_key.pub")
 }
 
-# Stable across VPS replacement so numbat_bootstrap can verify the new host
-# before sending any credentials. The private half exists only in Terraform
-# state and the replacement's first-boot metadata.
+# Stable across VPS replacement so the numbat bootstrap play can verify the
+# new host before sending any credentials. The private half exists only in
+# Terraform state and the replacement's first-boot metadata.
 resource "tls_private_key" "numbat_ssh_host" {
   algorithm = "ED25519"
 }
@@ -79,8 +79,8 @@ resource "binarylane_server" "numbat" {
   port_blocking = true
   ssh_keys      = [binarylane_ssh_key.numbat.id, binarylane_ssh_key.numbat_piv.id]
   user_data = templatefile("${path.module}/numbat/cloud-init.yaml.tftpl", {
-    bootstrap_sshd_config  = indent(6, file("${path.module}/../numbat/host/bootstrap-sshd_config"))
-    bootstrap_sshd_service = indent(6, file("${path.module}/../numbat/host/bootstrap-sshd.service"))
+    bootstrap_sshd_config  = indent(6, file("${path.module}/numbat/bootstrap-sshd_config"))
+    bootstrap_sshd_service = indent(6, file("${path.module}/numbat/bootstrap-sshd.service"))
     nathan_authorized_key  = trimspace(file("${path.module}/ssh_authorized_key.pub"))
     pomerium_ssh_user_ca   = trimspace(tls_private_key.pomerium_ssh_user_ca.public_key_openssh)
     ssh_host_private_key   = indent(6, trimspace(tls_private_key.numbat_ssh_host.private_key_openssh))
@@ -88,7 +88,8 @@ resource "binarylane_server" "numbat" {
   })
 
   # cloud-init is first-boot input. Host reconciliation after creation is
-  # numbat_bootstrap; changing this template must not replace the gateway.
+  # ansible/playbooks/numbat-bootstrap.yml (fresh VM) and numbat.yml
+  # (steady state); changing this template must not replace the gateway.
   lifecycle {
     create_before_destroy = true
     ignore_changes        = [user_data]

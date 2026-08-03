@@ -208,10 +208,17 @@ ansible-playbook playbooks/bilby.yml</code></pre>
           necessary before <code>terraform apply -replace=binarylane_server.numbat</code> can
           create the replacement first. Terraform then provisions the VM, both addresses,
           DNS, PKI, Pocket ID client, and 1Password handoffs.</li>
-        <li>Run <code>./numbat_bootstrap</code> with the op-unlock SSH agent active. It
-          verifies Terraform's pinned host key, reconciles Rocky, Docker, nftables and
-          dockernet, starts the public relay first, then starts outbound Periphery and the
-          userspace SSH recovery plane before closing first-boot port 2222.</li>
+        <li>From bilby (it streams the Periphery keys from <code>/opt/komodo/keys</code>
+          and polls Core on localhost), with the op-unlock SSH agent active, run
+          <pre><code>cd ansible
+ansible-playbook playbooks/numbat-bootstrap.yml</code></pre>
+          First contact is pinned against the Terraform-generated host key published to
+          1Password; the play connects to the application IP on first-boot port 2222,
+          reconciles Rocky, Docker, nftables and dockernet, starts the public relay first,
+          then outbound Periphery (gated on Komodo reporting <code>state=Ok</code>) and the
+          userspace SSH recovery plane, and only then loads the final firewall and closes
+          port 2222. Steady-state reconciliation afterwards is
+          <code>ansible-playbook playbooks/numbat.yml</code>, reached through Pomerium.</li>
         <li>Run the podhaus sync or push the repository. Komodo deploys
           <code>numbat-pomerium</code>, <code>numbat-logging</code>, and
           <code>numbat-autoheal</code> from <code>podhaus-numbat</code>; it adopts the

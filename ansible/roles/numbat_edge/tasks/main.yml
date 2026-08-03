@@ -1,0 +1,130 @@
+# numbat's edge: the dual-address nftables firewall, the relay-address
+# dispatcher, the loopback-only sshd drop-in, and the residue cloud-init
+# writes once at first boot but never re-asserts.
+#
+# Shared by playbooks/numbat-bootstrap.yml (staging only — see
+# podhaus_numbat_firewall_apply in defaults) and playbooks/numbat.yml.
+# Against a correctly bootstrapped host every task here is changed=0; that
+# check-mode cleanliness is the equivalence gate for retiring the old
+# bootstrap script's reconciliation role.
+---
+- name: Install edge packages
+  # Re-asserts what cloud-init installed at first boot: nftables loads the
+  # ruleset, policycoreutils-python-utils backs the seport task below, and
+  # the guest agent is BinaryLane's console/ACPI channel.
+  ansible.builtin.dnf:
+    name:
+      - nftables
+      - policycoreutils-python-utils
+      - qemu-guest-agent
+    state: present
+
+- name: Remove cockpit
+  # Rocky preinstalls cockpit; a public gateway does not want a web console.
+  # cloud-init masks the socket at first boot but leaves the packages.
+  ansible.builtin.dnf:
+    name: "cockpit*"
+    state: absent
+
+- name: Mask cockpit.socket
+  # Belt and braces over the removal: a future dependency pulling cockpit
+  # back in still cannot activate it. The mask symlink survives the package
+  # removal, so this is changed=0 on a bootstrapped host.
+  ansible.builtin.systemd_service:
+    name: cockpit.socket
+    masked: true
+
+- name: Enable the guest agent
+  ansible.builtin.systemd_service:
+    name: qemu-guest-agent.service
+    enabled: true
+    state: started
+
+- name: Label port 2222 for sshd
+  # SELinux would otherwise refuse the bootstrap sshd's listener. Kept in
+  # steady state deliberately: the label is inert while nothing listens on
+  # 2222, and the next rebuild's first-boot sshd depends on it existing.
+  community.general.seport:
+    ports: "2222"
+    proto: tcp
+    setype: ssh_port_t
+    state: present
+
+- name: Ensure the config directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/nftables
+    - /etc/NetworkManager/dispatcher.d
+
+- name: Install the final firewall ruleset
+  # Both addresses' service ports open, everything else (including 2222)
+  # dropped. Replaces the bootstrap variant cloud-init wrote to the same
+  # path.
+  ansible.builtin.template:
+    src: podhaus.nft.j2
+    dest: /etc/nftables/podhaus.nft
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload the podhaus firewall
+
+- name: Install the firewall loader
+  # Delete-then-load: a bare `nft -f` would append duplicate rules into an
+  # existing table rather than replace it.
+  ansible.builtin.copy:
+    src: podhaus-nftables
+    dest: /usr/local/sbin/podhaus-nftables
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Reload the podhaus firewall
+
+- name: Install the firewall unit
+  ansible.builtin.copy:
+    src: podhaus-nftables.service
+    dest: /etc/systemd/system/podhaus-nftables.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Reload the podhaus firewall
+
+- name: Enable the firewall service
+  # Enable only. Loading a changed ruleset is the handler's job, and the
+  # bootstrap play gates that off until its close stage — the final ruleset
+  # closes 2222, the bootstrap transport.
+  ansible.builtin.systemd_service:
+    name: podhaus-nftables.service
+    enabled: true
+
+- name: Install the relay-address dispatcher
+  # NetworkManager re-runs this on eth0 events, which is what makes the
+  # second (relay) address survive DHCP renewals and reboots. The handler
+  # applies a change immediately rather than waiting for the next event.
+  ansible.builtin.template:
+    src: 20-numbat-relay-ip.j2
+    dest: /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Apply the relay address
+
+- name: Close sshd to loopback
+  # The steady-state contract: the host's real sshd serves only
+  # 127.0.0.1:22, reached through Pomerium's native SSH via the rathole
+  # relay. sshd's reload re-execs the daemon, so the new ListenAddress is
+  # rebound without dropping established sessions.
+  ansible.builtin.copy:
+    src: 00-podhaus-final.conf
+    dest: /etc/ssh/sshd_config.d/00-podhaus-final.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd

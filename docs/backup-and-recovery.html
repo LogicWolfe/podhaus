@@ -139,8 +139,8 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
         Numbat has the same conditional exemption. Its Pomerium Autocert cache and Docker
         volumes are replaceable; PKI and long-lived secrets are recoverable from Terraform
         state and 1Password. Rebuild is <code>terraform apply</code>,
-        <code>./numbat_bootstrap</code>, then Komodo deployment. Meaningful application data
-        landing there would reopen this decision.
+        <code>ansible-playbook playbooks/numbat-bootstrap.yml</code>, then Komodo
+        deployment. Meaningful application data landing there would reopen this decision.
       </p>
       <p>
         <strong>This exemption is conditional, not permanent.</strong> If any meaningful state

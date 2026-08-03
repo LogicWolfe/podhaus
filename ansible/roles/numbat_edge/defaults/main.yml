@@ -1,0 +1,12 @@
+# The two addresses have no defaults on purpose: they come from
+# host_vars/numbat.yml (1Password lookups fed by Terraform), and a missing
+# value must fail the template render loudly, never produce an empty
+# firewall rule.
+---
+# Staging vs activation. The config tasks always run; whether a *changed*
+# ruleset is loaded is gated here because the final ruleset does not open
+# port 2222. Steady state (playbooks/numbat.yml) keeps the default and
+# applies changes immediately; the bootstrap play sets this false so it can
+# stage the final ruleset without cutting the 2222 transport it runs on,
+# then activates it deliberately in its close stage.
+podhaus_numbat_firewall_apply: true

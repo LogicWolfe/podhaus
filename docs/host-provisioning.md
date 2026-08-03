@@ -32,8 +32,10 @@ networks, the NFS-bind hardening, the firewall, the Pomerium CA trust,
 and Komodo Core's host directories — but stays in `pending_migration`
 until its live check-mode equivalence pass comes back clean; that pass,
 the real run, and the scheduled live-restore flip are deliberate human
-acts. Every other host is still owned by its bootstrap script, and those
-scripts remain the runbook until each host is migrated deliberately. See
+acts. **numbat**'s two plays exist and its bootstrap script is gone; it
+likewise joins `provisioned` once its live check-mode pass comes back
+clean. voltaire is still owned by hand and kangaroo by its bootstrap
+script. See
 [the migration plan](plans/host-provisioning-migration.md) for what
 is left.
 
@@ -51,6 +53,8 @@ ansible/
     site.yml               targets the `provisioned` group
     fractal.yml            single-host entry point
     bilby.yml              single-host entry point (+ Komodo host dirs)
+    numbat.yml             single-host entry point (steady state)
+    numbat-bootstrap.yml   fresh-VM bring-up, sequencing preserved as play order
   roles/
     base/                  timezone, baseline packages, dirs
     wsl/                   /etc/wsl.conf, hostname
@@ -60,6 +64,7 @@ ansible/
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
     nfs_binds/             QNAP NFS-bind hardening (bilby)
     firewalld/             declarative zone + service XML (bilby)
+    numbat_edge/           numbat's nftables ruleset, relay-IP dispatcher, loopback sshd
 ```
 
 ### Inventory groups
@@ -69,12 +74,12 @@ Hosts are grouped twice: by **migration state** and by **role**.
 - `provisioned` — fully Ansible-owned. Currently fractal alone.
   `site.yml` targets this group and nothing else.
 - `pending_migration` — bilby, numbat, voltaire. Present so
-  the inventory is honest about the fleet. numbat and voltaire carry a
-  `podhaus_bootstrap_script` var naming the script that still owns them;
-  bilby's script is already absorbed into `playbooks/bilby.yml`, which
-  targets it by name. **No playbook targets this group.** Migrating a
-  host means moving it between the two groups by hand, after its
-  check-mode pass comes back clean.
+  the inventory is honest about the fleet. bilby's and numbat's scripts
+  are already absorbed into their playbooks, which target them by name —
+  both wait only on their live check-mode passes; voltaire is still
+  owned by hand. **No playbook targets this group as a group.**
+  Migrating a host means moving it between the two groups by hand,
+  after its check-mode pass comes back clean.
 - `excluded` — kangaroo. QTS ships no Python interpreter at all (no
   `python3`, no `/opt/bin/python3`, only the MalwareRemover and
   Container Station QPKGs), so it can never be an Ansible target.
@@ -171,6 +176,37 @@ than editing `sshd_config`, validates the file with `sshd -t -f %s`,
 re-checks the *combined* config afterwards, and **reloads rather than
 restarts**. A reload does not drop established connections, so the
 session running the playbook survives a bad edit long enough to fix it.
+
+**`numbat_edge`** is numbat's host-specific edge: the dual-address
+nftables ruleset and the NetworkManager dispatcher that keeps the relay
+IP on `eth0` are jinja templates fed from host_vars, whose two addresses
+are 1Password lookups against the fields Terraform publishes (never DNS,
+never `terraform output`). It also owns the loopback-only sshd drop-in,
+cockpit removal, the SELinux label for first-boot port 2222, and the
+guest agent. Activation of a changed ruleset is a handler gated on
+`podhaus_numbat_firewall_apply`, which exists for one consumer:
+
+## numbat: two plays
+
+numbat is a remote, self-firewalling host, so its bring-up is
+*sequencing* — preserved in `playbooks/numbat-bootstrap.yml` as task
+order, each constraint commented. The play runs **from bilby** (it
+streams Periphery keys from `/opt/komodo/keys` and polls Core on
+localhost), connects to the application IP on first-boot port 2222 with
+the host key pinned from 1Password, stages the `numbat_edge` config
+*without* loading the final ruleset (it would close 2222, the play's own
+transport), punches only the relay ports into the live bootstrap table,
+starts the rathole relay **before** Periphery (Periphery dials
+`core-connect.pod.haus`, which resolves back through this host's own
+relay), enrolls the Tailscale recovery daemon, and closes 2222 last —
+scheduling the stop of the bootstrap sshd three seconds after the play
+disconnects. Like the script it replaced, the bootstrap play is only
+truly exercised by the next rebuild.
+
+`playbooks/numbat.yml` is the steady state — base, docker, numbat_edge,
+sshd_pomerium_ca, komodo_periphery — reached through Pomerium like any
+managed host, and the thing check-mode equivalence proves against the
+live gateway.
 
 ## Adding a host
 

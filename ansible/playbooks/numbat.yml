@@ -1,0 +1,28 @@
+# Provision numbat: the public gateway, in steady state.
+#
+# Reached through Pomerium (numbat's own sshd is loopback-only; the
+# ssh://numbat.pod.haus route carries the session in via the relay):
+#   cd ansible
+#   ansible-playbook playbooks/numbat.yml --check --diff   # read first
+#   ansible-playbook playbooks/numbat.yml
+#
+# Deliberately not yet in site.yml: numbat stays in `pending_migration`
+# until the live check-mode equivalence pass comes back clean (see
+# docs/plans/host-provisioning-migration.md). A fresh VM is brought here by
+# playbooks/numbat-bootstrap.yml first.
+---
+- name: Provision numbat
+  hosts: numbat
+  gather_facts: true
+
+  roles:
+    - role: base
+      tags: [base]
+    - role: docker
+      tags: [docker]
+    - role: numbat_edge
+      tags: [edge]
+    - role: sshd_pomerium_ca
+      tags: [ssh]
+    - role: komodo_periphery
+      tags: [periphery]

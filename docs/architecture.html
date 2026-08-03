@@ -60,8 +60,8 @@
         <li>Komodo's own infrastructure lives in <code>komodo/</code>
           (<code>ferretdb.compose.yaml</code>, ResourceSync TOML files).</li>
         <li>Bootstrap scripts (<code>komodo-start</code>, <code>komodo-sync</code>,
-          <code>kangaroo_bootstrap</code>, <code>numbat_bootstrap</code>) sit at the
-          repo root.</li>
+          <code>kangaroo_bootstrap</code>) sit at the repo root; hosts migrated to
+          Ansible (fractal, numbat) are provisioned from <code>ansible/</code> instead.</li>
         <li><code>terraform/</code> is the ONE consolidated Terraform root for everything
           outside Docker: BinaryLane and Numbat edge material, Cloudflare DNS, CDN, AOP, and
           Pine Lake's current Access and Tunnel resources, UniFi LAN DNS, the GitHub webhook

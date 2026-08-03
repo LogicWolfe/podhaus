@@ -191,10 +191,13 @@
           port 22, Pomerium redirect and ACME on 80, Pomerium HTTPS on 443.</li>
         <li><strong><code>relay.numbat.pod.haus</code>:</strong> Pomerium native SSH on
           port 22, public TLS rathole on 443, and rathole control on 2333.</li>
-        <li><strong>Bootstrap-managed:</strong> host nftables, loopback-only sshd,
+        <li><strong>Ansible-managed:</strong> host nftables, loopback-only sshd,
           a first-boot-only key-pinned sshd on application port 2222, outbound Periphery,
-          and the SSH-only Tailscale recovery daemon. <code>./numbat_bootstrap</code> starts
-          the relay before Periphery, installs the final firewall, then closes port 2222.</li>
+          and the SSH-only Tailscale recovery daemon.
+          <code>ansible-playbook playbooks/numbat-bootstrap.yml</code> (fresh VM, from
+          bilby) starts the relay before Periphery, installs the final firewall, then
+          closes port 2222; <code>playbooks/numbat.yml</code> is the steady state, reached
+          through Pomerium.</li>
         <li><strong>Komodo-managed:</strong> <code>numbat-pomerium</code>,
           <code>numbat-relay</code>,
           <code>numbat-logging</code>, and <code>numbat-autoheal</code> through linked repo

@@ -140,42 +140,29 @@ Remaining — each a deliberate human act, in order:
 
 ### 3. numbat, as two plays
 
-`numbat_bootstrap` is a hand-rolled Ansible run; its real content is
-sequencing. That sequencing is a property of a remote, self-firewalling
-host and survives the move as **play order**, not as shell.
+Done so far: `numbat_bootstrap` and `numbat/host/` are gone.
+`playbooks/numbat-bootstrap.yml` (fresh VM, sequencing preserved as
+play order) and `playbooks/numbat.yml` (steady state) own the host,
+sharing the `numbat_edge` role; docs describe the resulting system
+([host-provisioning.md](../host-provisioning.md),
+[disaster-recovery](../disaster-recovery.html)).
 
-**Bootstrap play** (`playbooks/numbat-bootstrap.yml`, fresh VM only):
+Remaining:
 
-- Connects to the application IP on **2222** (the only port cloud-init's
-  nft ruleset opens) as `nathan` (cloud-init grants NOPASSWD sudo — no
-  root transport needed; the break-glass root password still gets set
-  from 1P). First contact is pinned: a pre-task writes a throwaway
-  `known_hosts` from the 1P-published host key — same channel as
-  everything, no `terraform output` shelling.
-- Then, in order: package/config residue cloud-init doesn't cover
-  (cockpit removal, selinux port, dispatcher script + final `podhaus.nft`
-  from **jinja templates** replacing the `sed`-substituted
-  `numbat/host/*` files), docker role, **relay before Periphery**
-  (clone the linked repo, render `relay/.env` from 1P lookups,
-  `docker_compose_v2` up, wait for the rathole server), the existing
-  `komodo_periphery` role unchanged (its wait-for-`Ok` gate is the
-  health signal), `tailscale-recovery-bootstrap` invoked via `command`
-  with the auth key on stdin, and **close 2222 last** — replicating the
-  `systemd-run --on-active` trick so the play can schedule the death of
-  its own transport.
-- Honest limitation, same as the script's: the bootstrap play is only
-  truly exercised by the next rebuild. The steady-state play is what
-  check-mode equivalence can prove against the live host.
-
-**Steady state:** numbat joins `provisioned` and `site.yml`, reached via
-`ssh.pod.haus` like fractal (its sshd is loopback-only behind Pomerium).
-Roles: base, docker (engine managed, `live-restore: true`),
-sshd_pomerium_ca, komodo_periphery, plus the nftables/dispatcher
-config as a small `numbat_edge` role shared by both plays.
-
-Delete `numbat_bootstrap` and `numbat/host/` (files become role
-files/templates); update `docs/disaster-recovery.html` to name the two
-plays as the rebuild path.
+- [ ] Run the live check-mode equivalence pass through Pomerium:
+  `ansible-playbook playbooks/numbat.yml --check --diff` to zero.
+  Gated on slice 2's generalised docker role being merged — numbat sets
+  `podhaus_docker_engine_managed`/`podhaus_docker_live_restore`, needs
+  the distro-derived `linux/rhel` repo URL, and takes a one-time
+  byte-normalising `daemon.json` restart (safe: live-restore is already
+  active there). Expected first-run deltas beyond that: the
+  `sshd_pomerium_ca` drop-in (new file, same trust) and possibly
+  dockernet options if the script-era `docker network create` picked a
+  different subnet — verify before letting the role touch it.
+- [ ] Then move numbat from `pending_migration` to `provisioned`
+  (`site.yml` covers it via the role groups it already joined).
+- [ ] The bootstrap play itself is only truly exercised by the next
+  rebuild.
 
 ### 4. voltaire — a full homelab member
 

@@ -9,6 +9,6 @@ output "numbat_relay_ipv4" {
 }
 
 output "numbat_ssh_host_public_key" {
-  description = "Pinned ED25519 host key used by numbat_bootstrap."
+  description = "Pinned ED25519 host key; the numbat bootstrap play reads it from 1Password."
   value       = tls_private_key.numbat_ssh_host.public_key_openssh
 }

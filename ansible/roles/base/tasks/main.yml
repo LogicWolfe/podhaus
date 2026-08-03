@@ -11,10 +11,13 @@
       than letting this role no-op.
 
 - name: Ensure the dnf5 Python bindings are present
-  # The dnf module needs python3-libdnf5 to inspect package state. A normal
-  # run auto-installs it, but check mode cannot — so without this, `--check`
-  # fails on a fresh host and the read-before-apply pass is unavailable
-  # exactly when it is most useful.
+  # On dnf5 hosts (Fedora 41+) the dnf module needs python3-libdnf5 to
+  # inspect package state. A normal run auto-installs it, but check mode
+  # cannot — so without this, `--check` fails on a fresh host and the
+  # read-before-apply pass is unavailable exactly when it is most useful.
+  # dnf4 hosts (Rocky/RHEL 10 — numbat) ship the python3-dnf bindings with
+  # the engine and have no python3-libdnf5 package at all, so the install
+  # attempt would fail there; hence the pkg_mgr gate.
   #
   # `check_mode: false` is the one deliberate exception in this layer: it
   # makes the task run even during a dry run. Justified because it installs
@@ -28,6 +31,7 @@
   register: libdnf5_bootstrap
   changed_when: "'Installing' in libdnf5_bootstrap.stdout"
   check_mode: false
+  when: ansible_facts['pkg_mgr'] == 'dnf5'
 
 - name: Set the system timezone
   community.general.timezone:

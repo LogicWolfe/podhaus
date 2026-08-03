@@ -1,0 +1,29 @@
+---
+- name: Reload systemd
+  # Defined before the firewall handler so a changed unit file is re-read
+  # before it is reloaded (handlers run in definition order, not
+  # notification order).
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Reload the podhaus firewall
+  # The oneshot unit stays active (RemainAfterExit), so reloaded runs
+  # ExecReload — the delete-then-load loader script. Gated so the bootstrap
+  # play can stage a ruleset that would cut its own transport; its close
+  # stage owns activation there.
+  ansible.builtin.systemd_service:
+    name: podhaus-nftables.service
+    state: reloaded
+  when: podhaus_numbat_firewall_apply
+
+- name: Apply the relay address
+  ansible.builtin.command: /etc/NetworkManager/dispatcher.d/20-numbat-relay-ip eth0 up
+  changed_when: true
+
+- name: Reload sshd
+  # Reload, never restart — same contract as sshd_pomerium_ca's handler
+  # (identical name and action on purpose: when both roles run in one play,
+  # a single reload serves both).
+  ansible.builtin.systemd_service:
+    name: sshd
+    state: reloaded

@@ -248,9 +248,9 @@ resource "onepassword_item" "pomerium_secrets" {
         }
         # Public halves, published so consumers derive them from the one
         # producer instead of carrying copies: the sshd_pomerium_ca Ansible
-        # role and numbat_bootstrap read the CA; chezmoi's 00-ssh-hostkeys
-        # pins ssh.pod.haus from the host key. The committed
-        # pomerium/keys/user-ca.pub copy this replaces is gone.
+        # role reads the CA (numbat's cloud-init receives it TF-direct);
+        # chezmoi's 00-ssh-hostkeys pins ssh.pod.haus from the host key.
+        # The committed pomerium/keys/user-ca.pub copy this replaces is gone.
         ssh_user_ca_pub = {
           type  = "STRING"
           value = trimspace(tls_private_key.pomerium_ssh_user_ca.public_key_openssh)

@@ -1,0 +1,34 @@
+# numbat — BinaryLane Perth VPS (Rocky Linux 10, x86_64), the public
+# gateway.
+#
+# Steady state is reached through Pomerium like every managed host; the
+# bootstrap play overrides ansible_host/ansible_port at the play level
+# because a fresh VM answers only on the application IP's first-boot port
+# 2222.
+---
+ansible_host: numbat.pod.haus
+ansible_user: nathan
+
+# The two public addresses. Terraform (BinaryLane) is the producer and
+# publishes them to 1Password beside the break-glass credential — the
+# fleet's one channel. Deliberately not DNS-derived (the records are
+# consumers of these same values, and cache lag would bite in exactly the
+# rebuild window) and not `terraform output` (a shell-out coupling the
+# from-anywhere contract forbids).
+podhaus_numbat_application_ipv4: >-
+  {{ lookup('community.general.onepassword', 'Numbat Root',
+            section='Host', field='application_ipv4', vault='Homelab') }}
+podhaus_numbat_relay_ipv4: >-
+  {{ lookup('community.general.onepassword', 'Numbat Root',
+            section='Host', field='relay_ipv4', vault='Homelab') }}
+
+# Docker: numbat runs docker-ce (unlike bilby's moby-engine), and its
+# daemon.json has carried live-restore since first boot — a daemon restart
+# must not take the public edge down with it.
+podhaus_docker_engine_managed: true
+podhaus_docker_live_restore: true
+
+# Komodo Periphery: every komodo_periphery role default already matches
+# numbat (/opt/komodo-periphery layout, keys streamed from the control
+# node's /opt/komodo/keys, Core polled on localhost:9120) — nothing to
+# override.

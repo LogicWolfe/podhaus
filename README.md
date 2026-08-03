@@ -64,7 +64,7 @@ Bootstrap the remote hosts from bilby:
 
 ```sh
 ./kangaroo_bootstrap
-./numbat_bootstrap
+(cd ansible && ansible-playbook playbooks/numbat-bootstrap.yml)
 ```
 
 ## Terraform

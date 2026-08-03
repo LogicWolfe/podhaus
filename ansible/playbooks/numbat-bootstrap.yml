@@ -1,0 +1,293 @@
+# Bootstrap a fresh numbat VM into a fleet member (replaced
+# ./numbat_bootstrap).
+#
+# Run from bilby: the control node must hold /opt/komodo/keys (Core's
+# public key and numbat's Periphery private key) and reach Core's API on
+# localhost:9120, exactly as the script it replaced did.
+#
+#   cd ansible
+#   ansible-playbook playbooks/numbat-bootstrap.yml
+#
+# Honest limitation, inherited from the script: this play is only truly
+# exercised by the next rebuild. What check-mode can prove against the live
+# host is playbooks/numbat.yml. This play's real content is *sequencing* —
+# a property of a remote, self-firewalling host — preserved here as task
+# order, with each ordering constraint carrying its why.
+---
+- name: Pin numbat's host key for first contact
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Resolve the throwaway known_hosts path
+      # A fact, so the second play can reference it. Throwaway because
+      # steady state never dials these addresses directly again — Pomerium
+      # owns the transport once bootstrap closes port 2222.
+      ansible.builtin.set_fact:
+        numbat_known_hosts_file: >-
+          {{ (lookup('env', 'XDG_STATE_HOME')
+              | default(lookup('env', 'HOME') ~ '/.local/state', true))
+             ~ '/podhaus/numbat-known-hosts' }}
+
+    - name: Ensure the state directory exists
+      ansible.builtin.file:
+        path: "{{ numbat_known_hosts_file | dirname }}"
+        state: directory
+        mode: "0700"
+
+    - name: Pin the Terraform-published host key
+      # First contact is verified, never TOFU: Terraform generates the host
+      # key (stable across VPS replacement) and publishes the public half
+      # to 1Password, the fleet's one channel — no `terraform output`
+      # shell-out. Both address forms the fleet ever dials directly: plain
+      # 22 and the first-boot bootstrap sshd on 2222.
+      ansible.builtin.copy:
+        dest: "{{ numbat_known_hosts_file }}"
+        mode: "0600"
+        content: |
+          {{ numbat_application_ipv4 }} {{ numbat_host_key }}
+          [{{ numbat_application_ipv4 }}]:2222 {{ numbat_host_key }}
+      vars:
+        numbat_application_ipv4: "{{ hostvars['numbat'].podhaus_numbat_application_ipv4 }}"
+        numbat_host_key: >-
+          {{ lookup('community.general.onepassword', 'Numbat Root',
+                    section='Host', field='ssh_host_key_pub', vault='Homelab') }}
+
+- name: Bootstrap numbat
+  hosts: numbat
+  gather_facts: true
+
+  vars:
+    # A fresh VM answers only on the application address at port 2222 — the
+    # single inbound port cloud-init's bootstrap nft ruleset opens.
+    # Overridden at the play level so the steady-state inventory values
+    # (numbat.pod.haus through Pomerium) stay clean for numbat.yml.
+    ansible_host: "{{ podhaus_numbat_application_ipv4 }}"
+    ansible_port: 2222
+    # Same IdentityAgent/ConnectTimeout contract as group_vars/all.yml,
+    # plus strict checking against the throwaway known_hosts pinned above.
+    ansible_ssh_common_args: >-
+      -o IdentityAgent={{ lookup('env', 'SSH_AUTH_SOCK') }}
+      -o ConnectTimeout=15
+      -o StrictHostKeyChecking=yes
+      -o UserKnownHostsFile={{ hostvars['localhost'].numbat_known_hosts_file }}
+    # Stage the edge config without activating it: the final ruleset does
+    # not open 2222, so loading it before the close stage would cut this
+    # play's own transport. The close stage activates it, last.
+    podhaus_numbat_firewall_apply: false
+
+  tasks:
+    - name: Set the break-glass root password
+      # First, as the script did: BinaryLane emails its creation-only root
+      # password in plaintext, so the 1Password-held credential replaces it
+      # before anything else happens on the host.
+      ansible.builtin.command: chpasswd
+      args:
+        stdin: >-
+          root:{{ lookup('community.general.onepassword', 'Numbat Root',
+                         field='password', vault='Homelab') }}
+      no_log: true
+      changed_when: true
+
+    - name: Apply the fleet baseline
+      ansible.builtin.import_role:
+        name: base
+
+    - name: Stage the edge configuration
+      # Firewall, dispatcher, and sshd config land on disk here; ruleset
+      # activation is gated off (podhaus_numbat_firewall_apply above) until
+      # the close stage.
+      ansible.builtin.import_role:
+        name: numbat_edge
+
+    - name: Converge sshd to the steady-state contract
+      # Safe mid-bootstrap: the play's transport is the separate bootstrap
+      # sshd on 2222, so reloading the main (about-to-be loopback-only)
+      # sshd cannot cut this session. Running the role here means the first
+      # numbat.yml check after a rebuild starts from changed=0.
+      ansible.builtin.import_role:
+        name: sshd_pomerium_ca
+
+    - name: Apply the staged relay address and sshd reload now
+      # The dispatcher handler must fire before the nft insert and relay
+      # start below — the relay address has to exist on eth0 before
+      # anything filters or binds on it. (The firewall handler is gated off
+      # and skips.)
+      ansible.builtin.meta: flush_handlers
+
+    - name: Read the live bootstrap ruleset
+      ansible.builtin.command: nft list chain inet podhaus input
+      register: numbat_nft_input
+      changed_when: false
+
+    - name: Open the relay ports in the live bootstrap ruleset
+      # The final ruleset is staged on disk but deliberately not loaded (it
+      # would close 2222 — see above). The rathole server must be reachable
+      # on 443/2333 before it starts, so exactly those ports are punched
+      # into the *running* bootstrap table; the close stage then replaces
+      # the whole table with the final ruleset.
+      ansible.builtin.command: >-
+        nft insert rule inet podhaus input
+        ip daddr {{ podhaus_numbat_relay_ipv4 }} tcp dport { 443, 2333 } accept
+      when: podhaus_numbat_relay_ipv4 not in numbat_nft_input.stdout
+      changed_when: true
+
+    - name: Install Docker
+      # Before the relay: the relay is a locally built compose project, so
+      # the engine (and dockernet, which the role owns) must exist first.
+      ansible.builtin.import_role:
+        name: docker
+
+    - name: Ensure the linked-repo parent directory exists
+      ansible.builtin.file:
+        path: /opt/komodo-periphery/etc-komodo/repos
+        state: directory
+        mode: "0755"
+
+    - name: Clone the podhaus linked repo
+      # Relay before Periphery, the script's load-bearing order: Periphery
+      # dials wss://core-connect.pod.haus, which resolves back to this very
+      # host's public_tls rathole service and tunnels to Core behind
+      # bilby's caddy — so the relay must be up before Periphery can
+      # connect at all. This checkout is the same clone Komodo's
+      # linked-repo Periphery later adopts and pulls.
+      ansible.builtin.git:
+        repo: https://github.com/LogicWolfe/podhaus.git
+        dest: /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat
+        version: main
+        depth: 1
+
+    - name: Render the relay environment
+      # The token list is derived from what relay/numbat/compose.yaml
+      # actually consumes, never maintained by hand: the script this
+      # replaced carried a hand-written list that went stale (it predated
+      # fractal_ssh/fractal_http, so a rebuild would have brought the relay
+      # up without fractal's services). A token added to compose with no
+      # matching 1Password field fails the lookup loudly here.
+      ansible.builtin.copy:
+        dest: /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat/relay/numbat/.env
+        mode: "0600"
+        content: |
+          {% for name in numbat_relay_token_env_names | sort %}
+          {{ name }}={{ lookup('community.general.onepassword', 'Numbat Rathole',
+                               section='Tokens', vault='Homelab',
+                               field=name | regex_replace('^RATHOLE_(.+)_TOKEN$', '\\1')
+                                     | lower) }}
+          {% endfor %}
+          RATHOLE_NOISE_LOCAL_PRIVATE_KEY={{ lookup('community.general.onepassword',
+                                                    'Rathole Relay',
+                                                    field='noise_private_key',
+                                                    vault='Homelab') }}
+      vars:
+        numbat_relay_token_env_names: >-
+          {{ (lookup('ansible.builtin.file',
+                     playbook_dir ~ '/../../relay/numbat/compose.yaml')
+              | from_yaml).services['rathole-server'].environment.keys()
+             | select('match', 'RATHOLE_.+_TOKEN$') | list }}
+      no_log: true
+
+    - name: Start the relay
+      # build: always mirrors the script's `up -d --build`.
+      community.docker.docker_compose_v2:
+        project_src: /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat/relay/numbat
+        project_name: numbat-relay
+        state: present
+        build: always
+
+    - name: Assert the rathole server is running
+      community.docker.docker_container_info:
+        name: numbat-rathole-server
+      register: numbat_rathole
+      failed_when: not (numbat_rathole.exists and numbat_rathole.container.State.Running)
+
+    - name: Wait for core-connect to answer through the relay
+      # Probed from the target, as the script did: proves the whole return
+      # path — this host's relay, bilby's caddy, Core — before Periphery
+      # dials it. 400 (not a websocket 101) is the expected answer to a
+      # bare GET on the connector endpoint; the script's `curl -sk` becomes
+      # validate_certs: false.
+      ansible.builtin.uri:
+        url: "https://core-connect.pod.haus/ws/periphery?server=numbat"
+        validate_certs: false
+        status_code: 400
+      register: numbat_core_connect
+      until: numbat_core_connect.status == 400
+      retries: 30
+      delay: 2
+
+    - name: Bring up Periphery and gate on Core reporting Ok
+      # The role unchanged: it streams the keypair halves from the control
+      # node's /opt/komodo/keys (the reason this play runs from bilby),
+      # renders the periphery config, composes it up, and polls Core's
+      # ListServers until state=Ok — the script's separate "wait for
+      # Komodo" stage lives inside the role's final task.
+      ansible.builtin.import_role:
+        name: komodo_periphery
+
+    - name: Check whether the recovery plane is already enrolled
+      ansible.builtin.command: systemctl is-active podhaus-tailscale-recovery.service
+      register: numbat_recovery_active
+      failed_when: false
+      changed_when: false
+
+    - name: Stage the recovery bootstrap script
+      # tailscale-recovery-bootstrap stays ONE script because it must also
+      # run on kangaroo (no Python); systemd hosts invoke it rather than
+      # growing a parallel role.
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../tailscale-recovery-bootstrap"
+        dest: /tmp/tailscale-recovery-bootstrap
+        mode: "0700"
+      when: numbat_recovery_active.stdout != 'active'
+
+    - name: Enroll the userspace SSH recovery daemon
+      # The auth key rides stdin, the script's contract — it never touches
+      # the remote filesystem or the process list.
+      ansible.builtin.command: /tmp/tailscale-recovery-bootstrap --hostname numbat-recovery
+      args:
+        stdin: >-
+          {{ lookup('community.general.onepassword',
+                    'Tailscale Recovery Auth Key',
+                    field='password', vault='Homelab') }}
+      no_log: true
+      changed_when: true
+      when: numbat_recovery_active.stdout != 'active'
+
+    - name: Remove the staged bootstrap script
+      ansible.builtin.file:
+        path: /tmp/tailscale-recovery-bootstrap
+        state: absent
+      when: numbat_recovery_active.stdout != 'active'
+
+    - name: Flush any pending handlers before the transport closes
+      # Nothing may stay queued past this point: play-end handlers would
+      # otherwise run after the close stage has scheduled the death of the
+      # connection they need.
+      ansible.builtin.meta: flush_handlers
+
+    - name: Load the final firewall ruleset
+      # The close begins. This replaces the bootstrap table with the final
+      # ruleset: both addresses' service ports open, 2222 closed. The
+      # play's own established connection survives (ct state established
+      # accept); no new 2222 connection will. reload-or-restart rather than
+      # a state so it works whether or not the oneshot unit is active,
+      # mirroring the script.
+      ansible.builtin.command: systemctl reload-or-restart podhaus-nftables.service
+      changed_when: true
+
+    - name: Disable the bootstrap sshd
+      # Disable now, stop later: stopping the unit kills its per-connection
+      # children — including the session this play is running on.
+      ansible.builtin.systemd_service:
+        name: numbat-bootstrap-sshd.service
+        enabled: false
+
+    - name: Schedule the death of this play's own transport
+      # The script's systemd-run trick, preserved: a detached three-second
+      # timer stops the bootstrap sshd after the play has disconnected.
+      # This must remain the play's final task against numbat.
+      ansible.builtin.command: >-
+        systemd-run --quiet --collect --unit podhaus-close-bootstrap-ssh
+        --on-active=3s systemctl stop numbat-bootstrap-sshd.service
+      changed_when: true

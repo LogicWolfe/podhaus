@@ -136,8 +136,9 @@ config were present.
 
 ## Edge rebuild
 
-Run Terraform to provision Numbat, then run `./numbat_bootstrap` to reconcile
-the host and outbound Periphery. Komodo deploys `numbat-relay` and
+Run Terraform to provision Numbat, then run
+`ansible-playbook playbooks/numbat-bootstrap.yml` (from `ansible/`, on bilby)
+to reconcile the host and outbound Periphery. Komodo deploys `numbat-relay` and
 `numbat-pomerium`; `bilby-relay` supplies Forgejo SSH and the private origin.
 Verify browser OIDC, LFS, and `ssh -T git@git.pod.haus`.
 

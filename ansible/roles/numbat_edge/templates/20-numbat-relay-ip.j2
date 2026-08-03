@@ -4,6 +4,6 @@ set -euo pipefail
 [[ $1 == eth0 ]] || exit 0
 case $2 in
   up | dhcp4-change | reapply)
-    ip address replace ${NUMBAT_RELAY_IPV4}/24 dev eth0
+    ip address replace {{ podhaus_numbat_relay_ipv4 }}/24 dev eth0
     ;;
 esac
