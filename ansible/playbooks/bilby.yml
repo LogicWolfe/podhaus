@@ -9,10 +9,9 @@
 #   ansible-playbook playbooks/bilby.yml --check --diff   # read first
 #   ansible-playbook playbooks/bilby.yml
 #
-# The live-restore flip is still a scheduled 04:00-window human act — until
-# it happens, host_vars/bilby.yml pins podhaus_docker_live_restore: false,
-# so a run outside the window must come back with the docker daemon-config
-# task unchanged.
+# The live-restore flip landed 2026-08-04, so the docker daemon-config task
+# is steady-state now: any run should report it unchanged. If it ever comes
+# back changed, something rewrote /etc/docker/daemon.json out of band.
 ---
 - name: Provision bilby
   hosts: bilby

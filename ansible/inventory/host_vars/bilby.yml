@@ -16,13 +16,10 @@ ansible_python_interpreter: /usr/bin/python3
 # networks here.
 podhaus_docker_engine_managed: false
 
-# live-restore is not active on bilby yet, and flipping it requires the one
-# remaining UNPROTECTED daemon restart — every container bounces. The flip
-# to true is a deliberate human act in a 04:00 maintenance window (edit
-# this line, run the play, take the restart), never a handler side effect.
-# Until then this stays false, which renders daemon.json byte-identical to
-# the live file so the restart handler can never fire on bilby.
-podhaus_docker_live_restore: false
+# Flipped 2026-08-04. The one unprotected daemon restart it required has
+# been taken; bilby now matches the fleet default, so future daemon
+# restarts leave containers running instead of bouncing all 45.
+podhaus_docker_live_restore: true
 
 # The two fenwick-private bridges (browser-quarantine topology; rationale in
 # the fenwick repo's docs/networking.html). Labels match the live networks
