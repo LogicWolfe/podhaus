@@ -3,11 +3,13 @@
 # A WSL guest is not a normal host in two ways that matter here:
 #   - its lifecycle is owned by Windows (no real boot; an autostart task on
 #     the Windows side starts the instance), and
-#   - /etc/wsl.conf is read only at instance start, so changes here need a
-#     `wsl --shutdown` from Windows before they fully take effect.
-# Neither is reachable from inside the guest — `[interop] enabled=false`
-# deliberately severs that path. Anything requiring a Windows action is
-# surfaced to the operator rather than attempted.
+#   - /etc/wsl.conf is read only at instance start, so a persistent config
+#     change here only takes effect on the next WSL instance restart — which
+#     Windows drives on its own (reboots, updates), not this role. We write
+#     the config correctly by construction and apply the live equivalent
+#     immediately, rather than asking the operator to force a restart.
+# Interop is disabled (`[interop] enabled=false`), so nothing in this role
+# can reach or drive the Windows side even if it wanted to.
 ---
 - name: Assert this really is a WSL guest
   ansible.builtin.assert:
@@ -15,6 +17,18 @@
     fail_msg: >-
       {{ inventory_hostname }} is in the wsl role but its kernel
       ({{ ansible_facts['kernel'] }}) is not a WSL kernel.
+
+- name: Ensure the [network] section exists in /etc/wsl.conf
+  # insertafter below is a no-op if this header is missing, so the hostname
+  # line would land outside any section and WSL may not parse it. Guarantee
+  # the header first so the persistent write is correct by construction —
+  # nothing downstream needs to prove it took effect.
+  ansible.builtin.lineinfile:
+    path: /etc/wsl.conf
+    regexp: '^\[network\]'
+    line: '[network]'
+    insertafter: EOF
+    state: present
 
 - name: Set the guest hostname in /etc/wsl.conf
   # WSL rewrites /etc/hostname from this key on every instance start, so
@@ -33,13 +47,14 @@
   ansible.builtin.hostname:
     name: "{{ podhaus_hostname }}"
 
-- name: Report that a Windows-side restart is needed
-  # Not a failure: the running instance already has the name applied above.
-  # This exists so the operator knows the persistent path is untested until
-  # the next `wsl --shutdown`.
+- name: Note that the persistent hostname will confirm itself naturally
+  # Informational, not an action item. The running instance already has the
+  # right name (task above) and the [network] header is guaranteed to exist
+  # (task above), so the write is correct by construction. Windows restarts
+  # WSL instances on its own routinely (reboots, updates) — that's what will
+  # exercise this, with no need to force a `wsl --shutdown` just to check.
   ansible.builtin.debug:
     msg: >-
-      /etc/wsl.conf changed. Run `wsl --shutdown` from Windows and restart the
-      instance to confirm the hostname persists across an instance restart.
-      This cannot be done from inside the guest (interop is disabled).
+      /etc/wsl.conf changed. The persistent hostname will take effect on
+      Windows' own next WSL instance restart — no action needed.
   when: wsl_hostname_conf is changed

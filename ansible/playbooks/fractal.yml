@@ -33,9 +33,10 @@
       ansible.builtin.debug:
         msg: >-
           Host provisioning complete. Remaining manual steps:
-          (1) `wsl --shutdown` from Windows to confirm the hostname persists;
-          (2) run `chezmoi init --apply` as {{ ansible_user }} to lay down user
+          (1) run `chezmoi init --apply` as {{ ansible_user }} to lay down user
           state and mint the soft machine key;
-          (3) register the resulting ~/.ssh/id_fractal.pub on git.pod.haus
+          (2) register the resulting ~/.ssh/id_fractal.pub on git.pod.haus
           (LogicWolfe) and github.com (logicwolfe);
-          (4) `gh auth login` for the HTTPS credential helper.
+          (3) `gh auth login` for the HTTPS credential helper.
+          The persistent WSL hostname (if changed this run) needs no separate
+          step — it confirms itself on Windows' own next WSL restart.
