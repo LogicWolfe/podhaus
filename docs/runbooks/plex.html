@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Service runbooks">
-  <meta name="doc-order" content="1">
-  <title>Plex — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Plex</h1>
       <p class="lead text-lg text-text-muted">
@@ -81,9 +62,10 @@
 
       <h2 id="ingress">Web ingress</h2>
       <p>
-        <code>plex.pod.haus</code> routes to <code>http://172.18.0.1:32400</code> via
-        Cloudflare Tunnel (Plex runs <code>network_mode: host</code>, so dockernet's bridge
-        gateway IP is the entry point).
+        <code>plex.pod.haus</code> routes through Numbat Pomerium and the private rathole
+        origin to Caddy, which reaches <code>http://172.18.0.1:32400</code>. Plex runs
+        <code>network_mode: host</code>, so dockernet's bridge gateway IP is Caddy's entry
+        point.
       </p>
       <p>
         <strong>Web-only.</strong> Native Plex clients are <em>not</em> told about this URL via
@@ -135,13 +117,13 @@ curl -s "http://localhost:32400/myplex/account?X-Plex-Token=$TOKEN" \
         stream. Affected files are typically Disney+ <code>MULTi</code> rips carrying 15–25
         audio tracks.
       </p>
-      <aside class="callout note">
-        <span class="callout-title">Two red herrings</span>
+      <blockquote>
+        <p><strong>Two red herrings</strong></p>
         These releases often order <code>English [Audio Description]</code> <em>before</em> the
         real English track, and often flag no audio track as default. Neither is the cause —
         removing the AD track or fixing the default flag does not fix it. Nor is it the codec;
         the AAC tracks decode fine. Track <em>count</em> is the trigger.
-      </aside>
+      </blockquote>
       <p>
         <strong>Fix.</strong> Remux the file down to a single English audio track. There is then
         nothing to select and no index to miscount. Block copy, no re-encode, seconds per file;
@@ -173,14 +155,14 @@ mv -f "$f.tmp" "$f"</code></pre>
       <pre><code>mkvmerge -J out.mkv | jq '[.tracks[] | select(.type=="audio")] | length'   # must be 1
 ffprobe -v error -select_streams v:0 \
   -show_entries stream_side_data=dv_profile -of csv=p=0 out.mkv          # same as source</code></pre>
-      <aside class="callout note">
-        <span class="callout-title">Compare DV to the source, don't assert it</span>
+      <blockquote>
+        <p><strong>Compare DV to the source, don't assert it</strong></p>
         Scene releases are not internally consistent: in the Maul season only E01, E08 and E10
         carry a DOVI configuration record at all, the rest are plain HDR10, despite
         <code>HDR DV</code> in the release name. A verify step that asserts "DV must be present"
         will false-fail on the majority of the season. <code>mkvmerge</code> itself preserves DV
         correctly (confirmed on E01) — assert <em>output DV == input DV</em>.
-      </aside>
+      </blockquote>
       <p>
         To confirm the surviving track is the real English mix and not the AD one, decode the
         same window from the source track and the remuxed track and compare
@@ -217,13 +199,13 @@ ffprobe -v error -select_streams v:0 \
         client-visible stalls. Moving the DB onto bilby's NVMe eliminated the contention
         class entirely. Bulk media reads stay on Pouch (sequential, HDDs are fine).
       </p>
-      <aside class="callout note">
-        <span class="callout-title">No hardware transcoding</span>
+      <blockquote>
+        <p><strong>No hardware transcoding</strong></p>
         Apple Silicon's VideoToolbox media engines have no Linux driver — they're an
         undocumented Apple block, Asahi can't expose them. Plex transcoding is software-only.
         M1 CPU is fast enough for 1080p in software trivially; 4K HDR tone-mapping is the worst
         case, and the answer there is "play a different copy" or "let the client direct-play".
-      </aside>
+      </blockquote>
 
       <h2 id="see-also">See also</h2>
       <ul>
@@ -234,11 +216,3 @@ ffprobe -v error -select_streams v:0 \
       </ul>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

@@ -122,7 +122,8 @@ against the static page (`/`).
 
 1. **Pre-flight**: capture
    `colima ssh -- stat -c %g /Users/baxter` value. Confirm
-   `torrent.pinelake.haus` is loading the Flood UI behind Access.
+   `torrent.pinelake.haus` is loading the Flood UI through its current
+   Cloudflare Access path.
    Confirm rtorrent has no active hash-checks in progress
    (`/api/torrents` count stable, no `hashing` state).
 2. **Stop legacy container**: `docker stop rtorrent-flood &&
@@ -166,8 +167,7 @@ Detail in [Platform stacks](platform-stacks.md).
 ## Acceptance criteria
 
 - `docker ps` shows `flood` container on `dockernet`, healthy
-- `torrent.pinelake.haus` returns the Flood UI through Cloudflare
-  Access
+- `torrent.pinelake.haus` returns the Flood UI through Pomerium after cutover
 - `curl -fsS http://flood:3000/api/torrents` from another container on
   dockernet returns the same torrent list as before cutover
 - No rehashing observed; all previously-completed torrents still

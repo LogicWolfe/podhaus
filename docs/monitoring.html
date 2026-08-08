@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Operations">
-  <meta name="doc-order" content="2">
-  <title>Monitoring — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Monitoring</h1>
       <p class="lead text-lg text-text-muted">
@@ -107,7 +88,7 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           <code>302</code>
           for unauthenticated requests, which the default <code>[STATUS] &lt; 400</code>
           condition accepts as healthy — masking backend failure. Bit us on 2026-05-30
-          (see <a href="/postmortems/postmortem-viewer.html?file=2026-05-30-power-outage-nfs-recovery.md">postmortem</a>).</li>
+          (see <a href="/postmortems/2026-05-30-power-outage-nfs-recovery.md">postmortem</a>).</li>
         <li><strong>Push (external endpoints)</strong> — bearer-token-protected URLs that
           jobs/scripts POST to with <code>success=true|false&amp;error=...</code>. Used for
           Backrest nightly heartbeats, Sky cache invalidation, and the RAR-extraction backlog scan.</li>
@@ -429,7 +410,7 @@ $DK restart alloy backrest                           # reattach by name + rebuil
               <em>Kangaroo Telemetry Pipeline (heartbeat)</em> check is the detection net for
               that case (its 60 s self-metric rides the same exporter, so a detach trips it
               within ~15 min). See
-              <a href="/postmortems/postmortem-viewer.html?file=2026-06-16-firmware-reboot-recovery.md">the
+              <a href="/postmortems/2026-06-16-firmware-reboot-recovery.md">the
               firmware-reboot postmortem</a>.</li>
           </ul></li>
         <li><strong>ClickHouse MergeTree part explosion.</strong> The collector's frequent
@@ -437,7 +418,7 @@ $DK restart alloy backrest                           # reattach by name + rebuil
           <code>async_load_databases</code> decouples ClickHouse startup from part count so a
           slow start no longer trips autoheal, but the underlying insert batching still needs
           tuning. The remaining work is tracked in the
-          <a href="/plans/plan-viewer.html?file=alligator-bilby-migration/deferred-followups.md">deferred platform debt plan</a>.</li>
+          <a href="/plans/alligator-bilby-migration/deferred-followups.md">deferred platform debt plan</a>.</li>
       </ul>
 
       <h2 id="hyperdx-mcp">HyperDX MCP server</h2>
@@ -545,11 +526,3 @@ $DK restart alloy backrest                           # reattach by name + rebuil
       </ul>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

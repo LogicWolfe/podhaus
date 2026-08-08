@@ -23,7 +23,7 @@ changes can be unwound. Rsync (`-a --delete`) the following directories
 to bilby's `/mnt/jump/pinelake-prebootstrap/` (or a temp external
 drive):
 
-```
+```text
 /Users/baxter/Library/Application Support/Plex Media Server/
 /Users/baxter/Library/Preferences/com.plexapp.plexmediaserver.plist
 /Users/baxter/Library/Application Support/Syncthing/
@@ -117,7 +117,7 @@ disk_critical = 95.0
 ```
 
 Add `komodo/keys/pinelake-periphery.pub` to Core's trusted Periphery
-public-key list using the same path as Kangaroo and Kookaburra.
+public-key list using the same path as Numbat and Fractal.
 
 In `komodo/sync/repos.toml`, add:
 

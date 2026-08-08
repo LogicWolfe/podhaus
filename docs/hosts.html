@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Getting started">
-  <meta name="doc-order" content="2">
-  <title>Hosts — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Hosts</h1>
       <p class="lead text-lg text-text-muted">
@@ -43,12 +24,12 @@
         <li><strong><code>/mnt/jump</code></strong>: NFS mount of the QNAP SSD array. Restic
           repositories, Paperless documents, Forgejo data, and Plex BIF thumbnails.</li>
       </ul>
-      <aside class="callout warn">
-        <span class="callout-title">SELinux on Fedora Asahi</span>
+      <blockquote>
+        <p><strong>SELinux on Fedora Asahi</strong></p>
         Most container bind mounts need <code>security_opt: label:disable</code> or the
         <code>:z</code> volume flag. Pattern documented in
         <a href="/stack-conventions.html#selinux">Stack conventions</a>.
-      </aside>
+      </blockquote>
 
       <h3 id="bilby-cli-tools">Host CLI tools</h3>
       <p>
@@ -83,14 +64,14 @@
           <tr><td><code>zellij</code></td><td>Terminal multiplexer (user preference)</td><td>Cargo / upstream</td></tr>
         </tbody>
       </table>
-      <aside class="callout note">
-        <span class="callout-title">mc vs mcli</span>
+      <blockquote>
+        <p><strong>mc vs mcli</strong></p>
         Fedora's MinIO RPM ships the binary as <code>mcli</code> to avoid colliding with
         the Midnight Commander package, which also installs <code>/usr/bin/mc</code>.
         Upstream MinIO docs uniformly use <code>mc</code>; mentally substitute when
         copy-pasting. The Docker image <code>minio/mc:latest</code> still uses the
         <code>mc</code> binary name internally.
-      </aside>
+      </blockquote>
       <p>
         Candidates that aren't installed yet but probably should be:
       </p>
@@ -120,14 +101,14 @@
         <code>ansible-playbook playbooks/bilby.yml --tags firewall</code> from
         <code>ansible/</code>.
       </p>
-      <aside class="callout warn">
-        <span class="callout-title">Never edit the firewall imperatively</span>
+      <blockquote>
+        <p><strong>Never edit the firewall imperatively</strong></p>
         Do <em>not</em> use <code>firewall-cmd --add-port</code>/<code>--add-service</code>
         (even <code>--permanent</code>). That writes straight to
         <code>/etc/firewalld/</code> and diverges from the role's files;
         the next playbook run silently overwrites and reverts it. Change the
         XML, re-run the play.
-      </aside>
+      </blockquote>
       <p>
         The <code>public</code> zone allows <code>ssh</code>, <code>mdns</code>,
         <code>dhcpv6-client</code>, <code>plex</code>, and <code>music-assistant</code>,
@@ -169,8 +150,8 @@
         <li><strong><code>/share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/</code></strong>
           — Periphery state.</li>
       </ul>
-      <aside class="callout note">
-        <span class="callout-title">No Container Station GUI involvement</span>
+      <blockquote>
+        <p><strong>No Container Station GUI involvement</strong></p>
         The bootstrap uses SSH to install and start Periphery. After that, Periphery deploys
         stacks through the QNAP Docker socket. Container Station's REST API only accepts built-in template
         names, and its GUI flow blocks the <code>docker.sock</code> mount Periphery needs.
@@ -178,7 +159,7 @@
         <code>autorun.sh</code> installed from <code>kangaroo/host-autorun/</code>. It starts
         Container Station's user Docker engine and reconciles exited or detached containers. See
         <a href="/disaster-recovery.html#kangaroo-rebuild">disaster recovery</a>.
-      </aside>
+      </blockquote>
 
       <h2 id="numbat">numbat</h2>
       <p>
@@ -311,11 +292,3 @@
       </p>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

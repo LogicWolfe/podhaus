@@ -21,12 +21,13 @@ We do **not** write postmortems for:
 
 ## File layout
 
-```
+```text
 docs/postmortems/
   conventions.md              ← this file
-  index.html                  ← listing page, used by docs.pod.haus
   YYYY-MM-DD-short-slug.md    ← one file per incident
 ```
+
+The docs server generates the directory listing automatically.
 
 **Naming:** `YYYY-MM-DD-<short-slug>.md`. Date is incident date (when the user-visible thing happened), not when you got around to writing it. Slug is 2–5 words describing the failure mode, not the system — `pouch-jump-mount-failure` not `flood-broken`; the same root cause might surface across multiple systems.
 

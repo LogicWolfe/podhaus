@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Platform">
-  <meta name="doc-order" content="3">
-  <title>Stack conventions — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Stack conventions</h1>
       <p class="lead text-lg text-text-muted">
@@ -46,9 +27,12 @@
           <a href="#stack-private-variables">Stack-private variables</a>.</li>
         <li>Add any new secrets to the 1Password Homelab vault — komodo-op auto-syncs them
           (see <a href="/secrets.html">Secrets</a>).</li>
-        <li>If the stack needs a normal <code>*.pod.haus</code> hostname, add its service module
-          in <code>terraform/services_pod_haus.tf</code> and append the module's ingress output in
-          <code>terraform/tunnel.tf</code>. Run stock Terraform from <code>terraform/</code>.</li>
+        <li>If the stack needs a protected <code>*.pod.haus</code> hostname, add its DNS entry
+          to <code>local.pod_haus_service_dns</code> in
+          <code>terraform/services_pod_haus.tf</code>, its policy route to
+          <code>pomerium/config.yaml</code>, and its private-origin host to
+          <code>caddy/Caddyfile</code>. Run stock Terraform from
+          <code>terraform/</code>.</li>
         <li>If the stack has services with <code>build:</code> directives or
           <code>depends_on</code> a build service, wire the content-hash
           consumer pattern — see <a href="#content-hash-wiring">Content-hash
@@ -74,7 +58,7 @@
       <h2 id="multi-host">Adding a stack to a multi-host shared service</h2>
       <p>
         Services in this layout today: <code>backup/</code>, <code>autoheal/</code>,
-        <code>logging/</code>, and <code>tailscale/</code>. Each has a
+        and <code>logging/</code>. Each has a
         <code>compose.shared.yaml</code> defining the cross-host contract and per-host
         subdirectories overlaying the host-specific bits.
       </p>
@@ -121,7 +105,7 @@
           default. Use when the overlay only adds fields (extra volumes, security_opt,
           additional services). Relative <code>build.context</code> in the overlay resolves
           against <code>&lt;service&gt;/&lt;host&gt;/</code>. Current users: autoheal,
-          logging, backup/kangaroo, and tailscale.</li>
+          logging, and backup/kangaroo.</li>
         <li><strong>Shared-first</strong>
           (<code>file_paths = ["../compose.shared.yaml", "compose.yaml"]</code>) — use when
           the overlay needs to <em>override</em> a scalar field in the shared definition
@@ -277,8 +261,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
         <strong>init-tools shared image:</strong> All init containers across the fleet use the
         same locally-built image declared at <code>init-tools/Dockerfile</code>
         (alpine + gettext + python3 + curl + jq — covers config templating,
-        python merge scripts, and inits that hit external APIs like
-        <code>tailscale-cleanup</code>'s tailnet ghost pruner). Each consumer
+        Python merge scripts, and init-time API calls). Each consumer
         stack triggers the build inline via its init service's
         <code>build:</code> directive (Komodo's <code>run_build = true</code>
         handles this). Init service uses <code>pull_policy: never</code> so Komodo's auto_pull
@@ -322,8 +305,8 @@ description = "Service port (well-known, not a secret)"</code></pre>
         absolute path to the repo clone. This keeps the repo portable across hosts and
         environments.
       </p>
-      <aside class="callout caution">
-        <span class="callout-title">Never use single-file bind mounts</span>
+      <blockquote>
+        <p><strong>Never use single-file bind mounts</strong></p>
         Compose lines like
         <code>${PODHAUS_REPO}/&lt;stack&gt;/config.yaml:/etc/foo/config.yaml:ro</code>
         <strong>are forbidden in this repo</strong>. File-level binds pin the inode at mount
@@ -339,18 +322,18 @@ description = "Service port (well-known, not a secret)"</code></pre>
         <code>docs-server/conf/</code>, that whole directory bound at <code>/conf/</code>,
         and nginx pointed at it via
         <code>command: ["nginx", "-c", "/conf/nginx.conf", "-g", "daemon off;"]</code>.
-      </aside>
-      <aside class="callout warn">
-        <span class="callout-title">Always use absolute host paths</span>
+      </blockquote>
+      <blockquote>
+        <p><strong>Always use absolute host paths</strong></p>
         Komodo-managed stack <code>run_directory</code> paths
         (<code>/etc/komodo/repo/&lt;stack&gt;</code>) exist <em>inside</em> Periphery but not on
         the host. Docker daemon resolves bind mount sources from the host filesystem, so
         relative paths like <code>./conf/</code> resolve to non-existent host paths and
         Docker silently creates empty stub directories. Always
         <code>${PODHAUS_REPO}/&lt;stack&gt;/...</code>, never relative paths.
-      </aside>
-      <aside class="callout caution">
-        <span class="callout-title">Config-only commits recreate the container (since 2026-06-18) — via the Stage-1 reconcile</span>
+      </blockquote>
+      <blockquote>
+        <p><strong>Config-only commits recreate the container (since 2026-06-18) — via the Stage-1 reconcile</strong></p>
         Directory bind mounts mean a host-side edit is <em>visible on disk</em>
         inside the container immediately — but the process running inside is
         already past its config-load step and won't re-read the file. And
@@ -382,7 +365,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
             <code>.env</code> (see
             <a href="/komodo.html">Komodo</a> / AGENTS.md content-hash note).</li>
         </ul>
-      </aside>
+      </blockquote>
 
       <h2 id="orphans">Removed services leave orphan containers</h2>
       <p>
@@ -442,7 +425,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
         restart-stormed it every 30 s, and one restart — tearing down namespaces while the
         NFS bind hung — wedged it to <code>exited</code>, where autoheal (watches running) and
         the restart policy (suppressed) both ignored it. See
-        <a href="/postmortems/postmortem-viewer.html?file=2026-06-16-firmware-reboot-recovery.md">postmortem</a>.
+        <a href="/postmortems/2026-06-16-firmware-reboot-recovery.md">postmortem</a>.
       </p>
       <p>
         The rule for any container that binds an NFS path: restarting it can't fix a down NFS
@@ -475,7 +458,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
           that just checks for presence. The container serves traffic but reads return wrong
           (empty) data, writes land on local disk. This is the failure that bit the
           2026-05-23 incident — see
-          <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">postmortem</a>.</li>
+          <a href="/postmortems/2026-05-23-pouch-jump-mount-failure.md">postmortem</a>.</li>
       </ol>
       <p>
         The defence is a positive sentinel — a file you dropped on the QNAP share itself —
@@ -509,8 +492,8 @@ description = "Service port (well-known, not a secret)"</code></pre>
         <code>ansible/roles/nfs_binds/</code> (re-touched on each play run — e.g. to restore
         markers after a share rebuild wipes them); add new sub-paths to that list too.
       </p>
-      <aside class="callout note">
-        <span class="callout-title">Companion: the chattr +i tripwire</span>
+      <blockquote>
+        <p><strong>Companion: the chattr +i tripwire</strong></p>
         The healthcheck is the last line of defence — the first is the host-level tripwire.
         Bare <code>/mnt/pouch</code> and <code>/mnt/jump</code> have <code>chattr +i</code>
         set on their underlying btrfs dirs (applied idempotently by
@@ -520,7 +503,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
         affected stacks fail loudly at deploy rather than silently running on bare-stub binds.
         With NFS mounted, the bit is irrelevant (NFS supersedes the btrfs dir). See
         <a href="/storage.html#nas-quirks">storage → NFS recovery + bare-stub defence</a>.
-      </aside>
+      </blockquote>
 
       <h3 id="local-bind-healthcheck">Local-bind healthcheck pattern</h3>
       <p>
@@ -537,13 +520,14 @@ description = "Service port (well-known, not a secret)"</code></pre>
         A protected <code>*.pod.haus</code> service needs three matching declarations:
       </p>
       <ol>
-        <li>A module in <code>terraform/services_pod_haus.tf</code> with
-          <code>edge_ipv4 = local.numbat_application_ipv4</code>. The module publishes
-          active DNS to Numbat while retaining its Tunnel and Access rollback resources.</li>
+        <li>An entry in <code>local.pod_haus_service_dns</code> in
+          <code>terraform/services_pod_haus.tf</code>, normally pointing at
+          <code>local.numbat_application_ipv4</code>.</li>
         <li>A policy route in <code>pomerium/config.yaml</code>.</li>
         <li>A host matcher and backend in Caddy's private <code>:4443</code> listener.</li>
       </ol>
       <p>
+        Podhaus services do not get Cloudflare Tunnel or Access resources.
         Machine endpoints must use an exact hostname or path plus an application credential.
         Add them to the public Caddy listener only when Pomerium cannot handle the protocol.
         Run Terraform from the consolidated root and deploy config through the normal Komodo
@@ -597,17 +581,9 @@ chmod +x .git/hooks/pre-commit</code></pre>
         <li>☐ Secrets created in 1P, referenced via <code>OP__KOMODO__*</code></li>
         <li>☐ Stack-private non-secret config declared as <code>[[variable]]</code> blocks at the bottom of <code>stack.toml</code> (rather than seeded in <code>komodo-start</code>)</li>
         <li>☐ Every key in the stack.toml <code>environment</code> block is referenced as <code>${KEY}</code> in compose (pre-commit hook catches mismatches)</li>
-        <li>☐ Terraform service module + tunnel ingress output (if public hostname)</li>
+        <li>☐ Terraform DNS + Pomerium policy + Caddy route (if protected hostname)</li>
         <li>☐ Backrest plan added (if there's state to preserve)</li>
         <li>☐ Gatus monitor added (if there's a public hostname or critical internal endpoint)</li>
       </ul>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

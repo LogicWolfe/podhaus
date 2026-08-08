@@ -46,6 +46,8 @@ replacement for it.
 |---|---|---|---|
 | bilby | Asahi (Apple Silicon), YubiKey PIV | 1P Homelab vault, direct | hardware + FDE *(gap)* |
 | kangaroo | QNAP QTS appliance | Komodo variable interpolation | network auth only |
+| numbat | BinaryLane Rocky Linux VM | Komodo interpolation + Terraform-managed 1P handoffs | provider disk + rendered stack env *(gap)* |
+| fractal | Fedora WSL2, encrypted `/home` | Ansible 1P lookups + Komodo interpolation | LUKS `/home`; Periphery and rendered stack env under unencrypted `/opt` *(gap)* |
 
 Kangaroo already receives service secrets through the
 `1P Homelab → komodo-op → Komodo Variables → [[VARIABLE]]` path
@@ -98,7 +100,9 @@ So the Komodo path distributes secrets from 1Password without a bespoke
 channel, but it **does not keep them off disk**.
 
 For kangaroo, rendered environment files are the main at-rest exposure because the
-appliance can't use guest-managed full-disk encryption.
+appliance can't use guest-managed full-disk encryption. Numbat has the same exposure
+on its provider-managed disk. Fractal encrypts `/home`, but Periphery state and linked-repo
+stack environments live under `/opt`, outside that encrypted volume.
 
 Candidate fix: a **tmpfs `run_directory`** on kangaroo, so resolved
 secrets exist only in RAM. The QNAP boot-DOM autorun hook starts Container
@@ -106,22 +110,24 @@ Station's Docker engine, but it doesn't currently repopulate Komodo run
 directories. **Unverified:** check Komodo's deploy assumptions, QTS tmpfs
 sizing, and the cold-boot ordering before treating this as viable.
 
-Kangaroo's Periphery private key also lives on disk. Moving rendered stack
-environment into tmpfs wouldn't protect that key. The host could still
-authenticate to Core after a theft, so the design also needs a clear public-key
-revocation and replacement runbook.
+Each remote host's Periphery private key also lives on disk. Moving rendered stack
+environment into tmpfs would not protect those keys. A stolen host could still
+authenticate to Core, so the design also needs a clear public-key revocation and
+replacement runbook. Bilby's copies make replacement possible; they do not revoke
+the stolen key.
 
 ### Service account token on disk
 
 `OP_SERVICE_ACCOUNT_TOKEN` at the repo root is plaintext, `0600`, and
-gitignored. AGENTS.md documents it as the one secret deliberately allowed
-raw on disk.
+gitignored.
 
-Removing it is wider than it looks — **13+ files consume it**, including
-running infrastructure: `komodo-start` / `komodo-sync` / `komodo-upgrade`
-(each `cat`s it directly), `onepassword/compose.yaml` and `stack.toml`,
-`terraform/backend.tf` and `tailscale.tf`, five `paperless/*` scripts,
-and `kangaroo_bootstrap`.
+Removing it is wider than it looks: **nine executable paths read the file
+directly** — `komodo-start`, `komodo-sync`, `komodo-upgrade`,
+`kangaroo_bootstrap`, and five `paperless/*` maintenance scripts. The
+`OP_SERVICE_ACCOUNT_TOKEN` passed to the `onepassword` stack is a different
+Komodo variable carrying the 1Password Connect token. Terraform credentials now
+come from the chezmoi-installed, repository-scoped shell hook rather than this
+repo-root file.
 
 The token grants exactly the **Homelab** vault and nothing else
 (verified: the service account sees one vault). That scoping is already

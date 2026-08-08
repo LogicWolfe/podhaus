@@ -1,7 +1,7 @@
 # Pocket ID
 
 Self-hosted, passkey-first OIDC identity provider on bilby at `id.pod.haus`.
-Pomerium, Forgejo, and the retained Tailscale account use it for authentication.
+Pomerium, Forgejo, and the Tailscale account use it for authentication.
 Each relying party keeps its own authorisation policy. One Go binary plus
 SQLite, single local volume.
 
@@ -16,11 +16,10 @@ SQLite, single local volume.
   Internal port `1411`; healthcheck is the image's built-in `pocket-id healthcheck`
   CLI.
 - **Ingress** `id.pod.haus` → Numbat public TLS rathole → Caddy `:4444` →
-  `pocket-id:1411`. Cloudflare Tunnel and Bypass Access remain for rollback.
+  `pocket-id:1411`.
 - **IdP registration** `cloudflare_zero_trust_access_identity_provider.pocket_id`
-  (generic OIDC, PKCE) in `terraform/access.tf`, next to the dashboard-managed
-  GitHub IdP. `allowed_idps` is intentionally unset on every Access app, so the
-  login chooser lists both GitHub and Pocket ID and the Family group is unchanged.
+  (generic OIDC, PKCE) in `terraform/access.tf` remains for Pinelake's current
+  Access applications. Podhaus services authenticate through Pomerium instead.
 - **Tailscale login** uses the client and `tailscale-users` group in
   `terraform/pocket_id.tf`. Caddy serves the required WebFinger response at
   `nathanbaxter.com/.well-known/webfinger`; the IdP selection itself is set in
@@ -80,7 +79,8 @@ privileges.
 
 **Cloudflare Zero Trust** is confidential, uses PKCE, and has callback
 `https://podhaus.cloudflareaccess.com/cdn-cgi/access/callback`. Its credentials
-live in `Pocket ID OIDC`. It remains configured only for rollback.
+live in `Pocket ID OIDC`. It remains configured only for Pinelake's current
+Access applications.
 
 **Pomerium** is confidential, uses PKCE, is restricted to `pomerium-users`, and
 has callback `https://authenticate.pod.haus/oauth2/callback`. Terraform writes
@@ -121,22 +121,20 @@ creates the local profile and synchronizes those keys during OIDC login.
 
 ## Failure modes
 
-- `Failed to verify oidc token with fresh keys` — Cloudflare can't fetch the
-  JWKS: `id.pod.haus` got Access-gated, Bot Fight Mode is on for the zone, or a WAF
-  rule is blocking Cloudflare's egress (ASN `13335`). Keep `id.pod.haus` on the
-  Bypass-everyone app and Bot Fight Mode off; if needed, a WAF skip rule for
-  AS13335 on `id.pod.haus` (mirror the `cloudflare_ruleset` shape in
-  `umami_analytics.tf`).
+- `Failed to verify oidc token with fresh keys` — a relying party cannot fetch
+  Pocket ID's public JWKS. Check the Numbat relay, Caddy route, DNS, and any
+  Cloudflare WAF rule affecting Pinelake Access. Never put `id.pod.haus` behind
+  Pomerium; OIDC clients must reach its discovery, token, and key endpoints.
 - **Authenticated, then denied** — the Pocket ID user's email doesn't match the
-  Family group. Fix the email in Pocket ID; the match is case-insensitive but
-  otherwise exact.
+  applicable Pomerium route policy. Fix the email in Pocket ID; the match is
+  case-insensitive but otherwise exact.
 
 ## Lockout safety
 
 Pomerium deliberately has one identity provider. A Pocket ID outage blocks new
 protected browser and native SSH sessions. Recovery is Numbat's temporary
-key-only port 2222, the BinaryLane console, LAN access to bilby, or restoring
-the retained Cloudflare DNS and Access path, where GitHub remains a login option.
+key-only port 2222, the BinaryLane console, LAN access to bilby, or the explicit
+Tailscale SSH recovery plane. Cloudflare Access is not a live Podhaus fallback.
 
 Tailscale's Owner is `nathan@nathanbaxter.com` through Pocket ID. The separate
 Tailscale-native `logicwolfe@passkey` Admin remains the recovery path for the

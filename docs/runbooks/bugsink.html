@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Service runbooks">
-  <meta name="doc-order" content="6">
-  <title>Bugsink — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Bugsink</h1>
       <p class="lead text-lg text-text-muted">
@@ -29,13 +10,13 @@
         Single-user, SQLite, one intended client: <strong>fenwick</strong>.
       </p>
 
-      <aside class="callout note">
-        <span class="callout-title">fenwick is wired up</span>
+      <blockquote>
+        <p><strong>fenwick is wired up</strong></p>
         fenwick reports exceptions here (project <code>fenwick</code>,
         id 1) via <code>@sentry/deno</code> at its single
         <code>recordError</code> seam, verified end to end. As-built
         detail: <a href="#wiring-fenwick">Wiring fenwick</a>.
-      </aside>
+      </blockquote>
 
       <h2 id="topology">Topology</h2>
       <ul>
@@ -73,8 +54,8 @@
           <tr><td>Bugsink Create Superuser</td><td><code>OP__KOMODO__BUGSINK_CREATE_SUPERUSER__USERNAME</code><br><code>OP__KOMODO__BUGSINK_CREATE_SUPERUSER__CREDENTIAL</code></td><td>superuser email / password (see below — the item <em>splits</em>)</td></tr>
         </tbody>
       </table>
-      <aside class="callout warn">
-        <span class="callout-title">The superuser item is stored split — stack.toml reconstructs it</span>
+      <blockquote>
+        <p><strong>The superuser item is stored split — stack.toml reconstructs it</strong></p>
         "Bugsink Create Superuser" is stored with the email in the item's
         <code>username</code> field and the password in its
         <code>credential</code> field (kept split deliberately, for
@@ -100,7 +81,7 @@
         <strong>redeploy</strong>, not just first deploy.)
         <code>SECRET_KEY</code> is unaffected — its item has an empty
         username, so it stays a single <code>__CREDENTIAL</code>.
-      </aside>
+      </blockquote>
       <p>
         <code>CREATE_SUPERUSER</code> only provisions the <em>initial</em>
         user; the password must contain no colon (Bugsink splits the env on
@@ -210,11 +191,3 @@
       </p>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

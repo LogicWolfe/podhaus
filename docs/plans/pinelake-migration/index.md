@@ -8,9 +8,9 @@ Syncthing state, or attached TerraMaster data.
 No Pinelake server, linked repo, or stack exists yet. Re-run the 2026-05-13
 [inventory](inventory.md) before changing the host.
 
-The Numbat migration changed the network target. Old Cloudflare Tunnel and
-Tailscale sections in the workstream notes are superseded. Pinelake will use
-narrow outbound connections to Numbat:
+The dated inventory records Pinelake's current Cloudflare Tunnel and Tailscale
+source state. The migration target instead uses narrow outbound connections to
+Numbat:
 
 - Periphery to `core-connect.pod.haus`, authenticated by Komodo Noise keys.
 - Alloy to `logs-ingest.pod.haus`, authenticated by per-host mTLS and the
@@ -33,8 +33,8 @@ narrow outbound connections to Numbat:
    `MachineIdentifier`.
 5. Add [platform stacks](platform-stacks.md), including Alloy through Numbat,
    then add [monitoring](monitoring.md).
-6. Replace the old Tunnel and routed-Tailscale workstreams with the Numbat route,
-   DNS changes, and SSH-only recovery plane above.
+6. Apply the [edge and DNS](edge-and-dns.md) cutover and reconcile Tailscale to
+   the SSH-only recovery plane above.
 
 ## Decisions still needed
 

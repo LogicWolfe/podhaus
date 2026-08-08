@@ -1,7 +1,6 @@
 # Pinelake edge and DNS
 
-This replaces the earlier Cloudflare Tunnel workstream. Pinelake will not run
-cloudflared.
+Pinelake will not run cloudflared.
 
 For each intentionally exposed service, Pinelake makes a named outbound rathole
 connection to Numbat. Protected browser routes terminate at Pomerium and use

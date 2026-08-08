@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Platform">
-  <meta name="doc-order" content="1">
-  <title>Komodo — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Komodo</h1>
       <p class="lead text-lg text-text-muted">
@@ -161,8 +142,8 @@
         <code>files_on_host</code> because tight save-and-deploy beats the
         commit-roundtrip when the editor is on the same host.
       </p>
-      <aside class="callout warn">
-        <span class="callout-title">Linked Repo deploys: what actually pulls</span>
+      <blockquote>
+        <p><strong>Linked Repo deploys: what actually pulls</strong></p>
         <strong><code>DeployStack</code> = pulls;
         <code>RestartStack</code> = no pull.</strong>
         <code>DeployStack</code> (manual <em>or</em> webhook-triggered)
@@ -190,7 +171,7 @@
         <br><br>
         Always confirm a deploy via a config-level signal — the
         pulled-to commit hash or a metric — never "container healthy."
-      </aside>
+      </blockquote>
 
       <h2 id="stack-toml">stack.toml structure</h2>
       <p>
@@ -268,8 +249,8 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           own <code>linked_repo</code> + dedicated push-deploy procedure. The
           podhaus sync picks them up via its <code>resource_path</code> scan.</li>
       </ul>
-      <aside class="callout note">
-        <span class="callout-title">Declare a ResourceSync with [[resource_sync]], never [[sync]]</span>
+      <blockquote>
+        <p><strong>Declare a ResourceSync with [[resource_sync]], never [[sync]]</strong></p>
         The synced-TOML key for a ResourceSync is <code>[[resource_sync]]</code> /
         <code>[resource_sync.config]</code> — Komodo's <code>ResourcesToml</code>
         field is <code>resource_syncs</code> (alias <code>resource_sync</code>);
@@ -284,9 +265,9 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         misleading. The fenwick/pets <code>[[sync]]</code> blocks had been inert
         the whole time (their syncs existed only from earlier manual creation);
         all three were migrated to <code>[[resource_sync]]</code> on 2026-06-26.
-      </aside>
-      <aside class="callout note">
-        <span class="callout-title">Auto-deploy on push (one webhook → one procedure)</span>
+      </blockquote>
+      <blockquote>
+        <p><strong>Auto-deploy on push (one webhook → one procedure)</strong></p>
         Komodo's webhook contract is per-resource:
         <code>https://&lt;host&gt;/listener/&lt;auth&gt;/&lt;resource_type&gt;/&lt;id&gt;/&lt;seg&gt;</code>.
         podhaus uses one webhook per <em>repo</em>, not per stack:
@@ -352,7 +333,7 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         komodo-sync row in the scripts table below).
         Single point of failure: a broken procedure breaks all
         push-deploys — komodo-sync is the fallback.
-      </aside>
+      </blockquote>
 
       <h2 id="scripts">komodo-* scripts at the repo root</h2>
       <table>
@@ -378,11 +359,3 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
       </ul>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

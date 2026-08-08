@@ -38,7 +38,7 @@ is left.
 
 ## Layout
 
-```
+```text
 ansible/
   ansible.cfg              control-node config
   requirements.yml         collection pins (community.general, community.docker)
@@ -74,17 +74,19 @@ Hosts are grouped twice: by **migration state** and by **role**.
   bilby-only ones like `nfs_binds` and `firewalld`) on the matching
   role group rather than on hostname, so a future host inherits the
   right roles from group membership alone.
-- `pending_migration` — bilby, numbat, voltaire. Present so
-  the inventory is honest about the fleet. bilby's and numbat's scripts
-  are already absorbed into their playbooks, which target them by name —
-  both wait only on their live check-mode passes; voltaire is still
-  owned by hand. **No playbook targets this group as a group.**
-  Migrating a host means moving it between the two groups by hand,
-  after its check-mode pass comes back clean.
+- `pending_migration` — numbat and voltaire. Present so
+  the inventory is honest about the fleet. numbat's script is already
+  absorbed into its playbooks, which target it by name — it waits only
+  on its live check-mode pass; voltaire is still owned by hand.
+  **No playbook targets this group as a group.** Migrating a host means
+  moving it between the two groups by hand, after its check-mode pass
+  comes back clean.
 - `excluded` — kangaroo. QTS ships no Python interpreter at all (no
   `python3`, no `/opt/bin/python3`, only the MalwareRemover and
   Container Station QPKGs), so it can never be an Ansible target.
   `kangaroo_bootstrap` is permanent, not interim.
+- Voltaire is absent deliberately. It is a work machine with a narrow SSH
+  integration, not a podhaus provisioning target.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes` — role groups.
   `site.yml` gates each role on membership.
 
@@ -94,7 +96,7 @@ Ansible is a control-node dependency only; nothing is installed on
 targets beyond a Python interpreter, which Fedora already has. It lives
 in the repo's `.venv`.
 
-```
+```sh
 cd ansible
 ansible-playbook playbooks/fractal.yml --check --diff   # read first
 ansible-playbook playbooks/fractal.yml

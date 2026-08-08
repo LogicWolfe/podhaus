@@ -9,7 +9,7 @@ active migration unless a plan says otherwise.
 
 Bilby's shared `dockernet` is both an ingress network and a broad east-west
 trust domain. A compromised member can discover and connect directly to other
-members, bypassing Pomerium, Cloudflare Access, and Caddy. Application-native
+members, bypassing Pomerium and Caddy. Application-native
 authentication still applies where it exists, but edge-auth-only services and
 otherwise private backend ports have no equivalent boundary. The same shared
 network also couples unrelated stacks to one Docker network's lifecycle and

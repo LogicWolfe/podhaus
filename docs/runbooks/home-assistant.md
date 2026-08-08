@@ -12,11 +12,10 @@ entities to Apple Home so Siri can drive them through HA.
   bilby. `/config` is a host bind of `/var/lib/home-assistant` on local NVMe;
   `/run/dbus` is bind-mounted for Bluetooth. `extra_hosts` pins
   `music.pod.haus` to `10.0.0.119` so HA reaches Music Assistant via Caddy
-  (real cert) instead of the Cloudflare AAAA (which hits Access and blocks
-  server-to-server).
+  (real cert) instead of the public Numbat Pomerium route, which requires an
+  interactive identity.
 - **Ingress** `home.pod.haus` → Numbat Pomerium → private rathole origin →
-  Caddy → `http://172.18.0.1:8123`, behind the Family policy. The retained
-  Cloudflare Tunnel and Access path is rollback only.
+  Caddy → `http://172.18.0.1:8123`, behind the Family policy.
 
 ## Config-as-code layout
 
@@ -60,7 +59,7 @@ server-to-server block). Auth is a long-lived token at
 `op://Homelab/Home Assistant/credential`. Read state, call any service, reload
 config:
 
-```
+```sh
 TOK=$(op item get "Home Assistant" --vault Homelab --fields credential --reveal)
 curl -s -H "Authorization: Bearer $TOK" http://localhost:8123/api/states
 ```
@@ -101,7 +100,7 @@ independent reasons, either sufficient:
 So HA cannot command a lock, and never will with this hardware. What it *can*
 do is change an entity Apple Home is watching:
 
-```
+```text
 HA input_boolean -> HomeKit bridge -> Apple Home automation -> hub -> BLE -> lock
 ```
 
@@ -291,7 +290,7 @@ Config changes ship like any stack: commit + push → the `podhaus-push-deploy`
 procedure's content-hash mechanism sees the changed files in `home-assistant/`
 and recreates the container. Validate first with:
 
-```
+```sh
 docker exec home-assistant python -m homeassistant --script check_config -c /config
 ```
 

@@ -34,7 +34,7 @@ Consult these pages before acting:
 | Cron / ofelia jobs | [`docs/scheduling.html`](docs/scheduling.html) |
 | DR rebuild runbooks | [`docs/disaster-recovery.html`](docs/disaster-recovery.html) |
 | Provisioning a host; the Ansible / chezmoi boundary | [`docs/host-provisioning.md`](docs/host-provisioning.md) |
-| Service-specific quirks | [`docs/runbooks/<service>.html`](docs/runbooks/) |
+| Service-specific quirks | [`docs/runbooks/`](docs/runbooks/) |
 | Current or recent migrations, design context | [`docs/plans/`](docs/plans/) |
 
 **If you're about to modify a stack and the relevant runbook page exists,
@@ -132,7 +132,7 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
 - Static IPs are for LAN devices (e.g. UniFi gateway at `10.0.0.1`) or
   host-network services.
 - Services needing device access (Home Assistant, Plex, Syncthing) use
-  `network_mode: host`. Cloudflare Tunnel reaches them via the dockernet
+  `network_mode: host`. Caddy reaches them via the dockernet
   bridge gateway at `172.18.0.1:<port>`.
 - Protected names are DNS-only A records to Numbat's application IP.
   Pomerium authenticates with Pocket ID and reaches Caddy's private
@@ -355,11 +355,11 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
    normally. Pushes that DON'T touch procedures.toml apply fully via
    the webhook with no manual step.
 7. If the service is a single-host pod.haus service, add a
-   `module "<name>"` block in `terraform/services_pod_haus.tf` with
-   `edge_ipv4 = local.numbat_application_ipv4`, add the protected
+   DNS entry to `local.pod_haus_service_dns` in
+   `terraform/services_pod_haus.tf`, add the protected
    route to `pomerium/config.yaml`, and add its private-origin host to
-   `caddy/Caddyfile`. The module retains Access and Tunnel for rollback
-   while publishing active DNS to Numbat.
+   `caddy/Caddyfile`. Podhaus services do not get Cloudflare Tunnel or
+   Access resources.
    `cd terraform && terraform apply` to publish (creds are ambient
    after the chezmoi-installed fish hook runs `op inject`; no wrapper, runs from any
    machine).
@@ -367,7 +367,7 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
 ## When adding a new instance of a shared service to another host
 
 Multi-host services already in this layout: `backup/`, `autoheal/`,
-`logging/`, `tailscale/`. Each has `<service>/compose.shared.yaml` plus per-host
+and `logging/`. Each has `<service>/compose.shared.yaml` plus per-host
 subdirs.
 
 1. Create `<service>/<host>/compose.yaml` with only the host-specific

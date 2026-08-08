@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Service runbooks">
-  <meta name="doc-order" content="3">
-  <title>Paperless — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Paperless</h1>
       <p class="lead text-lg text-text-muted">
@@ -58,14 +39,14 @@
           container's <code>PAPERLESS_ALLOWED_HOSTS=paperless.pod.haus</code> requires the
           <code>Host:</code> header to match.</li>
       </ul>
-      <aside class="callout note">
-        <span class="callout-title">Script-side note</span>
+      <blockquote>
+        <p><strong>Script-side note</strong></p>
         Migration / import scripts run in throwaway <code>python:3.13-slim</code> containers
         attached to dockernet, hit <code>http://paperless:8000</code> with an explicit
         <code>Host: paperless.pod.haus</code> header. Going via the browser URL would redirect
         to Pomerium. Anything that follows Paperless's own pagination
         <code>next</code> URLs must walk pagination by explicit page number instead.
-      </aside>
+      </blockquote>
 
       <h2 id="paperless-state">Paperless state at a glance</h2>
       <ul>
@@ -105,18 +86,18 @@
       </table>
 
       <h2 id="known-quirks">Known quirks</h2>
-      <aside class="callout warn">
-        <span class="callout-title"><code>onenote_page_ids_all</code> truncation</span>
+      <blockquote>
+        <p><strong><code>onenote_page_ids_all</code> truncation</strong></p>
         Paperless string custom fields cap at 128 chars. Initial bulk import hit 133 PATCH
         failures from this. Import script now truncates to fit; the truncation is in the
         sidecar but not in Paperless if you re-upload via a different path.
-      </aside>
-      <aside class="callout warn">
-        <span class="callout-title">Tika is distroless</span>
+      </blockquote>
+      <blockquote>
+        <p><strong>Tika is distroless</strong></p>
         Same shape as cloudflare-tunnel — image ships no shell. Healthcheck dropped. Tika
         liveness is observed via the paperless container's logs (it complains loudly on Tika
         failures).
-      </aside>
+      </blockquote>
 
       <h2 id="email-ingest">Email ingest</h2>
       <p>
@@ -172,8 +153,8 @@
         <code>paperless/scripts/mail-init.sh</code> — edit there, not in the UI, or the next
         deploy reverts it.
       </p>
-      <aside class="callout note">
-        <span class="callout-title">Full-email previews lead with the header, not the content</span>
+      <blockquote>
+        <p><strong>Full-email previews lead with the header, not the content</strong></p>
         Document thumbnails are rendered from the <strong>first PDF page</strong>, and the
         toweosp parser prepends the From/To/Subject/Date block <em>inline</em> at the top of
         the body — so a full-email document's preview shows that metadata, not the content.
@@ -186,17 +167,17 @@
         document is reprocessed (paperless regenerates the thumbnail from page 1), and page 2
         isn't reliably the body since the header bleeds inline. Forwarding the source as an
         attachment sidesteps it (the attachment becomes page 1, no header block).
-      </aside>
+      </blockquote>
 
-      <aside class="callout note">
-        <span class="callout-title">${PODHAUS_REPO} must be surfaced</span>
+      <blockquote>
+        <p><strong>${PODHAUS_REPO} must be surfaced</strong></p>
         <code>paperless-mail-init</code> bind-mounts its script via
         <code>${PODHAUS_REPO}</code>, which is interpolated at compose-render time — so
         <code>paperless/stack.toml</code> must carry
         <code>PODHAUS_REPO=[[PODHAUS_REPO]]</code> in its <code>environment</code> block.
         Without it the path resolves to an empty prefix, Docker stubs an empty dir, and
         the init silently no-ops.
-      </aside>
+      </blockquote>
 
       <h2 id="see-also">See also</h2>
       <ul>
@@ -205,11 +186,3 @@
       </ul>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

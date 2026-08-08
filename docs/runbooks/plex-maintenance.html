@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Service runbooks">
-  <meta name="doc-order" content="2">
-  <title>Plex maintenance log — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Plex maintenance log — 2026-04-12/13</h1>
       <p class="lead text-lg text-text-muted">
@@ -79,15 +60,15 @@
         from 570 MB/min to 60 MB/min, Phase 3 (checkpoint replay) ~1 hour. Reclaimed a modest
         3.8% (47.13 GB → 45.35 GB).
       </p>
-      <aside class="callout warn">
-        <span class="callout-title">Why the first VACUUM attempt failed</span>
+      <blockquote>
+        <p><strong>Why the first VACUUM attempt failed</strong></p>
         Initial VACUUM at 06:07 ran for 4.5 hours, then autoheal killed Plex at 10:35 because
         the healthcheck timed out under the VACUUM DB lock pressure. Plex restart rolled back
         the transaction, losing all 4.5 hours of work. Lesson: <strong>autoheal + long DB ops
         is a bad combination</strong>. Belt-and-suspenders for v2: remove
         <code>autoheal: "true"</code>, disable the Plex healthcheck entirely, stop the
         autoheal container.
-      </aside>
+      </blockquote>
 
       <h2 id="statistics-bandwidth">The actual culprit: statistics_bandwidth</h2>
       <p>
@@ -164,11 +145,3 @@ COMMIT;</code></pre>
       </ul>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

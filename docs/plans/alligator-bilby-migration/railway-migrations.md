@@ -32,8 +32,9 @@ The Railway account token is at
    access remains unavailable, mirroring the public static site is an acceptable
    fallback. Yiayia should be rebuilt from source.
 2. Decide whether Doggos remains public at `doggos.indigo.pod.haus` or moves to
-   a single-label `*.pod.haus` hostname. The current two-label hostname isn't
-   covered by the wildcard Access application.
+   a single-label `*.pod.haus` hostname. Pomerium routes are explicit, so either
+   hostname works if Doggos becomes protected; keeping the current public name
+   avoids a needless URL change.
 3. Confirm whether Doggos still needs its FTP and SSH upload paths. Remove them
    from the new deployment if Blocs now publishes through Git instead.
 
@@ -48,11 +49,14 @@ The Railway account token is at
    into the local state path, and deploy both stacks through the normal push
    procedure.
 4. Move ingress and DNS in the consolidated Terraform root:
-   - Add Yiayia through `terraform/services_pod_haus.tf` and
-     `terraform/tunnel.tf`.
-   - If Doggos gets a single-label protected hostname, use the same module.
-   - If the existing public hostname stays, add its CNAME and tunnel ingress
-     explicitly without an Access application.
+   - For a protected service, add its DNS record to
+     `terraform/services_pod_haus.tf`, its policy route to
+     `pomerium/config.yaml`, and its private origin route to `caddy/Caddyfile`.
+   - For a public Doggos site, publish a proxied record to Numbat's relay
+     address and add it to Caddy's public-only listener with the standard
+     Authenticated Origin Pull contract.
+   - Do not add Cloudflare Tunnel or Access resources; Podhaus browser ingress
+     is owned by Numbat, Pomerium, and Caddy.
 5. Run `terraform plan` and `terraform apply` from `terraform/`, then verify the
    public hostnames serve from bilby.
 6. Update Gatus. Yiayia already has frontend and device checks; add Doggos and

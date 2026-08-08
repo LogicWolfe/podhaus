@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Platform">
-  <meta name="doc-order" content="4">
-  <title>Terraform — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Terraform</h1>
       <p class="lead text-lg text-text-muted">
@@ -28,14 +9,14 @@
         from any machine — no wrapper.
       </p>
 
-      <aside class="callout warn">
-        <span class="callout-title">Read the provider docs before editing</span>
+      <blockquote>
+        <p><strong>Read the provider docs before editing</strong></p>
         Schemas drift between provider minor versions and our HCL has to match. The
         registry's resource pages are the source of truth — <strong>not</strong> Stack
         Overflow, blog posts, or older copies of this doc. Direct links in
         each provider's <code>required_providers</code> block in
         <a href="https://github.com/LogicWolfe/podhaus/blob/main/terraform/backend.tf"><code>terraform/backend.tf</code></a>.
-      </aside>
+      </blockquote>
 
       <h2 id="surface">What's TF-managed today</h2>
       <table>
@@ -133,17 +114,17 @@ terraform apply</code></pre>
         each machine self-locks within the <code>~&gt;</code> version
         constraints (no cross-platform hash drift, zero maintenance).
       </p>
-      <aside class="callout note">
-        <span class="callout-title">Tailscale policy, DNS, and auth keys live in this root</span>
+      <blockquote>
+        <p><strong>Tailscale policy, DNS, and auth keys live in this root</strong></p>
         <code>terraform/tailscale.tf</code> owns the tailnet ACL, DNS, and the rotating
         <code>tag:recovery</code> auth key through the <code>tailscale/tailscale</code>
         provider. The key rotates every 80 days and is stored in a Terraform-managed
         1Password login consumed only by <code>tailscale-recovery-bootstrap</code>.
         Recovery nodes expose local OpenSSH on TCP 22 only. They install no routes and
         receive no access to one another.
-      </aside>
-      <aside class="callout note">
-        <span class="callout-title">Credential split is intentional</span>
+      </blockquote>
+      <blockquote>
+        <p><strong>Credential split is intentional</strong></p>
         The PWD hook is authoritative for Terraform backend and provider
         credentials. The S3 backend must authenticate before Terraform can
         evaluate provider data sources. Existing Homelab provider items also use
@@ -152,7 +133,7 @@ terraform apply</code></pre>
         The <code>1Password/onepassword</code> provider remains for credentials it
         can read or manage cleanly, including Pocket ID, Pouch MinIO, Forgejo, and
         the Sky backup accounts.
-      </aside>
+      </blockquote>
       <p>
         The S3 state backend is the public
         <code>https://storage.pod.haus</code> — MinIO behind its own Caddy
@@ -252,11 +233,3 @@ terraform apply</code></pre>
       </ul>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

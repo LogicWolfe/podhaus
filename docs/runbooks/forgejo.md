@@ -141,6 +141,3 @@ Run Terraform to provision Numbat, then run
 to reconcile the host and outbound Periphery. Komodo deploys `numbat-relay` and
 `numbat-pomerium`; `bilby-relay` supplies Forgejo SSH and the private origin.
 Verify browser OIDC, LFS, and `ssh -T git@git.pod.haus`.
-
-Kookaburra and its old rathole path remain live only for rollback until Numbat
-is independently verified.

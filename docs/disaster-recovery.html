@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Operations">
-  <meta name="doc-order" content="4">
-  <title>Disaster recovery — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Disaster recovery</h1>
       <p class="lead text-lg text-text-muted">
@@ -151,15 +132,15 @@ ansible-playbook playbooks/bilby.yml</code></pre>
           state is stale or someone touched Cloudflare via the dashboard. See
           <a href="/terraform.html#dr">Terraform → disaster recovery</a>.</li>
       </ol>
-      <aside class="callout warn">
-        <span class="callout-title">First-boot API-key dance</span>
+      <blockquote>
+        <p><strong>First-boot API-key dance</strong></p>
         <code>komodo-start</code> currently assumes a pre-existing
         <code>"Komodo API OnePassword Sync"</code> item in 1P that matches the live Komodo
         DB's keys. On a true fresh install the DB has no such key yet — you have to log into
         Komodo UI once, mint an API key under your user, save it to that 1P item, then re-run
         <code>komodo-start</code>. Folding this into the script as an automatic first-boot
         path is a deferred follow-up.
-      </aside>
+      </blockquote>
 
       <h2 id="kangaroo-rebuild">Fresh kangaroo from scratch</h2>
       <p>Assumes kangaroo is QTS-installed with Container Station available.</p>
@@ -258,12 +239,12 @@ restic -r ./recovery/podhaus restore latest --target ./out</code></pre>
         <li>Stage the restored files on a fresh bilby/kangaroo and run the relevant
           rebuild runbook above.</li>
       </ol>
-      <aside class="callout caution">
-        <span class="callout-title">Emergency Kit note</span>
+      <blockquote>
+        <p><strong>Emergency Kit note</strong></p>
         The 1P Emergency Kit hardcopy should carry a note that points at the
         <code>restic-repo-password</code> item — without that password, the OneDrive copy is
         useless.
-      </aside>
+      </blockquote>
 
       <h2 id="drill-cadence">Drill cadence</h2>
       <p>
@@ -273,11 +254,3 @@ restic -r ./recovery/podhaus restore latest --target ./out</code></pre>
       </p>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

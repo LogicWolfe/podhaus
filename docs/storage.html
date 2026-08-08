@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Getting started">
-  <meta name="doc-order" content="3">
-  <title>Storage — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Storage</h1>
       <p class="lead text-lg text-text-muted">
@@ -68,7 +49,7 @@
       <p>
         Bilby mounts Jump over NFS at <code>/mnt/jump</code> via <code>x-systemd.automount</code>
         in <code>/etc/fstab</code> (added 2026-05-23 after a post-reboot incident — see
-        <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>);
+        <a href="/postmortems/2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>);
         kangaroo accesses it directly. Either-direction off-site sync to OneDrive runs out
         of bilby's Backrest container via the existing rclone hook.
       </p>
@@ -89,12 +70,12 @@
         <code>sky-backups</code> bucket is an additional backup copy of data that remains on
         Sky's source device. It is not copied to Jump or OneDrive.
       </p>
-      <aside class="callout note">
-        <span class="callout-title">Why these aren't backed up the same way</span>
+      <blockquote>
+        <p><strong>Why these aren't backed up the same way</strong></p>
         Plex media and paperless documents are large and redundant (we have the originals).
         Backrest backs up the small operational <em>state</em> (Plex DB, Paperless pgdata) — not
         the bulk content.
-      </aside>
+      </blockquote>
 
       <h2 id="sizing-rule">Sizing rule</h2>
       <p>
@@ -105,8 +86,8 @@
         <li><strong>5–50 GB or "we'd hate to lose this":</strong> ask. Probably Jump.</li>
         <li><strong>&gt;50 GB, bulk, regenerable:</strong> Pouch.</li>
       </ul>
-      <aside class="callout warning">
-        <span class="callout-title">kangaroo's ordinary container state goes on CACHEDEV2 (Jump)</span>
+      <blockquote>
+        <p><strong>kangaroo's ordinary container state goes on CACHEDEV2 (Jump)</strong></p>
         Every kangaroo-resident stack's state dir lives under
         <code>/share/CACHEDEV2_DATA/Container/</code>, the backed-up SSD volume — Container
         Station itself installs there too (it follows the QTS default volume, which is
@@ -119,11 +100,11 @@
         CACHEDEV1; state survived only because backrest <em>copied</em> it cross-volume.
         Placement on the backed-up volume remains the model for every ordinary stack. The
         MinIO exception is safe only because Pouch itself is the requested secondary copy.
-      </aside>
+      </blockquote>
 
       <h2 id="nas-quirks">NFS quirks</h2>
-      <aside class="callout warn">
-        <span class="callout-title">Squash on Jump</span>
+      <blockquote>
+        <p><strong>Squash on Jump</strong></p>
         Kangaroo's <code>/Jump</code> export squashes all writes to <code>uid 1000:gid 100</code>
         and denies <code>chown</code>. Container images that <code>chown</code> their data dir on
         startup will fail to deploy against Docker NFS volumes — this hit
@@ -131,9 +112,9 @@
         <code>postgres:16</code>, and <code>1password/connect-api</code> during bring-up.
         The carve-out is permanent now: any state that would have lived on Jump moved to local
         NVMe instead.
-      </aside>
-      <aside class="callout note">
-        <span class="callout-title">NFS recovery + bare-stub defence</span>
+      </blockquote>
+      <blockquote>
+        <p><strong>NFS recovery + bare-stub defence</strong></p>
         <p>Both NAS mounts use <code>x-systemd.automount,_netdev,nofail</code> in
         <code>/etc/fstab</code>. The kernel autofs mounts on first access and silently retries
         on the next access if a prior mount failed — survives network races at boot, QNAP
@@ -173,11 +154,11 @@
         <p>Install / reinstall these defences idempotently with
         <code>ansible-playbook playbooks/bilby.yml --tags nfs</code> (the
         <code>nfs_binds</code> role, run from <code>ansible/</code>). Full incident records:
-        <a href="/postmortems/postmortem-viewer.html?file=2026-05-30-power-outage-nfs-recovery.md">2026-05-30 postmortem</a>
+        <a href="/postmortems/2026-05-30-power-outage-nfs-recovery.md">2026-05-30 postmortem</a>
         (the pre-dockerd gate + rate-limit removal),
-        <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>
+        <a href="/postmortems/2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>
         (the automount + sentinel + chattr +i defences).</p>
-      </aside>
+      </blockquote>
 
       <h2 id="mounts">Mount summary</h2>
       <table>
@@ -195,11 +176,3 @@
       </table>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

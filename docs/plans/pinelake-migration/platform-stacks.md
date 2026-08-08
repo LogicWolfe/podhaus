@@ -21,8 +21,8 @@ Create `logging/pinelake/` by mirroring the Kangaroo overlay:
 - `alloy-conf/parsers/` contains only the parser chain required by Pinelake's
   containers.
 
-The cross-network exporter must copy the fixed Kangaroo and Kookaburra
-settings:
+The cross-network exporter must follow the working Numbat and Fractal
+outbound-ingest settings:
 
 ```alloy
 otelcol.exporter.otlphttp "clickstack" {

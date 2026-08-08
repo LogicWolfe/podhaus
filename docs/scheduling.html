@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Operations">
-  <meta name="doc-order" content="3">
-  <title>Scheduling — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Scheduling</h1>
       <p class="lead text-lg text-text-muted">
@@ -71,13 +52,13 @@
       </table>
 
       <h2 id="self-restart">Why the push procedure restarts Ofelia</h2>
-      <aside class="callout warn">
-        <span class="callout-title">Workaround for upstream label-reload bug</span>
+      <blockquote>
+        <p><strong>Workaround for upstream label-reload bug</strong></p>
         ofelia 0.3.x in label-discovery mode reads container labels at startup and only
         partially tracks changes after that. In practice, label-value changes on existing
         containers (typical when redeploying a stack with an updated schedule) silently fail to
         take effect.
-      </aside>
+      </blockquote>
       <p>
         The workaround lives in Stage 3 of <code>podhaus-push-deploy</code>. After changed stacks
         deploy, Komodo runs <code>RestartStack "ofelia"</code>. The fresh process re-reads every
@@ -91,13 +72,13 @@
       </p>
 
       <h2 id="ofelia-quirk">Other ofelia quirk</h2>
-      <aside class="callout warn">
-        <span class="callout-title">ofelia exits if it starts with zero jobs</span>
+      <blockquote>
+        <p><strong>ofelia exits if it starts with zero jobs</strong></p>
         If ofelia comes up before any target container has its labels, the scheduler has zero
         jobs and ofelia exits fatally (rather than idling). After a fresh bilby boot, ofelia
         sometimes needs to be restarted once the labeled containers are up. Documented during
         the plex-stats-cleanup bring-up.
-      </aside>
+      </blockquote>
 
       <h2 id="adding-job">Adding an ofelia job</h2>
       <ol>
@@ -119,11 +100,3 @@
       </ol>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

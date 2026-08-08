@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Service runbooks">
-  <meta name="doc-order" content="5">
-  <title>Flood + RAR pipeline — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Flood + RAR pipeline</h1>
       <p class="lead text-lg text-text-muted">
@@ -43,8 +24,8 @@
         the library). Runs as <code>1000:1001</code> so created files end up owned the
         same as rtorrent's. UI on port 3000, reachable at <code>torrent.pod.haus</code>.
       </p>
-      <aside class="callout note">
-        <span class="callout-title">Build-stack content-hash convention</span>
+      <blockquote>
+        <p><strong>Build-stack content-hash convention</strong></p>
         flood uses a <code>build:</code> directive, which means changes to the
         Dockerfile (and any future COPY-source files) need to invalidate docker's
         image-layer cache. Per AGENTS.md "Content-hash change detection":
@@ -55,7 +36,7 @@
         busts the cache. <code>BUILD_HASH_FLOOD</code> is injected per-deploy
         by Stage 1 of the push procedure. The running container never reads the
         value; it's purely a layer-cache invalidation lever.
-      </aside>
+      </blockquote>
       <p>Storage:</p>
       <ul>
         <li><code>/var/lib/flood-db</code> (local NVMe) — rtorrent session
@@ -113,15 +94,15 @@
           link is a local-VFS event (this guarantee evaporates if flood ever moves off
           bilby).</li>
       </ol>
-      <aside class="callout note">
-        <span class="callout-title">Hardlink, not move; library paths only</span>
+      <blockquote>
+        <p><strong>Hardlink, not move; library paths only</strong></p>
         A completed file is still a live torrent member, so it can't be moved out from
         under rtorrent — a hardlink lets rtorrent keep seeding from
         <code>/data/torrents</code> while Plex reads the library copy, single copy on
         disk. Set destinations to library paths (<code>/data/TV</code>,
         <code>/data/Movies</code>, <code>/data/Kids</code>) — never under
         <code>/data/torrents</code>, which the publisher logs a WARN for and skips.
-      </aside>
+      </blockquote>
 
       <h2 id="rar-pipeline">RAR auto-extract</h2>
       <p>
@@ -188,8 +169,8 @@
         with a count + sample. A missing 25h ping fires the dead-man's switch (ofelia
         broken, flood dead, NFS unmounted).
       </p>
-      <aside class="callout note">
-        <span class="callout-title">Cross-uid log/lock ownership</span>
+      <blockquote>
+        <p><strong>Cross-uid log/lock ownership</strong></p>
         <code>flood-publish</code>'s log and single-flight lock are touched by both the
         ofelia tick and rtorrent's uid-1000 execute hooks. <code>flood-init</code>
         pre-owns <code>/flood-db/flood-publish.{log,lock}</code> as
@@ -198,7 +179,7 @@
         variable expanded to empty and <code>chmod</code>'d <code>/flood-db</code> itself,
         crash-looping flood). The publish tick also tolerates an unopenable lock rather
         than aborting.
-      </aside>
+      </blockquote>
 
       <h2 id="config-as-code">Config-as-code overlays</h2>
       <p>
@@ -216,12 +197,12 @@
           <code>rar-backlog.sh</code> (daily safety-net + Gatus heartbeat), and
           <code>pinelake-stignore.sh</code>.</li>
       </ul>
-      <aside class="callout note">
-        <span class="callout-title">Directory bind, not file bind, for the scripts dir</span>
+      <blockquote>
+        <p><strong>Directory bind, not file bind, for the scripts dir</strong></p>
         File-level binds pin the inode at mount time. Any tool that saves via atomic rename
         (vim, $EDITOR, Claude Code) leaves the container looking at the original inode forever.
         A directory bind sidesteps that.
-      </aside>
+      </blockquote>
 
       <h2 id="healthcheck-recovery">Healthcheck + recovery from NFS loss</h2>
       <p>
@@ -237,7 +218,7 @@
           Without this check, a missed NFS mount would false-green via the
           <code>/proc/mounts</code> presence check (Docker creates a bind entry regardless of
           source state). Background:
-          <a href="/postmortems/postmortem-viewer.html?file=2026-05-23-pouch-jump-mount-failure.md">2026-05-23 pouch/jump mount-failure postmortem</a>.</li>
+          <a href="/postmortems/2026-05-23-pouch-jump-mount-failure.md">2026-05-23 pouch/jump mount-failure postmortem</a>.</li>
       </ol>
       <p>
         The whole probe is wrapped in <code>timeout 10</code> so a soft-NFS stall returns red
@@ -378,11 +359,3 @@
       </ul>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>

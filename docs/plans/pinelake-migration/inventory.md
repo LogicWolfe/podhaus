@@ -322,8 +322,8 @@ Already in the repo as of this writing:
 
 **Not** in the repo: any `cloudflare_zero_trust_tunnel_cloudflared_config`
 for the pinelake tunnel. Ingress rules live only in
-`/etc/cloudflared/config.yml` on the host. That's the drift we close
-in [Cloudflare tunnel + Terraform](cloudflare-tunnel.md).
+`/etc/cloudflared/config.yml` on the host. The migration removes that host-only
+source state instead of adopting it; see [Edge and DNS](edge-and-dns.md).
 
 ## Things flagged for the migration
 

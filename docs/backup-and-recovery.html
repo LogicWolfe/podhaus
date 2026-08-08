@@ -1,23 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="doc-group" content="Operations">
-  <meta name="doc-order" content="1">
-  <title>Backup &amp; recovery — podhaus docs</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/vendor/tailwind.js"></script>
-  <script src="/assets/tailwind.config.js"></script>
-</head>
-<body class="bg-bg text-text font-sans antialiased min-h-full flex flex-col">
-  <div id="topbar"></div>
-  <div class="flex-1 w-full max-w-screen-2xl mx-auto flex">
-    <aside id="sidebar"
-      class="hidden lg:block lg:w-64 lg:shrink-0 border-r border-border lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-    </aside>
-    <main class="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-10 prose dark:prose-invert max-w-prose mx-auto">
+<main>
 
       <h1>Backup &amp; recovery</h1>
       <p class="lead text-lg text-text-muted">
@@ -160,12 +141,12 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
         template with the password substituted, so the running config.json on disk has the
         password baked in — but the source of truth is 1P.
       </p>
-      <aside class="callout caution">
-        <span class="callout-title">Annotate the 1P Emergency Kit</span>
+      <blockquote>
+        <p><strong>Annotate the 1P Emergency Kit</strong></p>
         Without the restic password, the off-site OneDrive copy is useless. The 1P Emergency
         Kit hardcopy should have a note pointing at the
         <code>restic-repo-password</code> item.
-      </aside>
+      </blockquote>
 
       <h2 id="off-site">Off-site sync</h2>
       <p>
@@ -233,11 +214,3 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
       </ol>
 
     </main>
-    <aside id="toc"
-      class="hidden xl:block xl:w-56 xl:shrink-0 xl:sticky xl:top-14 xl:h-[calc(100vh-3.5rem)]">
-    </aside>
-  </div>
-  <script src="/assets/vendor/marked.min.js"></script>
-  <script src="/assets/nav.js"></script>
-</body>
-</html>
