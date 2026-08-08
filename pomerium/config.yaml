@@ -101,6 +101,14 @@ routes:
     from: https://git.pod.haus
     prefix: null
     regex: '^/[^/]+/[^/]+\.git/info/lfs(/.*)?$'
+  # Forgejo REST API. Forgejo's own token auth is the boundary behind
+  # this exception (REQUIRE_SIGNIN_VIEW is on, so anonymous API calls
+  # get 401 from Forgejo itself) — same stance as MinIO SigV4. Needed
+  # so Terraform's forgejo provider works from any machine.
+  - <<: *public_route
+    from: https://git.pod.haus
+    prefix: null
+    regex: '^/api/v1(/.*)?$'
   - <<: *family_route
     from: https://git.pod.haus
 
