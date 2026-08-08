@@ -142,10 +142,12 @@ Remaining — each a deliberate human act, in order:
   bind-mount check) — `lsattr` against the live mountpoint can't see it
   because NFS shadows the underlying inode, which is expected, not a
   failure.
-- [ ] The 04:00-window live-restore flip: set
-  `podhaus_docker_live_restore: true` in `host_vars/bilby.yml`, run
-  the play in the window, take the one unprotected daemon restart,
-  then confirm a subsequent daemon restart leaves containers running.
+- [x] Live-restore flip (2026-08-04, Nathan authorised it outside the
+  04:00 window): pre-flight confirmed all 45 containers carry
+  `unless-stopped`, real run `ok=8 changed=2` matching the check-mode
+  preview, and afterwards `Live Restore Enabled: true` with the same 45
+  containers back and the external chain green. Full
+  `site.yml --limit bilby` re-run → `changed=0`. bilby is done.
 - [x] Moved bilby from `pending_migration` to `provisioned` (2026-08-04).
   Decided: group-gated like `docker_hosts` — `site.yml` gained
   `komodo_core_host`/`nfs_binds`/`firewalld` roles behind new
@@ -169,19 +171,17 @@ sharing the `numbat_edge` role; docs describe the resulting system
 
 Remaining:
 
-- [ ] Run the live check-mode equivalence pass through Pomerium:
-  `ansible-playbook playbooks/numbat.yml --check --diff` to zero.
-  Gated on slice 2's generalised docker role being merged — numbat sets
-  `podhaus_docker_engine_managed`/`podhaus_docker_live_restore`, needs
-  the distro-derived `linux/rhel` repo URL, and takes a one-time
-  byte-normalising `daemon.json` restart (safe: live-restore is already
-  active there). Expected first-run deltas beyond that: the
-  `sshd_pomerium_ca` drop-in (new file, same trust). The dockernet
-  question is settled — inspected live via Komodo (2026-08-03):
-  172.18.0.0/16, gateway 172.18.0.1, bridge, no labels — exactly what
-  the role declares, so no recreate risk.
-- [ ] Then move numbat from `pending_migration` to `provisioned`
-  (`site.yml` covers it via the role groups it already joined).
+- [x] Live equivalence pass + real run through Pomerium (2026-08-08):
+  check-mode deltas audited (all intended — `sshd_pomerium_ca` drop-in,
+  `daemon.json` byte-normalisation, base packages), real run `ok=43
+  changed=10`, second run `changed=0`, Core reports the server Ok
+  afterwards. The connection rides `ansible_user: nathan@numbat` (the
+  Pomerium route selector — Ansible's ssh plugin emits `-o User` before
+  `ssh_common_args`, so an `ssh_config` User rewrite can never win);
+  OS-account work uses the new `podhaus_operator` var instead.
+- [x] Moved numbat from `pending_migration` to `provisioned`; `site.yml`
+  gained `numbat_edge` behind a new `edge_hosts` group, matching the
+  group-gated pattern of every other role.
 - [ ] The bootstrap play itself is only truly exercised by the next
   rebuild.
 

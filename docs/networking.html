@@ -72,12 +72,17 @@ networks:
         mTLS log ingestion. Forgejo uses Pomerium for HTTPS and the application address on
         port 22 for ordinary <code>git@git.pod.haus</code> SSH. Managed devices use the
         canonical <code>&lt;host&gt;.pod.haus</code> name for host SSH. Chezmoi sends Bilby
-        directly through split DNS and Kangaroo directly to its active LAN address while
-        preserving the canonical host-key identity. It sends all other cases through
+        and Fractal directly through split DNS and Kangaroo directly to its active LAN
+        address while preserving the canonical host-key identity. Fractal's split-horizon
+        record resolves to the Windows host's <code>:22</code> forward (UniFi-reserved,
+        both in Terraform) and is safe precisely because <code>fractal.pod.haus</code> is
+        SSH-only — its HTTPS name <code>fractal.docs.pod.haus</code> is separate and stays
+        on Pomerium — and it keeps fractal reachable from the LAN even when the Pomerium
+        edge is down. Chezmoi sends all other cases through
         Pomerium at <code>ssh.pod.haus:22</code>. On an unmanaged device, connect as
         <code>nathan@ssh.pod.haus</code> and choose a route from Pomerium's portal. Routes are
-        named <code>bilby</code>, <code>numbat</code>, <code>voltaire</code>, and
-        <code>kangaroo</code>.
+        named <code>bilby</code>, <code>fractal</code>, <code>numbat</code>,
+        <code>voltaire</code>, and <code>kangaroo</code>.
         The generic <code>pomerium-ssh-origin-bootstrap</code> installs the
         machine-local outbound relay and CA trust on a target; the operator chooses the
         initial SSH transport separately. Kangaroo uses the same CA bootstrap in

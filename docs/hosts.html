@@ -202,10 +202,16 @@
         — it has no bootstrap script and never had one.
       </p>
       <p>
-        Everything in and out is a connection fractal makes. Its LAN address
+        Almost everything in and out is a connection fractal makes. Its LAN address
         <code>10.0.0.70</code> is the <em>Windows</em> host, which forwards only :22 into the
         guest; the guest itself sits behind WSL's NAT on a subnet that changes across reboots.
-        So there is no inbound path to depend on, and none is used.
+        The one inbound path is LAN SSH: a split-horizon <code>fractal.pod.haus</code> A
+        record (Terraform, UniFi resolver) points at the Windows host's :22 forward, with
+        the address UniFi-reserved so it cannot drift. That keeps fractal reachable from
+        the home network — including for bilby-resident agents — even when the Pomerium
+        edge is down. It is safe where a kangaroo split record would not be, because this
+        name is SSH-only: fractal's HTTPS name <code>fractal.docs.pod.haus</code> is
+        separate and stays on Pomerium.
       </p>
       <ul>
         <li><strong>Ansible-managed (root state):</strong> hostname via
@@ -228,10 +234,11 @@
         Ingress is an outbound rathole client to numbat, following the same pattern as bilby:
         <code>fractal.docs.pod.haus</code> lands on Pomerium, which forwards to
         <code>127.0.0.1:8444</code> on numbat, through the tunnel to fractal's Caddy on
-        <code>:4443</code> (mTLS origin), and on to the docs container. SSH takes the same
-        route via <code>127.0.0.1:2204</code> and the <code>ssh://fractal</code> Pomerium
-        route; <code>ssh fractal.pod.haus</code> resolves through a chezmoi
-        <code>Match originalhost</code> rule, not a DNS record.
+        <code>:4443</code> (mTLS origin), and on to the docs container. Off-LAN SSH takes
+        the same route via <code>127.0.0.1:2204</code> and the <code>ssh://fractal</code>
+        Pomerium route through a chezmoi <code>Match originalhost</code> rewrite; on the
+        home network a preceding <code>localnetwork</code> match connects direct via the
+        split-horizon record instead.
       </p>
       <p>
         <strong>fractal has no backup stack.</strong> Everything Ansible and chezmoi put

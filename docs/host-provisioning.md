@@ -26,13 +26,13 @@ the layer exists to draw.
 
 ## What is Ansible-managed today
 
-**fractal** and **bilby** are fully migrated (`provisioned`/`site.yml`).
-bilby's real run landed 2026-08-04 (`site.yml --limit bilby` →
-`changed=0`); its one remaining item is the scheduled 04:00-window
-live-restore flip, a deliberate human act tracked in the migration plan.
-**numbat**'s two plays exist and its bootstrap script is gone; it joins
-`provisioned` once its live check-mode pass comes back clean. voltaire is
-still owned by hand and kangaroo by its bootstrap script. See
+**fractal**, **bilby**, and **numbat** are fully migrated
+(`provisioned`/`site.yml`). bilby's real run landed 2026-08-04 and the
+live-restore flip followed, so it carries the fleet-default daemon config
+with nothing held back. numbat's live run landed 2026-08-08 (`ok=43
+changed=10`, second run `changed=0`), reached through Pomerium with the
+`nathan@numbat` route selector in its connection vars. voltaire is still
+owned by hand and kangaroo by its bootstrap script. See
 [the migration plan](plans/host-provisioning-migration.md) for what
 is left.
 
@@ -69,15 +69,13 @@ ansible/
 
 Hosts are grouped twice: by **migration state** and by **role**.
 
-- `provisioned` — fully Ansible-owned: fractal and bilby. `site.yml`
-  targets this group and nothing else, gating each role (including
-  bilby-only ones like `nfs_binds` and `firewalld`) on the matching
-  role group rather than on hostname, so a future host inherits the
-  right roles from group membership alone.
-- `pending_migration` — numbat and voltaire. Present so
-  the inventory is honest about the fleet. numbat's script is already
-  absorbed into its playbooks, which target it by name — it waits only
-  on its live check-mode pass; voltaire is still owned by hand.
+- `provisioned` — fully Ansible-owned: fractal, bilby, and numbat.
+  `site.yml` targets this group and nothing else, gating each role
+  (including single-host ones like `nfs_binds`, `firewalld`, and
+  `numbat_edge`) on the matching role group rather than on hostname, so a
+  future host inherits the right roles from group membership alone.
+- `pending_migration` — voltaire, still owned by hand. Present so
+  the inventory is honest about the fleet.
   **No playbook targets this group as a group.** Migrating a host means
   moving it between the two groups by hand, after its check-mode pass
   comes back clean.
@@ -85,8 +83,6 @@ Hosts are grouped twice: by **migration state** and by **role**.
   `python3`, no `/opt/bin/python3`, only the MalwareRemover and
   Container Station QPKGs), so it can never be an Ansible target.
   `kangaroo_bootstrap` is permanent, not interim.
-- Voltaire is absent deliberately. It is a work machine with a narrow SSH
-  integration, not a podhaus provisioning target.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes` — role groups.
   `site.yml` gates each role on membership.
 
