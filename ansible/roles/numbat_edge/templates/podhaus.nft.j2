@@ -4,8 +4,19 @@ table inet podhaus {
     ct state established,related accept
     iifname "lo" accept
     ip protocol icmp accept
-    ip daddr {{ podhaus_numbat_application_ipv4 }} tcp dport { 22, 80, 443 } accept
-    ip daddr {{ podhaus_numbat_relay_ipv4 }} tcp dport { 22, 443, 2333 } accept
+
+    # Public SSH takes a per-source throttle on NEW connections only.
+    # A human opens a handful of connections; scanners open hundreds a
+    # minute and feed Pomerium's auth path until memory runs out (bit
+    # the 1 GB box twice in 2026-08). Established flows are accepted
+    # above, so an open session is never touched; over-limit sources
+    # just stop reaching Pomerium. 10/min with burst 20 is far above
+    # any human or git/ansible automation pattern.
+    ip daddr { {{ podhaus_numbat_application_ipv4 }}, {{ podhaus_numbat_relay_ipv4 }} } tcp dport 22 ct state new meter podhaus_ssh { ip saddr limit rate 10/minute burst 20 packets } accept
+    ip daddr { {{ podhaus_numbat_application_ipv4 }}, {{ podhaus_numbat_relay_ipv4 }} } tcp dport 22 counter drop
+
+    ip daddr {{ podhaus_numbat_application_ipv4 }} tcp dport { 80, 443 } accept
+    ip daddr {{ podhaus_numbat_relay_ipv4 }} tcp dport { 443, 2333 } accept
     ip daddr { {{ podhaus_numbat_application_ipv4 }}, {{ podhaus_numbat_relay_ipv4 }} } drop
   }
 }

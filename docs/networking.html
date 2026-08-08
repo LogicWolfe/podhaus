@@ -55,6 +55,11 @@ networks:
         </tbody>
       </table>
       <p>
+        Port 22 on both addresses carries a per-source nftables rate limit on new
+        connections (10/minute, burst 20); established sessions are never touched, and
+        over-limit sources are dropped before they reach Pomerium or the Forgejo relay.
+      </p>
+      <p>
         Protected browser names resolve to the application address. Pomerium authenticates
         with Pocket ID, then reaches Caddy's private <code>:4443</code> listener through a
         loopback-only rathole service. That listener also requires Pomerium's client
