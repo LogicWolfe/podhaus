@@ -190,6 +190,19 @@ class EventForwarder:
     def forward(self, user_code, binding, state):
         fingerprint = "SHA256:" + binding.key.removeprefix(FINGERPRINT_PREFIX)
         owner = self.config["owners"].get(fingerprint)
+        # Unregistered keys never generate a sign-in prompt — anyone can
+        # reach keyboard-interactive, so forwarding these would be a
+        # phone-spam channel. Resolutions still forward: an approval of
+        # an unknown key is exactly the anomaly fenwick should flag.
+        if owner is None and state == "in_flight":
+            log.warning(
+                "unregistered key %s attempted sign-in (code %s, from %s); "
+                "not forwarding",
+                fingerprint,
+                user_code,
+                binding.details.get("Source Address"),
+            )
+            return
         route = None
         if state == "in_flight":
             route = self.wait_for_route(fingerprint.removeprefix("SHA256:"))

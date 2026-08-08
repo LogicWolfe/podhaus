@@ -38,4 +38,4 @@ description = "Fenwick account that receives SSH auth notifications for unmapped
 [[variable]]
 name = "POMERIUM_SSH_KEY_OWNERS"
 value = '{"SHA256:xoFwRTtZZF3C28yg3VfgVSyseiKjgsMaoPIQnDv4abg":{"user":"Nathan","machine":"bilby machine key"},"SHA256:f3/+BExiF4aprqM94hFJuLDS0dF2+Ppaum9hN9UI8eU":{"user":"Nathan","machine":"Nathan personal key"},"SHA256:1sv7ZuiXn1VBwZLfCrEKaB4TR2HWM8iXlJM1f8EzXQ4":{"user":"Nathan","machine":"fractal machine key"},"SHA256:RhKW+weirrcPh6fpA8VWWWqO/YsWNEXlGyyGwAlDfLc":{"user":"Nathan","machine":"fractal soft machine key"}}'
-description = "SSH key fingerprint -> fenwick account + machine label for ssh-auth-notify routing. Fingerprints are `ssh-keygen -lf` SHA256 values. Adding a person = add their key here with their fenwick account name."
+description = "SSH key fingerprint -> fenwick account + machine label for ssh-auth-notify routing. Fingerprints are `ssh-keygen -lf` SHA256 values. Unmapped fingerprints never generate an in_flight prompt. Keep in lockstep with the ssh_publickey allow-list in pomerium/config.yaml: registering a key means both lists (plus a fenwick account for a new person)."

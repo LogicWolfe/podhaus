@@ -120,9 +120,25 @@ networks:
         notified is configuration, not code: the
         <code>POMERIUM_SSH_KEY_OWNERS</code> variable in
         <code>pomerium/stack.toml</code> maps fingerprints to
-        <code>{user, machine}</code>; unmapped keys go to
-        <code>POMERIUM_SSH_AUTH_DEFAULT_USER</code> flagged as unrecognised.
-        Adding a person = their key in that map plus a fenwick account.
+        <code>{user, machine}</code>.
+      </p>
+      <p>
+        <strong>Only registered keys generate prompts, at two layers.</strong>
+        Anyone completing an SSH handshake with any key reaches
+        keyboard-interactive (Pomerium writes the binding record before
+        evaluating policy), so the sidecar drops <code>in_flight</code>
+        events for fingerprints outside the owner map — logged, never
+        forwarded. Resolutions for unknown keys still forward: an approval
+        of an unregistered key is an anomaly fenwick flags to
+        <code>POMERIUM_SSH_AUTH_DEFAULT_USER</code>. Independently, every
+        SSH route policy carries an <code>ssh_publickey</code> allow-list
+        (the same four keys, full authorized_keys form in
+        <code>pomerium/config.yaml</code>), so an unregistered key can
+        never gain access even if its sign-in link were somehow approved.
+        <strong>Registering a key means updating both lists</strong> —
+        the owner map (who gets the prompt) and the policy allow-list
+        (whether access is possible) — plus a fenwick account for a new
+        person.
       </p>
       <p>
         Transport is the gateway-token pattern:

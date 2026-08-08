@@ -143,6 +143,18 @@ routes:
                 is: nathan@nathanbaxter.com
             - ssh_username:
                 is: nathan
+            # Registered client keys only. Evaluated after browser
+            # sign-in (v0.33.0 writes the binding record before policy),
+            # so this cannot stop the sign-in prompt — the sidecar's
+            # unmapped-fingerprint filter does that. This layer makes a
+            # mis-tapped link for an unregistered key unexploitable.
+            # Keep in lockstep with POMERIUM_SSH_KEY_OWNERS in
+            # stack.toml: registering a key means both lists.
+            - ssh_publickey: &registered_ssh_keys
+                - 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM= bilby machine key'
+                - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZSaoga8/dYnCgeiOSaV+3Xe5Tl6AkBpqO0T863ZajR Nathan personal key'
+                - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGc4palJ9QLWwFABcbyHKXNUvrTRpKdAkqATs8Bmr5xW fractal machine key'
+                - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINj/PsgYGQRoYSsdnfG+x+vNTa/01OxriWJhDqGiB/IZ fractal soft machine key'
   - from: ssh://bilby
     to: ssh://127.0.0.1:2201
     policy: *nathan_ssh_policy
@@ -161,3 +173,4 @@ routes:
                 is: nathan@nathanbaxter.com
             - ssh_username:
                 is: admin
+            - ssh_publickey: *registered_ssh_keys
