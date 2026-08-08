@@ -159,10 +159,11 @@ executions = [
 
 # nathanbaxter-deploy — push-to-deploy for nathanbaxter.com.
 #
-# Replaces the previous .github/workflows/deploy.yml. Bound to the
-# nathanbaxter GitHub push webhook
+# Bound to the nathanbaxter Forgejo push webhook — the repo lives on
+# git.pod.haus and Forgejo sends GitHub-compatible X-GitHub-Event /
+# X-Hub-Signature-256 headers to the same listener
 # (komodo.pod.haus/listener/github/procedure/nathanbaxter-deploy/main,
-# branch-filtered to main; see terraform/github.tf). Single stage:
+# branch-filtered to main; see terraform/forgejo.tf). Single stage:
 # force-redeploy the nathanbaxter-deploy stack, whose one-shot builder
 # container clones the repo, runs npm ci + npm run build, mcli mirrors
 # dist/ to the nathanbaxter-com MinIO bucket, exits.

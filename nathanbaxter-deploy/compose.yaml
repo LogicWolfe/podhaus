@@ -1,10 +1,11 @@
 # nathanbaxter-deploy — build + mirror nathanbaxter.com to MinIO.
 #
-# One-shot builder container: clones LogicWolfe/nathanbaxter@main into
-# the container's temp filesystem, runs npm ci + npm run build, mcli
+# One-shot builder container: clones LogicWolfe/nathanbaxter@main from
+# Forgejo (SSH over dockernet, read-only deploy key) into the
+# container's temp filesystem, runs npm ci + npm run build, mcli
 # mirrors dist/ to the nathanbaxter-com bucket, exits 0. Triggered by
-# the nathanbaxter GitHub push webhook via the nathanbaxter-deploy
-# Komodo procedure (komodo/sync/procedures.toml).
+# the nathanbaxter Forgejo push webhook (terraform/forgejo.tf) via the
+# nathanbaxter-deploy Komodo procedure (komodo/sync/procedures.toml).
 #
 # Why fresh clone instead of bind-mounting bilby's working tree: the
 # user's working tree at /home/nathan/repos/nathanbaxter is shared with
@@ -38,6 +39,7 @@ services:
       TZ: ${TZ}
       MINIO_ACCESS_KEY: ${NATHANBAXTER_MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${NATHANBAXTER_MINIO_SECRET_KEY}
+      DEPLOY_KEY_B64: ${NATHANBAXTER_DEPLOY_KEY_B64}
     networks:
       - dockernet
     labels:

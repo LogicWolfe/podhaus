@@ -1,10 +1,11 @@
 # Komodo stack — nathanbaxter-deploy.
 #
-# Replaces .github/workflows/deploy.yml in the nathanbaxter repo with
-# a Komodo-managed build + mirror pipeline. One-shot builder image
-# (node:lts + mcli) clones nathanbaxter@main, npm ci + npm run build,
-# mcli mirrors dist/ to the nathanbaxter-com bucket on bilby's MinIO,
-# exits 0.
+# Komodo-managed build + mirror pipeline for nathanbaxter.com. One-shot
+# builder image (node:lts + mcli) clones nathanbaxter@main from Forgejo
+# (git.pod.haus — the repo moved off GitHub; SSH over dockernet with a
+# read-only deploy key from terraform/forgejo.tf), npm ci + npm run
+# build, mcli mirrors dist/ to the nathanbaxter-com bucket on bilby's
+# MinIO, exits 0.
 #
 # Why Komodo-managed instead of GHA:
 #   - No external CI runner dependency. The 2026-05-26 GitHub Actions
@@ -14,7 +15,8 @@
 #   - Build logs land in ClickStack via Periphery's container logging,
 #     alongside every other deploy on the homelab.
 #
-# Trigger: nathanbaxter GitHub push webhook → nathanbaxter-deploy
+# Trigger: nathanbaxter Forgejo push webhook (terraform/forgejo.tf) →
+# nathanbaxter-deploy
 # procedure (komodo/sync/procedures.toml) → DeployStack here. Always
 # force-deploy (the procedure uses DeployStack, not IfChanged), so
 # every push to main produces a fresh build regardless of whether the
@@ -42,6 +44,7 @@ environment = """
 TZ=[[TZ]]
 NATHANBAXTER_MINIO_ACCESS_KEY=[[OP__KOMODO__MINIO_NATHANBAXTER_COM__ACCESS_KEY_ID]]
 NATHANBAXTER_MINIO_SECRET_KEY=[[OP__KOMODO__MINIO_NATHANBAXTER_COM__SECRET_ACCESS_KEY]]
+NATHANBAXTER_DEPLOY_KEY_B64=[[OP__KOMODO__NATHANBAXTER_DEPLOY_KEY__PRIVATE_KEY_B64]]
 CLOUDFLARE_CACHE_ZONE=nathanbaxter.com
 CLOUDFLARE_CACHE_TAG=nathanbaxter
 """
