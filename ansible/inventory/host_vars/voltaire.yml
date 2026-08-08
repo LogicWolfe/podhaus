@@ -1,0 +1,28 @@
+# voltaire — Nathan's work desktop (Fedora 44 Workstation, x86_64), a
+# full homelab member.
+#
+# It sits on a foreign LAN (192.168.0.x) with no route from the home
+# network, so like numbat it is reached exclusively through Pomerium; its
+# own links out are the rathole SSH origin and outbound Periphery.
+---
+ansible_host: voltaire.pod.haus
+# The Pomerium route selector rides the SSH username (user@route) and must
+# live here, not in ~/.ssh/config — see host_vars/numbat.yml for the full
+# `-o User` ordering rationale. OS-account work uses podhaus_operator.
+ansible_user: nathan@voltaire
+
+# Docker: fresh install — the host was podman-only before migration, and
+# the single-engine end state is docker (see the migration plan's voltaire
+# slice). Fleet-default live-restore from day one.
+podhaus_docker_engine_managed: true
+podhaus_docker_live_restore: true
+
+# Development machine ---------------------------------------------------
+# Nathan clones what he works on; nothing manufactures a repo manifest.
+podhaus_repos_dir: /home/nathan/repos
+
+# Komodo Periphery ------------------------------------------------------
+# Outbound v2: Periphery dials Core, so nothing listens publicly. Every
+# komodo_periphery role default already matches (/opt/komodo-periphery
+# layout, keys streamed from the control node, Core polled on
+# localhost:9120) — nothing to override.

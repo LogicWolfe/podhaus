@@ -65,3 +65,21 @@ enabled = true
 send_cpu_alerts = false
 disk_warning = 85.0
 disk_critical = 95.0
+
+[[server]]
+name = "voltaire"
+description = "Nathan's work desktop (Fedora 44 Workstation). v2 outbound: Periphery dials Core at core-connect.pod.haus."
+tags = ["voltaire", "podhaus"]
+
+[server.config]
+# Outbound mode (v2 PKI noise handshake). voltaire sits on a foreign LAN
+# with no route from the home network — every path in and out is a
+# connection voltaire makes. Port 8120 is not published.
+address = ""
+enabled = true
+# A developer machine running builds and test suites hits 100% CPU as
+# normal behaviour, the same argument as kangaroo and fractal. Real
+# failures still surface via ServerUnreachable and StackStateChange.
+send_cpu_alerts = false
+disk_warning = 85.0
+disk_critical = 95.0

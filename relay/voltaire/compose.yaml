@@ -1,0 +1,42 @@
+# voltaire rathole CLIENT — dials OUT to Numbat's control port and publishes
+# one service: host SSH.
+#
+# This replaces the podhaus-pomerium-ssh-origin systemd unit (the last
+# consumer of the script-managed origin pattern besides kangaroo's --ca-only
+# branch). voltaire sits on a foreign LAN with no route from the home
+# network, so this outbound tunnel is what makes `ssh voltaire.pod.haus`
+# work at all. No HTTP origin: voltaire has no HTTPS name.
+services:
+  voltaire-rathole-client:
+    container_name: voltaire-rathole-client
+    build:
+      context: ..
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_VOLTAIRE_RATHOLE_CLIENT:-unset}
+    image: voltaire-rathole:local
+    pull_policy: never
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      # SELinux enforcing on Fedora Workstation denies cross-label reads of
+      # the bind-mounted config dir without label:disable (bilby pattern).
+      - label:disable
+      - no-new-privileges:true
+    environment:
+      RATHOLE_CONFIG_TEMPLATE: /etc/rathole/client.toml.tmpl
+      RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}
+      RATHOLE_VOLTAIRE_SSH_TOKEN: ${RATHOLE_VOLTAIRE_SSH_TOKEN}
+    volumes:
+      # Directory bind, never a single file — an atomic-rename save on the
+      # host would otherwise leave the container on the orphaned inode.
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-voltaire/relay/voltaire:/etc/rathole:ro
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+networks:
+  dockernet:
+    external: true

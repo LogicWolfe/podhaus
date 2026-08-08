@@ -1,0 +1,17 @@
+[[stack]]
+name = "voltaire-relay"
+description = "Outbound voltaire SSH origin for Numbat Pomerium"
+tags = ["voltaire", "podhaus"]
+
+[stack.config]
+server = "voltaire"
+linked_repo = "podhaus-voltaire"
+run_directory = "relay/voltaire"
+file_paths = ["compose.yaml"]
+run_build = true
+auto_pull = false
+
+environment = """
+RATHOLE_NOISE_REMOTE_PUBLIC_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PUBLIC_KEY]]
+RATHOLE_VOLTAIRE_SSH_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__VOLTAIRE_SSH]]
+"""

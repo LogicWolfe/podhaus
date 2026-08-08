@@ -1,0 +1,26 @@
+# Provision voltaire: podhaus host + Nathan's work development machine.
+#
+# Run from any machine with the op-unlock agent active:
+#   cd ansible
+#   ansible-playbook playbooks/voltaire.yml --check --diff   # read first
+#   ansible-playbook playbooks/voltaire.yml
+#
+# chezmoi is applied separately, by Nathan, as himself. This playbook
+# deliberately does not invoke it — that would put user state under root's
+# control and break the boundary the whole layer exists to draw.
+---
+- name: Provision voltaire
+  hosts: voltaire
+  gather_facts: true
+
+  roles:
+    - role: base
+      tags: [base]
+    - role: docker
+      tags: [docker]
+    - role: devbox
+      tags: [devbox]
+    - role: sshd_pomerium_ca
+      tags: [ssh]
+    - role: komodo_periphery
+      tags: [periphery]

@@ -1,0 +1,18 @@
+[[stack]]
+name = "voltaire-logging"
+description = "Alloy on voltaire, shipping to Bilby through the mTLS log-ingest gateway"
+tags = ["voltaire", "podhaus"]
+
+[stack.config]
+server = "voltaire"
+linked_repo = "podhaus-voltaire"
+run_directory = "logging/voltaire"
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
+ignore_services = ["alloy-secrets-init"]
+run_build = true
+
+environment = """
+CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
+VOLTAIRE_CERT_B64=[[OP__KOMODO__LOG_INGEST_PKI__VOLTAIRE_CERT_B64]]
+VOLTAIRE_KEY_B64=[[OP__KOMODO__LOG_INGEST_PKI__VOLTAIRE_KEY_B64]]
+"""

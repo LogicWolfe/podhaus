@@ -1,0 +1,18 @@
+[client]
+remote_addr = "relay.numbat.pod.haus:2333"
+
+[client.transport]
+type = "noise"
+
+[client.transport.noise]
+remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
+
+# Host sshd, reached across the dockernet bridge gateway. voltaire is on a
+# foreign LAN with no route from the home network, so this outbound tunnel
+# is what makes `ssh voltaire.pod.haus` work from anywhere. Same
+# voltaire_ssh service (and token) the retired systemd origin used —
+# nothing changes server-side on numbat.
+[client.services.voltaire_ssh]
+type = "tcp"
+local_addr = "172.18.0.1:22"
+token = "${RATHOLE_VOLTAIRE_SSH_TOKEN}"

@@ -1,0 +1,46 @@
+# voltaire's logging overlay. Renders the mTLS client credential into a
+# named volume (init) and binds the alloy-conf directory from the linked
+# podhaus clone, same shape as fractal's overlay plus the SELinux opt
+# Fedora Workstation needs.
+services:
+  alloy-secrets-init:
+    build:
+      context: ../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_ALLOY_SECRETS_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
+    restart: "no"
+    environment:
+      VOLTAIRE_CERT_B64: ${VOLTAIRE_CERT_B64}
+      VOLTAIRE_KEY_B64: ${VOLTAIRE_KEY_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf '%s' "$${VOLTAIRE_CERT_B64}" | base64 -d > /secrets/voltaire-cert.pem
+        printf '%s' "$${VOLTAIRE_KEY_B64}" | base64 -d > /secrets/voltaire-key.pem
+    volumes:
+      - alloy-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  alloy:
+    depends_on:
+      alloy-secrets-init:
+        condition: service_completed_successfully
+    # SELinux enforcing denies cross-label writes to docker.sock and reads
+    # of the bind-mounted config dir; label:disable covers both (bilby
+    # pattern).
+    security_opt:
+      - label:disable
+    volumes:
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-voltaire/logging/voltaire/alloy-conf:/etc/alloy:ro
+      - alloy-secrets:/run/podhaus-secrets:ro
+    labels:
+      podhaus.depends-on-alloy-secrets-init: ${BUILD_HASH_ALLOY_SECRETS_INIT:-unset}
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+volumes:
+  alloy-secrets:

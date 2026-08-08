@@ -1,0 +1,10 @@
+[[stack]]
+name = "voltaire-autoheal"
+description = "Restart unhealthy autoheal-labelled containers on voltaire"
+tags = ["voltaire", "podhaus"]
+
+[stack.config]
+server = "voltaire"
+linked_repo = "podhaus-voltaire"
+run_directory = "autoheal/voltaire"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]

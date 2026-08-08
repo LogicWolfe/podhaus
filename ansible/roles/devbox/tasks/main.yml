@@ -12,8 +12,10 @@
 # removed from chezmoi.
 #
 # Deliberately absent: the TPM (tpm2-pkcs11) and YubiKey (opensc/pcsc-lite)
-# provider stacks. Both are hardware-gated in chezmoi and fractal has neither
-# — no TPM device, no USB passthrough into the WSL guest.
+# provider stacks. Those stay chezmoi-owned and hardware-gated there — the
+# machine key is user state, and chezmoi's probe installs the right provider
+# only where the hardware exists (voltaire has a TPM; fractal has neither a
+# TPM device nor USB passthrough into the WSL guest).
 ---
 - name: Import the 1Password signing key
   ansible.builtin.get_url:

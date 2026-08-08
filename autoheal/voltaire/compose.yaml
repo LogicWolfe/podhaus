@@ -1,0 +1,11 @@
+# voltaire's autoheal overlay. SELinux is enforcing on Fedora Workstation,
+# which denies cross-label writes to /var/run/docker.sock without
+# label:disable (bilby pattern).
+
+
+services:
+  autoheal:
+    security_opt:
+      - label:disable
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

@@ -111,3 +111,15 @@ git_provider = "github.com"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/docs-server"
 branch = "main"
+
+[[repo]]
+name = "podhaus-voltaire"
+description = "Komodo-managed podhaus clone on voltaire"
+tags = ["podhaus", "voltaire"]
+
+[repo.config]
+server = "voltaire"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/podhaus"
+branch = "main"

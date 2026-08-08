@@ -63,6 +63,7 @@ SKIP_PATH_FRAGMENTS = (
     "fractal/periphery",
     "kangaroo/periphery",
     "numbat/periphery",
+    "voltaire/periphery",
 )
 
 
