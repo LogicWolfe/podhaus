@@ -51,4 +51,30 @@
         <size>100M</size>
         <count>8</count>
     </logger>
+
+    <!-- ClickHouse's own self-instrumentation ships with NO TTL, so both
+         of these grow forever. They dwarfed the actual telemetry: at
+         2026-08-08 text_log was 18.9 GB and trace_log 14.4 GB against
+         6.2 GB of otel_logs — 5× the data we actually collect, on a box
+         whose root filesystem had reached 84%.
+
+         text_log is the server's own log messages (we run at
+         <level>trace</level>, deliberately — the healthcheck asserts
+         clickhouse-server.log is being written to). trace_log is the
+         query profiler, sampling at 1 s. Both are debugging aids, not
+         records: a week is more than enough to investigate anything we
+         would actually investigate.
+
+         Only these two are capped. query_log / part_log / metric_log
+         describe the *workload* rather than the server's internals and
+         are left at their defaults on purpose.
+
+         Applied to the live tables with ALTER TABLE … MODIFY TTL; this
+         block is what makes a fresh bootstrap come up the same way. -->
+    <text_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </text_log>
+    <trace_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </trace_log>
 </clickhouse>
