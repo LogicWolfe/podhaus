@@ -17,8 +17,12 @@ A record to Numbat's application address. HTTPS terminates at Pomerium, then
 crosses the private mTLS rathole origin to Caddy and Forgejo. Forgejo still uses
 Pocket ID natively, so browser login is Pomerium followed by Forgejo OIDC.
 Forgejo LFS has an exact public Pomerium route and relies on its short-lived LFS
-token. Port 22 is a separate raw rathole service to Forgejo's embedded SSH
-server, so ordinary `git@git.pod.haus` URLs continue to work.
+token. The REST API (`/api/v1`) has a matching public route: Forgejo's own token
+auth is the boundary (`REQUIRE_SIGNIN_VIEW` rejects anonymous API calls), which
+lets Terraform's forgejo provider manage deploy keys and webhooks from any
+machine (`terraform/forgejo.tf`). Port 22 is a separate raw rathole service to
+Forgejo's embedded SSH server, so ordinary `git@git.pod.haus` URLs continue to
+work.
 
 After Pomerium login, Forgejo shows the Pocket ID button without its marketing
 homepage, powered-by label, version, or template timing. This is configuration
