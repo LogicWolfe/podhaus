@@ -355,3 +355,111 @@
         entity_id: "{{ trigger.entity_id }}"
   mode: parallel
   max: 10
+
+- id: turn_touch_burrow_lights
+  alias: 'Turn Touch burrow: Hue, Shapes and fan downlight'
+  description: >-
+    The burrow Turn Touch mirrors the burrow Hue tap, but unlike the tap it has
+    no rules stored on the Hue bridge, so this automation drives everything the
+    room does. That means the three Hue bulbs (bloom, cupboard strip, window
+    strip) via the same scenes the bridge recalls for the tap, plus the Nanoleaf
+    Shapes and the Big Ass Fan downlight that burrow_switch_extras adds.
+
+    North recalls Bright, West recalls Orange, East recalls Leave the lights on,
+    South turns the room off. The extras follow the scene rather than the
+    button: Bright lights the fan and Shapes, Orange kills the fan and drops the
+    Shapes to a random effect, and both Leave-the-lights-on and Off clear the
+    extras. Leave-the-lights-on deliberately keeps the Hue bulbs lit while
+    clearing the extras -- it is not a variant of off. Effect names must match
+    what is loaded on the Nanoleaf exactly, or the call fails silently.
+
+    Unlike the kinetic tap, the Turn Touch emits hold and double events on every
+    button as well as press. Only press is bound, so the condition filters the
+    others out; without it a hold would fire the scene a second time. not_from
+    guards the restore transitions, which would otherwise fire this on restart
+    or integration reload.
+  triggers:
+    - trigger: state
+      entity_id: event.turn_touch_burrow_north
+      not_from:
+        - unknown
+        - unavailable
+      id: bright
+    - trigger: state
+      entity_id: event.turn_touch_burrow_west
+      not_from:
+        - unknown
+        - unavailable
+      id: orange
+    - trigger: state
+      entity_id: event.turn_touch_burrow_east
+      not_from:
+        - unknown
+        - unavailable
+      id: leave_on
+    - trigger: state
+      entity_id: event.turn_touch_burrow_south
+      not_from:
+        - unknown
+        - unavailable
+      id: all_off
+  conditions:
+    - condition: template
+      value_template: "{{ trigger.to_state.attributes.event_type == 'press' }}"
+  actions:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: bright
+          sequence:
+            - action: scene.turn_on
+              target:
+                entity_id: scene.burrow_bright
+            - action: light.turn_on
+              target:
+                entity_id: light.haiku_fan_4
+              data:
+                brightness_pct: 70
+            - action: light.turn_on
+              target:
+                entity_id: light.shapes_4108
+              data:
+                brightness_pct: 40
+                effect: Sunlight through trees
+        - conditions:
+            - condition: trigger
+              id: orange
+          sequence:
+            - action: scene.turn_on
+              target:
+                entity_id: scene.burrow_orange
+            - action: light.turn_off
+              target:
+                entity_id: light.haiku_fan_4
+            - action: light.turn_on
+              target:
+                entity_id: light.shapes_4108
+              data:
+                brightness_pct: 15
+                effect: >-
+                  {{ ['Aquarium', 'Retro Future', 'Vintage Modern'] | random }}
+        - conditions:
+            - condition: trigger
+              id: leave_on
+          sequence:
+            - action: scene.turn_on
+              target:
+                entity_id: scene.burrow_leave_the_lights_on
+            - action: light.turn_off
+              target:
+                entity_id:
+                  - light.haiku_fan_4
+                  - light.shapes_4108
+      default:
+        - action: light.turn_off
+          target:
+            entity_id:
+              - light.burrow
+              - light.haiku_fan_4
+              - light.shapes_4108
+  mode: restart

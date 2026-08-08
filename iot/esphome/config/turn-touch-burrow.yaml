@@ -1,0 +1,166 @@
+substitutions:
+  device_name: turn-touch-burrow
+  friendly_name: "Turn Touch Burrow"
+  turn_touch_mac: "D0:B3:F2:63:CE:08"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# INFO keeps steady-state quiet. Raise to DEBUG to get the per-notification raw
+# byte trace from the decode lambda plus ESPHome's own GATT notify lines — that
+# pair is what makes a misbehaving remote diagnosable.
+#
+# hardware_uart is required on this board: the C3's Serial is the native
+# USB-Serial/JTAG peripheral, not UART0. Attaching to it over USB resets the
+# chip, though, so prefer `esphome logs --device <ip>` over serial once the
+# device is on wifi.
+logger:
+  level: INFO
+  hardware_uart: USB_SERIAL_JTAG
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+# Low duty cycle: this chip is single-core, so BLE scanning contends with wifi
+# for the same core. We only ever connect to one known MAC, so passive and
+# infrequent is sufficient.
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1100ms
+    window: 300ms
+    active: false
+
+ble_client:
+  - mac_address: ${turn_touch_mac}
+    id: turn_touch
+    on_connect:
+      - logger.log: "Turn Touch connected"
+    on_disconnect:
+      - logger.log: "Turn Touch disconnected"
+
+globals:
+  # Last raw payload, for duplicate suppression: the remote re-sends identical
+  # notifications and each must not be read as a fresh edge.
+  - id: last_byte0
+    type: uint8_t
+    initial_value: '0xFF'
+  - id: last_byte1
+    type: uint8_t
+    initial_value: '0x00'
+  # Buttons whose hold has already fired; their release must not also emit a press.
+  - id: held
+    type: uint8_t
+    initial_value: '0x00'
+
+event:
+  - platform: template
+    id: button_north
+    name: "North"
+    device_class: button
+    event_types: ["press", "hold", "double"]
+  - platform: template
+    id: button_east
+    name: "East"
+    device_class: button
+    event_types: ["press", "hold", "double"]
+  - platform: template
+    id: button_west
+    name: "West"
+    device_class: button
+    event_types: ["press", "hold", "double"]
+  - platform: template
+    id: button_south
+    name: "South"
+    device_class: button
+    event_types: ["press", "hold", "double"]
+
+sensor:
+  - platform: ble_client
+    type: characteristic
+    ble_client_id: turn_touch
+    id: button_state
+    internal: true
+    service_uuid: "99c31523-dc4f-41b1-bb04-4e4deb81fadd"
+    characteristic_uuid: "99c31525-dc4f-41b1-bb04-4e4deb81fadd"
+    notify: true
+    # Never poll. A GATT read of this characteristic returns a value unrelated to
+    # button state (observed 0x40EB at rest, vs 0xFF00 on notify), which the decode
+    # below would interpret as four buttons down plus three double-taps.
+    update_interval: never
+    # Raw bytes arrive here as std::vector<uint8_t>; on_notify would only see
+    # the parsed float. Events are dispatched as a side effect and the returned
+    # value is just the raw bitmask, kept internal for debugging.
+    lambda: |-
+      if (x.size() != 2) {
+        ESP_LOGW("turn_touch", "unexpected payload size %u", (unsigned) x.size());
+        return NAN;
+      }
+      const uint8_t byte0 = x[0], byte1 = x[1];
+      ESP_LOGD("turn_touch", "raw %02X %02X (prev %02X %02X, held %02X)",
+               byte0, byte1, id(last_byte0), id(last_byte1), id(held));
+      if (byte0 == id(last_byte0) && byte1 == id(last_byte1)) {
+        ESP_LOGD("turn_touch", "  duplicate, ignored");
+        return (float) byte0;
+      }
+
+      const uint8_t was_down = (uint8_t) (~id(last_byte0)) & 0x0F;
+      id(last_byte0) = byte0;
+      id(last_byte1) = byte1;
+
+      const uint8_t down = (uint8_t) (~byte0) & 0x0F;
+      const uint8_t doubled = ((uint8_t) (~byte0) >> 4) & 0x0F;
+
+      for (uint8_t i = 0; i < 4; i++) {
+        const uint8_t bit = 1 << i;
+        const char *type = nullptr;
+        if (doubled & bit) {
+          type = "double";
+        } else if (byte1 == 0xFF && (down & bit) && !(id(held) & bit)) {
+          type = "hold";
+        } else if ((was_down & bit) && !(down & bit) && !(id(held) & bit)) {
+          type = "press";
+        }
+        if (type == nullptr)
+          continue;
+        ESP_LOGD("turn_touch", "  bit %u -> %s", i, type);
+        switch (i) {
+          case 0: id(button_north).trigger(type); break;
+          case 1: id(button_east).trigger(type); break;
+          case 2: id(button_west).trigger(type); break;
+          case 3: id(button_south).trigger(type); break;
+        }
+      }
+
+      if (byte1 == 0xFF)
+        id(held) |= down;
+      id(held) &= down;
+
+      return (float) byte0;
+
+  - platform: ble_client
+    type: characteristic
+    ble_client_id: turn_touch
+    id: battery_level
+    name: "Battery"
+    service_uuid: "180F"
+    characteristic_uuid: "2A19"
+    device_class: battery
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    # The remote only re-samples its gauge at boot, so polling faster buys nothing.
+    update_interval: 30min

@@ -1,0 +1,72 @@
+services:
+  # Seeds the ESPHome config volume from the repo and renders secrets.yaml from
+  # Komodo Variables. The device YAMLs are config-as-code in iot/esphome/config;
+  # the volume is a working copy, so the repo stays the source of truth and no
+  # secret is ever written into the checkout. Exits 0 by design — hence
+  # ignore_services in stack.toml.
+  esphome-init:
+    container_name: esphome-init
+    image: alpine:latest
+    restart: "no"
+    volumes:
+      - esphome-config:/config:z
+      - ${PODHAUS_REPO}/iot/esphome/config:/repo-config:ro,z
+    environment:
+      WIFI_SSID: ${ESPHOME_WIFI_SSID}
+      WIFI_PASSWORD: ${ESPHOME_WIFI_PASSWORD}
+      API_KEY: ${ESPHOME_API_KEY}
+      OTA_PASSWORD: ${ESPHOME_OTA_PASSWORD}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        # Fail loudly rather than rendering an empty secret: ESPHome would
+        # compile happily with a blank wifi password and the device would
+        # silently never associate.
+        for name in WIFI_SSID WIFI_PASSWORD API_KEY OTA_PASSWORD; do
+          eval "value=\$$$$name"
+          if [ -z "$$value" ]; then
+            echo "esphome-init: $$name is empty — check the ESPHome item in the 1Password Homelab vault" >&2
+            exit 1
+          fi
+        done
+        cp -a /repo-config/. /config/
+        printf 'wifi_ssid: "%s"\nwifi_password: "%s"\napi_encryption_key: "%s"\nota_password: "%s"\n' \
+          "$$WIFI_SSID" "$$WIFI_PASSWORD" "$$API_KEY" "$$OTA_PASSWORD" > /config/secrets.yaml
+        chmod 600 /config/secrets.yaml
+        echo "esphome-init: seeded $$(ls /config/*.yaml | wc -l) config file(s) and rendered secrets.yaml"
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  # network_mode: host is load-bearing, not convenience. The dashboard needs
+  # mDNS to discover devices and reach them for OTA, and mDNS does not cross the
+  # dockernet bridge. Same reason Home Assistant runs host-networked.
+  esphome:
+    container_name: esphome
+    image: ghcr.io/esphome/esphome:latest
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      esphome-init:
+        condition: service_completed_successfully
+    volumes:
+      - esphome-config:/config:z
+      # Toolchain and platformio cache. Kept off the config volume so a config
+      # reset does not force a full ESP-IDF re-download.
+      - esphome-cache:/cache:z
+    environment:
+      TZ: ${TZ}
+      ESPHOME_DASHBOARD_USE_PING: "true"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:6052/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+volumes:
+  esphome-config:
+  esphome-cache:

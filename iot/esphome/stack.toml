@@ -1,0 +1,31 @@
+[[stack]]
+name = "esphome"
+description = "ESPHome dashboard — compiles and OTA-updates the BLE remote bridges in iot/"
+tags = ["podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/iot/esphome"
+# esphome-init seeds the config volume and renders secrets.yaml, then exits 0 —
+# not a failure. Without this Komodo counts the exited init and marks the whole
+# stack Unhealthy (a false red). See AGENTS.md.
+ignore_services = ["esphome-init"]
+
+# Wi-Fi credentials, the native-API encryption key and the OTA password come
+# from the 1Password Homelab item "ESPHome", auto-synced by komodo-op (one
+# Komodo Variable per 1Password field). Expected field labels on that item:
+#   wifi ssid / wifi password / api key / ota password
+# The API key is the load-bearing one: Home Assistant stores it in its config
+# entry, so rotating it in 1Password silently breaks the integration until the
+# entry is re-added. PODHAUS_REPO is required for the config bind mount — a
+# stack that binds ${PODHAUS_REPO} without declaring it here expands to an empty
+# path and Docker creates an empty stub directory instead.
+environment = """
+TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
+ESPHOME_WIFI_SSID=[[OP__KOMODO__ESPHOME__WIFI_SSID]]
+ESPHOME_WIFI_PASSWORD=[[OP__KOMODO__ESPHOME__WIFI_PASSWORD]]
+ESPHOME_API_KEY=[[OP__KOMODO__ESPHOME__API_KEY]]
+ESPHOME_OTA_PASSWORD=[[OP__KOMODO__ESPHOME__OTA_PASSWORD]]
+"""

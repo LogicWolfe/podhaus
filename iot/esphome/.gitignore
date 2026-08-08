@@ -1,0 +1,6 @@
+# Rendered at deploy time by esphome-init from Komodo Variables. Never commit —
+# it holds the wifi password, the native-API encryption key and the OTA password.
+config/secrets.yaml
+# ESPHome build tree (toolchain output, ~1GB). Lives in the config volume in
+# production; this guards a local `esphome compile` run against the checkout.
+config/.esphome/
