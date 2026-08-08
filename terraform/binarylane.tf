@@ -70,6 +70,12 @@ resource "binarylane_server" "numbat" {
   region            = "per"
   image             = "rocky-10"
   size              = "std-min"
+  # std-min ships 1024 MB and there is no 1.5 GB plan; BinaryLane's
+  # Standard sizes instead take memory à la carte (multiple of 128 below
+  # 2048) at $0.0037109375/MB/month, so +512 MB is $1.90/mo against $9.80
+  # for the 2 GB std-1vcpu tier. Headroom for Pomerium, which leaks under
+  # SSH scan floods and exhausted the 1 GB box twice in 2026-08.
+  memory            = 1536
   public_ipv4_count = 2
   backups           = false
   ipv6              = false
