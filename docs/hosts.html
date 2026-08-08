@@ -256,6 +256,56 @@
         exactly the Windows coupling the outbound-only design avoids.
       </p>
 
+      <h2 id="voltaire">voltaire</h2>
+      <p>
+        Fedora Workstation desktop, x86_64, at a remote site with no route to or from
+        the home LAN. Like fractal it is two things at once: Nathan's other remote
+        development machine and an ordinary podhaus host. Provisioned by
+        <a href="/host-provisioning.md">Ansible</a> (<code>playbooks/voltaire.yml</code>,
+        reached through Pomerium at <code>ssh.pod.haus</code> with the
+        <code>nathan@voltaire</code> route selector).
+      </p>
+      <p>
+        Everything in and out is a connection voltaire makes, on the fractal pattern:
+        Komodo Periphery dials <code>core-connect.pod.haus</code>, the
+        <code>voltaire-relay</code> rathole client carries <code>ssh://voltaire</code> to
+        numbat, and Alloy ships logs to <code>logs-ingest.pod.haus</code> with per-host
+        mTLS. There is no HTTPS name and no public DNS record — off-LAN SSH rides
+        <code>ssh.pod.haus</code> like every other managed host. The Cloudflare tunnel
+        that used to carry SSH is gone (Terraform resources destroyed, host artifacts
+        removed); Tailscale <code>voltaire-recovery</code> is the break-glass path.
+      </p>
+      <ul>
+        <li><strong>Ansible-managed (root state):</strong> base packages, Docker CE +
+          <code>dockernet</code>, the developer toolchain, the Pomerium SSH user-CA
+          trust, and Komodo Periphery.</li>
+        <li><strong>chezmoi-managed (user state):</strong> everything under
+          <code>$HOME</code>, including the TPM-resident machine key.</li>
+        <li><strong>Komodo-managed:</strong> <code>voltaire-relay</code>,
+          <code>voltaire-logging</code>, and <code>voltaire-autoheal</code> through the
+          <code>podhaus-voltaire</code> linked repo.</li>
+      </ul>
+      <p>
+        SELinux is enforcing (Fedora Workstation default), so every podhaus service that
+        bind-mounts host paths or the Docker socket carries
+        <code>security_opt: [label:disable]</code> in its compose overlay.
+      </p>
+      <p>
+        Docker is the host's <strong>single container engine</strong>. The rootless
+        podman that predated provisioning was retired: its one container (the
+        <code>hybrid-sim-postgres-dev</code> dev database) was dump/restored into a
+        docker container of the same name, published on loopback only. The podman
+        package itself remains installed until the spike work that might still
+        reference it wraps up; the stopped podman container and its volume are kept as
+        a rollback until then.
+      </p>
+      <p>
+        <strong>voltaire has no backup stack</strong>, for the same reasons as fractal:
+        host state is reproducible from the repos, its Periphery key also exists on
+        bilby, and uncommitted work in <code>~/repos</code> is a developer-discipline
+        boundary.
+      </p>
+
       <h2 id="pinelake">pinelake (planned)</h2>
       <p>
         A second household's primary host, paralleling bilby's role for that environment.

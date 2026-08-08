@@ -9,7 +9,8 @@
 #   3. SCP keys (private + Core's pub) and render config (TZ + GitHub PAT).
 #   4. SSH-execute `docker compose up -d`.
 #   5. Wait for Periphery health (outbound dial settles via Core in <30s).
-#   6. Idempotently install the QNAP boot-DOM autorun hook.
+#   6. Idempotently install the QNAP boot-DOM autorun hook, plus the
+#      Pomerium SSH CA trust start.sh it invokes at every boot.
 #   7. Verify the committed kangaroo Server definition.
 #
 # v2 PKI + outbound: Periphery dials Core at ws://10.0.0.119:9120; auth is
@@ -148,6 +149,32 @@ ssh_kangaroo "mkdir -p '$AUTORUN_DIR'"
 scp -q kangaroo/host-autorun/autorun.sh kangaroo/host-autorun/install.sh "$KANGAROO_SSH:$AUTORUN_DIR/"
 ssh_kangaroo "chmod +x '$AUTORUN_DIR/install.sh' '$AUTORUN_DIR/autorun.sh' && '$AUTORUN_DIR/install.sh'"
 ok "autorun.sh boot hook installed"
+
+# --- 6b. Pomerium SSH CA trust ---
+# QTS regenerates sshd_config on firmware upgrades, so trust is re-applied
+# at every boot: autorun.sh invokes this start.sh, which appends the
+# TrustedUserCAKeys line if missing and HUPs sshd. The CA public half is
+# published to 1Password by Terraform (its producer); the repo carries no
+# copy to drift. The outbound tunnel itself is the restart-managed
+# kangaroo-relay container — only CA trust lives host-side.
+log "Installing Pomerium SSH CA trust (CA file + boot start.sh) on kangaroo"
+QTS_PODHAUS_DIR="/share/CACHEDEV2_DATA/.podhaus/pomerium-ssh-origin"
+QTS_CA_FILE="$QTS_PODHAUS_DIR/pomerium-ssh-user-ca.pub"
+QTS_SSHD_CONFIG="/etc/config/ssh/sshd_config"
+ssh_kangaroo "mkdir -p '$QTS_PODHAUS_DIR'"
+op read 'op://Homelab/Pomerium Secrets/Secrets/ssh_user_ca_pub' \
+    | ssh_kangaroo "cat > '$QTS_CA_FILE' && chmod 644 '$QTS_CA_FILE'"
+ssh_kangaroo "ssh-keygen -l -f '$QTS_CA_FILE' >/dev/null" || fail "shipped CA file failed ssh-keygen validation"
+{
+    printf '#!/bin/sh\n'
+    printf '# Auto-rendered by kangaroo_bootstrap; run at boot by autorun.sh.\n'
+    printf 'set -eu\n'
+    printf "grep -Fqx 'TrustedUserCAKeys %s' '%s' || printf '\\\\nTrustedUserCAKeys %s\\\\n' >> '%s'\n" \
+        "$QTS_CA_FILE" "$QTS_SSHD_CONFIG" "$QTS_CA_FILE" "$QTS_SSHD_CONFIG"
+    printf "/usr/sbin/sshd -t -f '%s'\n" "$QTS_SSHD_CONFIG"
+    printf '[ ! -s /var/run/sshd.pid ] || kill -HUP $(cat /var/run/sshd.pid)\n'
+} | ssh_kangaroo "cat > '$QTS_PODHAUS_DIR/start.sh' && chmod 755 '$QTS_PODHAUS_DIR/start.sh' && '$QTS_PODHAUS_DIR/start.sh'"
+ok "Pomerium SSH CA trusted (boot-persistent via autorun.sh)"
 
 # --- 7. Verify kangaroo in komodo/sync/servers.toml ---
 # Outbound mode requires the Server's `address` field to be empty (or unset)

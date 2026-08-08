@@ -21,15 +21,6 @@ locals {
   }
 }
 
-resource "cloudflare_dns_record" "voltaire_ssh" {
-  zone_id = local.zones["pod.haus"]
-  name    = "voltaire.pod.haus"
-  type    = "CNAME"
-  content = "${cloudflare_zero_trust_tunnel_cloudflared.voltaire.id}.cfargotunnel.com"
-  proxied = true
-  ttl     = 1
-}
-
 resource "cloudflare_dns_record" "pod_haus_external_cname" {
   for_each = local.pod_haus_external_cnames
   zone_id  = local.zones["pod.haus"]

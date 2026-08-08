@@ -46,7 +46,7 @@ aren't obvious from the compose files alone.
 
 ## What podhaus is
 
-Docker container infrastructure for **four** active hosts:
+Docker container infrastructure for **five** active hosts:
 - **bilby** (Apple M1 Mac mini, primary; Fedora Asahi Linux) — runs
   Komodo Core, MinIO, Caddy, every primary service.
 - **kangaroo** (QNAP NAS, QTS + Container Station) — secondary LAN
@@ -65,6 +65,13 @@ Docker container infrastructure for **four** active hosts:
   `core-connect.pod.haus`, rathole to Numbat for `fractal.docs.pod.haus`
   and `ssh://fractal`, Alloy to `logs-ingest.pod.haus`. **Provisioned by
   Ansible** rather than a bootstrap script, like numbat.
+- **voltaire** (Fedora Workstation desktop, x86_64, foreign LAN) is
+  Nathan's other remote dev machine and an ordinary podhaus host on the
+  fractal pattern: no inbound path at all, so it dials out — Periphery to
+  `core-connect.pod.haus`, a rathole client (`relay/voltaire`) carrying
+  `ssh://voltaire`, Alloy to `logs-ingest.pod.haus`. Provisioned by
+  Ansible (`playbooks/voltaire.yml`); its old Cloudflare tunnel and
+  systemd rathole origin are gone.
 
 Managed as Docker Compose stacks under a single Komodo Core; secrets
 flow from 1Password. Protected names resolve to Numbat Pomerium; public
@@ -149,8 +156,9 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
   there is no identity boundary to leak. Tailscale keeps separate
   `*-recovery` names for explicit break-glass use.
 - Public and raw endpoints use Numbat's relay IP and Caddy `:4444`.
-  Cloudflare proxies only public CDN sites. Voltaire and Pine Lake retain
-  their explicitly scoped Cloudflare Tunnel resources.
+  Cloudflare proxies only public CDN sites. Pine Lake retains its
+  explicitly scoped Cloudflare Tunnel resources until it moves to the
+  outbound Numbat contract.
 - **Do not set per-container `dns: [...]` in compose.** It replaces Docker's
   embedded resolver (`127.0.0.11`) and breaks service-name resolution such as
   `ferretdb` and `caddy`. Bilby's daemon configuration has no DNS override;
@@ -184,12 +192,12 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
 | `ansible/roles/nfs_binds/` | bilby's NFS-bind hardening (absorbed the deleted `bilby/host-systemd/`): `wait-for-qnap-nfs.service` oneshot that gates `docker.service` on QNAP TCP/2049 reachability, `StartLimit*=0` drop-ins on `mnt-{pouch,jump}.automount` so the automount units can't go to permanently-failed state on a boot-time burst, the `chattr +i` tripwire on bare `/mnt/{pouch,jump}`, the `.podhaus-share-mounted` sentinels, and Forgejo directory ownership. Apply via `ansible-playbook playbooks/bilby.yml` (tag `nfs`). See [`docs/postmortems/2026-05-30-power-outage-nfs-recovery.md`](docs/postmortems/2026-05-30-power-outage-nfs-recovery.md). |
 | `ansible/roles/firewalld/` | **Source of truth for bilby's firewalld** (absorbed the deleted `bilby/firewalld/`) — `files/zones/public.xml` (LAN `end0` zone) + `files/services/*.xml` (custom port groups). The role installs services, then the zone, runs `firewall-cmd --check-config`, then reloads. **Never** run `firewall-cmd --add-*` (even `--permanent`) — it diverges from the role files and the next play run reverts it; edit the XML and re-run `ansible-playbook playbooks/bilby.yml` (tag `firewall`). The `public` zone trusts the whole home LAN (`10.0.0.0/24 → accept`), so LAN-only services need no explicit rule; services reached from dockernet get an explicit service XML (plex, music-assistant). See [`docs/hosts.html#bilby-firewall`](docs/hosts.html#bilby-firewall). |
 | `iot/` | **BLE/RF remotes bridged into Home Assistant.** One subdirectory per bridging system; currently just `iot/esphome/` (the ESPHome dashboard stack plus one config-as-code YAML per physical device in `iot/esphome/config/`). Device YAMLs are flat in that directory because the ESPHome dashboard only lists configs at its config root. Firmware is built and OTA-pushed from the dashboard; `secrets.yaml` is rendered at deploy time by `esphome-init` from the 1Password Homelab item **ESPHome** and is never in the checkout. The matching Home Assistant automations live in `home-assistant/config/automations.yaml` alongside the other remotes, not in a package. Behaviour is HA-side only — firmware just emits `event` entities. See [`docs/runbooks/ble-remotes.md`](docs/runbooks/ble-remotes.md). |
-| `ansible/` | **Host provisioning — the machine half of a host.** Roles for base packages, WSL, Docker engine/daemon + host-provisioned networks, the developer toolchain, Komodo Periphery, Komodo Core's host directories (`komodo_core_host`), Pomerium SSH CA trust, NFS-bind hardening (`nfs_binds`), firewalld, and numbat's edge (`numbat_edge`: dual-address nftables + relay-IP dispatcher as jinja templates fed from 1P-published addresses). Ansible owns root state; chezmoi owns `$HOME`; the boundary is "needs sudo" and it means chezmoi never prompts for a password. **fractal**, **bilby**, and **numbat** are fully migrated (`provisioned`/`site.yml`; numbat keeps `playbooks/numbat-bootstrap.yml` for a fresh VM and `playbooks/numbat.yml` as its single-host entry point, reached through Pomerium — its live run landed 2026-08-08, `changed=0`); voltaire is in `pending_migration`; kangaroo is permanently `excluded` (QTS has no Python). **Not wired into push-to-deploy:** host state changes when a human runs a playbook, never on a push. Second run must report `changed=0`. See [`docs/host-provisioning.md`](docs/host-provisioning.md) + [`docs/plans/host-provisioning-migration.md`](docs/plans/host-provisioning-migration.md). |
-| `fractal/periphery/` | fractal's bootstrap-managed outbound Periphery, dialing `wss://core-connect.pod.haus`. Installed by the `komodo_periphery` Ansible role, not by a script. |
+| `ansible/` | **Host provisioning — the machine half of a host.** Roles for base packages, WSL, Docker engine/daemon + host-provisioned networks, the developer toolchain, Komodo Periphery, Komodo Core's host directories (`komodo_core_host`), Pomerium SSH CA trust, NFS-bind hardening (`nfs_binds`), firewalld, and numbat's edge (`numbat_edge`: dual-address nftables + relay-IP dispatcher as jinja templates fed from 1P-published addresses). Ansible owns root state; chezmoi owns `$HOME`; the boundary is "needs sudo" and it means chezmoi never prompts for a password. **fractal**, **bilby**, **numbat**, and **voltaire** are fully migrated (`provisioned`/`site.yml`; numbat keeps `playbooks/numbat-bootstrap.yml` for a fresh VM and `playbooks/numbat.yml` as its single-host entry point, reached through Pomerium; voltaire's single-host entry point is `playbooks/voltaire.yml`); `pending_migration` is empty until pinelake starts; kangaroo is permanently `excluded` (QTS has no Python — `kangaroo_bootstrap` covers it, including Pomerium SSH CA trust). **Not wired into push-to-deploy:** host state changes when a human runs a playbook, never on a push. Second run must report `changed=0`. See [`docs/host-provisioning.md`](docs/host-provisioning.md) + [`docs/plans/host-provisioning-migration.md`](docs/plans/host-provisioning-migration.md). |
+| `fractal/periphery/`, `voltaire/periphery/` | The dev hosts' bootstrap-managed outbound Peripheries, dialing `wss://core-connect.pod.haus`. Installed by the `komodo_periphery` Ansible role, not by a script. |
 | `relay/fractal/`, `caddy/fractal/`, `logging/fractal/` | fractal's outbound ingress + observability: rathole client → Numbat (`fractal_http` → `127.0.0.1:8444`, `fractal_ssh` → `127.0.0.1:2204`), Caddy mTLS origin on `:4443`, Alloy to `logs-ingest.pod.haus`. The `fractal-docs` stack (docs-server over `~/repos`) is defined in the **docs repo's** `stack.toml`, beside its compose. |
+| `relay/voltaire/`, `logging/voltaire/`, `autoheal/voltaire/` | voltaire's outbound ingress + observability on the fractal pattern: rathole client → Numbat (`voltaire_ssh` only — no HTTPS service), Alloy to `logs-ingest.pod.haus`, autoheal. All linked-repo (`podhaus-voltaire`); the Fedora Workstation host runs SELinux enforcing, so every bind-mounting service carries `security_opt: [label:disable]`. |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
 | `ansible/playbooks/numbat-bootstrap.yml` + `ansible/playbooks/numbat.yml` | Numbat's two plays. The bootstrap play (fresh VM only, run from bilby) pins Terraform's 1P-published host key for first contact, connects on first-boot port 2222, stages the `numbat_edge` firewall without activating it, starts rathole before outbound Periphery, enrolls the userspace SSH recovery daemon, then loads the final ruleset and closes 2222 last. The steady-state play (base, docker, numbat_edge, sshd_pomerium_ca, komodo_periphery) reaches the host through Pomerium and is what check-mode equivalence proves. Numbat application stacks are Komodo-managed. |
-| `pomerium-ssh-origin-bootstrap` | Generic target-side Pomerium SSH origin bootstrap. It trusts the Pomerium CA and either installs a current rathole systemd origin from a stdin token or uses `--ca-only` when the relay is managed separately. The initial SSH transport stays outside the script. |
 | `tailscale-recovery-bootstrap` | Host-native, userspace-mode Tailscale recovery bootstrap for bilby, numbat, and kangaroo. It publishes only loopback OpenSSH through Tailscale Serve on TCP 22; no host route, DNS override, TUN, or container socket/state exposure. |
 | `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS/CDN/AOP, Pine Lake's current Cloudflare edge, UniFi DNS, GitHub deploy webhooks, the SSH-only Tailscale recovery plane, MinIO IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in MinIO via public `https://storage.pod.haus`; run stock `terraform` directly. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (per-site static hosting) via `storage.pod.haus`. |
@@ -473,7 +481,7 @@ These have failure modes that you must not introduce:
   at commit time. (`vpn-diagnostics` is the only stack that
   intentionally carries `deploy = false`; for podhaus stacks just
   omit the field.)
-- **Linked Repo hosts (kangaroo, numbat, fractal, future pinelake) use the
+- **Linked Repo hosts (kangaroo, numbat, fractal, voltaire, future pinelake) use the
   same four-stage procedure as bilby.** Komodo v2 semantics:
   `DeployStack` `git pull`s the linked clone before composing;
   `RestartStack` does not pull (it only `docker compose restart`s).

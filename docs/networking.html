@@ -83,12 +83,14 @@ networks:
         <code>nathan@ssh.pod.haus</code> and choose a route from Pomerium's portal. Routes are
         named <code>bilby</code>, <code>fractal</code>, <code>numbat</code>,
         <code>voltaire</code>, and <code>kangaroo</code>.
-        The generic <code>pomerium-ssh-origin-bootstrap</code> installs the
-        machine-local outbound relay and CA trust on a target; the operator chooses the
-        initial SSH transport separately. Kangaroo uses the same CA bootstrap in
-        <code>--ca-only</code> mode because QTS cannot run the current upstream x86_64
-        rathole binary; its outbound client is the Komodo-managed
-        <code>kangaroo-relay</code> container on host networking. Kangaroo's canonical route
+        CA trust on Ansible-managed hosts comes from the
+        <code>sshd_pomerium_ca</code> role; on kangaroo (which Ansible cannot
+        reach — QTS has no Python) <code>kangaroo_bootstrap</code> installs a
+        boot-persistent <code>start.sh</code> that re-applies the trust after QTS
+        regenerates <code>sshd_config</code>. Every host's outbound tunnel is a
+        Komodo-managed rathole container (<code>relay/*</code>); kangaroo's runs on
+        host networking because QTS cannot run the current upstream x86_64
+        rathole binary in a systemd unit. Kangaroo's canonical route
         maps to QTS's real UID 0 account, <code>admin</code>. Tailscale recovery keeps separate
         <code>*-recovery</code> names so its break-glass role stays explicit.
       </p>
@@ -145,7 +147,8 @@ networks:
       <ul>
         <li><strong>Cloudflare</strong> public zones: DNS-only A records to Numbat for
           protected and raw services; proxied A records to Numbat's relay address for
-          the public CDN sites. Voltaire and Pine Lake retain their explicit tunnel records.</li>
+          the public CDN sites. Pine Lake retains its explicit tunnel records until it
+          moves to the outbound Numbat contract.</li>
         <li><strong>UniFi</strong> LAN-side split-horizon. <code>unifi.pod.haus</code> and
           <code>bilby.pod.haus</code> resolve to Bilby at <code>10.0.0.119</code>.
           Kangaroo stays on public DNS so its browser path remains behind Pomerium.</li>

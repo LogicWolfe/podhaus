@@ -5,8 +5,9 @@
 # long-lived key being distributed. Without this the route authenticates
 # fine at the edge and then fails at the target.
 #
-# Replaced bilby/host-sshd/install.sh (deleted) and the CA half of
-# pomerium-ssh-origin-bootstrap.
+# Replaced bilby/host-sshd/install.sh and pomerium-ssh-origin-bootstrap
+# (both deleted). kangaroo, which Ansible can't reach (QTS has no
+# Python), gets the same trust from kangaroo_bootstrap's start.sh.
 ---
 - name: Install the Pomerium SSH user CA
   # Read from 1Password, where Terraform (the CA's producer) publishes the

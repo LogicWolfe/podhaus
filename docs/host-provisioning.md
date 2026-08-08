@@ -24,17 +24,58 @@ and `playbooks/fractal.yml` deliberately does **not** invoke chezmoi:
 that would put user state under root's control and dissolve the boundary
 the layer exists to draw.
 
+## Cross-host state: one producer, one channel, zero copies
+
+Every piece of state that crosses hosts follows one rule set:
+
+- **One producer.** Values Terraform generates (PKI, addresses, tokens)
+  live in Terraform state and nowhere else. Values a host generates
+  (Forgejo's host key, Periphery private keys) stay on the host that
+  made them, with only the public half committed or documented.
+- **One channel.** 1Password is the only distribution path for anything
+  that crosses hosts. Terraform publishes there; Ansible reads there
+  (`community.general.onepassword` lookups run on the control node, so
+  targets need no op auth); chezmoi reads there via `op-homelab`.
+- **Zero copies.** The repo carries no file whose content is derivable
+  from Terraform state. The narrow exception is a root-of-trust literal
+  a fresh machine needs before it can reach any channel — the Forgejo
+  host key in the dotfiles README, and the Pomerium SSH host-key
+  fingerprint there for human TOFU verification on non-homelab machines.
+- **Terraform feeds, never drives.** `terraform apply` never runs
+  playbooks: provisioners are invisible to `plan` (breaking the
+  from-anywhere contract), a failed playbook would taint and replace the
+  resource it ran on, and most of the fleet is not TF-created. Its job
+  ends at publishing values; templating its own outputs into cloud-init
+  at create time (numbat) is fine. Host state changes when a human runs
+  a playbook.
+
+The resulting ledger:
+
+| Value | Producer | Channel | Consumers |
+|---|---|---|---|
+| Pomerium SSH user CA (public) | TF `tls_private_key.pomerium_ssh_user_ca` | 1P `Pomerium Secrets` | `sshd_pomerium_ca` role; numbat cloud-init (TF-direct); `kangaroo_bootstrap` (op read on the bilby side) |
+| Pomerium SSH host key (public) | TF `tls_private_key.pomerium_ssh_host` | 1P `Pomerium Secrets` | chezmoi `00-ssh-hostkeys` upsert; README fingerprint for TOFU |
+| numbat application + relay IPv4 | TF (BinaryLane) | 1P numbat handoffs | numbat host_vars → nft/dispatcher templates |
+| numbat host SSH key | TF `tls_private_key.numbat_ssh_host` | 1P (public half) | numbat bootstrap play pins first contact |
+| Rathole tokens, noise keys | TF `random_password` | 1P `Numbat Rathole` | relay `.env` renders via lookup |
+| Per-host log-shipping mTLS certs | TF `voltaire_log_client` etc. | 1P `Log Ingest PKI` | logging stacks via Komodo variables |
+| Periphery X25519 private keys | generated on bilby | `/opt/komodo/keys` on the control node only | `komodo_periphery` role |
+| Forgejo SSH host key | Forgejo container | committed literal in dotfiles (root of trust) | chezmoi `00-ssh-hostkeys` |
+
 ## What is Ansible-managed today
 
-**fractal**, **bilby**, and **numbat** are fully migrated
+**fractal**, **bilby**, **numbat**, and **voltaire** are fully migrated
 (`provisioned`/`site.yml`). bilby's real run landed 2026-08-04 and the
 live-restore flip followed, so it carries the fleet-default daemon config
 with nothing held back. numbat's live run landed 2026-08-08 (`ok=43
 changed=10`, second run `changed=0`), reached through Pomerium with the
-`nathan@numbat` route selector in its connection vars. voltaire is still
-owned by hand and kangaroo by its bootstrap script. See
+`nathan@numbat` route selector in its connection vars; voltaire followed
+the same day (`ok=28 changed=13`, then `changed=0`), also through
+Pomerium, with its Docker engine freshly installed by the play and the
+old cloudflared tunnel and systemd rathole origin retired. kangaroo
+stays on its bootstrap script permanently. See
 [the migration plan](plans/host-provisioning-migration.md) for what
-is left.
+is left (pinelake).
 
 ## Layout
 
@@ -69,13 +110,13 @@ ansible/
 
 Hosts are grouped twice: by **migration state** and by **role**.
 
-- `provisioned` — fully Ansible-owned: fractal, bilby, and numbat.
-  `site.yml` targets this group and nothing else, gating each role
-  (including single-host ones like `nfs_binds`, `firewalld`, and
+- `provisioned` — fully Ansible-owned: fractal, bilby, numbat, and
+  voltaire. `site.yml` targets this group and nothing else, gating each
+  role (including single-host ones like `nfs_binds`, `firewalld`, and
   `numbat_edge`) on the matching role group rather than on hostname, so a
   future host inherits the right roles from group membership alone.
-- `pending_migration` — voltaire, still owned by hand. Present so
-  the inventory is honest about the fleet.
+- `pending_migration` — currently empty; pinelake joins here when its
+  migration starts. Present so the inventory is honest about the fleet.
   **No playbook targets this group as a group.** Migrating a host means
   moving it between the two groups by hand, after its check-mode pass
   comes back clean.
