@@ -68,3 +68,20 @@
     group: "{{ ansible_user }}"
     mode: "0755"
   when: podhaus_repos_dir is defined
+
+- name: Create the user@.service drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/user@.service.d
+    state: directory
+    mode: "0755"
+
+- name: Restart the per-user systemd manager when it is killed
+  # logind starts the manager on a user's first session and stops it after the
+  # last, so a manager killed mid-session is never restarted and every user
+  # service under it stays dead. Baseline for every host, not bilby-specific.
+  # See docs/postmortems/2026-08-08-bilby-oom-session-teardown.md
+  ansible.builtin.copy:
+    src: 10-restart-on-failure.conf
+    dest: /etc/systemd/system/user@.service.d/10-restart-on-failure.conf
+    mode: "0644"
+  notify: Reload systemd units
