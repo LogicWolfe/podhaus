@@ -58,3 +58,46 @@
       /etc/wsl.conf changed. The persistent hostname will take effect on
       Windows' own next WSL instance restart — no action needed.
   when: wsl_hostname_conf is changed
+
+# ---- SSH key vault ----------------------------------------------------
+# On a guest whose /home is LUKS-encrypted and unlocked manually after
+# each instance start, sshd cannot read ~/.ssh/authorized_keys until the
+# operator is already in — a bootstrap deadlock. The vault keeps public
+# keys on the unencrypted root so SSH works pre-unlock. Predates Ansible
+# (hand-rolled 2026-07-25); owned here since 2026-08-08.
+
+- name: Provision the SSH key vault directory
+  ansible.builtin.file:
+    path: /etc/ssh/authorized_keys
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: podhaus_wsl_vault_keys is defined
+
+- name: Install the operator's vaulted authorized keys
+  ansible.builtin.copy:
+    dest: "/etc/ssh/authorized_keys/{{ podhaus_operator }}"
+    content: |
+      {% for key in podhaus_wsl_vault_keys %}
+      {{ key }}
+      {% endfor %}
+    owner: root
+    group: "{{ podhaus_operator }}"
+    mode: "0640"
+  when: podhaus_wsl_vault_keys is defined
+
+- name: Point sshd at the vault
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-wsl-vault.conf
+    content: |
+      # Public keys live outside /home so login works while /home is still locked.
+      AuthorizedKeysFile /etc/ssh/authorized_keys/%u
+      PasswordAuthentication no
+      PermitRootLogin no
+      KbdInteractiveAuthentication no
+    owner: root
+    group: root
+    mode: "0644"
+  when: podhaus_wsl_vault_keys is defined
+  notify: Reload sshd for the vault

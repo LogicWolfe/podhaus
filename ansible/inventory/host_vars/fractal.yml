@@ -27,6 +27,17 @@ podhaus_hostname: fractal
 # Ansible only installs the tooling, never key material.
 podhaus_machine_key_mode: soft
 
+# Public keys served by sshd from outside the LUKS-locked /home (the wsl
+# role's SSH key vault — see its tasks for why). Nathan's personal key and
+# bilby's machine key, so both he and the bilby-resident agents keep
+# direct 10.0.0.70 access with no Pomerium dependency, including right
+# after an instance restart while /home is still locked.
+podhaus_wsl_vault_keys:
+  - >-
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZSaoga8/dYnCgeiOSaV+3Xe5Tl6AkBpqO0T863ZajR
+  - >-
+    ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM= bilby-machine-key
+
 # Development machine ---------------------------------------------------
 # Nathan clones what he works on; nothing here manufactures a repo manifest
 # that would immediately drift from reality. The docs server serves whatever
