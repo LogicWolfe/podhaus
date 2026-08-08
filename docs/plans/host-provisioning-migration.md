@@ -202,15 +202,58 @@ its SSH origin becomes a Komodo-managed rathole *container* at
 `rathole_ssh_origin` role is needed — by anyone, ever. Every host's
 origin ends up managed the same one way.
 
-- **Audit first** (via the tunnel, while it exists): specs, sshd state,
-  the TPM machine key, and docker-ce coexistence with the existing
-  podman install (expected fine on Fedora; verify before committing).
-- Provision: keypair on bilby, `komodo/keys/voltaire-periphery.pub`,
-  servers/repos TOML entries, the three stacks, the playbook run.
-- Verify `ssh voltaire.pod.haus` through Pomerium end to end, then
-  **tear down the tunnel** (decided):
+- [x] Audit (2026-08-08, via the live Pomerium SSH path): Fedora 44
+  Workstation, x86_64, 12 cores / 31 GiB, 475 GB LUKS root(+/home), TPM
+  present and the chezmoi machine key already probes `hardware`. sshd
+  already trusts the Pomerium user CA (`00-podhaus-pomerium-ca.conf`);
+  passwordless sudo; Python 3.13; fish is the login shell; mise/node/op
+  present; dotfiles current; `homelab = false` (flip is part of this
+  slice). **Podman-only today** — docker absent. The coexistence risk is
+  bounded: the one live container (`hybrid-sim-postgres-dev`, in-flight
+  analysis work) runs `pasta` user-mode networking with a host-published
+  port, which never traverses iptables FORWARD, so docker's FORWARD-DROP
+  policy can't break it. Voltaire sits on a foreign LAN (192.168.0.x) —
+  no home-LAN path; today's access is the `podhaus-pomerium-ssh-origin`
+  systemd rathole (active, verified — it carried the audit) plus the
+  legacy cloudflared tunnel (`ssh://localhost:22`, voltaire.pod.haus).
+  `relay/numbat` already carries the `voltaire_ssh` server service and
+  Pomerium the `ssh://voltaire` route — the origin swap is client-side
+  only. **In-flight agent work to protect** (no reboot, no session
+  teardown): a long-running autonomous claude session, several codex
+  servers, an attached tmux session, and the postgres container.
+- **One container engine, decided**: podman/docker coexistence is a
+  bounded migration state only. Docker is the fleet contract; the end
+  state is docker-only with the Ansible docker role asserting podman
+  absent so it can't creep back. The live `hybrid-sim-postgres-dev`
+  moves to docker (stop podman container → recreate on docker at the
+  same published port, dump/restore if its data is volume-resident) —
+  but podman *removal* is gated on the hybrid-haul spike wrapping (or
+  on confirming none of its in-flight agents shell out to the podman
+  CLI). Until that gate clears, coexistence is tolerated and the pasta
+  finding above bounds the risk.
+- Provision (order matters; the tunnel stays up as the fallback until
+  the end): keypair on bilby + `komodo/keys/voltaire-periphery.pub` +
+  `KOMODO_PERIPHERY_PUBLIC_KEYS` append; host_vars (`ansible_user:
+  nathan@voltaire` — Pomerium route selector, numbat's pattern;
+  `podhaus_operator: nathan`) + `playbooks/voltaire.yml` (base, devbox,
+  docker, sshd_pomerium_ca, komodo_periphery) + role groups; servers/
+  repos TOML (`podhaus-voltaire` linked repo); the three stacks
+  (`relay/voltaire`, `logging/voltaire`, `autoheal/voltaire`). Verify
+  the postgres container still answers after docker.service starts.
+- Origin swap: stop `podhaus-pomerium-ssh-origin.service`, deploy
+  the `relay/voltaire` container on the same `voltaire_ssh` token,
+  verify `ssh voltaire.pod.haus` end to end through the container
+  origin (the tunnel is the recovery path if the swap fails).
+- **Tailscale recovery before tunnel teardown**: voltaire has no
+  recovery-plane membership today — the tunnel is currently its only
+  non-Pomerium path, so break-glass must exist before the tunnel dies.
+  Enroll via `tailscale-recovery-bootstrap` (userspace, SSH-only,
+  `tag:recovery`) + the TF recovery-plane resources, same as
+  bilby/numbat/kangaroo; verify `voltaire-recovery` answers.
+- Then **tear down the tunnel** (decided):
   `cloudflare_zero_trust_tunnel_cloudflared.voltaire`, the CNAME, and
-  the host-side cloudflared service + `/etc/cloudflared`.
+  the host-side cloudflared service + `/etc/cloudflared`, plus the
+  now-dead systemd origin unit + `/usr/local/libexec/podhaus-rathole`.
 - Then `pomerium-ssh-origin-bootstrap` has one consumer left: kangaroo's
   ~20-line QTS `--ca-only` branch. Fold that into `kangaroo_bootstrap`
   (CA text supplied by `op read` on the bilby side) and delete the
