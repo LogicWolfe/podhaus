@@ -14,6 +14,10 @@ auto_pull = true
 
 environment = """
 TZ=[[TZ]]
+FENWICK_EVENTS_GATEWAY_TOKEN=[[OP__KOMODO__POMERIUM_GATEWAY_TOKENS__FENWICK_EVENTS]]
+FENWICK_INTERNAL_HTTP_TOKEN=[[OP__KOMODO__FENWICK_INTERNAL_TOKEN__CREDENTIAL]]
+FENWICK_DEFAULT_USER=[[POMERIUM_SSH_AUTH_DEFAULT_USER]]
+FENWICK_USER_BY_FINGERPRINT=[[POMERIUM_SSH_KEY_OWNERS]]
 SHARED_SECRET=[[OP__KOMODO__POMERIUM_SECRETS__SHARED_SECRET]]
 COOKIE_SECRET=[[OP__KOMODO__POMERIUM_SECRETS__COOKIE_SECRET]]
 SSH_USER_CA_KEY_B64=[[OP__KOMODO__POMERIUM_SECRETS__SSH_USER_CA_KEY_B64]]
@@ -25,3 +29,13 @@ SIGNING_KEY_B64=[[OP__KOMODO__POMERIUM_SECRETS__SIGNING_KEY_B64]]
 IDP_CLIENT_ID=[[OP__KOMODO__POMERIUM_OIDC__USERNAME]]
 IDP_CLIENT_SECRET=[[OP__KOMODO__POMERIUM_OIDC__PASSWORD]]
 """
+
+[[variable]]
+name = "POMERIUM_SSH_AUTH_DEFAULT_USER"
+value = "Nathan"
+description = "Fenwick account that receives SSH auth notifications for unmapped key fingerprints (the admin)"
+
+[[variable]]
+name = "POMERIUM_SSH_KEY_OWNERS"
+value = '{"SHA256:xoFwRTtZZF3C28yg3VfgVSyseiKjgsMaoPIQnDv4abg":{"user":"Nathan","machine":"bilby machine key"},"SHA256:f3/+BExiF4aprqM94hFJuLDS0dF2+Ppaum9hN9UI8eU":{"user":"Nathan","machine":"Nathan personal key"},"SHA256:1sv7ZuiXn1VBwZLfCrEKaB4TR2HWM8iXlJM1f8EzXQ4":{"user":"Nathan","machine":"fractal machine key"},"SHA256:RhKW+weirrcPh6fpA8VWWWqO/YsWNEXlGyyGwAlDfLc":{"user":"Nathan","machine":"fractal soft machine key"}}'
+description = "SSH key fingerprint -> fenwick account + machine label for ssh-auth-notify routing. Fingerprints are `ssh-keygen -lf` SHA256 values. Adding a person = add their key here with their fenwick account name."

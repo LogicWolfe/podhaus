@@ -72,6 +72,34 @@ services:
       podhaus.depends-on-pomerium-secrets-init: ${BUILD_HASH_POMERIUM_SECRETS_INIT:-unset}
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
+  ssh-auth-notify:
+    container_name: ssh-auth-notify
+    build:
+      context: ./ssh-auth-notify
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_SSH_AUTH_NOTIFY:-unset}
+    image: ssh-auth-notify:local
+    pull_policy: never
+    restart: unless-stopped
+    # Host networking to reach the databroker gRPC ingress on 127.0.0.1:5443;
+    # the docker socket feeds the route-context log follower.
+    network_mode: host
+    depends_on:
+      pomerium:
+        condition: service_started
+    environment:
+      SHARED_SECRET: ${SHARED_SECRET}
+      AUTHENTICATE_URL: https://authenticate.pod.haus
+      FENWICK_EVENT_URL: https://fenwick-events.pod.haus/events/async
+      FENWICK_GATEWAY_TOKEN: ${FENWICK_EVENTS_GATEWAY_TOKEN}
+      FENWICK_EVENT_TOKEN: ${FENWICK_INTERNAL_HTTP_TOKEN}
+      FENWICK_DEFAULT_USER: ${FENWICK_DEFAULT_USER}
+      FENWICK_USER_BY_FINGERPRINT: ${FENWICK_USER_BY_FINGERPRINT}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
 volumes:
   pomerium-config:
   pomerium-secrets:

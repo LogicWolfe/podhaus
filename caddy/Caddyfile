@@ -435,6 +435,22 @@ paperless-api.pod.haus:4444 {
 	}
 }
 
+fenwick-events.pod.haus:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	@events {
+		path /events/async
+		header X-Podhaus-Gateway-Token {env.FENWICK_EVENTS_GATEWAY_TOKEN}
+	}
+	handle @events {
+		reverse_proxy fenwick:8088
+	}
+	handle {
+		respond 404
+	}
+}
+
 pets.indigopod.au:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}

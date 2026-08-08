@@ -19,7 +19,11 @@ autocert: true
 autocert_dir: /data/autocert
 autocert_email: nathan@nathanbaxter.com
 databroker_storage_type: memory
-log_level: info
+# debug (not info) so the "ssh keyboard-interactive auth request" line exists:
+# it is the only place the target route appears for a pending SSH auth, and
+# ssh-auth-notify joins it against the databroker record by key fingerprint.
+# Envoy verbosity is governed separately (proxy_log_level) and is unchanged.
+log_level: debug
 signing_key_file: /run/pomerium-secrets/signing-key.pem
 
 ssh_address: ${NUMBAT_RELAY_IPV4}:22

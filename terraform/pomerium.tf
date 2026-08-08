@@ -10,6 +10,7 @@ resource "random_password" "pomerium_cookie_secret" {
 
 resource "random_password" "pomerium_gateway_tokens" {
   for_each = toset([
+    "fenwick_events",
     "hyperdx_mcp",
     "paperless_api",
   ])
@@ -503,6 +504,15 @@ resource "cloudflare_dns_record" "fractal_docs" {
 resource "cloudflare_dns_record" "numbat_paperless_api" {
   zone_id = local.zones["pod.haus"]
   name    = "paperless-api.pod.haus"
+  type    = "A"
+  content = local.numbat_relay_ipv4
+  proxied = false
+  ttl     = 300
+}
+
+resource "cloudflare_dns_record" "numbat_fenwick_events" {
+  zone_id = local.zones["pod.haus"]
+  name    = "fenwick-events.pod.haus"
   type    = "A"
   content = local.numbat_relay_ipv4
   proxied = false
