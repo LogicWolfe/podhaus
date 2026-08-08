@@ -4,7 +4,16 @@ http_redirect_addr: ${NUMBAT_APPLICATION_IPV4}:80
 authenticate_service_url: https://authenticate.pod.haus
 idp_provider: oidc
 idp_provider_url: https://id.pod.haus
-idp_scopes: [openid, email, profile]
+# offline_access makes Pocket ID issue a refresh token, letting Pomerium
+# keep the IdP tokens fresh for the whole session window below.
+idp_scopes: [openid, email, profile, offline_access]
+
+# 30-day sessions instead of the 14-hour default. Personal deployment:
+# the threat model does not include an already-authorized machine
+# retaining access, and daily re-auth was the real cost. Sessions still
+# die on every Pomerium restart (databroker_storage_type: memory), so
+# this is an upper bound, not a guarantee.
+cookie_expire: 720h
 
 autocert: true
 autocert_dir: /data/autocert

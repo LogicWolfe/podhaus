@@ -43,6 +43,12 @@ services:
     image: pomerium/pomerium:latest
     restart: unless-stopped
     network_mode: host
+    # Containment for memory exhaustion under scan floods (CVE-2026-50285
+    # was a pre-auth zstd bomb on /.pomerium/callback, fixed in 0.32.8;
+    # the box was exhausted twice in 2026-08). Normal pomerium+envoy sits
+    # well under this; a runaway gets cgroup-OOM-killed and unless-stopped
+    # brings it back in seconds instead of taking the 1.5 GB host down.
+    mem_limit: 640m
     cap_drop:
       - ALL
     cap_add:
