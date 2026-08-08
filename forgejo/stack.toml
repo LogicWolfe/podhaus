@@ -14,6 +14,11 @@ TZ=[[TZ]]
 FORGEJO_SECRET_KEY=[[OP__KOMODO__FORGEJO_SECRETS__SECRET_KEY]]
 FORGEJO_INTERNAL_TOKEN=[[OP__KOMODO__FORGEJO_SECRETS__INTERNAL_TOKEN]]
 FORGEJO_LFS_JWT_SECRET=[[OP__KOMODO__FORGEJO_SECRETS__LFS_JWT_SECRET]]
-FORGEJO_OIDC_CLIENT_ID=[[OP__KOMODO__FORGEJO_OIDC__USERNAME]]
+# Literal, not [[OP__KOMODO__FORGEJO_OIDC__USERNAME]]: an OAuth client id
+# is not a secret, and that variable's value is the string "forgejo" —
+# interpolating it as a secret made Komodo redact every "forgejo" in the
+# stack's stored deploy state, mangling the recorded service names so the
+# runtime containers never matched and the stack reported down forever.
+FORGEJO_OIDC_CLIENT_ID=forgejo
 FORGEJO_OIDC_CLIENT_SECRET=[[OP__KOMODO__FORGEJO_OIDC__PASSWORD]]
 """
