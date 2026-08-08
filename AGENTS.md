@@ -203,7 +203,7 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (per-site static hosting) via `storage.pod.haus`. |
 | `caddy/` | Bilby's split origin: private mTLS `:4443` for Pomerium, public-only `:4444` for Numbat raw/CDN endpoints, and `:443` for LAN routes. |
 | `relay/` | Outbound rathole clients on internal hosts and the Numbat server. Services are individually tokened and use Noise transport. |
-| `pomerium/` | Pomerium Core on Numbat: Pocket ID browser policy, scoped machine exceptions, native SSH, private-origin client mTLS, and persistent replaceable Autocert cache. |
+| `pomerium/` | Pomerium Core on Numbat: Pocket ID browser policy, scoped machine exceptions, native SSH, private-origin client mTLS, and persistent replaceable Autocert cache. Includes the `ssh-auth-notify` sidecar, which pushes parked SSH sign-in links to the key owner's Signal via fenwick (see `docs/networking.html#ssh-auth-notify`); fingerprint→owner routing lives as variables in `pomerium/stack.toml`. |
 | `forgejo/` | Local Git hosting on bilby. Pomerium protects HTTPS; a raw Numbat rathole owns ordinary `git@git.pod.haus` SSH. Forgejo retains native Pocket ID OIDC and key synchronization. |
 | `numbat/periphery/` | Numbat's outbound Periphery compose, dialing the exact public `wss://core-connect.pod.haus/ws/periphery` connector with Komodo Noise keys. Installed by the `komodo_periphery` Ansible role, not by Komodo. |
 | `logging/numbat/` | Alloy ships to `logs-ingest.pod.haus` through rathole and Caddy with per-host mTLS. |

@@ -95,6 +95,54 @@ networks:
         <code>*-recovery</code> names so its break-glass role stays explicit.
       </p>
 
+      <h2 id="ssh-auth-notify">SSH sign-in links over Signal</h2>
+      <p>
+        Pomerium's native SSH parks an unauthenticated connection and shows
+        the browser sign-in URL only on the interactive terminal, so headless
+        clients (agents, git, ansible) hang with no way to see it. The
+        <code>ssh-auth-notify</code> sidecar in the <code>pomerium/</code>
+        stack closes this: it watches the databroker's
+        <code>SessionBindingRequest</code> records over the loopback gRPC
+        ingress (<code>127.0.0.1:5443</code>, HS256-JWT-signed with the
+        shared secret) and forwards every state change to fenwick, which puts
+        the tappable sign-in link on the key owner's Signal within seconds.
+        Approving in the browser completes the original parked connection —
+        nothing client-side is wrapped.
+      </p>
+      <p>
+        The record id is the <code>user_code</code>, so the sidecar
+        reconstructs the sign-in URL directly. The target route is not in the
+        record; it appears only in Pomerium's debug log line
+        <code>ssh keyboard-interactive auth request</code>, so the stack runs
+        <code>log_level: debug</code> (with <code>proxy_log_level: info</code>
+        keeping envoy's volume at normal levels) and the sidecar joins log to
+        record on the key fingerprint via the docker socket. Who gets
+        notified is configuration, not code: the
+        <code>POMERIUM_SSH_KEY_OWNERS</code> variable in
+        <code>pomerium/stack.toml</code> maps fingerprints to
+        <code>{user, machine}</code>; unmapped keys go to
+        <code>POMERIUM_SSH_AUTH_DEFAULT_USER</code> flagged as unrecognised.
+        Adding a person = their key in that map plus a fenwick account.
+      </p>
+      <p>
+        Transport is the gateway-token pattern:
+        <code>fenwick-events.pod.haus</code> (relay address, Caddy
+        <code>:4444</code>) requires the <code>fenwick_events</code> gateway
+        token, then relays to fenwick's token-authenticated
+        <code>/events/async</code> injection transport with
+        <code>X-Fenwick-User</code> routing. Delivery is at-most-once — event
+        ids are fenwick-assigned, so the sidecar never retries; a missed
+        notification is a loud sidecar log, never a duplicate Signal message.
+        The fenwick half (deterministic in_flight delivery with no LLM in the
+        path, guidance-gated resolutions) is documented in the fenwick repo's
+        <code>docs/ssh-auth.html</code>. The databroker protos are vendored at
+        v0.33.0 and unpinned by design: if a Pomerium upgrade shifts the
+        internal contract, the sidecar restart-loops loudly and the protos get
+        refreshed then. A candidate upstream PR — putting the route hostname
+        in the record's <code>Details</code> — would drop both the log join
+        and the debug log level.
+      </p>
+
       <h2 id="identity">Identity and machine exceptions</h2>
       <p>
         Pomerium's default policy allows the two family Pocket ID identities. Syncthing and
