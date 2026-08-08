@@ -4,6 +4,10 @@ locals {
   # UniFi reservations still need both physical Kangaroo addresses.
   kangaroo_ip_1g  = "10.0.0.232"
   kangaroo_ip_10g = "10.0.0.25"
+  # The Windows desktop hosting the fractal WSL guest; forwards only :22
+  # into it. Reserved so the split-horizon fractal.pod.haus record and
+  # every ssh config pointing at it stay truthful.
+  fractal_windows_ip = "10.0.0.70"
 
   pod_haus_service_dns = {
     backup          = local.numbat_application_ipv4
