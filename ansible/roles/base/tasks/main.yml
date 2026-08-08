@@ -52,10 +52,10 @@
   # chezmoi owns the *contents*; the directory and its mode are machine state,
   # and several later steps (known_hosts pinning, the machine key) assume it.
   ansible.builtin.file:
-    path: "/home/{{ ansible_user }}/.ssh"
+    path: "/home/{{ podhaus_operator }}/.ssh"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ podhaus_operator }}"
+    group: "{{ podhaus_operator }}"
     mode: "0700"
 
 - name: Ensure the repos directory exists
@@ -64,8 +64,8 @@
   ansible.builtin.file:
     path: "{{ podhaus_repos_dir }}"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ podhaus_operator }}"
+    group: "{{ podhaus_operator }}"
     mode: "0755"
   when: podhaus_repos_dir is defined
 

@@ -68,7 +68,7 @@
 
 - name: Add the operator to the docker group
   ansible.builtin.user:
-    name: "{{ ansible_user }}"
+    name: "{{ podhaus_operator }}"
     groups: docker
     append: true
 

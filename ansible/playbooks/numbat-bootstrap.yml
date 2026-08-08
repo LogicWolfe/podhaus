@@ -65,6 +65,9 @@
     # (numbat.pod.haus through Pomerium) stay clean for numbat.yml.
     ansible_host: "{{ podhaus_numbat_application_ipv4 }}"
     ansible_port: 2222
+    # Direct sshd, no Pomerium in the path — the steady-state inventory's
+    # nathan@numbat route selector would be a nonexistent OS user here.
+    ansible_user: "{{ podhaus_operator }}"
     # Same IdentityAgent/ConnectTimeout contract as group_vars/all.yml,
     # plus strict checking against the throwaway known_hosts pinned above.
     ansible_ssh_common_args: >-

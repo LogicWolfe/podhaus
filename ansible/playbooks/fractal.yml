@@ -33,7 +33,7 @@
       ansible.builtin.debug:
         msg: >-
           Host provisioning complete. Remaining manual steps:
-          (1) run `chezmoi init --apply` as {{ ansible_user }} to lay down user
+          (1) run `chezmoi init --apply` as {{ podhaus_operator }} to lay down user
           state and mint the soft machine key;
           (2) register the resulting ~/.ssh/id_fractal.pub on git.pod.haus
           (LogicWolfe) and github.com (logicwolfe);

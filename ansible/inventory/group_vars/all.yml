@@ -14,6 +14,16 @@ podhaus_dockernet_name: dockernet
 podhaus_dockernet_subnet: 172.18.0.0/16
 podhaus_dockernet_gateway: 172.18.0.1
 
+# The operator's OS account on every host. Distinct from ansible_user
+# because the two answer different questions: podhaus_operator is who owns
+# home directories, joins the docker group, and holds the Komodo keys;
+# ansible_user is the SSH username, which on a Pomerium-reached host also
+# carries the route selector (numbat's is nathan@numbat — Pomerium parses
+# user@route, and Ansible's ssh plugin passes -o User before
+# ssh_common_args, so ~/.ssh/config's User rewrite can never win). Roles
+# must always use podhaus_operator for OS-account work.
+podhaus_operator: nathan
+
 # Auth to every host rides the operator's agent. On bilby that is op-unlock;
 # pinned explicitly rather than left ambient so a future `Host *`
 # IdentityAgent line in ~/.ssh/config cannot silently redirect it (the same

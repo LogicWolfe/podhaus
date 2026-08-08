@@ -21,6 +21,6 @@
   ansible.builtin.file:
     path: /opt/komodo/keys
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ podhaus_operator }}"
+    group: "{{ podhaus_operator }}"
     mode: "0700"

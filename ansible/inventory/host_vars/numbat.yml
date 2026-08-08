@@ -7,7 +7,14 @@
 # 2222.
 ---
 ansible_host: numbat.pod.haus
-ansible_user: nathan
+# The Pomerium route selector rides the SSH username (user@route). It must
+# live here and not in ~/.ssh/config: Ansible's ssh plugin emits
+# -o User=<ansible_user> ahead of ssh_common_args, and ssh's
+# first-obtained-value-wins means that always beats the config rewrite —
+# a plain `nathan` lands in Pomerium's route portal, whose exec handler is
+# the pomerium CLI, not a shell ("unknown command /bin/sh"). OS-account
+# work uses podhaus_operator instead (group_vars/all.yml).
+ansible_user: nathan@numbat
 
 # The two public addresses. Terraform (BinaryLane) is the producer and
 # publishes them to 1Password beside the break-glass credential — the
