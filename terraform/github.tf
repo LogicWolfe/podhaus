@@ -79,24 +79,9 @@ resource "github_repository_webhook" "fenwick_deploy" {
   }
 }
 
-# Sibling webhook for the nathanbaxter repo. Replaces the repo's
-# previous .github/workflows/deploy.yml. Same global webhook secret,
-# same Pomerium machine exception. Fires the nathanbaxter-deploy procedure
-# (komodo/sync/procedures.toml) → DeployStack nathanbaxter-deploy →
-# the one-shot builder container clones, builds, and mcli mirrors
-# dist/ to the nathanbaxter-com bucket.
-resource "github_repository_webhook" "nathanbaxter_deploy" {
-  repository = "nathanbaxter"
-  events     = ["push"]
-  active     = true
-
-  configuration {
-    url          = "https://komodo.pod.haus/listener/github/procedure/nathanbaxter-deploy/main"
-    content_type = "json"
-    insecure_ssl = false
-    secret       = var.komodo_webhook_secret
-  }
-}
+# The nathanbaxter repo's webhook is NOT here: that repo migrated to
+# Forgejo (git.pod.haus) and its push webhook is
+# forgejo_repository_webhook.nathanbaxter_deploy in forgejo.tf.
 
 # Sibling webhook for the pets engine repo. Same global secret +
 # Pomerium machine exception for /listener/github. Fires

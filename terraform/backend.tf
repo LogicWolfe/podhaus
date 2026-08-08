@@ -76,6 +76,21 @@ terraform {
       source  = "1Password/onepassword"
       version = "~> 3.1" # section_map/field_map (v3.1.0+) for the access.tf Pocket ID OIDC data source
     }
+    forgejo = {
+      # Forgejo-native provider for the self-hosted git.pod.haus
+      # instance: deploy keys + repository webhooks on migrated repos.
+      # Chosen over go-gitea/gitea (tracks Forgejo's API — Forgejo 16
+      # has diverged from Gitea) and over svalabs/forgejo (its fork
+      # parent), whose webhook resource keeps the secret inside the
+      # config map and hits "inconsistent result after apply" because
+      # Forgejo never echoes it back (svalabs#158, fix unmerged).
+      # kfkonrad models the secret as a proper write-only top-level
+      # attribute. Pin the minor: 0.x provider, schema changes must be
+      # reviewed deliberately.
+      # Docs: https://registry.terraform.io/providers/kfkonrad/forgejo/latest/docs
+      source  = "kfkonrad/forgejo"
+      version = "~> 0.11.0"
+    }
     pocketid = {
       # Pocket ID is authoritative for human identities, application
       # access groups and OIDC claims (including Forgejo SSH keys).
