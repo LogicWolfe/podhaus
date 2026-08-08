@@ -59,7 +59,9 @@ services:
       TZ: ${TZ}
       ESPHOME_DASHBOARD_USE_PING: "true"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:6052/"]
+      # curl, not wget: the image has no wget, and a healthcheck whose binary is
+      # missing reports unhealthy forever rather than failing visibly.
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:6052/"]
       interval: 60s
       timeout: 10s
       retries: 3

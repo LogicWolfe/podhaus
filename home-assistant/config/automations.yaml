@@ -374,10 +374,13 @@
     what is loaded on the Nanoleaf exactly, or the call fails silently.
 
     Unlike the kinetic tap, the Turn Touch emits hold and double events on every
-    button as well as press. Only press is bound, so the condition filters the
-    others out; without it a hold would fire the scene a second time. not_from
-    guards the restore transitions, which would otherwise fire this on restart
-    or integration reload.
+    button as well as press. Press and double both run the same actions, because
+    the remote itself classifies two quick taps as a double: someone who presses
+    again when the room did not react would otherwise send the one event that is
+    ignored, so a weak link would read as a dead remote. Hold stays unbound, and
+    the condition filters it out; without it a hold would fire the scene a
+    second time. not_from guards the restore transitions, which would otherwise
+    fire this on restart or integration reload.
   triggers:
     - trigger: state
       entity_id: event.turn_touch_burrow_north
@@ -405,7 +408,8 @@
       id: all_off
   conditions:
     - condition: template
-      value_template: "{{ trigger.to_state.attributes.event_type == 'press' }}"
+      value_template: >-
+        {{ trigger.to_state.attributes.event_type in ['press', 'double'] }}
   actions:
     - choose:
         - conditions:
