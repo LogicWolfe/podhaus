@@ -121,15 +121,23 @@ resource "pocketid_client" "tailscale" {
   ]
 }
 
-# Forgejo's stack consumes the confidential-client credentials through
+# Forgejo's stack consumes the confidential-client secret through
 # komodo-op. The secret is generated once by Pocket ID, stored in
 # Terraform's versioned MinIO state, and copied into 1Password.
+#
+# No username field, deliberately: komodo-op syncs every field as a
+# secret Komodo Variable, and Komodo redacts every secret's value in
+# stored deploy state. A variable whose value is the literal "forgejo"
+# rewrites that string inside the forgejo stack's deployed_services
+# (service/container/image names), which breaks the name match against
+# running containers and pins the stack at state "down" forever. The
+# client id is not a secret; it lives as a literal in forgejo/stack.toml
+# and in pocketid_client.forgejo above.
 resource "onepassword_item" "forgejo_oidc" {
   vault    = data.onepassword_vault.homelab.uuid
   title    = "Forgejo OIDC"
   category = "login"
   url      = "https://git.pod.haus"
-  username = pocketid_client.forgejo.client_id
   password = pocketid_client.forgejo.client_secret
   tags     = ["terraform-managed"]
 }
