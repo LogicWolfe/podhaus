@@ -134,6 +134,29 @@ routes:
     from: https://fractal.docs.pod.haus
     to: https://127.0.0.1:8444
 
+  # Pocket ID is the gate; the key you hold decides how much that identity
+  # buys. Two allow rules, OR'd: a registered key may assume any principal
+  # (including root — the hosts run `PermitRootLogin without-password` with
+  # no AuthorizedPrincipalsFile, so `ssh root@bilby` through Pomerium lands
+  # a root shell, accepted knowingly since the same person could sudo);
+  # an unregistered key is confined to the host's own login account.
+  #
+  # The key list is evaluated only *after* browser sign-in — v0.33.0 writes
+  # the binding record before any policy runs — so it cannot suppress the
+  # sign-in prompt. It decides what an approved link is worth. Which key
+  # you hold separately decides whether the link is pushed to Signal at all
+  # (ssh-auth-notify's owner map). An unregistered key on the host's own
+  # account still works end to end: copy the URL Pomerium prints on the
+  # terminal, approve, connect. A new device is never locked out, only less
+  # convenient and less privileged.
+  #
+  # Keep in lockstep with POMERIUM_SSH_KEY_OWNERS in stack.toml —
+  # registering a key means both lists.
+  #
+  # The behavioural rule this leaves: Pomerium hands the sign-in URL to
+  # whoever is connecting, so a link reaching you by any route other than
+  # Fenwick is someone else's parked connection. Never approve one you did
+  # not just cause.
   - from: ssh://numbat
     to: ssh://127.0.0.1:22
     policy: &nathan_ssh_policy
@@ -141,20 +164,17 @@ routes:
           and:
             - email:
                 is: nathan@nathanbaxter.com
-            - ssh_username:
-                is: nathan
-            # Registered client keys only. Evaluated after browser
-            # sign-in (v0.33.0 writes the binding record before policy),
-            # so this cannot stop the sign-in prompt — the sidecar's
-            # unmapped-fingerprint filter does that. This layer makes a
-            # mis-tapped link for an unregistered key unexploitable.
-            # Keep in lockstep with POMERIUM_SSH_KEY_OWNERS in
-            # stack.toml: registering a key means both lists.
             - ssh_publickey: &registered_ssh_keys
                 - 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM= bilby machine key'
                 - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZSaoga8/dYnCgeiOSaV+3Xe5Tl6AkBpqO0T863ZajR Nathan personal key'
                 - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGc4palJ9QLWwFABcbyHKXNUvrTRpKdAkqATs8Bmr5xW fractal machine key'
                 - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINj/PsgYGQRoYSsdnfG+x+vNTa/01OxriWJhDqGiB/IZ fractal soft machine key'
+      - allow:
+          and:
+            - email:
+                is: nathan@nathanbaxter.com
+            - ssh_username:
+                is: nathan
   - from: ssh://bilby
     to: ssh://127.0.0.1:2201
     policy: *nathan_ssh_policy
@@ -164,6 +184,8 @@ routes:
   - from: ssh://fractal
     to: ssh://127.0.0.1:2204
     policy: *nathan_ssh_policy
+  # QTS names its UID 0 account `admin` and has no root passwd entry, so
+  # that — not `nathan` — is kangaroo's unregistered-key fallback.
   - from: ssh://kangaroo
     to: ssh://127.0.0.1:2203
     policy:
@@ -171,6 +193,10 @@ routes:
           and:
             - email:
                 is: nathan@nathanbaxter.com
+            - ssh_publickey: *registered_ssh_keys
+      - allow:
+          and:
+            - email:
+                is: nathan@nathanbaxter.com
             - ssh_username:
                 is: admin
-            - ssh_publickey: *registered_ssh_keys

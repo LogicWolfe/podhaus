@@ -123,22 +123,46 @@ networks:
         <code>{user, machine}</code>.
       </p>
       <p>
-        <strong>Only registered keys generate prompts, at two layers.</strong>
-        Anyone completing an SSH handshake with any key reaches
-        keyboard-interactive (Pomerium writes the binding record before
-        evaluating policy), so the sidecar drops <code>in_flight</code>
-        events for fingerprints outside the owner map — logged, never
-        forwarded. Resolutions for unknown keys still forward: an approval
-        of an unregistered key is an anomaly fenwick flags to
-        <code>POMERIUM_SSH_AUTH_DEFAULT_USER</code>. Independently, every
-        SSH route policy carries an <code>ssh_publickey</code> allow-list
-        (the same four keys, full authorized_keys form in
-        <code>pomerium/config.yaml</code>), so an unregistered key can
-        never gain access even if its sign-in link were somehow approved.
-        <strong>Registering a key means updating both lists</strong> —
-        the owner map (who gets the prompt) and the policy allow-list
-        (whether access is possible) — plus a fenwick account for a new
-        person.
+        <strong>Pocket ID is the gate; the key you hold decides how much
+        that identity buys.</strong> Anyone completing an SSH handshake with
+        any key reaches keyboard-interactive — Pomerium writes the binding
+        record before evaluating policy — so nothing can suppress a sign-in
+        prompt at the key layer. What the key decides is two things. First,
+        whether the link is pushed to Signal at all: the sidecar drops
+        <code>in_flight</code> events for fingerprints outside the owner map
+        (logged, never forwarded), keeping the notification channel from
+        becoming a spam channel that anyone on the internet can ring.
+        Second, what an approved link is worth: each SSH route in
+        <code>pomerium/config.yaml</code> carries two OR'd allow rules, so a
+        registered key may assume any principal (including <code>root</code>
+        — the hosts run <code>PermitRootLogin without-password</code> with no
+        <code>AuthorizedPrincipalsFile</code>, accepted knowingly since the
+        same person could <code>sudo</code>), while an unregistered key is
+        confined to the host's own login account — <code>nathan</code>
+        everywhere, <code>admin</code> on kangaroo.
+      </p>
+      <p>
+        So an unregistered key is never locked out, only less convenient and
+        less privileged: copy the URL Pomerium prints on the terminal,
+        approve it, connect as the host account. Resolutions for unknown keys
+        still forward — an approval of an unregistered key is an anomaly
+        fenwick flags to <code>POMERIUM_SSH_AUTH_DEFAULT_USER</code>.
+        <strong>Registering a key means updating both lists</strong> — the
+        owner map in <code>pomerium/stack.toml</code> (who gets the push) and
+        the <code>ssh_publickey</code> list in <code>pomerium/config.yaml</code>
+        (full authorized_keys form, whether any principal is mintable) — plus
+        a fenwick account for a new person. The client side of that contract
+        lives in chezmoi: a <code>Match host ssh.pod.haus</code> block pins
+        <code>IdentitiesOnly</code> to the machine key and the personal key,
+        so an agent holding several identities cannot present an unregistered
+        one by accident.
+      </p>
+      <p>
+        Because Pomerium hands the sign-in URL to whoever is connecting, the
+        remaining defence against a phished link is behavioural:
+        <strong>a link that reaches you by any route other than fenwick is
+        someone else's parked connection — never approve one you did not just
+        cause.</strong>
       </p>
       <p>
         Transport is the gateway-token pattern:

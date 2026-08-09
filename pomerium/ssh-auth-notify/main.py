@@ -190,14 +190,19 @@ class EventForwarder:
     def forward(self, user_code, binding, state):
         fingerprint = "SHA256:" + binding.key.removeprefix(FINGERPRINT_PREFIX)
         owner = self.config["owners"].get(fingerprint)
-        # Unregistered keys never generate a sign-in prompt — anyone can
-        # reach keyboard-interactive, so forwarding these would be a
-        # phone-spam channel. Resolutions still forward: an approval of
-        # an unknown key is exactly the anomaly fenwick should flag.
+        # The owner map governs notification, not access: an unmapped key
+        # still authenticates by copy/pasting the URL pomerium prints on
+        # its terminal, confined to the host's own login account by the
+        # route policy. Not forwarding is what keeps this channel
+        # meaningful — anyone at all can reach keyboard-interactive, so a
+        # push per attempt would be a spam channel and would train the
+        # "only approve links that arrive here" habit out of existence.
+        # Resolutions still forward: an approval nobody was told about is
+        # exactly the anomaly fenwick should surface.
         if owner is None and state == "in_flight":
-            log.warning(
-                "unregistered key %s attempted sign-in (code %s, from %s); "
-                "not forwarding",
+            log.info(
+                "no owner mapping for %s (code %s, from %s); no push, "
+                "terminal copy/paste still works",
                 fingerprint,
                 user_code,
                 binding.details.get("Source Address"),
