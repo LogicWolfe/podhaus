@@ -137,13 +137,42 @@ transitions that fire when the device reconnects or the integration reloads.
 
 ## Changing firmware
 
-Over the air, from the dashboard at `bilby:6052`. USB is only needed for the
-very first flash of a blank board.
+Over the air, from the CLI. USB is only needed for the very first flash of a
+blank board, and the dashboard at `bilby:6052` is a convenience, not a step —
+nothing here requires it.
 
-Editing a device YAML in the repo does **not** reflash the device — the stack
-redeploys and the dashboard picks up the new config, but the running firmware
-is unchanged until someone clicks Install. Treat repo and device as capable of
-diverging.
+```
+docker exec esphome sh -c 'cd /config && esphome compile <device>.yaml \
+  && esphome upload <device>.yaml --device <ip>'
+```
+
+**Deploy before you compile.** The container's `/config` is a Docker volume
+seeded by `esphome-init` at deploy time — it is *not* a bind mount of the repo.
+Editing a device YAML and compiling straight away silently builds the previously
+deployed config, and the OTA reports success because it did upload something.
+The order is: commit → push (or `./komodo-sync`) → compile → upload. Confirm
+with `docker exec esphome grep <your-change> /config/<device>.yaml` before
+building if there's any doubt.
+
+Editing a device YAML in the repo does **not** reflash the device. The stack
+redeploys and the volume updates, but the running firmware is unchanged until
+someone uploads. Treat repo and device as capable of diverging, and verify a
+flash landed by a behaviour change in the metrics rather than by the upload's
+own success message.
+
+An ESPHome build is the heaviest thing that runs on bilby: it fans out to one
+`cc1plus` per core and was the trigger for the 2026-08-08 global OOM that tore
+down the user session. Check `free -h` first, and if swap is anywhere near full,
+cap the container for the duration so a runaway build dies instead of the host:
+
+```
+docker update --memory=3g --memory-swap=3g esphome   # build, then recreate
+```
+
+Note that a memory limit set this way **cannot be removed** with
+`docker update --memory=0` — the cgroup keeps it. Clear the drift by recreating
+the container (`docker rm -f esphome` then a Komodo `DeployStack`), not by
+another `docker update`.
 
 ## Gotchas
 
