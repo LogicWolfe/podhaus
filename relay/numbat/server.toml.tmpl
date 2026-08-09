@@ -49,3 +49,9 @@ token = "${RATHOLE_FRACTAL_SSH_TOKEN}"
 type = "tcp"
 bind_addr = "127.0.0.1:8444"
 token = "${RATHOLE_FRACTAL_HTTP_TOKEN}"
+
+# voltaire terminates its own mTLS origin, same contract as fractal_http.
+[server.services.voltaire_http]
+type = "tcp"
+bind_addr = "127.0.0.1:8445"
+token = "${RATHOLE_VOLTAIRE_HTTP_TOKEN}"

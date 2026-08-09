@@ -112,6 +112,21 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/docs-server"
 branch = "main"
 
+# voltaire's own clone of the docs-server repo. A separate Repo resource from
+# bilby's `docs-server` and fractal's `docs-server-fractal` because Repo
+# resources are per-Periphery — each host's clone is independent state.
+[[repo]]
+name = "docs-server-voltaire"
+description = "Komodo-managed clone of the docs-server repo on voltaire's Periphery"
+tags = ["podhaus", "voltaire", "docs"]
+
+[repo.config]
+server = "voltaire"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/docs-server"
+branch = "main"
+
 [[repo]]
 name = "podhaus-voltaire"
 description = "Komodo-managed podhaus clone on voltaire"

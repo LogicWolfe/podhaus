@@ -127,12 +127,25 @@ routes:
   - <<: *nathan_route
     from: https://dev.nathanbaxter.com
 
+  # Per-host docs servers. nathan-only (not the shared docs.pod.haus'
+  # family_route) because each host's own repos tree is more sensitive than
+  # the shared docs site.
+  #
+  # bilby's own docs-server, addressed by its per-host name — an alias onto
+  # the same container docs.pod.haus already serves.
+  - <<: *nathan_route
+    from: https://bilby.docs.pod.haus
   # fractal's docs server. Same mTLS origin contract as every other protected
   # route, but terminating on fractal's Caddy through its own loopback rathole
   # service rather than bilby's.
   - <<: *nathan_route
     from: https://fractal.docs.pod.haus
     to: https://127.0.0.1:8444
+  # voltaire's docs server. Same shape as fractal's, its own loopback rathole
+  # service and its own Caddy mTLS origin.
+  - <<: *nathan_route
+    from: https://voltaire.docs.pod.haus
+    to: https://127.0.0.1:8445
 
   # Pocket ID is the gate; the key you hold decides how much that identity
   # buys. Two allow rules, OR'd: a registered key may assume any principal

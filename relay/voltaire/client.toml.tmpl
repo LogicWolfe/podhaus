@@ -16,3 +16,10 @@ remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
 type = "tcp"
 local_addr = "172.18.0.1:22"
 token = "${RATHOLE_VOLTAIRE_SSH_TOKEN}"
+
+# voltaire's own mTLS origin. Pomerium's client certificate is verified by
+# voltaire-caddy, so the tunnel carries TLS rather than terminating it.
+[client.services.voltaire_http]
+type = "tcp"
+local_addr = "voltaire-caddy:4443"
+token = "${RATHOLE_VOLTAIRE_HTTP_TOKEN}"

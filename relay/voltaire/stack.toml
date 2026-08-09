@@ -1,6 +1,6 @@
 [[stack]]
 name = "voltaire-relay"
-description = "Outbound voltaire SSH origin for Numbat Pomerium"
+description = "Outbound voltaire SSH + mTLS HTTP origins for Numbat Pomerium"
 tags = ["voltaire", "podhaus"]
 
 [stack.config]
@@ -14,4 +14,5 @@ auto_pull = false
 environment = """
 RATHOLE_NOISE_REMOTE_PUBLIC_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PUBLIC_KEY]]
 RATHOLE_VOLTAIRE_SSH_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__VOLTAIRE_SSH]]
+RATHOLE_VOLTAIRE_HTTP_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__VOLTAIRE_HTTP]]
 """

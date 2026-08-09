@@ -28,6 +28,7 @@ resource "random_password" "numbat_rathole_tokens" {
     "kangaroo_ssh",
     "protected_http",
     "public_tls",
+    "voltaire_http",
     "voltaire_ssh",
   ])
 
@@ -490,11 +491,29 @@ resource "cloudflare_dns_record" "numbat_logs_ingest" {
   ttl     = 300
 }
 
-# fractal's docs server. Protected by Pomerium like every other browser name,
-# so it resolves to the application address, not the relay address.
+# Per-host docs servers. Protected by Pomerium like every other browser
+# name, so they resolve to the application address, not the relay address.
+resource "cloudflare_dns_record" "bilby_docs" {
+  zone_id = local.zones["pod.haus"]
+  name    = "bilby.docs.pod.haus"
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
+}
+
 resource "cloudflare_dns_record" "fractal_docs" {
   zone_id = local.zones["pod.haus"]
   name    = "fractal.docs.pod.haus"
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
+}
+
+resource "cloudflare_dns_record" "voltaire_docs" {
+  zone_id = local.zones["pod.haus"]
+  name    = "voltaire.docs.pod.haus"
   type    = "A"
   content = local.numbat_application_ipv4
   proxied = false

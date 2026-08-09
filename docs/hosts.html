@@ -14,6 +14,14 @@
         <code>10.0.0.119</code>.
       </p>
       <p>
+        Its docs-server instance is reachable both at the shared
+        <code>docs.pod.haus</code> and at its own per-host name,
+        <code>bilby.docs.pod.haus</code> — the same container, just a second
+        Pomerium route and a second Caddy Host match. See
+        <a href="/networking.html#current-ingress">Networking → current
+        ingress rules</a>.
+      </p>
+      <p>
         Filesystem highlights:
       </p>
       <ul>
@@ -268,12 +276,18 @@
       <p>
         Everything in and out is a connection voltaire makes, on the fractal pattern:
         Komodo Periphery dials <code>core-connect.pod.haus</code>, the
-        <code>voltaire-relay</code> rathole client carries <code>ssh://voltaire</code> to
-        numbat, and Alloy ships logs to <code>logs-ingest.pod.haus</code> with per-host
-        mTLS. There is no HTTPS name and no public DNS record — off-LAN SSH rides
+        <code>voltaire-relay</code> rathole client carries <code>ssh://voltaire</code> and
+        its own mTLS HTTP origin to numbat, and Alloy ships logs to
+        <code>logs-ingest.pod.haus</code> with per-host mTLS. Off-LAN SSH rides
         <code>ssh.pod.haus</code> like every other managed host. The Cloudflare tunnel
         that used to carry SSH is gone (Terraform resources destroyed, host artifacts
         removed); Tailscale <code>voltaire-recovery</code> is the break-glass path.
+      </p>
+      <p>
+        <code>voltaire.docs.pod.haus</code> lands on Pomerium, which forwards to
+        <code>127.0.0.1:8445</code> on numbat, through the tunnel to voltaire's Caddy on
+        <code>:4443</code> (mTLS origin), and on to the docs container — same shape as
+        fractal's ingress, a separate loopback port and Caddy instance per host.
       </p>
       <ul>
         <li><strong>Ansible-managed (root state):</strong> base packages, Docker CE +
@@ -281,9 +295,11 @@
           trust, and Komodo Periphery.</li>
         <li><strong>chezmoi-managed (user state):</strong> everything under
           <code>$HOME</code>, including the TPM-resident machine key.</li>
-        <li><strong>Komodo-managed:</strong> <code>voltaire-relay</code>,
-          <code>voltaire-logging</code>, and <code>voltaire-autoheal</code> through the
-          <code>podhaus-voltaire</code> linked repo.</li>
+        <li><strong>Komodo-managed:</strong> <code>voltaire-relay</code> (rathole client),
+          <code>voltaire-caddy</code> (mTLS origin), <code>voltaire-logging</code>,
+          <code>voltaire-autoheal</code>, and <code>voltaire-docs</code> (the docs-server
+          over <code>~/repos</code>) through linked repos <code>podhaus-voltaire</code> and
+          <code>docs-server-voltaire</code>.</li>
       </ul>
       <p>
         SELinux is enforcing (Fedora Workstation default), so every podhaus service that

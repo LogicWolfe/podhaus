@@ -1,0 +1,78 @@
+# voltaire's protected origin.
+#
+# Unlike bilby's Caddy this owns no public TLS and issues no certificates, so
+# it runs the stock upstream image — there is no ACME DNS-01 to satisfy and
+# therefore no reason to build the caddy-dns/cloudflare module in. Its only
+# job is to terminate Pomerium's mTLS and dispatch by Host.
+services:
+  voltaire-caddy-secrets-init:
+    build:
+      context: ../../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_VOLTAIRE_CADDY_SECRETS_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
+    restart: "no"
+    security_opt:
+      # SELinux enforcing on Fedora Workstation denies cross-label reads of
+      # the bind-mounted config dir without label:disable (bilby pattern).
+      - label:disable
+    environment:
+      POMERIUM_ORIGIN_CA_CERT_B64: ${POMERIUM_ORIGIN_CA_CERT_B64}
+      POMERIUM_ORIGIN_SERVER_CERT_B64: ${POMERIUM_ORIGIN_SERVER_CERT_B64}
+      POMERIUM_ORIGIN_SERVER_KEY_B64: ${POMERIUM_ORIGIN_SERVER_KEY_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf '%s' "$${POMERIUM_ORIGIN_CA_CERT_B64}" | base64 -d > /secrets/pomerium-origin-ca.pem
+        printf '%s' "$${POMERIUM_ORIGIN_SERVER_CERT_B64}" | base64 -d > /secrets/pomerium-origin-server-cert.pem
+        printf '%s' "$${POMERIUM_ORIGIN_SERVER_KEY_B64}" | base64 -d > /secrets/pomerium-origin-server-key.pem
+    volumes:
+      - voltaire-caddy-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  voltaire-caddy:
+    container_name: voltaire-caddy
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      voltaire-caddy-secrets-init:
+        condition: service_completed_successfully
+    security_opt:
+      # SELinux enforcing on Fedora Workstation denies cross-label reads of
+      # the bind-mounted config dir without label:disable (bilby pattern).
+      - label:disable
+    volumes:
+      # Directory binds only.
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-voltaire/caddy/voltaire:/etc/caddy:ro
+      - voltaire-caddy-secrets:/run/podhaus-secrets:ro
+      - voltaire-caddy-data:/data
+      - voltaire-caddy-config:/config
+    environment:
+      TZ: ${TZ}
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      podhaus.depends-on-voltaire-caddy-secrets-init: ${BUILD_HASH_VOLTAIRE_CADDY_SECRETS_INIT:-unset}
+    healthcheck:
+      # `caddy validate` proves the config parses; a TCP probe of :4443 would
+      # need a client certificate we deliberately do not have here.
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  voltaire-caddy-secrets:
+  voltaire-caddy-data:
+  voltaire-caddy-config:
+
+networks:
+  dockernet:
+    external: true

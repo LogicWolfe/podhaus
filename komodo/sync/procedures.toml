@@ -221,14 +221,14 @@ executions = [
 # makes IfChanged a permanent no-op; the Docker layer cache makes an
 # unchanged push a container-level no-op). Bound to its own GitHub
 # webhook (.../procedure/docs-push-deploy/main; see
-# ../../terraform/github.tf). The pattern lists both instances by exact
+# ../../terraform/github.tf). The pattern lists every instance by exact
 # name — never a wildcard — so it can't match the legacy "docs-server"
 # nginx stack during the cutover window. Adding a docs instance on a new
 # host means adding its stack name here too.
 
 [[procedure]]
 name = "docs-push-deploy"
-description = "Push-to-deploy for the docs service stacks: docs on bilby, fractal-docs on fractal."
+description = "Push-to-deploy for the docs service stacks: docs on bilby, fractal-docs on fractal, voltaire-docs on voltaire."
 tags = ["docs", "podhaus"]
 config.webhook_enabled = true
 config.schedule_enabled = false
@@ -244,7 +244,7 @@ executions = [
 name = "Deploy docs (build + up; layer cache makes an unchanged push a no-op)"
 enabled = true
 executions = [
-  { execution.type = "BatchDeployStack", execution.params = { pattern = "docs, fractal-docs" }, enabled = true },
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "docs, fractal-docs, voltaire-docs" }, enabled = true },
 ]
 
 

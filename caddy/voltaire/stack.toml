@@ -1,21 +1,21 @@
 [[stack]]
-name = "fractal-caddy"
-description = "Pomerium mTLS origin on fractal — terminates the fractal_http rathole service and dispatches by Host"
-tags = ["fractal", "podhaus"]
+name = "voltaire-caddy"
+description = "Pomerium mTLS origin on voltaire — terminates the voltaire_http rathole service and dispatches by Host"
+tags = ["voltaire", "podhaus"]
 
 [stack.config]
-server = "fractal"
-linked_repo = "podhaus-fractal"
-run_directory = "caddy/fractal"
+server = "voltaire"
+linked_repo = "podhaus-voltaire"
+run_directory = "caddy/voltaire"
 file_paths = ["compose.yaml"]
 run_build = true
 # The secrets-init exits 0 by design; without this Komodo counts the exited
 # container and marks the whole stack Unhealthy.
-ignore_services = ["fractal-caddy-secrets-init"]
+ignore_services = ["voltaire-caddy-secrets-init"]
 
 # Reuses bilby's origin server certificate rather than minting a second leaf.
 # The certificate is issued for pomerium-origin.pod.haus and Pomerium pins
-# that name via tls_upstream_server_name on every route, so one leaf serves
+# that name via tls_upstream_server_name on both origins, so one leaf serves
 # all of them correctly. A second leaf would add a rotation surface without
 # changing what is authenticated.
 environment = """

@@ -48,7 +48,7 @@
 	@plex host plex.pod.haus
 	@music host music.pod.haus
 	@watch host watch.pod.haus
-	@docs host docs.pod.haus
+	@docs host docs.pod.haus bilby.docs.pod.haus
 	@minio_console host minio.pod.haus
 	@sync host sync.pod.haus
 	@paperless host paperless.pod.haus
