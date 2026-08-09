@@ -373,14 +373,23 @@
     clearing the extras -- it is not a variant of off. Effect names must match
     what is loaded on the Nanoleaf exactly, or the call fails silently.
 
+    Holding a button runs a variant of its own scene rather than an unrelated
+    one: North-hold is Bright with everything -- including the Hue bulbs --
+    pinned to 100%. West-hold is a softer Orange: scene Lighter orange, fan
+    off, Shapes at 50% on the same random effect the tap uses. East-hold is
+    its own scene, Warm morning, fan off, Shapes fixed on Vintage Modern at
+    10%. South-hold has no scene of its own: it turns the fan light off if it
+    is on, and only once the fan light is already off does it fall back to
+    halving the Hue bulbs' and Shapes' current brightness, so a second hold
+    does something instead of nothing.
+
     Unlike the kinetic tap, the Turn Touch emits hold and double events on every
     button as well as press. Press and double both run the same actions, because
     the remote itself classifies two quick taps as a double: someone who presses
     again when the room did not react would otherwise send the one event that is
-    ignored, so a weak link would read as a dead remote. Hold stays unbound, and
-    the condition filters it out; without it a hold would fire the scene a
-    second time. not_from guards the restore transitions, which would otherwise
-    fire this on restart or integration reload.
+    ignored, so a weak link would read as a dead remote. not_from guards the
+    restore transitions, which would otherwise fire this on restart or
+    integration reload.
   triggers:
     - trigger: state
       entity_id: event.turn_touch_burrow_north
@@ -409,12 +418,15 @@
   conditions:
     - condition: template
       value_template: >-
-        {{ trigger.to_state.attributes.event_type in ['press', 'double'] }}
+        {{ trigger.to_state.attributes.event_type in ['press', 'double', 'hold'] }}
   actions:
     - choose:
         - conditions:
             - condition: trigger
               id: bright
+            - condition: template
+              value_template: >-
+                {{ trigger.to_state.attributes.event_type in ['press', 'double'] }}
           sequence:
             - action: scene.turn_on
               target:
@@ -432,7 +444,35 @@
                 effect: Sunlight through trees
         - conditions:
             - condition: trigger
+              id: bright
+            - condition: template
+              value_template: "{{ trigger.to_state.attributes.event_type == 'hold' }}"
+          sequence:
+            - action: scene.turn_on
+              target:
+                entity_id: scene.burrow_bright
+            - action: light.turn_on
+              target:
+                entity_id: light.burrow
+              data:
+                brightness_pct: 100
+            - action: light.turn_on
+              target:
+                entity_id: light.haiku_fan_4
+              data:
+                brightness_pct: 100
+            - action: light.turn_on
+              target:
+                entity_id: light.shapes_4108
+              data:
+                brightness_pct: 100
+                effect: Sunlight through trees
+        - conditions:
+            - condition: trigger
               id: orange
+            - condition: template
+              value_template: >-
+                {{ trigger.to_state.attributes.event_type in ['press', 'double'] }}
           sequence:
             - action: scene.turn_on
               target:
@@ -449,7 +489,29 @@
                   {{ ['Aquarium', 'Retro Future', 'Vintage Modern'] | random }}
         - conditions:
             - condition: trigger
+              id: orange
+            - condition: template
+              value_template: "{{ trigger.to_state.attributes.event_type == 'hold' }}"
+          sequence:
+            - action: scene.turn_on
+              target:
+                entity_id: scene.burrow_lighter_orange
+            - action: light.turn_off
+              target:
+                entity_id: light.haiku_fan_4
+            - action: light.turn_on
+              target:
+                entity_id: light.shapes_4108
+              data:
+                brightness_pct: 50
+                effect: >-
+                  {{ ['Aquarium', 'Retro Future', 'Vintage Modern'] | random }}
+        - conditions:
+            - condition: trigger
               id: leave_on
+            - condition: template
+              value_template: >-
+                {{ trigger.to_state.attributes.event_type in ['press', 'double'] }}
           sequence:
             - action: scene.turn_on
               target:
@@ -459,6 +521,51 @@
                 entity_id:
                   - light.haiku_fan_4
                   - light.shapes_4108
+        - conditions:
+            - condition: trigger
+              id: leave_on
+            - condition: template
+              value_template: "{{ trigger.to_state.attributes.event_type == 'hold' }}"
+          sequence:
+            - action: scene.turn_on
+              target:
+                entity_id: scene.burrow_warm_morning
+            - action: light.turn_off
+              target:
+                entity_id: light.haiku_fan_4
+            - action: light.turn_on
+              target:
+                entity_id: light.shapes_4108
+              data:
+                brightness_pct: 10
+                effect: Vintage Modern
+        - conditions:
+            - condition: trigger
+              id: all_off
+            - condition: template
+              value_template: "{{ trigger.to_state.attributes.event_type == 'hold' }}"
+          sequence:
+            - if:
+                - condition: state
+                  entity_id: light.haiku_fan_4
+                  state: "on"
+              then:
+                - action: light.turn_off
+                  target:
+                    entity_id: light.haiku_fan_4
+              else:
+                - action: light.turn_on
+                  target:
+                    entity_id: light.burrow
+                  data:
+                    brightness: >-
+                      {{ (state_attr('light.burrow', 'brightness') | int(0)) // 2 }}
+                - action: light.turn_on
+                  target:
+                    entity_id: light.shapes_4108
+                  data:
+                    brightness: >-
+                      {{ (state_attr('light.shapes_4108', 'brightness') | int(0)) // 2 }}
       default:
         - action: light.turn_off
           target:
