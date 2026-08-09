@@ -223,8 +223,20 @@ executions = [
 # webhook (.../procedure/docs-push-deploy/main; see
 # ../../terraform/github.tf). The pattern lists every instance by exact
 # name — never a wildcard — so it can't match the legacy "docs-server"
-# nginx stack during the cutover window. Adding a docs instance on a new
-# host means adding its stack name here too.
+# nginx stack during the cutover window.
+#
+# ADDING A DOCS INSTANCE ON A NEW HOST — podhaus first, docs repo second.
+# A docs instance is split across two repos, and the dependency runs one
+# way: the `<host>-docs` [[stack]] lives in the docs repo's stack.toml,
+# but the `docs-server-<host>` Repo resource it names via `linked_repo`
+# lives in podhaus (komodo/sync/repos.toml), as does this deploy pattern.
+# So podhaus must land BEFORE the docs repo. Push them the other way and
+# Stage 0's RunSync can't resolve the linked repo, the stack is never
+# created, and Stage 1 wouldn't deploy it anyway (the pattern is still
+# missing the name) — the host's Caddy comes up fine and proxies to a
+# docs container that does not exist, i.e. a bodyless 502 that renders
+# as a blank page. Bit voltaire on 2026-08-09; recovery is to land
+# podhaus and re-run this procedure.
 
 [[procedure]]
 name = "docs-push-deploy"

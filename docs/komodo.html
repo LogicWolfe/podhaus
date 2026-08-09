@@ -267,6 +267,28 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         all three were migrated to <code>[[resource_sync]]</code> on 2026-06-26.
       </blockquote>
       <blockquote>
+        <p><strong>Separate-repo stacks: push podhaus first</strong></p>
+        A stack defined in a separate repo still depends on podhaus for two
+        things: the <code>docs-server-&lt;host&gt;</code> / equivalent Repo
+        resource it names via <code>linked_repo</code>
+        (<code>komodo/sync/repos.toml</code>), and its stack name in the
+        deploy pattern of the matching push-deploy procedure
+        (<code>komodo/sync/procedures.toml</code>). Both live in podhaus, so
+        <strong>podhaus must land before the separate repo</strong> whenever a
+        change adds a new instance.
+        <br><br>
+        Push them the other way and the failure is quiet: Stage 0's
+        <code>RunSync</code> cannot resolve the linked repo, so the stack is
+        never created, and Stage 1 would not deploy it anyway because the
+        pattern still lacks the name. Nothing in the request path reports an
+        error — the host's Caddy comes up healthy and reverse-proxies to a
+        container that does not exist, which surfaces as a bodyless 502, i.e.
+        a blank white page behind working authentication. Adding
+        <code>voltaire-docs</code> hit this on 2026-08-09. Recovery is to land
+        podhaus and re-run the separate repo's push-deploy procedure; no state
+        needs unwinding.
+      </blockquote>
+      <blockquote>
         <p><strong>Auto-deploy on push (one webhook → one procedure)</strong></p>
         Komodo's webhook contract is per-resource:
         <code>https://&lt;host&gt;/listener/&lt;auth&gt;/&lt;resource_type&gt;/&lt;id&gt;/&lt;seg&gt;</code>.
