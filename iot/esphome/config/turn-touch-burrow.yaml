@@ -99,6 +99,15 @@ ble_client:
 # `ble_reconnect_cycles` against the recovery timestamps will tell us — then no
 # watchdog can beat "first press wakes it, second press works", and this
 # becomes a fallback rather than the mechanism.
+# 5 minutes, not 90 s. esp32_ble_tracker retries on its own roughly every 30 s
+# and each attempt runs a 20 s connect timeout, so a short watchdog interval
+# does not retry sooner — it aborts an attempt that is still in flight and
+# leaves the GATT client in DISCONNECTING when the open event lands. This is a
+# last resort behind the tracker's own retry, not a faster version of it.
+#
+# The fire timestamp is stamped BEFORE the disconnect rather than after the
+# connect: anything that interrupts the action list after that point would
+# otherwise leave the spacing unrecorded and the watchdog firing every tick.
 interval:
   - interval: 30s
     then:
@@ -106,16 +115,18 @@ interval:
           condition:
             lambda: |-
               return !id(ble_connected) &&
-                     (millis() - id(disconnected_since_ms)) > 90000;
+                     (millis() - id(disconnected_since_ms)) > 300000 &&
+                     (millis() - id(last_cycle_ms)) > 300000;
           then:
-            - logger.log: "BLE link down >90s, cycling ble_client"
-            - lambda: 'id(reconnect_cycles) += 1;'
+            - logger.log:
+                level: INFO
+                format: "BLE link down >5min, cycling ble_client"
+            - lambda: |-
+                id(last_cycle_ms) = millis();
+                id(reconnect_cycles) += 1;
             - ble_client.disconnect: turn_touch
             - delay: 2s
             - ble_client.connect: turn_touch
-            # Restart the clock so a wedge that outlives one cycle retries on
-            # the same 90s spacing rather than every interval tick.
-            - lambda: 'id(disconnected_since_ms) = millis();'
 
 globals:
   # Last raw payload, for duplicate suppression: the remote re-sends identical
@@ -147,6 +158,11 @@ globals:
     type: uint32_t
     initial_value: '0'
   - id: reconnect_cycles
+    type: uint32_t
+    initial_value: '0'
+  # Written only by the watchdog. Spacing must not depend on
+  # disconnected_since_ms, which the ble_client triggers also write.
+  - id: last_cycle_ms
     type: uint32_t
     initial_value: '0'
 
