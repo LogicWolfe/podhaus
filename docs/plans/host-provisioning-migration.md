@@ -17,12 +17,6 @@ one-producer / one-channel / zero-copies ledger) and
 
 What's left:
 
-## numbat: bootstrap play
-
-- [ ] `playbooks/numbat-bootstrap.yml` is only truly exercised by the
-  next fresh-VM rebuild. Nothing to do until then; noted so the first
-  rebuild is treated as a validation run, not a routine one.
-
 ## pinelake lands on Ansible
 
 Forward guidance, superseding the pinelake plan's open item ("separate
@@ -47,6 +41,18 @@ rathole control channels, `sshd -T`) — never "container healthy".
   human runs a playbook. A push must not reconfigure a machine.
 - **Engine swaps** (bilby moby→docker-ce) and **FDE** — the latter is
   tracked in [secret-architecture.md](secret-architecture.md).
+- **Proactively validating `playbooks/numbat-bootstrap.yml`.** The play
+  is only truly exercised against a fresh VM (the playbook's own header
+  comment says so); check-mode against the live host proves
+  `numbat.yml`, not this one. Forcing that exercise means
+  `terraform apply -replace=binarylane_server.numbat` — `public_ipv4_count`
+  allocates both addresses fresh from BinaryLane, not from a stable
+  reserved/floating IP, so a replace lands two new public IPv4s and a
+  real production DNS cutover (every DNS-only record behind
+  `numbat_application_ipv4`/`numbat_relay_ipv4`, plus Pomerium's Autocert
+  cache, which is not preserved). Not worth it for validation's sake —
+  the play gets its real test the day numbat actually needs rebuilding
+  (see [Fresh Numbat from scratch](../disaster-recovery.html#numbat-rebuild)).
 
 ## Open questions
 
