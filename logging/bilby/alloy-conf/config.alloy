@@ -279,6 +279,59 @@ otelcol.processor.transform "svc_alloy" {
   }
 }
 
+// ESPHome IoT devices expose every entity as OpenMetrics via their own
+// `prometheus:` component (iot/esphome/config/<device>.yaml). This is the only
+// telemetry path off these devices: ESPHome has no syslog output, and the
+// MQTT route would mean standing up a broker plus a Telegraf bridge — two new
+// services to carry one ESP32's log lines. Entities are free by comparison,
+// and the state (BLE link up, notification rate, battery trend) is what
+// actually diagnoses these devices; the log lines never were.
+//
+// Scraped by IP because Alloy resolves through Docker's DNS, which has no
+// mDNS, so `turn-touch-burrow.local` is unreachable from in here. The address
+// is pinned by a UniFi reservation (terraform/unifi.tf) — without it a DHCP
+// drift would silently end the scrape.
+//
+// Deliberately narrow: one target, ~10 series. bilby's ClickHouse runs under a
+// 4g cap, so the tempting alternative — scraping Home Assistant's
+// /api/prometheus for every entity in the house — is not a like-for-like
+// swap.
+prometheus.scrape "esphome" {
+  targets = [{
+    __address__      = "10.0.0.238",
+    __metrics_path__ = "/metrics",
+    instance         = "turn-touch-burrow",
+  }]
+  scrape_interval = "60s"
+  forward_to      = [otelcol.receiver.prometheus.esphome.receiver]
+}
+
+otelcol.receiver.prometheus "esphome" {
+  output {
+    metrics = [otelcol.processor.transform.svc_esphome.input]
+  }
+}
+
+// Same service.name stamping as svc_gatus — the Prometheus→OTLP bridge
+// carries none, and unattributed metrics are invisible to HyperDX's
+// metric-by-service views. "esphome" groups every device under one service,
+// with `instance` from the scrape target separating them.
+otelcol.processor.transform "svc_esphome" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context = "metric"
+    statements = [
+      `set(resource.attributes["service.name"], "esphome")`,
+      `set(resource.attributes["host"], "bilby")`,
+    ]
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
 otelcol.processor.batch "clickstack" {
   output {
     logs    = [otelcol.exporter.otlphttp.clickstack.input]

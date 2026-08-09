@@ -8,6 +8,11 @@ locals {
   # into it. Reserved so the split-horizon fractal.pod.haus record and
   # every ssh config pointing at it stay truthful.
   fractal_windows_ip = "10.0.0.70"
+  # The ESP32 bridging the burrow Turn Touch. Reserved because Alloy scrapes
+  # its /metrics by IP — Docker's resolver has no mDNS, so the .local name is
+  # unreachable from the container and a DHCP drift would end the scrape
+  # silently.
+  turn_touch_burrow_ip = "10.0.0.238"
 
   pod_haus_service_dns = {
     backup          = local.numbat_application_ipv4

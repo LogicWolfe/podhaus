@@ -62,6 +62,53 @@ The decode lives in the sensor's value `lambda:`, not `on_notify` — raw
 `std::vector<uint8_t>` is only available in the lambda, whereas `on_notify`
 receives the parsed float.
 
+## Diagnostics and link recovery
+
+Each device exposes its entities as OpenMetrics at `http://<device>/metrics`
+via ESPHome's `prometheus:` component (which requires `web_server:`). Bilby's
+Alloy scrapes that endpoint every 60 s and bridges it into ClickStack, so
+device state is queryable in HyperDX under `service.name = esphome`, with
+`instance` separating devices.
+
+The scrape targets an IP, not a name: Alloy resolves through Docker's resolver,
+which has no mDNS, so `<device>.local` is unreachable from the container. The
+address is held by a UniFi DHCP reservation in `terraform/unifi.tf`. **Adding a
+device means adding a reservation, a `local`, and a scrape target** — otherwise
+the first DHCP drift ends the scrape with no error anywhere.
+
+What's exported beyond the button events:
+
+| Metric | Why it's there |
+|---|---|
+| `BLE link` | Connectivity binary sensor, driven by the `ble_client` `on_connect` / `on_disconnect` triggers. ESPHome has no connection entity of its own. |
+| `BLE notifications` | Monotonic count of GATT notifications, incremented before duplicate suppression — a repeat still proves the remote is transmitting. `rate()` over it answers "is the remote alive". |
+| `BLE last notification age` | Seconds since the last notification; NAN until the first one ever. |
+| `BLE reconnect cycles` | How often the watchdog has fired. Non-zero means the link is dropping. |
+| `Battery` | The remote's own gauge. Slow-moving (30 min poll, and the gauge only re-samples at boot), so read it as a trend, not a reading. |
+| `WiFi signal`, `Uptime`, `Heap free` | ESP32 health. Heap matters because `web_server` shares a single-core C3 with wifi and BLE; a downward trend precedes instability. |
+
+**The link watchdog triggers on connection state, never on button activity.**
+That distinction is the whole design. A press-timeout watchdog would have to
+cycle the link on a schedule to prove liveness during the ten hours a night
+nobody touches the remote, spending the coin cell to do it. Connection state is
+a local bool on a mains-powered ESP32, so watching it costs the remote nothing,
+and the only thing that reaches the remote — the reconnect — happens only when
+the link is already down.
+
+Mechanism: if the client has been disconnected for more than 90 s, a 30 s
+`interval` forces `ble_client.disconnect` then `ble_client.connect`, then
+restarts its own clock so a persistent wedge retries at the same spacing rather
+than every tick. `esp32_ble_tracker`'s `auto_connect` is already retrying
+underneath; the forced cycle exists to shake ESP-IDF's GATT client out of a
+stuck state it will otherwise sit in indefinitely — a link that drops during a
+burst of notifications has been observed staying down for hours while the ESP32
+itself remained up and connected to Home Assistant the entire time.
+
+Recovery speed has a floor we don't control: if the remote only advertises when
+a button is pressed, no watchdog beats "first press wakes the link, second press
+works". `BLE reconnect cycles` against the recovery timestamps is what
+distinguishes that from a genuine ESP-IDF wedge.
+
 ## Changing what a button does
 
 Home Assistant only. No reflash. The firmware knows nothing about Hue, scenes,
@@ -117,10 +164,18 @@ diverging.
 - **The API log stream is lossy.** Log lines are dropped even when the code
   demonstrably ran. Use HA entity history as the authoritative record of what
   happened; never treat a missing log line as evidence of absence.
-- **Wifi quality is not visible in HA** unless the device config declares a
-  `wifi_signal` sensor. To check it from outside, query the UniFi controller for
-  the client: signal, noise, and `tx_retries` tell the real story. Usable wifi
-  wants ≥20 dB SNR.
+- **Wifi quality is only visible for devices that declare a `wifi_signal`
+  sensor.** `turn-touch-burrow` does. For one that doesn't, query the UniFi
+  controller for the client: signal, noise, and `tx_retries` tell the real
+  story. Usable wifi wants ≥20 dB SNR.
+- **A dead BLE link does not make the HA entities unavailable.** The `event`
+  entities are templates on the ESP32, so they stay available as long as the
+  ESP32 does — which is the whole failure mode: buttons do nothing, nothing is
+  marked unavailable, and no error is logged. The `ble_client` *sensors* are the
+  exception: a failed GATT read publishes NAN, so `sensor.*_battery` going
+  `unknown` (not `unavailable`) is the tell that the link, rather than the
+  device, is gone. `BLE link` now reports the same thing within seconds instead
+  of up to half an hour later.
 - ESP32-C3 is single-core, so BLE scanning contends with wifi. Scan parameters
   are deliberately low duty cycle (`interval: 1100ms`, `window: 300ms`,
   `active: false`) since only one known MAC is ever needed.

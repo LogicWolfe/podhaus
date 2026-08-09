@@ -6,6 +6,13 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
+  # Boot disconnected. Without this the link sensor sits unknown until the
+  # first connect, and "never connected" would be indistinguishable from
+  # "connected, not reporting" on the very metric meant to tell them apart.
+  on_boot:
+    - binary_sensor.template.publish:
+        id: ble_link
+        state: false
 
 esp32:
   board: esp32-c3-devkitm-1
@@ -36,6 +43,16 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
+# Exists only to carry /metrics for the Alloy scrape. The UI is incidental:
+# its assets come from a CDN, so it renders only with internet, while /metrics
+# is generated locally and is the part we consume. Watch `heap_free` after
+# enabling — a C3 running wifi + BLE + an HTTP server is the memory-tight
+# configuration, and if it destabilises this is the first thing to drop.
+web_server:
+  port: 80
+
+prometheus:
+
 # Low duty cycle: this chip is single-core, so BLE scanning contends with wifi
 # for the same core. We only ever connect to one known MAC, so passive and
 # infrequent is sufficient.
@@ -50,8 +67,55 @@ ble_client:
     id: turn_touch
     on_connect:
       - logger.log: "Turn Touch connected"
+      - lambda: |-
+          id(ble_connected) = true;
+          id(disconnected_since_ms) = 0;
+      - binary_sensor.template.publish:
+          id: ble_link
+          state: true
     on_disconnect:
       - logger.log: "Turn Touch disconnected"
+      - lambda: |-
+          id(ble_connected) = false;
+          id(disconnected_since_ms) = millis();
+      - binary_sensor.template.publish:
+          id: ble_link
+          state: false
+
+# Link watchdog. Triggered by connection state, never by button activity: the
+# remote is legitimately silent for ten hours overnight, so a press-timeout
+# watchdog would have to cycle the link on a schedule and spend the remote's
+# coin cell proving liveness. Connection state is a local bool on a
+# mains-powered ESP32, so watching it is free, and the only thing that reaches
+# the remote — the reconnect — happens only when we are already broken.
+#
+# esp32_ble_tracker's own auto_connect is already retrying underneath this;
+# the forced disconnect/connect exists to shake ESP-IDF's GATT client out of a
+# stuck state it will otherwise sit in indefinitely (observed 2026-08-09: link
+# dropped during a button burst and never came back over 2.5 h while the ESP32
+# stayed up and connected to HA the whole time).
+#
+# If the remote only advertises on a button press — unknown, and what
+# `ble_reconnect_cycles` against the recovery timestamps will tell us — then no
+# watchdog can beat "first press wakes it, second press works", and this
+# becomes a fallback rather than the mechanism.
+interval:
+  - interval: 30s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return !id(ble_connected) &&
+                     (millis() - id(disconnected_since_ms)) > 90000;
+          then:
+            - logger.log: "BLE link down >90s, cycling ble_client"
+            - lambda: 'id(reconnect_cycles) += 1;'
+            - ble_client.disconnect: turn_touch
+            - delay: 2s
+            - ble_client.connect: turn_touch
+            # Restart the clock so a wedge that outlives one cycle retries on
+            # the same 90s spacing rather than every interval tick.
+            - lambda: 'id(disconnected_since_ms) = millis();'
 
 globals:
   # Last raw payload, for duplicate suppression: the remote re-sends identical
@@ -66,6 +130,38 @@ globals:
   - id: held
     type: uint8_t
     initial_value: '0x00'
+  # Link state, mirrored from the ble_client triggers. ESPHome exposes no
+  # connection entity of its own, so the triggers are the only source.
+  - id: ble_connected
+    type: bool
+    initial_value: 'false'
+  - id: disconnected_since_ms
+    type: uint32_t
+    initial_value: '0'
+  # Liveness: any notification counts, including the duplicates the decode
+  # suppresses — a repeat still proves the remote is transmitting.
+  - id: last_notify_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: notify_count
+    type: uint32_t
+    initial_value: '0'
+  - id: reconnect_cycles
+    type: uint32_t
+    initial_value: '0'
+
+# Free heap is the number to watch now that web_server shares the C3 with wifi
+# and BLE. A downward trend here precedes the instability, rather than
+# following it.
+debug:
+  update_interval: 60s
+
+binary_sensor:
+  - platform: template
+    id: ble_link
+    name: "BLE link"
+    device_class: connectivity
+    entity_category: diagnostic
 
 event:
   - platform: template
@@ -110,6 +206,8 @@ sensor:
         ESP_LOGW("turn_touch", "unexpected payload size %u", (unsigned) x.size());
         return NAN;
       }
+      id(notify_count)++;
+      id(last_notify_ms) = millis();
       const uint8_t byte0 = x[0], byte1 = x[1];
       ESP_LOGD("turn_touch", "raw %02X %02X (prev %02X %02X, held %02X)",
                byte0, byte1, id(last_byte0), id(last_byte1), id(held));
@@ -162,5 +260,58 @@ sensor:
     device_class: battery
     unit_of_measurement: "%"
     accuracy_decimals: 0
-    # The remote only re-samples its gauge at boot, so polling faster buys nothing.
+    # The remote only re-samples its gauge at boot, so polling faster buys
+    # nothing. It doubles as the link probe of last resort: a failed GATT read
+    # publishes NAN, which is how the 2026-08-09 wedge was identified after the
+    # fact. `ble_link` now reports the same thing within seconds instead of up
+    # to half an hour later.
     update_interval: 30min
+
+  - platform: wifi_signal
+    name: "WiFi signal"
+    entity_category: diagnostic
+    update_interval: 60s
+
+  - platform: uptime
+    name: "Uptime"
+    entity_category: diagnostic
+
+  - platform: debug
+    free:
+      name: "Heap free"
+      entity_category: diagnostic
+
+  # Counters, not gauges: rate() over these answers "is the remote actually
+  # transmitting" and "is the watchdog firing", which a point-in-time value
+  # cannot.
+  - platform: template
+    name: "BLE notifications"
+    id: ble_notifications
+    entity_category: diagnostic
+    state_class: total_increasing
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: 'return (float) id(notify_count);'
+
+  - platform: template
+    name: "BLE reconnect cycles"
+    id: ble_reconnect_cycles
+    entity_category: diagnostic
+    state_class: total_increasing
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: 'return (float) id(reconnect_cycles);'
+
+  # NAN until the first notification ever received — an unknown age is not the
+  # same as a zero one, and reporting 0 would read as "just heard from it".
+  - platform: template
+    name: "BLE last notification age"
+    id: ble_last_notify_age
+    entity_category: diagnostic
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      if (id(last_notify_ms) == 0)
+        return NAN;
+      return (float) ((millis() - id(last_notify_ms)) / 1000);

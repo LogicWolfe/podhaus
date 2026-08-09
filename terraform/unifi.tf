@@ -83,3 +83,16 @@ resource "unifi_client" "fractal_windows" {
   fixed_ip = local.fractal_windows_ip
   # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
+
+# The ESP32-C3 bridging the burrow Turn Touch into Home Assistant. Pinned
+# because bilby's Alloy scrapes its Prometheus endpoint by address
+# (logging/bilby/alloy-conf/config.alloy) and Home Assistant's ESPHome entry
+# holds an address too. This client already exists in the controller as a DHCP
+# lease, so import before the first apply:
+#   terraform import unifi_client.turn_touch_burrow 1c:db:d4:f0:72:a8
+resource "unifi_client" "turn_touch_burrow" {
+  mac      = "1c:db:d4:f0:72:a8"
+  name     = "Turn Touch Burrow"
+  fixed_ip = local.turn_touch_burrow_ip
+  # No network_id: Default LAN, same constraint as the kangaroo clients.
+}

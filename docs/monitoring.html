@@ -52,6 +52,7 @@ kangaroo ─────────────► 10.0.0.119:4318       (cross
                   HyperDX UI  →  https://watch.pod.haus
 
 Gatus /metrics ──► bilby Alloy prometheus.scrape ──► same OTLP pipeline ──► ClickHouse
+ESPHome /metrics ─► bilby Alloy prometheus.scrape ──► same OTLP pipeline ──► ClickHouse
 
 Gatus service checks    ──► Fenwick /events ──► agent triage ──► Signal (Nathan)
 Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.com (backstop)</code></pre>
@@ -130,6 +131,25 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         are queryable and dashboardable in HyperDX. Gatus's own endpoint/heartbeat monitoring
         and the alert chain (Gatus → Fenwick, with the Postmark backstop) are unaffected by
         this.
+      </p>
+
+      <h3 id="esphome-metrics">ESPHome device metrics</h3>
+      <p>
+        IoT devices under <code>iot/esphome/</code> enable ESPHome's
+        <code>prometheus:</code> component, exposing every entity as OpenMetrics on the
+        device's own web server. bilby's Alloy scrapes each device at 60 s and bridges it
+        through the same authenticated exporter, landing under
+        <code>service.name = esphome</code> with <code>instance</code> separating devices.
+        This is the only telemetry path off these devices — ESPHome has no syslog output,
+        and the MQTT route would mean a broker plus a bridge process to carry log lines
+        that are worth less than the entity state. Targets are scraped by IP, since Docker's
+        resolver has no mDNS, so each device needs a UniFi DHCP reservation in
+        <code>terraform/unifi.tf</code>; without one a lease change ends the scrape with no
+        error anywhere. Kept deliberately narrow — roughly ten series per device — because
+        bilby's ClickHouse runs under a 4 GB cap, which is also why scraping Home
+        Assistant's <code>/api/prometheus</code> for every entity in the house is not a
+        like-for-like alternative. See
+        <a href="runbooks/ble-remotes.md">BLE remotes</a>.
       </p>
 
       <h3 id="adding-monitor">Adding a Gatus monitor</h3>
