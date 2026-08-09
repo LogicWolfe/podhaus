@@ -275,8 +275,24 @@ Pinelake rathole client will use.
 None of the above touches a service stack — those are in their own
 streams.
 
+## Bring-up is a playbook, not a script
+
+**Settled: neither a `pinelake_bootstrap` script nor a parameterised
+`kangaroo_bootstrap`.** pinelake is infrastructure and macOS ships a
+Python, so it is an ordinary Ansible target — the only reason kangaroo
+isn't one is that QTS has no interpreter at all.
+
+That means a `playbooks/pinelake.yml` plus membership in the existing
+role groups (`docker_hosts`, `komodo_periphery_hosts`), reusing the
+`komodo_periphery` role with a host_var'd docker socket for Colima.
+The macOS-specific parts are `community.general.homebrew` for packages
+and launchd units via `template:` + `command:` — the `pmset`/`caffeinate`
+and Colima sizing work above expressed as tasks rather than shell steps.
+Nothing in this stream needs a new bootstrap mechanism; if it appears to,
+that is the signal to fix the role instead. See
+[Host provisioning](../../host-provisioning.md) for the layer's contract
+(idempotency, `--check --diff` first, config-level verification).
+
 ## Open items deferred
 
 - Plex public exposure decision
-- Whether `pinelake_bootstrap` is a separate script or a parameterised
-  evolution of `kangaroo_bootstrap`

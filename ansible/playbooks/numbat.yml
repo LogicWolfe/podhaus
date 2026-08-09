@@ -6,10 +6,10 @@
 #   ansible-playbook playbooks/numbat.yml --check --diff   # read first
 #   ansible-playbook playbooks/numbat.yml
 #
-# Deliberately not yet in site.yml: numbat stays in `pending_migration`
-# until the live check-mode equivalence pass comes back clean (see
-# docs/plans/host-provisioning-migration.md). A fresh VM is brought here by
-# playbooks/numbat-bootstrap.yml first.
+# A single-host entry point, not a separate source of truth: numbat is in
+# `provisioned`, so `site.yml` covers it too and the two are equivalent
+# (`site.yml --limit numbat` reports the same changed=0). A fresh VM is
+# brought to this steady state by playbooks/numbat-bootstrap.yml first.
 ---
 - name: Provision numbat
   hosts: numbat

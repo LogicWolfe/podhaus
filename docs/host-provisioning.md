@@ -14,8 +14,7 @@ The boundary is **root state vs user state**, not infrastructure vs
 personal. It is drawn there because it is the only line that stays
 crisp: anything needing `sudo` is Ansible's, anything that doesn't is
 chezmoi's. The practical consequence is that **chezmoi never prompts for
-a password**. Its macOS branch was already sudo-free; the Linux branches
-move under Ansible as each host migrates.
+a password**.
 
 A host can take both. fractal does — it is a podhaus host *and* Nathan's
 development machine, so Ansible gives it Docker and Periphery while
@@ -62,20 +61,22 @@ The resulting ledger:
 | Periphery X25519 private keys | generated on bilby | `/opt/komodo/keys` on the control node only | `komodo_periphery` role |
 | Forgejo SSH host key | Forgejo container | committed literal in dotfiles (root of trust) | chezmoi `00-ssh-hostkeys` |
 
-## What is Ansible-managed today
+## Which hosts Ansible manages
 
-**fractal**, **bilby**, **numbat**, and **voltaire** are fully migrated
-(`provisioned`/`site.yml`). bilby's real run landed 2026-08-04 and the
-live-restore flip followed, so it carries the fleet-default daemon config
-with nothing held back. numbat's live run landed 2026-08-08 (`ok=43
-changed=10`, second run `changed=0`), reached through Pomerium with the
-`nathan@numbat` route selector in its connection vars; voltaire followed
-the same day (`ok=28 changed=13`, then `changed=0`), also through
-Pomerium, with its Docker engine freshly installed by the play and the
-old cloudflared tunnel and systemd rathole origin retired. kangaroo
-stays on its bootstrap script permanently. See
-[the migration plan](plans/host-provisioning-migration.md) for what
-is left (pinelake).
+**fractal**, **bilby**, **numbat**, and **voltaire** — the `provisioned`
+group, which is what `site.yml` targets. How each is reached is a
+per-host fact in `host_vars/`: bilby is the control node and runs
+against itself (`ansible_connection: local`); fractal is direct on the
+home LAN (`10.0.0.70`, the Windows host's `:22` forward); numbat and
+voltaire have no inbound path of their own and route through Pomerium,
+carrying `nathan@numbat` / `nathan@voltaire` as `ansible_user` — that is
+a Pomerium *route selector*, not an OS account, which is why
+OS-account work uses the separate `podhaus_operator` var.
+
+**kangaroo is not an Ansible target and never will be** — QTS ships no
+Python interpreter, so `kangaroo_bootstrap` is its permanent supported
+path. Nathan's MacBook is not in the inventory either: it is a personal
+device with chezmoi only, not infrastructure.
 
 ## Layout
 
@@ -108,24 +109,23 @@ ansible/
 
 ### Inventory groups
 
-Hosts are grouped twice: by **migration state** and by **role**.
+Hosts are grouped twice: by **whether Ansible manages them**, and by
+**role**.
 
-- `provisioned` — fully Ansible-owned: fractal, bilby, numbat, and
+- `provisioned` — the Ansible-owned hosts: fractal, bilby, numbat, and
   voltaire. `site.yml` targets this group and nothing else, gating each
   role (including single-host ones like `nfs_binds`, `firewalld`, and
   `numbat_edge`) on the matching role group rather than on hostname, so a
-  future host inherits the right roles from group membership alone.
-- `pending_migration` — currently empty; pinelake joins here when its
-  migration starts. Present so the inventory is honest about the fleet.
-  **No playbook targets this group as a group.** Migrating a host means
-  moving it between the two groups by hand, after its check-mode pass
-  comes back clean.
+  new host inherits the right roles from group membership alone.
 - `excluded` — kangaroo. QTS ships no Python interpreter at all (no
   `python3`, no `/opt/bin/python3`, only the MalwareRemover and
   Container Station QPKGs), so it can never be an Ansible target.
-  `kangaroo_bootstrap` is permanent, not interim.
-- `docker_hosts`, `komodo_periphery_hosts`, `devboxes` — role groups.
-  `site.yml` gates each role on membership.
+  `kangaroo_bootstrap` is permanent, not interim. It is listed here
+  rather than omitted so the inventory shows the whole fleet, with
+  `ansible_host: unreachable.invalid` so a stray `--limit` can't dial it.
+- `docker_hosts`, `komodo_periphery_hosts`, `devboxes`, `edge_hosts`,
+  `komodo_core_hosts`, `nfs_binds_hosts`, `firewalld_hosts` — role
+  groups. `site.yml` gates each role on membership.
 
 ## Running it
 
@@ -152,6 +152,14 @@ configured anywhere in the layer.
 Idempotency is the contract, and it is checked by machine rather than
 asserted: a second run of `playbooks/fractal.yml` reports `changed=0`
 across every task. Treat a non-zero second run as a bug in the role.
+
+**Read `--check --diff` before every real run against a host that is
+already carrying load**, and audit each reported delta — an unexplained
+change on a live host is the signal that a role has drifted from what
+the machine actually runs. Verify the result with a config-level signal
+per subsystem (Komodo reporting `state=Ok`, rathole control channels
+established, `sshd -T`), never "the container is healthy": a container
+being up proves it started, not that it is doing its job.
 
 ## Roles worth knowing about
 
@@ -240,8 +248,18 @@ starts the rathole relay **before** Periphery (Periphery dials
 `core-connect.pod.haus`, which resolves back through this host's own
 relay), enrolls the Tailscale recovery daemon, and closes 2222 last —
 scheduling the stop of the bootstrap sshd three seconds after the play
-disconnects. Like the script it replaced, the bootstrap play is only
-truly exercised by the next rebuild.
+disconnects.
+
+The bootstrap play is only truly exercised by an actual rebuild, and
+that is left as-is deliberately. Forcing an exercise of it means
+`terraform apply -replace=binarylane_server.numbat`, and numbat's two
+public IPv4s come from `public_ipv4_count` on the server resource — they
+are allocated per-VM, with no reserved or floating IP in front — so a
+replace lands two new addresses and a real production DNS cutover across
+every record derived from them, plus a Pomerium Autocert cache that is
+not preserved. The play gets its real test the day numbat actually needs
+rebuilding; the runbook for that is
+[Fresh Numbat from scratch](disaster-recovery.html#numbat-rebuild).
 
 `playbooks/numbat.yml` is the steady state — base, docker, numbat_edge,
 sshd_pomerium_ca, komodo_periphery — reached through Pomerium like any

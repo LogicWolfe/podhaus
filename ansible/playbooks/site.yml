@@ -1,9 +1,9 @@
 # Fleet entry point.
 #
-# Targets the `provisioned` group only — hosts still owned by their bootstrap
-# scripts are in `pending_migration` and are not touched. Migrating one means
-# moving it between those groups deliberately, after its check-mode
-# equivalence pass comes back clean.
+# Targets the `provisioned` group only. Each role is gated on a role group
+# rather than a hostname, so a new host inherits the right roles from its
+# group membership alone. kangaroo is in `excluded` and can never be a
+# target (QTS has no Python); `kangaroo_bootstrap` covers it.
 ---
 - name: Provision podhaus hosts
   hosts: provisioned

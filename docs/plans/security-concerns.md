@@ -156,9 +156,9 @@ where a boundary is.
       `kookaburra/*`, `logging/kookaburra/alloy-conf/`,
       `terraform/modules/pod_haus_service/`, and `docs/plans/pomerium-edge/`.
       The last one reads as an in-flight workstream.
-- [ ] Fix the doc path in `ansible/inventory/hosts.yml`, which points at
-      `docs/plans/host-provisioning/index.md`; the file is
-      `docs/plans/host-provisioning-migration.md`.
+- [x] Fix the stale doc path in `ansible/inventory/hosts.yml`. Resolved
+      by the plan's retirement: the inventory now points at
+      `docs/host-provisioning.md`, which is durable.
 
 The kookaburra references in `komodo/sync/procedures.toml` and
 `tools/lint-stack-toml.py` are legitimate rationale for a live rule. Leave
