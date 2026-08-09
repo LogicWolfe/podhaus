@@ -292,12 +292,12 @@
       </p>
       <p>
         Docker is the host's <strong>single container engine</strong>. The rootless
-        podman that predated provisioning was retired: its one container (the
+        podman that predated provisioning is gone: its one container (the
         <code>hybrid-sim-postgres-dev</code> dev database) was dump/restored into a
-        docker container of the same name, published on loopback only. The podman
-        package itself remains installed until the spike work that might still
-        reference it wraps up; the stopped podman container and its volume are kept as
-        a rollback until then.
+        docker container of the same name, published on loopback only, and the
+        podman package (plus its own-only dependencies — conmon, netavark,
+        aardvark-dns, crun) was removed. The <code>docker</code> role asserts podman
+        absent on every engine-managed host so it can't creep back.
       </p>
       <p>
         <strong>voltaire has no backup stack</strong>, for the same reasons as fractal:

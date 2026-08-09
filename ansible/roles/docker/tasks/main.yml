@@ -29,6 +29,18 @@
     state: present
   when: podhaus_docker_engine_managed
 
+- name: Assert podman is absent
+  # Docker is the fleet's single container engine. voltaire arrived
+  # podman-only (its dev postgres container has since been dump/restored
+  # onto docker); this keeps it from creeping back on any engine-managed
+  # host. dnf's remove pulls podman's own-only dependencies (conmon,
+  # netavark, aardvark-dns, crun, ...) with it, so a bare presence check
+  # is enough — no separate cleanup of those needed.
+  ansible.builtin.dnf:
+    name: podman
+    state: absent
+  when: podhaus_docker_engine_managed
+
 - name: Install the daemon-API Python bindings
   # community.docker talks to the daemon's HTTP API through requests. A task
   # of its own, outside the engine gate, because the network tasks below need

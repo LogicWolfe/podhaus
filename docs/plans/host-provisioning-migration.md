@@ -6,24 +6,16 @@ equivalence pass, a real run, and a second run at `changed=0`), kangaroo
 is permanently `excluded` (QTS has no Python — `kangaroo_bootstrap` is
 the supported path, including Pomerium SSH CA trust), and the retired
 bootstrap scripts (`numbat_bootstrap`, `pomerium-ssh-origin-bootstrap`,
-`bilby/host-systemd`, `bilby/firewalld`) are deleted. The resulting
-system is documented in [Host provisioning](../host-provisioning.md)
-(including the one-producer / one-channel / zero-copies ledger) and
+`bilby/host-systemd`, `bilby/firewalld`) are deleted. Docker is the
+fleet's single container engine everywhere it's host-managed (the
+`docker` role asserts podman absent on every
+`podhaus_docker_engine_managed` host, closing the gap voltaire's
+podman-only history opened). The resulting system is documented in
+[Host provisioning](../host-provisioning.md) (including the
+one-producer / one-channel / zero-copies ledger) and
 [Hosts](../hosts.html).
 
 What's left:
-
-## voltaire: podman package removal
-
-Docker is voltaire's single container engine and its one podman
-container (`hybrid-sim-postgres-dev`) has been dump/restored into
-docker. Remaining, gated on the hybrid-haul spike work wrapping (or on
-confirming none of its in-flight agents shell out to the podman CLI):
-
-- [ ] Remove the stopped podman container + `hybrid_sim_postgres_data`
-  podman volume (kept as the migration rollback until the gate clears).
-- [ ] Remove the podman package, and have the Ansible docker role
-  assert podman absent so it can't creep back.
 
 ## numbat: bootstrap play
 
