@@ -495,7 +495,7 @@
           sequence:
             - action: scene.turn_on
               target:
-                entity_id: scene.burrow_lighter_orange
+                entity_id: scene.burrow_burrow_lighter_orange
             - action: light.turn_off
               target:
                 entity_id: light.haiku_fan_4
