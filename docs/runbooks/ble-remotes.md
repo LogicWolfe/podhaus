@@ -75,8 +75,15 @@ Mappings live in `home-assistant/config/automations.yaml` as
 classifies two quick taps as a double, so anyone who presses again because the
 room did not react sends `double` — the one event that would otherwise be
 ignored. Binding only `press` makes a marginal link read as a completely dead
-remote. Hold stays unbound deliberately; without a filter a hold would fire the
-scene a second time.
+remote.
+
+**`hold` is bound, and mirrors its own button rather than doing something
+unrelated.** Each direction's hold runs a variant of that direction's own
+scene — e.g. North-hold is Bright pinned to 100% brightness, South-hold turns
+the fan light off (or, once it's already off, halves the room's current
+brightness instead). See the `turn_touch_burrow_lights` docstring in
+`automations.yaml` for the exact scene/brightness mapping per button; it
+changes independently of this page.
 
 `not_from: [unknown, unavailable]` on every trigger guards the restore
 transitions that fire when the device reconnects or the integration reloads.
@@ -93,6 +100,14 @@ diverging.
 
 ## Gotchas
 
+- **A Hue scene named with the room prefix already baked in doubles up in
+  HA.** The Hue integration always prefixes scene entity_ids with the room
+  slug, so a scene created in the Hue app as e.g. "Burrow Lighter orange"
+  becomes `scene.burrow_burrow_lighter_orange`, not
+  `scene.burrow_lighter_orange`. Check the real entity_id via `/api/states`
+  (or the frontend) before wiring a new scene into an automation — a wrong
+  entity_id fails `scene.turn_on` silently, and `check_config` won't catch
+  it either since it doesn't validate entity existence.
 - **Events fire and forget.** If the HA API connection is down when a button is
   pressed, that event is lost, not queued. A flaky wifi link therefore presents
   as buttons that silently do nothing, with no error anywhere.
