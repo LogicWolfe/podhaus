@@ -49,13 +49,18 @@ isn't in the Ansible inventory at all. Within that:
   forking that into chezmoi means we maintain it.
 - **Per-host enrolment is a deliberate human act** (machine-key /
   op-vault-mint pattern): `cc-clip setup <host>` from the Mac, once
-  per devbox.
+  per devbox — but chezmoi detects the gap: after a Mac
+  `chezmoi-update`, `__ccclip_nudge` (added 2026-08-11) diffs the
+  fleet.toml devbox list against `cc-clip hosts list` and prints the
+  exact `cc-clip setup` commands for any missing host, staying silent
+  otherwise. Adding a devbox to fleet.toml is the whole declaration;
+  the next Mac shell says what to run.
 
 ## Rollout
 
-- [ ] Mac: `cc-clip update` first (install is months old), then
-      `cc-clip setup voltaire.pod.haus` and `cc-clip setup
-      fractal.pod.haus`
+- [ ] Mac: `cc-clip update` first (install is months old), then run
+      the `cc-clip setup` line the shell nudge prints (expected:
+      voltaire.pod.haus + fractal.pod.haus)
 - [ ] Reconnect SSH (the forward rides the connection), verify on
       voltaire: `ss -tln | grep 18339`, then Ctrl+V an image into
       Claude Code — plain shell and inside tmux
