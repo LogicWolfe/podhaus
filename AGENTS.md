@@ -545,6 +545,14 @@ These have failure modes that you must not introduce:
   for files_on_host and linked_repo; Stage 3 restarts ofelia for
   label re-read. Push is not cheap and not a no-op — treat it as a
   deploy.
+  **CRITICAL (2026-08-11): a push made from any machine other than bilby
+  currently deploys NOTHING** — every procedure stage reads bilby's
+  working clone (`~/repos/podhaus`), which nothing pulls, so the webhook
+  runs green against a stale tree. Until the fix lands
+  ([`docs/plans/push-deploy-stale-bilby-checkout.md`](docs/plans/push-deploy-stale-bilby-checkout.md)),
+  follow any non-bilby push of stack-affecting changes with:
+  `ssh bilby.pod.haus 'cd ~/repos/podhaus && git pull --ff-only'` then
+  `ssh bilby.pod.haus 'cd ~/repos/podhaus && fish -lc ./komodo-sync'`.
 - **Before adding or modifying a Cloudflare / UniFi / GitHub TF
   resource, read the provider's resource doc.** Schemas change
   between minor versions and `terraform apply` errors with "Attribute X
