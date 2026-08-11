@@ -101,3 +101,47 @@
     mode: "0644"
   when: podhaus_wsl_vault_keys is defined
   notify: Reload sshd for the vault
+
+# ---- X11 socket directory ---------------------------------------------
+# WSL init (re)creates /tmp/.X11-unix -> /mnt/wslg/.X11-unix at every
+# instance start, but automount is disabled on this guest so /mnt/wslg
+# never exists and the link dangles. Anything needing a local X socket —
+# cc-clip's Xvfb for the Codex clipboard bridge — chases it into nothing
+# and fails to bind on every display number. The unit swaps the debris
+# for a real sticky directory each boot, conditioned tightly so a guest
+# that actually ran WSLg would keep its working link.
+
+- name: Install the X11 socket directory unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/wsl-x11-socket-dir.service
+    content: |
+      [Unit]
+      Description=Replace WSL's dangling WSLg X11 socket symlink with a real directory
+      # The symlink is laid down by WSL init before systemd starts; make
+      # sure the tmpfs /tmp is in place before touching anything under it.
+      After=tmp.mount
+      RequiresMountsFor=/tmp
+      # Scope strictly to the broken shape: a symlink whose WSLg target is
+      # absent. Skips (successfully) when WSLg is real or nothing is there.
+      ConditionPathIsSymbolicLink=/tmp/.X11-unix
+      ConditionPathExists=!/mnt/wslg/.X11-unix
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/bin/rm /tmp/.X11-unix
+      ExecStart=/usr/bin/mkdir -m 1777 /tmp/.X11-unix
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  register: wsl_x11_unit
+
+- name: Enable and start the X11 socket directory unit
+  ansible.builtin.systemd_service:
+    name: wsl-x11-socket-dir.service
+    enabled: true
+    state: started
+    daemon_reload: "{{ wsl_x11_unit is changed }}"
