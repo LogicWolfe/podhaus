@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Unlock the encrypted /home. Run once per WSL instance start, over SSH.
+#
+#   sudo unlock-home
+#
+# Interactive by design: the passphrase is never stored on this machine, so
+# nothing here can run unattended. The guest comes up with /home locked and
+# stays that way until a human answers the prompt.
+set -euo pipefail
+
+MAPPER=vault
+
+if [[ $EUID -ne 0 ]]; then
+    echo "Run as root: sudo unlock-home" >&2
+    exit 1
+fi
+
+if mountpoint -q /home; then
+    echo "/home is already mounted. Nothing to do."
+    exit 0
+fi
+
+echo "==> Locating the LUKS volume"
+DEV=""
+while read -r name type; do
+    [[ "$type" == "disk" ]] || continue
+    if [[ "$(blkid -o value -s TYPE "/dev/$name" 2>/dev/null || true)" == "crypto_LUKS" ]]; then
+        DEV="/dev/$name"
+        break
+    fi
+done < <(lsblk -dn -o NAME,TYPE)
+
+if [[ -z "$DEV" ]]; then
+    echo "ERROR: no LUKS device found." >&2
+    echo "The vault VHDX is probably not attached. From Windows (elevated):" >&2
+    echo '  wsl --mount --vhd C:\WSL\fedora-vault.vhdx --bare' >&2
+    exit 1
+fi
+echo "    found $DEV"
+
+if [[ ! -e "/dev/mapper/$MAPPER" ]]; then
+    echo "==> Unlocking (passphrase prompt follows)"
+    cryptsetup luksOpen "$DEV" "$MAPPER"
+else
+    echo "    already unlocked"
+fi
+
+echo "==> Mounting /home"
+mount "/dev/mapper/$MAPPER" /home
+
+echo
+echo "/home unlocked:"
+df -h /home | tail -1

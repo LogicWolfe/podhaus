@@ -1,0 +1,62 @@
+# Unlock the LUKS /home from the first interactive login after a WSL instance
+# start, then hand back a session indistinguishable from a normal one.
+#
+# WHY THIS LIVES IN /etc AND NOT IN chezmoi: everything chezmoi manages is on
+# /home, which is exactly what is unreadable when this needs to run. A hook for
+# the locked state cannot live inside the thing that is locked.
+#
+# WHY A SHELL HOOK AND NOT sshd/PAM: an sshd ForceCommand would also intercept
+# `ssh fractal <cmd>`, scp and sftp, so every non-interactive caller (Ansible,
+# agents, cc-clip) would have to be taught to step around it. A PAM hook would
+# cover those too, but a wrong answer in the PAM stack costs SSH access to a
+# machine whose console is a Windows terminal. This fires only where a human is
+# already typing, and the worst failure is the shell you would have got anyway.
+#
+# The exec at the end is the point of the whole file. Unlocking mid-session
+# leaves the shell holding a config, PATH and SSH_AUTH_SOCK it resolved while
+# /home was missing; re-execing re-runs the whole startup sequence against the
+# now-present home, which is what makes this equivalent to reconnecting.
+
+if not status is-interactive
+    return
+end
+
+# No TTY means no way to answer the passphrase prompt — cryptsetup would fail
+# and take the login down with it.
+if not isatty stdin
+    return
+end
+
+# Only the operator's own login should be able to trigger a passphrase prompt.
+if test (id -un) != {{ podhaus_operator }}
+    return
+end
+
+if mountpoint -q /home
+    return
+end
+
+# Survives the exec below, so a failed unlock degrades to an ordinary (if
+# unconfigured) shell instead of re-entering this file forever. On the success
+# path the mountpoint check above returns first and this never comes up.
+if set -q __PODHAUS_HOME_UNLOCK_TRIED
+    return
+end
+set -gx __PODHAUS_HOME_UNLOCK_TRIED 1
+
+if not sudo unlock-home
+    echo "home-unlock: /home is still locked; continuing with an unconfigured shell." >&2
+    return
+end
+
+# The systemd user manager started while /home was locked, so its view of
+# ~/.config/systemd/user is empty and stayed that way — nothing re-reads the
+# unit search path on its own. Without this, machine-ssh-agent.service never
+# starts, and the shell below comes up with no SSH_AUTH_SOCK.
+#
+# Both calls are advisory: a session without a user manager should still get
+# its shell, so neither failure aborts the login.
+systemctl --user daemon-reload 2>/dev/null
+systemctl --user start default.target 2>/dev/null
+
+exec fish -l

@@ -102,6 +102,94 @@
   when: podhaus_wsl_vault_keys is defined
   notify: Reload sshd for the vault
 
+# ---- LAN DNS ----------------------------------------------------------
+# [network] generateResolvConf=false means the guest keeps whatever is
+# written here, so this file is ours to own. The image shipped pointing at
+# public resolvers, made immutable to stop WSL rewriting it — bringup
+# residue predating both that wsl.conf key and split-horizon DNS.
+#
+# Public resolvers cannot see the internal view. A records for LAN hosts
+# exist only on the UniFi resolver (podhaus
+# terraform/dns_unifi_split_horizon.tf), so bilby.pod.haus resolved to
+# nothing from this guest while resolving fine from the Windows host beside
+# it. One nameserver and not two on purpose: a public resolver listed as a
+# second entry gets used on rotation, which turns a clean failure into
+# intermittently missing internal names.
+
+- name: Clear the immutable flag from the bringup resolv.conf
+  # Redundant once WSL is told not to generate the file, and it blocks the
+  # write below. A no-op on a file that is already mutable.
+  ansible.builtin.file:
+    path: /etc/resolv.conf
+    attributes: "-i"
+  when: podhaus_wsl_resolver is defined
+
+- name: Point the guest at the LAN resolver
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    content: |
+      # Managed by Ansible (podhaus wsl role). The UniFi resolver serves the
+      # split-horizon view of pod.haus and forwards everything else.
+      nameserver {{ podhaus_wsl_resolver }}
+    owner: root
+    group: root
+    mode: "0644"
+  when: podhaus_wsl_resolver is defined
+
+# ---- Encrypted /home unlock -------------------------------------------
+# The other half of the vault above: that one gets the operator in while
+# /home is locked, this one gets /home open once he is. Also hand-rolled
+# ahead of Ansible (2026-07-25, from /root/setup); owned here since
+# 2026-08-13.
+#
+# Deliberately interactive and deliberately not in /etc/crypttab: the
+# passphrase lives only in Nathan's head, so the guest can restart
+# unattended — as Windows makes it do — and still come up with /home shut.
+
+- name: Provision the /home unlock command
+  ansible.builtin.copy:
+    src: unlock-home
+    dest: /usr/local/sbin/unlock-home
+    owner: root
+    group: root
+    mode: "0755"
+  when: podhaus_wsl_encrypted_home | default(false)
+
+- name: Remove the pre-Ansible copy of the unlock command
+  # Hand-installed into /usr/local/bin even though its own usage text said
+  # sbin. Both sit on root's secure_path, so leaving the stray copy behind
+  # means two scripts drifting apart with `sudo unlock-home` silently
+  # resolving to whichever comes first.
+  ansible.builtin.file:
+    path: /usr/local/bin/unlock-home
+    state: absent
+  when: podhaus_wsl_encrypted_home | default(false)
+
+- name: Provision the system fish config directory
+  # Normally the fish package's, but the hook below is useless if it lands
+  # anywhere else, so do not depend on install order to have created it.
+  ansible.builtin.file:
+    path: /etc/fish/conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: podhaus_wsl_encrypted_home | default(false)
+
+- name: Install the login-time /home unlock hook
+  # Fires on the operator's first interactive login after an instance start,
+  # unlocks, then re-execs so the session is configured as if it had begun
+  # with /home present. See the file's own header for why it is a shell hook
+  # rather than an sshd or PAM one. Only reached when the login shell is
+  # fish; a non-fish shell falls back to running `sudo unlock-home` by hand.
+  ansible.builtin.template:
+    src: home-unlock.fish.j2
+    dest: /etc/fish/conf.d/00-home-unlock.fish
+    owner: root
+    group: root
+    mode: "0644"
+  when: podhaus_wsl_encrypted_home | default(false)
+
 # ---- X11 socket directory ---------------------------------------------
 # WSL init (re)creates /tmp/.X11-unix -> /mnt/wslg/.X11-unix at every
 # instance start, but automount is disabled on this guest so /mnt/wslg

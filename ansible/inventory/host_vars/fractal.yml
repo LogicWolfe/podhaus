@@ -38,6 +38,17 @@ podhaus_wsl_vault_keys:
   - >-
     ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM= bilby-machine-key
 
+# The UniFi gateway, which serves the split-horizon view of pod.haus. The
+# guest's public resolvers could not see it, so LAN hostnames resolved from
+# the Windows host but not from inside WSL. Routes fine over WSL NAT.
+podhaus_wsl_resolver: 10.0.0.1
+
+# /home is a LUKS volume on a separate VHDX, unlocked by hand once per WSL
+# instance start. Nothing stores the passphrase, so an unattended restart
+# leaves it locked on purpose. This turns on both halves of the wsl role's
+# handling: the `unlock-home` command and the login hook that runs it.
+podhaus_wsl_encrypted_home: true
+
 # Development machine ---------------------------------------------------
 # Nathan clones what he works on; nothing here manufactures a repo manifest
 # that would immediately drift from reality. The docs server serves whatever
