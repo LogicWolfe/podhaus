@@ -147,22 +147,16 @@
 # unattended — as Windows makes it do — and still come up with /home shut.
 
 - name: Provision the /home unlock command
+  # /usr/local/bin and not /usr/local/sbin, which the script's own usage text
+  # used to claim: Fedora ships /usr/local/sbin as a symlink to bin, so the
+  # two paths are one file. Writing via the sbin name and then tidying away
+  # "the other copy" would delete the command outright.
   ansible.builtin.copy:
     src: unlock-home
-    dest: /usr/local/sbin/unlock-home
+    dest: /usr/local/bin/unlock-home
     owner: root
     group: root
     mode: "0755"
-  when: podhaus_wsl_encrypted_home | default(false)
-
-- name: Remove the pre-Ansible copy of the unlock command
-  # Hand-installed into /usr/local/bin even though its own usage text said
-  # sbin. Both sit on root's secure_path, so leaving the stray copy behind
-  # means two scripts drifting apart with `sudo unlock-home` silently
-  # resolving to whichever comes first.
-  ansible.builtin.file:
-    path: /usr/local/bin/unlock-home
-    state: absent
   when: podhaus_wsl_encrypted_home | default(false)
 
 - name: Provision the system fish config directory
