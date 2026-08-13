@@ -22,6 +22,8 @@
       tags: [docker]
     - role: numbat_edge
       tags: [edge]
+    - role: authorized_keys
+      tags: [ssh]
     - role: sshd_pomerium_ca
       tags: [ssh]
     - role: komodo_periphery

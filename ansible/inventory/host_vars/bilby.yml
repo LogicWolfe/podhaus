@@ -34,3 +34,10 @@ podhaus_extra_networks:
     labels:
       fenwick.net: webagent-quarantine
       managed-by: fenwick-repo
+
+# Machine key: YubiKey PIV, hardware-resident, served by
+# machine-ssh-agent.service. Public half declared here so the
+# authorized_keys role can grant it on peers; see group_vars/all.yml.
+podhaus_machine_key: >-
+  ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM=
+  bilby machine key

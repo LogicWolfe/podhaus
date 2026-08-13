@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# Rendered whole from inventory group membership, so removing a host from an
+# SSH access group revokes it here on the next run. Edit the policy in
+# inventory/hosts.yml and the keys in host_vars — never this file.
+#
+# Grants on {{ inventory_hostname }}:
+{% if inventory_hostname in (groups['homelab_targets'] | default([])) %}
+#   homelab target — authorizes Nathan's personal key and every homelab
+#   development machine
+{% endif %}
+{% if inventory_hostname in (groups['remote_dev_machines'] | default([])) %}
+#   development machine — also authorizes its peers in the mesh
+{% endif %}
+{% for key in podhaus_authorized_key_set %}
+{{ key }}
+{% endfor %}

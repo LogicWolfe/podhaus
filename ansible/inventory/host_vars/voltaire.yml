@@ -26,3 +26,10 @@ podhaus_repos_dir: /home/nathan/repos
 # komodo_periphery role default already matches (/opt/komodo-periphery
 # layout, keys streamed from the control node, Core polled on
 # localhost:9120) — nothing to override.
+
+# Machine key: TPM-resident, served by machine-ssh-agent.service. Public
+# half declared here so the authorized_keys role can grant it on peers;
+# see group_vars/all.yml.
+podhaus_machine_key: >-
+  ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBOzuSyhdhW8qk35HF8k7ftbnXPJrGEKGpf0QSdD2VCddcAX3NGMIa21nalGFpBOFK3QDBgd+nOogSOC8H/vzEjY=
+  voltaire machine key

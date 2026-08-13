@@ -20,6 +20,8 @@
   roles:
     - role: docker
       tags: [docker]
+    - role: authorized_keys
+      tags: [ssh]
     - role: sshd_pomerium_ca
       tags: [ssh]
     - role: nfs_binds

@@ -27,7 +27,29 @@ podhaus_operator: nathan
 # Auth to every host rides the operator's agent. On bilby that is op-unlock;
 # pinned explicitly rather than left ambient so a future `Host *`
 # IdentityAgent line in ~/.ssh/config cannot silently redirect it (the same
-# trap the opssh procedure and numbat bootstrap already guard against).
+# trap the ssh procedure and numbat bootstrap already guard against).
 ansible_ssh_common_args: >-
   -o IdentityAgent={{ lookup('env', 'SSH_AUTH_SOCK') }}
   -o ConnectTimeout=15
+
+# ---- SSH identities -------------------------------------------------
+# Public halves live here because inventory IS Ansible's configuration
+# store, and host-provisioning.md's one-producer rule already says a host
+# keeps its private key and "only the public half committed or documented".
+# 1Password is the channel for material that needs protecting; these need a
+# single authoritative location, not secrecy. What was wrong before was six
+# copies of the same literal, not the literals themselves.
+#
+# Per-host machine keys are declared as podhaus_machine_key in host_vars,
+# beside the host that mints them. The authorized_keys role reads both
+# through hostvars, so adding a machine key to a host is one line and the
+# fleet's access policy follows from group membership alone.
+
+# Nathan's personal key. The MacBook has no machine key — machine-key-mode
+# returns none on darwin by construction — so this is the identity it, and
+# he, connect with. Also injected into numbat at create time by Terraform
+# (terraform/ssh_authorized_key.pub), which is upstream of Ansible and
+# stays a separate copy for that reason.
+podhaus_personal_key: >-
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZSaoga8/dYnCgeiOSaV+3Xe5Tl6AkBpqO0T863ZajR
+  Nathan personal key

@@ -24,6 +24,8 @@
     - role: numbat_edge
       when: inventory_hostname in groups['edge_hosts']
       tags: [edge]
+    - role: authorized_keys
+      tags: [ssh]
     - role: sshd_pomerium_ca
       tags: [ssh]
     - role: komodo_periphery

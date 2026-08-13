@@ -1,0 +1,99 @@
+# Host-to-host SSH authorization.
+#
+# The access policy lives in inventory group membership (see the SSH access
+# policy section of inventory/hosts.yml) and the public keys live beside the
+# hosts that mint them (podhaus_machine_key in host_vars). This role is only
+# the mechanism that turns the two into a file.
+#
+# Two things are deliberate:
+#
+# The file is rendered whole, not appended to. An authorized_keys managed by
+# add-this-key tasks can never revoke anything — dropping a host from a group
+# would leave its key in place forever. Rendering the complete set means
+# membership is the only input and removal works by construction.
+#
+# It lands in /etc/ssh/authorized_keys/%u rather than ~/.ssh/authorized_keys.
+# That is root-owned, so a compromised operator account cannot authorize
+# itself, and it keeps working on a host whose /home is an encrypted volume
+# that has not been unlocked yet — which is why fractal needed this shape
+# first. Making it universal also settles which layer owns the decision:
+# Ansible writes this file, chezmoi does not write authorized_keys at all.
+---
+- name: Work out which machines may log into this host
+  # Union of the two rules: development machines mesh with each other, and
+  # homelab development machines additionally reach every homelab target.
+  ansible.builtin.set_fact:
+    podhaus_ssh_peers: >-
+      {{ (_mesh + _homelab) | unique | difference([inventory_hostname]) | sort }}
+  vars:
+    _mesh: >-
+      {{ groups['remote_dev_machines'] | default([])
+         if inventory_hostname in (groups['remote_dev_machines'] | default([]))
+         else [] }}
+    _homelab: >-
+      {{ groups['homelab_dev_machines'] | default([])
+         if inventory_hostname in (groups['homelab_targets'] | default([]))
+         else [] }}
+
+- name: Require a declared machine key for every peer
+  # A host in an access group with no key is a policy that cannot be
+  # honoured. Fail here rather than render a file that quietly grants less
+  # than the inventory says it does.
+  ansible.builtin.assert:
+    that: hostvars[item].podhaus_machine_key is defined
+    fail_msg: >-
+      {{ item }} is in an SSH access group but declares no
+      podhaus_machine_key in host_vars.
+  loop: "{{ podhaus_ssh_peers }}"
+
+- name: Assemble the authorized key set
+  ansible.builtin.set_fact:
+    podhaus_authorized_key_set: "{{ (_personal + _peer_keys) | unique }}"
+  vars:
+    # Nathan's own key, which is how the MacBook connects: it has no machine
+    # key of its own, so it rides this one into every homelab target.
+    _personal: >-
+      {{ [podhaus_personal_key]
+         if inventory_hostname in (groups['homelab_targets'] | default([]))
+         else [] }}
+    _peer_keys: >-
+      {{ podhaus_ssh_peers | map('extract', hostvars, 'podhaus_machine_key') | list }}
+
+- name: Refuse to render an empty authorized_keys
+  # sshd would still accept Pomerium's user CA, so an empty file is not an
+  # immediate lockout — which is exactly why it could go unnoticed. Treat it
+  # as the configuration error it is.
+  ansible.builtin.assert:
+    that: podhaus_authorized_key_set | length > 0
+    fail_msg: >-
+      Computed an empty authorized_keys for {{ inventory_hostname }}. It is
+      in no SSH access group, so nothing would be able to reach it directly.
+
+- name: Provision the authorized keys directory
+  ansible.builtin.file:
+    path: /etc/ssh/authorized_keys
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the operator's authorized keys
+  ansible.builtin.template:
+    src: authorized_keys.j2
+    dest: "/etc/ssh/authorized_keys/{{ podhaus_operator }}"
+    owner: root
+    group: "{{ podhaus_operator }}"
+    mode: "0640"
+
+- name: Point sshd at the managed authorized keys
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/15-authorized-keys.conf
+    content: |
+      # Managed by Ansible (podhaus authorized_keys role).
+      # Root-owned and off /home, so it survives an encrypted home that has
+      # not been unlocked and cannot be edited by the account it authorizes.
+      AuthorizedKeysFile /etc/ssh/authorized_keys/%u
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload sshd for authorized keys

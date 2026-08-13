@@ -59,47 +59,26 @@
       Windows' own next WSL instance restart — no action needed.
   when: wsl_hostname_conf is changed
 
-# ---- SSH key vault ----------------------------------------------------
-# On a guest whose /home is LUKS-encrypted and unlocked manually after
-# each instance start, sshd cannot read ~/.ssh/authorized_keys until the
-# operator is already in — a bootstrap deadlock. The vault keeps public
-# keys on the unencrypted root so SSH works pre-unlock. Predates Ansible
-# (hand-rolled 2026-07-25); owned here since 2026-08-08.
+# ---- sshd hardening ---------------------------------------------------
+# The key vault that used to live here — public keys on the unencrypted
+# root, so sshd can authenticate before the LUKS /home is unlocked — is now
+# the fleet-wide authorized_keys role, which renders the same path on every
+# host. What stays is the inbound hardening, which is a property of this
+# guest's exposure (a Windows :22 forward from the LAN) rather than of the
+# access policy.
 
-- name: Provision the SSH key vault directory
-  ansible.builtin.file:
-    path: /etc/ssh/authorized_keys
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  when: podhaus_wsl_vault_keys is defined
-
-- name: Install the operator's vaulted authorized keys
-  ansible.builtin.copy:
-    dest: "/etc/ssh/authorized_keys/{{ podhaus_operator }}"
-    content: |
-      {% for key in podhaus_wsl_vault_keys %}
-      {{ key }}
-      {% endfor %}
-    owner: root
-    group: "{{ podhaus_operator }}"
-    mode: "0640"
-  when: podhaus_wsl_vault_keys is defined
-
-- name: Point sshd at the vault
+- name: Harden inbound sshd on the guest
   ansible.builtin.copy:
     dest: /etc/ssh/sshd_config.d/10-wsl-vault.conf
     content: |
-      # Public keys live outside /home so login works while /home is still locked.
-      AuthorizedKeysFile /etc/ssh/authorized_keys/%u
+      # Managed by Ansible (podhaus wsl role). AuthorizedKeysFile is set by
+      # the authorized_keys role in 15-authorized-keys.conf.
       PasswordAuthentication no
       PermitRootLogin no
       KbdInteractiveAuthentication no
     owner: root
     group: root
     mode: "0644"
-  when: podhaus_wsl_vault_keys is defined
   notify: Reload sshd for the vault
 
 # ---- LAN DNS ----------------------------------------------------------

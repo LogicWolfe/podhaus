@@ -27,16 +27,15 @@ podhaus_hostname: fractal
 # Ansible only installs the tooling, never key material.
 podhaus_machine_key_mode: soft
 
-# Public keys served by sshd from outside the LUKS-locked /home (the wsl
-# role's SSH key vault — see its tasks for why). Nathan's personal key and
-# bilby's machine key, so both he and the bilby-resident agents keep
-# direct 10.0.0.70 access with no Pomerium dependency, including right
-# after an instance restart while /home is still locked.
-podhaus_wsl_vault_keys:
-  - >-
-    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZSaoga8/dYnCgeiOSaV+3Xe5Tl6AkBpqO0T863ZajR
-  - >-
-    ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM= bilby-machine-key
+# The soft key itself. An earlier ~/.ssh/id_ was minted a minute before this
+# one, while the guest still answered to its pre-rename hostname, and it was
+# registered with Pomerium and left there — a drifted duplicate that no agent
+# ever served. Deregistered 2026-08-13; this is the live identity, and the
+# agent is the check: machine-ssh-agent-load derives the filename from the
+# hostname, so `ssh-add -L` on the host is always the authority.
+podhaus_machine_key: >-
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGc4palJ9QLWwFABcbyHKXNUvrTRpKdAkqATs8Bmr5xW
+  fractal machine key
 
 # The UniFi gateway, which serves the split-horizon view of pod.haus. The
 # guest's public resolvers could not see it, so LAN hostnames resolved from
