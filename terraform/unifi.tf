@@ -96,3 +96,17 @@ resource "unifi_client" "turn_touch_burrow" {
   fixed_ip = local.turn_touch_burrow_ip
   # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
+
+# The Pi Zero W running flicd, bridging the Flic buttons into Home
+# Assistant. Pinned because HA's flic integration holds a fixed host:port
+# (home-assistant/config/packages/flic.yaml) and cannot resolve mDNS from
+# its container, so a DHCP drift would take every button offline silently.
+# This client already exists in the controller as a DHCP lease, so import
+# before the first apply:
+#   terraform import unifi_client.pizero b8:27:eb:68:65:04
+resource "unifi_client" "pizero" {
+  mac      = "b8:27:eb:68:65:04"
+  name     = "Pi Zero"
+  fixed_ip = local.pizero_ip
+  # No network_id: Default LAN, same constraint as the kangaroo clients.
+}

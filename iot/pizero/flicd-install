@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Install or update flicd on the Pi Zero. Idempotent — safe to re-run, and
+# the path back after a re-flash.
+#
+# The Pi is an appliance, not a fleet host: ARMv6 rules out Docker and
+# Komodo Periphery, so this is the kangaroo_bootstrap pattern — a committed
+# script for a host Ansible does not reach.
+#
+# Run it ON the Pi, from a copy of this directory:
+#   scp -r iot/pizero nathan@<pi>:/tmp/ && ssh nathan@<pi> sudo /tmp/pizero/flicd-install
+
+set -euo pipefail
+
+SRC="https://github.com/50ButtonsEach/fliclib-linux-hci/archive/refs/heads/master.tar.gz"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+[[ $EUID -eq 0 ]] || { echo "flicd-install: must run as root" >&2; exit 1; }
+
+arch="$(uname -m)"
+[[ $arch == armv6l || $arch == armv7l ]] || {
+	echo "flicd-install: expected an ARM board, got $arch" >&2; exit 1
+}
+
+echo "==> Fetching flicd"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+curl -fsSL "$SRC" | tar -xz -C "$tmp"
+bin="$tmp/fliclib-linux-hci-master/bin/armv6l/flicd"
+[[ -x $bin ]] || { echo "flicd-install: no armv6l flicd in the tarball" >&2; exit 1; }
+
+echo "==> Installing"
+# Plain directory, not systemd StateDirectory: an earlier DynamicUser unit
+# put the database behind a /var/lib/flicd -> /var/lib/private/flicd
+# symlink, which is a trap for anyone looking for the bonds.
+[[ -L /var/lib/flicd ]] && rm -f /var/lib/flicd
+install -d -m 0755 /var/lib/flicd
+install -d -m 0755 /opt/flicd
+install -m 0755 "$bin" /opt/flicd/flicd
+# Bundled clients, for pairing and for testing flicd without Home Assistant.
+install -m 0755 -t /opt/flicd "$tmp/fliclib-linux-hci-master"/clientlib/python/*.py 2>/dev/null || true
+install -m 0644 "$HERE/flicd.service" /etc/systemd/system/flicd.service
+
+# BlueZ holds hci0 through the kernel's normal channel; flicd needs the
+# adapter exclusively via HCI_CHANNEL_USER.
+echo "==> Disabling BlueZ"
+systemctl disable --now bluetooth.service 2>/dev/null || true
+
+# Stopping bluetooth.service leaves the radio rfkill-blocked for a moment,
+# and flicd binding into that window comes up deaf. Settle before starting.
+sleep 3
+
+echo "==> Starting flicd"
+systemctl daemon-reload
+systemctl restart flicd.service
+systemctl enable flicd.service
+sleep 3
+
+# "Flic server is now up and running!" only means the TCP listener is up.
+# The adapter is a separate thing and can fail on its own, so assert on the
+# line that actually proves the radio.
+if journalctl -u flicd --since "-1min" | grep -q "Successfully bound HCI socket"; then
+	echo "==> flicd has the radio"
+else
+	echo "flicd-install: flicd is running but never bound hci0 — it is deaf" >&2
+	journalctl -u flicd --no-pager -n 20
+	exit 1
+fi
+
+echo
+echo "flicd listening on 5551, open to the LAN."
+echo "Pair a button: hold it down for 7 seconds with discovery running."

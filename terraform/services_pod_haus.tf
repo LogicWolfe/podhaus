@@ -13,6 +13,11 @@ locals {
   # unreachable from the container and a DHCP drift would end the scrape
   # silently.
   turn_touch_burrow_ip = "10.0.0.238"
+  # The Pi Zero bridging the Flic buttons. Reserved because Home Assistant's
+  # flic integration dials flicd at a fixed host:port and HA runs in a
+  # container with no mDNS, so pizero.local is unreachable from it. A DHCP
+  # drift would silently stop every button working.
+  pizero_ip = "10.0.0.77"
 
   pod_haus_service_dns = {
     backup          = local.numbat_application_ipv4

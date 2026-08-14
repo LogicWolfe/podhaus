@@ -106,11 +106,135 @@ correct; only mDNS is affected. Reclaim it with:
 sudo systemctl restart avahi-daemon
 ```
 
-**`hci0` shows `DOWN`** with `bluetoothd` logging `Failed to set mode:
-Failed (0x03)`. Not worth chasing — flicd claims the radio exclusively
-through `HCI_CHANNEL_USER` and requires BlueZ out of the way, so
-`bluetooth.service` gets disabled regardless. What matters is that the
-adapter enumerates, and it does.
+**`hci0` shows `DOWN` to `hciconfig`, and that is correct.** flicd holds
+the adapter exclusively through `HCI_CHANNEL_USER`, which bypasses the
+kernel's BlueZ stack entirely — so BlueZ's view of the adapter is
+necessarily dead while flicd is working. `bluetooth.service` is disabled
+and inactive by design. Do not "fix" this; starting bluetoothd takes the
+radio away from flicd.
+
+**mDNS does not resolve from fractal or from containers.** WSL2 has its
+own network namespace with no mDNS resolver, and Docker's embedded
+resolver has never done mDNS. `pizero.local` works from the LAN and from
+a Mac; from anywhere else use the reserved address.
+
+## Flic buttons
+
+The Pi's one job. flicd owns the BLE link and serves its own protocol on
+TCP 5551; Home Assistant's `flic` integration dials it and turns presses
+into `flic_click` events with a `click_type` of `single`, `double` or
+`hold`. No custom code sits between them.
+
+```
+Flic button ──BLE──> flicd on pizero ──TCP 5551──> Home Assistant on bilby
+```
+
+| | |
+|---|---|
+| Daemon | `/opt/flicd/flicd`, upstream `50ButtonsEach/fliclib-linux-hci` armv6l build |
+| Unit | `flicd.service`, from [`iot/pizero/`](../../iot/pizero/) |
+| Bond database | `/var/lib/flicd/flicd.db` — **the pairings live here** |
+| Listener | `0.0.0.0:5551`, unauthenticated |
+| HA config | [`home-assistant/config/packages/flic.yaml`](../../home-assistant/config/packages/flic.yaml) |
+
+Install or reinstall with
+[`iot/pizero/flicd-install`](../../iot/pizero/flicd-install) — idempotent,
+and the path back after a re-flash. The Pi is an appliance rather than a
+fleet host, so this is the `kangaroo_bootstrap` pattern: a committed
+script for a host Ansible does not reach.
+
+**5551 is deliberately open to the LAN.** flicd's protocol has no
+authentication or encryption, so anyone on the network can enumerate
+buttons and watch presses. Accepted on purpose — a firewall here buys
+very little and eventually costs an evening's debugging.
+
+### The buttons
+
+| Button | Address |
+|---|---|
+| Blue | `80:e4:da:73:d6:bd` |
+| Green | `80:e4:da:73:e3:2b` |
+| White | `80:e4:da:73:c4:f1` |
+| Black | `80:e4:da:73:e3:32` |
+
+flicd knows them only as addresses and HA names its entities after them
+(`binary_sensor.flic_80e4da73d6bd`), so this table is the only record of
+which is which. Re-derive it by running `test_client.py` and pressing each
+button in turn.
+
+Each button reports **single** and **hold**, giving eight actions. Double
+click is deliberately off: `ignored_click_types` selects which fliclib
+callback the integration registers, so enabling double would make every
+single press wait out the disambiguation window before firing.
+
+### Pairing a button
+
+Pairing is explicit, one button at a time, and needs you holding the
+button:
+
+```
+ssh nathan@pizero.local 'cd /opt/flicd && python3 new_scan_wizard.py'
+```
+
+Press and hold. A button still in private mode prints *"hold it down for
+7 seconds to make it public"* — keep holding through that. Success prints
+the bd_addr and exits.
+
+Use `new_scan_wizard.py`, not `scan_wizard.py`: it drives flicd's
+server-side wizard, which handles Flic 1 and Flic 2 and retries on its
+own. The older script hand-rolls the same loop.
+
+HA's own `discovery` option would let you pair by holding a button for
+seven seconds with no SSH at all, but it is off — it makes HA scan
+continuously, and radio time on a single-core ARMv6 board is not free
+while it is also holding connections to every paired button.
+
+### "Running" does not mean it can hear anything
+
+flicd's TCP listener and its Bluetooth adapter come up independently, and
+it will happily serve clients with no radio at all. **`systemctl is-active`
+proves nothing.** The log line that matters is:
+
+```
+Successfully bound HCI socket
+```
+
+followed by `Initialization of Bluetooth controller done!`. If you only
+see `Flic server is now up and running!`, flicd is deaf — it will accept
+connections, accept a scan request, and never read it. The tell is a
+client socket whose Recv-Q never drains:
+
+```
+ss -tn | grep 5551      # Recv-Q stuck non-zero = flicd is not listening to you
+```
+
+The cause is stopping `bluetooth.service`, which leaves the radio
+rfkill-blocked for a moment. flicd binding into that window comes up deaf
+and stays that way. `flicd-install` sleeps through the window and then
+asserts on the HCI line rather than trusting the service state.
+
+**Do not add `--wait-for-hci`.** It tells flicd to carry on when it cannot
+bind the adapter, which converts a loud startup failure into a silently
+deaf daemon. Without it flicd exits, `Restart=always` retries every five
+seconds, and the journal says why.
+
+### Debugging
+
+```
+sudo journalctl -u flicd -f               # daemon log
+cd /opt/flicd && python3 test_client.py   # watch events without HA
+cd /opt/flicd && python3 test_scanner.py  # watch raw advertisements
+```
+
+The unit runs flicd as root, unsandboxed, deliberately — this is a
+single-job appliance and easy debugging beats a tight blast radius.
+
+`test_client.py` is the tool for splitting "the button works" from "HA
+sees it". Both bundled clients connect to `localhost`.
+
+**Losing `/var/lib/flicd/flicd.db` un-pairs every button.** It is the
+only state on this device that is not reproducible from the repo, and
+nothing backs it up. Re-pairing is the recovery.
 
 ## GPIO
 
@@ -150,14 +274,15 @@ To re-run cloud-init on an existing card, bump the instance-id in
 
 ## Open items
 
-- No DHCP reservation yet. Currently `10.0.0.77`. Anything that addresses
-  this device by IP — a metrics scrape target, a Home Assistant entry —
-  needs a reservation in `terraform/unifi.tf` first, or it dies silently
-  on the next DHCP drift. Same trap documented for the Turn Touch ESP32.
+- DHCP reservation written (`terraform/unifi.tf`, `10.0.0.77`) but **not
+  yet applied**. It needs importing first — the client already exists as
+  a lease: `terraform import unifi_client.pizero b8:27:eb:68:65:04`.
+  Until it lands, HA's flic config is pointed at an unreserved address.
 - Log shipping not yet wired. Docker is unavailable on ARMv6, so this
-  will be journald forwarding rather than an Alloy container.
-- flicd not yet installed. It claims the radio exclusively via
-  `HCI_CHANNEL_USER`, so `bluetooth.service` must be disabled first.
+  will be journald forwarding rather than an Alloy container. flicd logs
+  to journald already, so there is something to ship.
+- No backup of `/var/lib/flicd/flicd.db`, so a card failure means
+  re-pairing every button.
 - The LED strip it was originally paired with now lives on its own
   ESP32 — see
   [`docs/plans/led-strip-grasshopper.md`](../plans/led-strip-grasshopper.md).
