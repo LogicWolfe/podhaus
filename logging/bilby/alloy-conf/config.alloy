@@ -288,19 +288,23 @@ otelcol.processor.transform "svc_alloy" {
 // actually diagnoses these devices; the log lines never were.
 //
 // Scraped by IP because Alloy resolves through Docker's DNS, which has no
-// mDNS, so `turn-touch-burrow.local` is unreachable from in here. The address
-// is pinned by a UniFi reservation (terraform/unifi.tf) — without it a DHCP
-// drift would silently end the scrape.
+// mDNS, so `turn-touch-burrow.local` is unreachable from in here. Both
+// addresses are pinned by UniFi reservations (terraform/unifi.tf) — without
+// them a DHCP drift would silently end the scrape.
 //
-// Deliberately narrow: one target, ~10 series. bilby's ClickHouse runs under a
-// 4g cap, so the tempting alternative — scraping Home Assistant's
-// /api/prometheus for every entity in the house — is not a like-for-like
-// swap.
+// Deliberately narrow: one target per device, ~10 series each. bilby's
+// ClickHouse runs under a 4g cap, so the tempting alternative — scraping Home
+// Assistant's /api/prometheus for every entity in the house — is not a
+// like-for-like swap.
 prometheus.scrape "esphome" {
   targets = [{
     __address__      = "10.0.0.238",
     __metrics_path__ = "/metrics",
     instance         = "turn-touch-burrow",
+  }, {
+    __address__      = "10.0.0.44",
+    __metrics_path__ = "/metrics",
+    instance         = "led-strip-grasshopper",
   }]
   scrape_interval = "60s"
   forward_to      = [otelcol.receiver.prometheus.esphome.receiver]

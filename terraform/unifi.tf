@@ -110,3 +110,16 @@ resource "unifi_client" "pizero" {
   fixed_ip = local.pizero_ip
   # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
+
+# The XIAO ESP32C3 switching the grasshopper LED strip. Pinned for the same
+# reason as the Turn Touch: Alloy scrapes its Prometheus endpoint by address
+# (logging/bilby/alloy-conf/config.alloy), and Home Assistant's ESPHome config
+# entry holds an address rather than a name. This client already exists in the
+# controller as a DHCP lease, so import before the first apply:
+#   terraform import unifi_client.led_strip_grasshopper ac:27:6e:81:e2:d8
+resource "unifi_client" "led_strip_grasshopper" {
+  mac      = "ac:27:6e:81:e2:d8"
+  name     = "Grasshopper LED Strip"
+  fixed_ip = local.led_strip_grasshopper_ip
+  # No network_id: Default LAN, same constraint as the kangaroo clients.
+}

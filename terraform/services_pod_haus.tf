@@ -18,6 +18,9 @@ locals {
   # container with no mDNS, so pizero.local is unreachable from it. A DHCP
   # drift would silently stop every button working.
   pizero_ip = "10.0.0.77"
+  # The ESP32 switching the grasshopper LED strip. Reserved for the same
+  # reason as the Turn Touch: Alloy scrapes its /metrics by IP.
+  led_strip_grasshopper_ip = "10.0.0.44"
 
   pod_haus_service_dns = {
     backup          = local.numbat_application_ipv4

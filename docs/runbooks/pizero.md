@@ -150,12 +150,18 @@ very little and eventually costs an evening's debugging.
 
 ### The buttons
 
-| Button | Address |
-|---|---|
-| Blue | `80:e4:da:73:d6:bd` |
-| Green | `80:e4:da:73:e3:2b` |
-| White | `80:e4:da:73:c4:f1` |
-| Black | `80:e4:da:73:e3:32` |
+| Button | Address | Single press |
+|---|---|---|
+| Blue | `80:e4:da:73:d6:bd` | toggle the bookshelf lamp |
+| Green | `80:e4:da:73:e3:2b` | toggle the grasshopper lamp |
+| White | `80:e4:da:73:c4:f1` | toggle the grasshopper LED strip |
+| Black | `80:e4:da:73:e3:32` | — |
+
+Bindings are automations in `home-assistant/config/automations.yaml`,
+triggered on the `flic_click` event and matched by `button_address`. Trigger
+on the event, never on the button's `binary_sensor`: the integration
+initialises every one of them to `on` at startup, so a state trigger fires on
+every Home Assistant restart and reload. Hold is unbound on all four.
 
 flicd knows them only as addresses and HA names its entities after them
 (`binary_sensor.flic_80e4da73d6bd`), so this table is the only record of
@@ -274,10 +280,6 @@ To re-run cloud-init on an existing card, bump the instance-id in
 
 ## Open items
 
-- DHCP reservation written (`terraform/unifi.tf`, `10.0.0.77`) but **not
-  yet applied**. It needs importing first — the client already exists as
-  a lease: `terraform import unifi_client.pizero b8:27:eb:68:65:04`.
-  Until it lands, HA's flic config is pointed at an unreserved address.
 - Log shipping not yet wired. Docker is unavailable on ARMv6, so this
   will be journald forwarding rather than an Alloy container. flicd logs
   to journald already, so there is something to ship.
