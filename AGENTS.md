@@ -618,6 +618,7 @@ The full set of pages on `docs.pod.haus`:
 - [Home Assistant](docs/runbooks/home-assistant.md)
 - [Mumble](docs/runbooks/mumble.md)
 - [Music Assistant + doorbell](docs/runbooks/music-assistant.html)
+- [pizero](docs/runbooks/pizero.md)
 - [Pocket ID](docs/runbooks/pocket-id.md)
 - [Pouch MinIO](docs/runbooks/pouch-minio.md)
 - [StreamFab publish](docs/runbooks/streamfab-publish.html)
