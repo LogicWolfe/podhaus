@@ -1,0 +1,87 @@
+substitutions:
+  device_name: led-strip-grasshopper
+  friendly_name: "Grasshopper LED Strip"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+# Seeed XIAO ESP32C3 — NOT esp32-c3-devkitm-1. Same chip, different board
+# definition, different pin labels (D0–D10 silkscreen, not GPIO numbers).
+#
+# This board has NO PCB antenna. Wifi is unusable without the supplied
+# external antenna plugged into the u.FL connector — it associates weakly at
+# a metre and not at all across a room, which reads as a firmware fault.
+esp32:
+  board: seeed_xiao_esp32c3
+  framework:
+    type: esp-idf
+
+# hardware_uart is required on the C3: its Serial is the native
+# USB-Serial/JTAG peripheral, not UART0. Attaching over USB resets the chip,
+# so prefer `esphome logs --device <ip>` once it is on wifi.
+logger:
+  level: INFO
+  hardware_uart: USB_SERIAL_JTAG
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+web_server:
+  port: 80
+
+prometheus:
+
+# D2 on the silkscreen = GPIO4. Chosen because GPIO2, GPIO8 and GPIO9 are
+# strapping pins on the C3 (a pull on those at boot changes boot mode), and
+# GPIO20/21 are UART0. GPIO4 is free of both roles.
+#
+# Drives the F5305S module's opto-isolated control input, which is
+# active-HIGH: current through the EL817 LED pulls the P-channel gate down and
+# switches the +5V rail to the USB socket. The module is a HIGH-SIDE switch —
+# it makes and breaks positive, and the negative rail passes straight through.
+#
+# ~5mA at 3.3V through the module's 200R series resistor, comfortably inside
+# the C3's per-pin budget.
+output:
+  - platform: gpio
+    pin: GPIO4
+    id: strip_output
+
+# Binary, not monochromatic: the strip is not dimmable, and PWM through an
+# optocoupler into a P-channel gate held up by 10k would be poor anyway —
+# roughly 20us to turn off against the MOSFET's gate capacitance.
+#
+# RESTORE_DEFAULT_OFF so a power cut leaves the strip off rather than
+# silently on.
+light:
+  - platform: binary
+    name: "Strip"
+    id: strip
+    output: strip_output
+    restore_mode: RESTORE_DEFAULT_OFF
+
+sensor:
+  - platform: wifi_signal
+    name: "Wifi signal"
+    entity_category: diagnostic
+    update_interval: 60s
+  - platform: uptime
+    name: "Uptime"
+    entity_category: diagnostic
+    update_interval: 60s
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "IP address"
+      entity_category: diagnostic
