@@ -37,11 +37,38 @@ some randomization.** The rest is open.
 
 ## State
 
-- **White** — built and working. Nothing further.
-- **Blue** — not built. Pure HA, no external dependencies.
-- **Green** — HA side written, uncommitted. Needs the colour count settled,
-  the reset timing revised, and the Apple Home automations created by hand.
-- **Black** — blocked on crazy mode being defined.
+**The entire Home Assistant side is built and deployed.** What remains is
+Apple-side only: three Shortcuts that cannot be expressed in this repo.
+
+- **White** — done and confirmed working.
+- **Blue** — done and **confirmed working in the real world**. Short press
+  toggles, hold cycles blue → red → blue+red. Entirely HA-driven.
+- **Green** — HA side deployed. Both request booleans exist and are bridged,
+  and the button raises them. **Inert until the two Shortcuts are authored**,
+  because nothing is listening on Apple's side yet.
+- **Black** — HA side deployed. The flag, both scripts and all four
+  automations are live, so the strip and the Hue will run the show. **The
+  Nanoleaf will not join in until its Shortcut is authored.**
+
+Deployed 2026-08-14 (`5ad84bd`). Verified in the running instance: three
+helpers, two scripts, eleven automations, and every runtime template rendered
+against live state.
+
+**Not yet exercised end to end:** crazy mode has never actually been run —
+that flickers a child's room for 30 seconds, so it wants a deliberate moment
+rather than a deploy-time smoke test.
+
+### What is left, all of it in the Home app
+
+| Shortcut | Trigger | Does |
+|---|---|---|
+| Lamp toggle | `Grasshopper lamp toggle` turns on | Read power, set the opposite |
+| Lamp colour | `Grasshopper lamp next colour` turns on | Read hue/sat, set the next palette entry |
+| Crazy Nanoleaf | `Grasshopper crazy mode` turns on | Loop colours while the flag stays on |
+
+The palettes and loop live inside those Shortcuts, in Apple's closed database,
+and are **not** recoverable from git. Rebuilding this house means re-authoring
+all three by hand.
 
 ## The Nanoleaf relay: move the loop to Apple's side
 
