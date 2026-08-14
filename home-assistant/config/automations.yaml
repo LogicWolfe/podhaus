@@ -574,3 +574,31 @@
               - light.haiku_fan_4
               - light.shapes_4108
   mode: restart
+- id: flic_white_grasshopper_strip
+  alias: 'Flic white: grasshopper LED strip'
+  description: >-
+    The white Flic toggles the LED strip in grasshopper -- the ESP32-driven
+    strip on light.grasshopper_led_strip_strip, NOT light.grasshopper, which is
+    the room's existing bulb.
+
+    Triggered on the flic_click event rather than the button's binary_sensor.
+    The flic integration initialises every one of its binary_sensors to `on`
+    at startup, so a state trigger would fire this on every Home Assistant
+    restart and reload. The event carries button_address and click_type and is
+    only emitted by a real press.
+
+    Single press only. Hold is deliberately left unbound so it stays available
+    for a second action on the same button; double is not reported at all,
+    because enabling it would make every single press wait out the
+    disambiguation window before firing.
+  triggers:
+    - trigger: event
+      event_type: flic_click
+      event_data:
+        button_address: '80:e4:da:73:c4:f1'
+        click_type: single
+  actions:
+    - action: light.toggle
+      target:
+        entity_id: light.grasshopper_led_strip_strip
+  mode: single
