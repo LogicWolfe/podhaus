@@ -605,14 +605,17 @@
 - id: flic_green_grasshopper_lamp
   alias: 'Flic green: grasshopper lamp'
   description: >-
-    The green Flic toggles the grasshopper lamp -- light.grasshopper, the Hue
-    room group, which currently holds one bulb (Bookshelf lamp). NOT
-    light.grasshopper_led_strip_strip, which is the ESP32 strip on the white
-    button.
+    The green Flic drives the grasshopper lamp -- the Nanoleaf Essentials NL45,
+    through the Apple Home relay in packages/grasshopper_lamp.yaml. NOT
+    light.grasshopper_led_strip_strip (the ESP32 strip, on the white button),
+    and no longer light.grasshopper, the Hue room group, which holds only the
+    bookshelf lamp and so duplicated the blue button.
 
-    A bare toggle IS the remember-its-last-state behaviour: turning a Hue light
-    on without attributes makes the bridge restore the brightness and colour it
-    had when it went off. Nothing extra is needed to get that.
+    There is no HA entity for this bulb and there cannot be one: it is a
+    HomeKit-over-Thread accessory paired to Apple Home, and HAP allows a single
+    controller. This raises a momentary request boolean; an Apple Shortcut on
+    the HomePod reads the bulb's real state and decides what to do with it. HA
+    stores nothing about this lamp, so nothing here can drift.
 
     This deliberately does NOT snapshot into a scene first. That was tried and
     it wedged the light permanently on 2026-08-14. scene.create captures
@@ -628,7 +631,7 @@
     input_text helpers, which persist across restarts and can never hold an
     "off" to replay. Do not reach for scene.create.
 
-    Single press only, matching the white button. Hold is left unbound.
+    Single press toggles; hold advances the colour palette.
   triggers:
     - trigger: event
       event_type: flic_click
@@ -636,10 +639,68 @@
         button_address: '80:e4:da:73:e3:2b'
         click_type: single
   actions:
-    - action: light.toggle
+    - action: input_boolean.turn_on
       target:
-        entity_id: light.grasshopper
-  mode: single
+        entity_id: input_boolean.grasshopper_lamp_toggle_request
+  mode: queued
+  max: 5
+- id: flic_green_grasshopper_lamp_colour
+  alias: 'Flic green (hold): grasshopper lamp colour'
+  description: >-
+    Holding the green Flic advances the grasshopper lamp through its palette:
+    an evening reading amber, a pink, a blue and a deep green.
+
+    The palette is NOT here. It is hand-authored as `If` branches in an Apple
+    Shortcut, because that is the only side that can read the bulb's current
+    hue to work out which entry it is on. HA only ever says "next".
+  triggers:
+    - trigger: event
+      event_type: flic_click
+      event_data:
+        button_address: '80:e4:da:73:e3:2b'
+        click_type: hold
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.grasshopper_lamp_colour_request
+  mode: queued
+  max: 5
+- id: grasshopper_lamp_request_reset
+  alias: 'Grasshopper lamp: reset request buttons'
+  description: >-
+    Makes the grasshopper lamp request booleans momentary, exactly as
+    door_lock_request_reset does for the locks. Apple Home triggers on an
+    off->on edge, so a boolean left on would make the next identical request a
+    silent no-op.
+
+    One second rather than the locks' ten. This signal crosses the bridge to a
+    hub in the same room and then Thread, rather than waiting on Bluetooth to
+    a battery lock, and the button belongs to a 4-year-old who will press it
+    again long before ten seconds are up.
+
+    THIS IS THE NUMBER TO TUNE IF PRESSES GO MISSING. Too long and rapid
+    repeats are swallowed; too short and the HomeKit bridge may coalesce the
+    on and off into a single update the hub never sees as a change at all. To
+    stop guessing, have the Apple automation flip an ack boolean back through
+    the bridge -- that makes the round trip measurable.
+
+    Parallel so the two requests never queue behind each other; each run
+    resets only the boolean that triggered it.
+  triggers:
+    - trigger: state
+      entity_id:
+        - input_boolean.grasshopper_lamp_toggle_request
+        - input_boolean.grasshopper_lamp_colour_request
+      to: "on"
+  conditions: []
+  actions:
+    - delay:
+        seconds: 1
+    - action: input_boolean.turn_off
+      target:
+        entity_id: "{{ trigger.entity_id }}"
+  mode: parallel
+  max: 10
 - id: flic_blue_bookshelf_lamp
   alias: 'Flic blue: bookshelf lamp'
   description: >-
@@ -760,3 +821,101 @@
                 rgb_color: [255, 0, 255]
   mode: queued
   max: 5
+- id: flic_black_crazy_start
+  alias: 'Flic black: start crazy mode'
+  description: >-
+    The black Flic is the fun button. A short press starts a 30-second light
+    show across all three lights in the room; holding it cancels (see
+    flic_black_crazy_stop).
+
+    Both gestures are ABSOLUTE -- set the flag, clear the flag -- so repeating
+    either is harmless. Black is the one button in this room that is entirely
+    safe to hammer, which is fitting given whose favourite it will be.
+
+    Pressing again while the show runs produces no edge and so starts nothing
+    new. Accepted: the show is visibly running, so this is the one place a
+    dead press does not read as a dead room. It also makes overlapping runs
+    structurally impossible.
+  triggers:
+    - trigger: event
+      event_type: flic_click
+      event_data:
+        button_address: '80:e4:da:73:e3:32'
+        click_type: single
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.grasshopper_crazy_active
+  mode: single
+- id: flic_black_crazy_stop
+  alias: 'Flic black (hold): cancel crazy mode'
+  description: >-
+    Holding the black Flic clears the crazy flag. All three consumers -- the
+    two HA scripts and the Nanoleaf's Apple Shortcut -- check it between
+    iterations, so the room stops within one on/off cycle rather than
+    instantly, and each restores the light it owns.
+
+    A hold while nothing is running is a genuinely dead press. Accepted.
+  triggers:
+    - trigger: event
+      event_type: flic_click
+      event_data:
+        button_address: '80:e4:da:73:e3:32'
+        click_type: hold
+  actions:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.grasshopper_crazy_active
+  mode: single
+- id: grasshopper_crazy_start
+  alias: 'Crazy mode: start the HA-driven lights'
+  description: >-
+    Launches the strip and Hue loops when the flag is raised. The Nanoleaf's
+    loop is NOT started here -- it runs on the HomePod, triggered by the same
+    flag arriving over the HomeKit bridge, because HA cannot command that bulb.
+
+    script.turn_on rather than calling the scripts directly, so the two run
+    concurrently and this automation returns immediately instead of blocking
+    for the length of the show.
+
+    The three lights therefore run independent random intervals and drift
+    against each other. That is forced by the architecture rather than chosen,
+    but it is also the more interesting result than three lights in lockstep.
+  triggers:
+    - trigger: state
+      entity_id: input_boolean.grasshopper_crazy_active
+      to: "on"
+  conditions: []
+  actions:
+    - action: script.turn_on
+      target:
+        entity_id:
+          - script.grasshopper_crazy_strip
+          - script.grasshopper_crazy_hue
+  mode: single
+- id: grasshopper_crazy_timer
+  alias: 'Crazy mode: end the show'
+  description: >-
+    Owns the flag's lifecycle, and is the ONLY thing that clears it on a normal
+    run. The show is 30 seconds; this allows 32 so the loops finish their last
+    cycle rather than being cut mid-flicker.
+
+    Single owner on purpose. The Nanoleaf's half runs on a hub that kills
+    shortcuts at ten minutes, and a killed shortcut cannot clear anything -- so
+    if the flag's lifetime depended on the loops finishing, one hub-side kill
+    would strand it on and make crazy mode permanently untriggerable.
+
+    Restart mode so pressing black again mid-show extends from the new press
+    rather than ending early on the original timer.
+  triggers:
+    - trigger: state
+      entity_id: input_boolean.grasshopper_crazy_active
+      to: "on"
+  conditions: []
+  actions:
+    - delay:
+        seconds: 32
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.grasshopper_crazy_active
+  mode: restart

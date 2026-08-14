@@ -96,6 +96,18 @@ homekit:
         - input_boolean.front_door_unlock_request
         - input_boolean.burrow_lock_request
         - input_boolean.burrow_unlock_request
+        # --- Grasshopper lamp + crazy mode (see packages/grasshopper_*.yaml) ---
+        # The Nanoleaf Essentials NL45 is a HomeKit-over-Thread accessory owned
+        # by Apple Home, and HAP allows one controller, so HA drives it the
+        # same way it drives the locks. The two lamp requests are momentary and
+        # carry RELATIVE instructions ("toggle", "next colour"); the Shortcut
+        # behind each reads the bulb's real state before acting, so HA stores
+        # nothing about this lamp and cannot drift. The crazy flag is stateful
+        # instead, because it is a mode rather than a request -- the Shortcut
+        # polls it to know whether to keep looping.
+        - input_boolean.grasshopper_lamp_toggle_request
+        - input_boolean.grasshopper_lamp_colour_request
+        - input_boolean.grasshopper_crazy_active
     entity_config:
       fan.haiku_fan: { name: Grove Fan }
       fan.haiku_fan_2: { name: Kitchen Fan }

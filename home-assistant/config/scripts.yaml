@@ -1,0 +1,125 @@
+# Crazy mode's HA-driven halves. The Nanoleaf's half is NOT here -- it is an
+# Apple Shortcut running on the HomePod, because HA cannot command that bulb.
+# See docs/plans/grasshopper-buttons.md.
+#
+# Both scripts loop `while input_boolean.grasshopper_crazy_active is on`, so
+# clearing that flag stops them. The check happens between iterations, so a
+# cancel lands within one on+off cycle (up to ~4s) rather than instantly --
+# the same trade the Nanoleaf's hub-side loop makes.
+#
+# The flag's LIFECYCLE belongs to grasshopper_crazy_timer in automations.yaml,
+# not to these scripts. One owner, so a script dying cannot strand the flag on
+# and make crazy mode permanently untriggerable.
+#
+# The iteration cap is a backstop, not the duration control. At an average
+# 2.5s cycle, 40 iterations is ~100s -- comfortably beyond the 32s the timer
+# allows, so it only ever fires if the timer itself failed.
+
+grasshopper_crazy_strip:
+  alias: 'Crazy mode: LED strip flicker'
+  description: >-
+    Flickers the pink LED strip: on for a random 0.5-3s, off for a random
+    0.5-1s. The strip is binary -- one colour, no brightness -- so flicker is
+    the whole of its vocabulary.
+  mode: restart
+  sequence:
+    - variables:
+        was_on: "{{ is_state('light.grasshopper_led_strip_strip', 'on') }}"
+    - repeat:
+        while:
+          - condition: state
+            entity_id: input_boolean.grasshopper_crazy_active
+            state: "on"
+          - condition: template
+            value_template: "{{ repeat.index <= 40 }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: light.grasshopper_led_strip_strip
+          - delay:
+              milliseconds: "{{ range(500, 3001) | random }}"
+          - action: light.turn_off
+            target:
+              entity_id: light.grasshopper_led_strip_strip
+          - delay:
+              milliseconds: "{{ range(500, 1001) | random }}"
+    - if:
+        - condition: template
+          value_template: "{{ was_on }}"
+      then:
+        - action: light.turn_on
+          target:
+            entity_id: light.grasshopper_led_strip_strip
+      else:
+        - action: light.turn_off
+          target:
+            entity_id: light.grasshopper_led_strip_strip
+
+grasshopper_crazy_hue:
+  alias: 'Crazy mode: bookshelf lamp flicker'
+  description: >-
+    Same rhythm as the strip, but each on-phase picks a new colour from the
+    eight-entry crazy palette.
+
+    Every entry is full saturation. Saturation is the whiteness axis, so a
+    partial value renders as a washed-out version of the colour -- which is
+    exactly what this palette exists to avoid. The eight hues are evenly
+    spread and skip the muddy in-between shades that are not fun even at full
+    saturation.
+
+    hs_color is built element-wise rather than as a templated list, because a
+    template returning a bare list is the fragile way to do this.
+
+    Restores the lamp's previous colour and brightness on exit. The `or`
+    defaults only ever evaluate when the lamp started off, in which case the
+    restore branch turns it off and never reads them.
+  mode: restart
+  sequence:
+    - variables:
+        was_on: "{{ is_state('light.bookshelf_lamp', 'on') }}"
+        prev_r: "{{ (state_attr('light.bookshelf_lamp', 'rgb_color') or [0, 0, 255])[0] }}"
+        prev_g: "{{ (state_attr('light.bookshelf_lamp', 'rgb_color') or [0, 0, 255])[1] }}"
+        prev_b: "{{ (state_attr('light.bookshelf_lamp', 'rgb_color') or [0, 0, 255])[2] }}"
+        prev_brightness: "{{ state_attr('light.bookshelf_lamp', 'brightness') or 255 }}"
+    - repeat:
+        while:
+          - condition: state
+            entity_id: input_boolean.grasshopper_crazy_active
+            state: "on"
+          - condition: template
+            value_template: "{{ repeat.index <= 40 }}"
+        sequence:
+          - variables:
+              hue: "{{ [0, 25, 50, 110, 180, 240, 280, 320] | random }}"
+          - action: light.turn_on
+            target:
+              entity_id: light.bookshelf_lamp
+            data:
+              brightness_pct: 100
+              hs_color:
+                - "{{ hue }}"
+                - 100
+          - delay:
+              milliseconds: "{{ range(500, 3001) | random }}"
+          - action: light.turn_off
+            target:
+              entity_id: light.bookshelf_lamp
+          - delay:
+              milliseconds: "{{ range(500, 1001) | random }}"
+    - if:
+        - condition: template
+          value_template: "{{ was_on }}"
+      then:
+        - action: light.turn_on
+          target:
+            entity_id: light.bookshelf_lamp
+          data:
+            brightness: "{{ prev_brightness }}"
+            rgb_color:
+              - "{{ prev_r }}"
+              - "{{ prev_g }}"
+              - "{{ prev_b }}"
+      else:
+        - action: light.turn_off
+          target:
+            entity_id: light.bookshelf_lamp

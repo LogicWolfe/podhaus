@@ -1,0 +1,38 @@
+# Crazy mode, loaded as a package (see ../homeassistant.yaml).
+#
+# The black Flic in grasshopper: short press starts a 30-second light show
+# across all three of the room's lights, long press cancels it. It is a
+# 4-year-old's button, so the design rule is that a press must always make
+# something happen -- unclear outcomes are fine, dead presses are not.
+#
+# THIS FLAG IS THE WHOLE INTERFACE. It is stateful, not momentary, and it is
+# published to Apple Home. Three consumers watch it:
+#
+#   - script.grasshopper_crazy_strip  (HA drives the ESP32 strip)
+#   - script.grasshopper_crazy_hue    (HA drives the Hue bookshelf lamp)
+#   - an Apple Shortcut on the HomePod (drives the Nanoleaf, which HA cannot)
+#
+# Each loops while the flag is on and exits when it clears, so one boolean
+# starts and stops the whole room.
+#
+# WHY A FLAG RATHER THAN CHECKING THE LIGHT. The obvious cancel signal --
+# "stop when the lamp is turned off" -- does not work: crazy mode wants
+# periods with the light off, so "off" cannot also mean "stop". The stop
+# signal has to be out of band.
+#
+# WHY STATEFUL, WHEN EVERY OTHER REQUEST HERE IS MOMENTARY. Both black
+# gestures are absolute -- set the flag, clear the flag -- so repeating either
+# is harmless and the button is safe to hammer. It also makes overlapping runs
+# impossible: while the show runs there is no off->on edge to start a second
+# one. That sidesteps an undocumented question about how Apple treats a
+# re-trigger during a running Repeat, by never asking it.
+#
+# The two dead-press cases, accepted rather than overlooked: a short press
+# while the show runs does nothing new (but the show is visibly running, so
+# the room is not dead), and a long press while it is not running does
+# nothing at all.
+
+input_boolean:
+  grasshopper_crazy_active:
+    name: Grasshopper crazy mode
+    icon: mdi:party-popper

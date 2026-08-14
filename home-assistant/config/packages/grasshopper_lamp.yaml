@@ -1,0 +1,43 @@
+# Grasshopper lamp relay, loaded as a package (see ../homeassistant.yaml).
+#
+# The grasshopper lamp is a Nanoleaf Essentials A19 (model NL45) -- the HomeKit
+# generation. It speaks HAP over CoAP/UDP port 5683 (HomeKit over Thread) and
+# is reachable only through a border router: the HomePod in grasshopper, which
+# publishes it as Nanoleaf-A19-1179.local with no address of its own.
+#
+# HA cannot control it directly, and adopting it would cost more than it buys:
+#
+#   - The `nanoleaf` integration will never see it. That integration speaks
+#     Nanoleaf's OpenAPI over _nanoleafapi._tcp, which only the panel products
+#     advertise (our Shapes 4108). Essentials bulbs have no such API.
+#   - `homekit_controller` could pair it, but HAP allows ONE controller and
+#     Apple Home holds it (the bulb advertises sf=0). Taking it would also kill
+#     the Nanoleaf app, which rides the same pairing rather than having a
+#     channel of its own -- and would still not buy the app's on-bulb effects,
+#     which live in vendor characteristics aiohomekit does not implement.
+#
+# So the bulb stays owned by Apple Home and HA drives it the way it drives the
+# door locks: by changing a boolean Apple Home is watching.
+#
+# WHAT IS DELIBERATELY ABSENT: any notion of the lamp's state. Both booleans
+# below are momentary REQUESTS carrying a relative instruction -- "toggle",
+# "next colour" -- and the Apple Shortcut behind each one reads the bulb's
+# actual state with `Get the state of Home` before acting. Apple can see the
+# truth and HA cannot, so the decision belongs on that side. An earlier design
+# kept a stateful power boolean here and drifted the moment anyone touched the
+# Nanoleaf app; this one cannot drift because it stores nothing.
+#
+# The cost: HA has no idea what this lamp is doing, and cannot condition on it.
+# Accepted.
+#
+# The palette lives in the Shortcut, hand-authored, NOT here. See
+# docs/plans/grasshopper-buttons.md.
+
+input_boolean:
+  grasshopper_lamp_toggle_request:
+    name: Grasshopper lamp toggle
+    icon: mdi:lamp
+
+  grasshopper_lamp_colour_request:
+    name: Grasshopper lamp next colour
+    icon: mdi:palette
