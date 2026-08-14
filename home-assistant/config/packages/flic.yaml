@@ -34,3 +34,11 @@ binary_sensor:
     # spent an hour disconnected would dump an hour of history into HA the
     # moment it reconnects -- firing every automation attached to it.
     timeout: 3
+    # Not cosmetic filtering: this selects which fliclib callback the
+    # integration registers. Ignoring double switches it to
+    # on_button_click_or_hold, so a single press fires the moment the button
+    # is released. With double enabled it would instead have to wait out the
+    # disambiguation window on every press, which is very noticeable on a
+    # button that switches a light.
+    ignored_click_types:
+      - double

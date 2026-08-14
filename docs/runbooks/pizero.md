@@ -162,6 +162,11 @@ flicd knows them only as addresses and HA names its entities after them
 which is which. Re-derive it by running `test_client.py` and pressing each
 button in turn.
 
+Each button reports **single** and **hold**, giving eight actions. Double
+click is deliberately off: `ignored_click_types` selects which fliclib
+callback the integration registers, so enabling double would make every
+single press wait out the disambiguation window before firing.
+
 ### Pairing a button
 
 Pairing is explicit, one button at a time, and needs you holding the
