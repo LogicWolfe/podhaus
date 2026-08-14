@@ -8,6 +8,16 @@
 # pizero.local, because HA's container has no mDNS resolver and the name
 # would simply never resolve.
 #
+# The integration names entities after the address -- binary_sensor.flic_
+# 80e4da73d6bd -- and there is no per-button config block to name them in.
+# Automations should trigger on the flic_click event and match
+# button_address, so this table is the only place the colours are recorded:
+#
+#   Blue    80:e4:da:73:d6:bd
+#   Green   80:e4:da:73:e3:2b
+#   White   80:e4:da:73:c4:f1
+#   Black   80:e4:da:73:e3:32
+#
 # Pairing is an explicit act, done once per button with the scan wizard on
 # the Pi -- see docs/runbooks/pizero.md. discovery is therefore off: leaving
 # it on makes HA scan continuously, which costs radio time on a single-core

@@ -148,6 +148,20 @@ authentication or encryption, so anyone on the network can enumerate
 buttons and watch presses. Accepted on purpose — a firewall here buys
 very little and eventually costs an evening's debugging.
 
+### The buttons
+
+| Button | Address |
+|---|---|
+| Blue | `80:e4:da:73:d6:bd` |
+| Green | `80:e4:da:73:e3:2b` |
+| White | `80:e4:da:73:c4:f1` |
+| Black | `80:e4:da:73:e3:32` |
+
+flicd knows them only as addresses and HA names its entities after them
+(`binary_sensor.flic_80e4da73d6bd`), so this table is the only record of
+which is which. Re-derive it by running `test_client.py` and pressing each
+button in turn.
+
 ### Pairing a button
 
 Pairing is explicit, one button at a time, and needs you holding the
