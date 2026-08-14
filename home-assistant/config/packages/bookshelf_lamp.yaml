@@ -1,0 +1,25 @@
+# Bookshelf lamp colour cycle, loaded as a package (see ../homeassistant.yaml).
+#
+# The blue Flic's long press steps this lamp through three colours. Unlike the
+# grasshopper lamp, this is a Hue bulb Home Assistant controls directly -- no
+# bridge, no Apple Home, and HA can see its real state -- so the palette lives
+# here in the repo rather than hand-authored in an Apple Shortcut.
+#
+# Colours are sent as rgb_color rather than hue/saturation. "100% full blue" is
+# a statement about RGB primaries, and converting through HS only adds a
+# rounding step to reach the same place. Hue bulbs have a narrower gamut than
+# sRGB, so each renders as the most saturated version the bulb can physically
+# produce -- expected, not a fault.
+#
+# This select is the cycle POSITION, not the truth. Changing the lamp from the
+# Hue app leaves it stale, and that is harmless: the next long press advances
+# from wherever the index sat and immediately re-asserts a known colour.
+
+input_select:
+  bookshelf_lamp_colour:
+    name: Bookshelf lamp colour
+    icon: mdi:palette
+    options:
+      - Blue
+      - Red
+      - Blue + red

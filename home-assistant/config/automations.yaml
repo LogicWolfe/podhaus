@@ -656,7 +656,8 @@
     only ever contain Hue bulbs, so covering both needs an HA light group or a
     multi-entity target rather than light.grasshopper.
 
-    Single press only. Hold is left unbound.
+    Single press toggles; hold advances the colour (see
+    flic_blue_bookshelf_lamp_colour below).
   triggers:
     - trigger: event
       event_type: flic_click
@@ -668,3 +669,94 @@
       target:
         entity_id: light.bookshelf_lamp
   mode: single
+- id: flic_blue_bookshelf_lamp_colour
+  alias: 'Flic blue (hold): bookshelf lamp colour'
+  description: >-
+    Holding the blue Flic advances the bookshelf lamp's colour, cycling
+    Blue -> Red -> Blue + red -> Blue. input_select.select_next cycles by
+    default, so there is no end stop.
+
+    This ONLY advances the select; applying the colour is
+    bookshelf_lamp_colour_apply's job. Split deliberately, for two reasons.
+    Picking a colour from a dashboard then behaves identically to holding the
+    button. And the apply step reads a state that has definitely settled,
+    rather than racing its own select_next call in the same sequence.
+
+    Queued rather than single so a fast second hold is not dropped. A press
+    that does nothing is the one outcome the buttons in this room must not
+    produce.
+  triggers:
+    - trigger: event
+      event_type: flic_click
+      event_data:
+        button_address: '80:e4:da:73:d6:bd'
+        click_type: hold
+  actions:
+    - action: input_select.select_next
+      target:
+        entity_id: input_select.bookshelf_lamp_colour
+  mode: queued
+  max: 5
+- id: bookshelf_lamp_colour_apply
+  alias: 'Bookshelf lamp: apply the selected colour'
+  description: >-
+    Applies input_select.bookshelf_lamp_colour (packages/bookshelf_lamp.yaml)
+    to the lamp.
+
+    Turns the light ON as well as setting the colour, so a hold on an off lamp
+    brings it up in the next colour instead of silently recolouring a dark
+    bulb.
+
+    Full brightness and pure primaries by design. Saturation is the whiteness
+    axis: anything short of full renders as a washed-out version of the colour,
+    which is exactly what this palette exists to avoid.
+
+    The from_state guard matters. State triggers also fire on attribute-only
+    changes, and fire with a null from_state when the entity is restored at
+    startup -- without the guard, every Home Assistant restart would switch
+    this lamp on by itself.
+  triggers:
+    - trigger: state
+      entity_id: input_select.bookshelf_lamp_colour
+  conditions:
+    - condition: template
+      value_template: >-
+        {{ trigger.from_state is not none
+           and trigger.to_state.state != trigger.from_state.state }}
+  actions:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_select.bookshelf_lamp_colour
+              state: 'Blue'
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id: light.bookshelf_lamp
+              data:
+                brightness_pct: 100
+                rgb_color: [0, 0, 255]
+        - conditions:
+            - condition: state
+              entity_id: input_select.bookshelf_lamp_colour
+              state: 'Red'
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id: light.bookshelf_lamp
+              data:
+                brightness_pct: 100
+                rgb_color: [255, 0, 0]
+        - conditions:
+            - condition: state
+              entity_id: input_select.bookshelf_lamp_colour
+              state: 'Blue + red'
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id: light.bookshelf_lamp
+              data:
+                brightness_pct: 100
+                rgb_color: [255, 0, 255]
+  mode: queued
+  max: 5
