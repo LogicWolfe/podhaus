@@ -7,18 +7,25 @@ alongside the other `iot/esphome/` devices.
 
 ## Status — where this is up to
 
-Soldering is **done**: both control wires are on the module pins and on
-the XIAO's D2 (red) and GND (black) keyhole pads.
+**The hardware is built and working.** Soldering, first USB flash and the
+whole Part F sequence are done: an API call switches the strip on and off.
 
-Next step is the **first flash**, over USB from a Mac the board is
-plugged into. See [Part E](#part-e--firmware) — the config exists in this
-repo but has never been compiled, and the ESPHome dashboard has not been
-redeployed, so create the device in the dashboard UI and land the repo
-copy afterwards.
+| | |
+|---|---|
+| Device | `led-strip-grasshopper`, board `seeed_xiao_esp32c3` |
+| MAC | `AC:27:6E:81:E2:D8` |
+| IP | `10.0.0.44` — **not reserved yet**, see open items |
+| Chip | ESP32-C3 QFN32 rev v0.4, 4MB embedded flash, USB-Serial/JTAG |
+| Wifi | −25 dBm at the bench, −45 dBm in place |
+| Build | zero warnings, zero errors; RAM 32.0%, flash 49.0% |
 
-**The LED strip is not physically accessible right now.** The `IN`/`OUT`
-column check in Part F cannot be completed until it is; everything up to
-"the entity appears and toggles" can.
+First flash was `firmware.factory.bin` compiled by the dashboard, written
+at offset `0x0` with `esptool` over USB from a Mac. Everything after this
+is OTA.
+
+What remains is integration, not hardware — see [Open items](#open-items).
+Once those land, this page goes away and the finished state moves into a
+runbook.
 
 ## What we're building
 
@@ -255,6 +262,17 @@ builds the previously-deployed YAML while reporting success. Deploy the
 stack first, then compile. This bit the Turn Touch work — see
 [`docs/postmortems/2026-08-09-turn-touch-ble-link-wedge.md`](../postmortems/2026-08-09-turn-touch-ble-link-wedge.md).
 
+**Reading and driving the device by hand.** `web_server:` on ESPHome
+2026.7.4 serves a single-page app, and its REST routes are not what the
+older documentation describes: `GET /light/<id>` and `GET /sensor/<id>`
+return 404, and the control routes return 411 without a body and 404 with
+one. What does work is **`GET /events`**, the SSE stream, which emits
+every entity's state — that is the reliable way to read state over HTTP.
+For control, use the **native API** (`aioesphomeapi`), which is the same
+path Home Assistant uses. Running it inside the esphome container lets it
+read the key straight from `/config/secrets.yaml`, so the key never
+crosses a shell boundary.
+
 ## Part F — Verification
 
 In order. Stop at the first surprise.
@@ -280,13 +298,16 @@ In order. Stop at the first surprise.
 
 ## Open items
 
-- [ ] Confirm the strip is plain single-colour, not addressable — a
-      MOSFET switch is useless for WS2812-style strips, which need a data
-      signal instead
-- [ ] Solder the two control wires to D2 and GND
-- [ ] Flash over USB, then verify OTA works
-- [ ] UniFi DHCP reservation in `terraform/unifi.tf` — without it the
-      Alloy scrape target drifts and dies silently
+- [x] Confirm the strip is plain single-colour, not addressable —
+      confirmed by behaviour: a high-side MOSFET switches the whole strip
+      cleanly, which would not work on a WS2812-style strip
+- [x] Solder the two control wires to D2 and GND
+- [x] Flash over USB — done, and Part F verified end to end
+- [ ] Verify OTA works — never yet exercised; the first OTA is the one
+      that proves the board is recoverable without a cable
+- [ ] UniFi DHCP reservation in `terraform/unifi.tf` for
+      `AC:27:6E:81:E2:D8` — without it the Alloy scrape target drifts and
+      dies silently
 - [ ] Alloy scrape target in `logging/bilby/alloy-conf/config.alloy`
       alongside the Turn Touch entry
 - [ ] HA automation binding a Flic press to the light

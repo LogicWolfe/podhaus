@@ -61,8 +61,10 @@ output:
 # optocoupler into a P-channel gate held up by 10k would be poor anyway —
 # roughly 20us to turn off against the MOSFET's gate capacitance.
 #
-# RESTORE_DEFAULT_OFF so a power cut leaves the strip off rather than
-# silently on.
+# RESTORE_DEFAULT_OFF restores the last state across a power cut — it reads the
+# saved state from flash and only falls back to OFF when nothing has been saved
+# yet, i.e. the first boot after a flash. If a power cut should instead force
+# the strip off, that is ALWAYS_OFF (or RESTORE_AND_OFF).
 light:
   - platform: binary
     name: "Strip"
