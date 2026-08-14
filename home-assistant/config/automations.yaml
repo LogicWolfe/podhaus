@@ -610,24 +610,23 @@
     light.grasshopper_led_strip_strip, which is the ESP32 strip on the white
     button.
 
-    Turning off snapshots the light into scene.grasshopper_lamp_previous first,
-    so turning it back on restores exactly the brightness and colour it had
-    rather than whatever the bulb defaults to. Hue usually restores the last
-    setting by itself on a bare turn_on, but that is the bridge's behaviour
-    rather than a guarantee, and it does not survive the bulb losing mains
-    power -- the snapshot makes the intent explicit and independent of it.
+    A bare toggle IS the remember-its-last-state behaviour: turning a Hue light
+    on without attributes makes the bridge restore the brightness and colour it
+    had when it went off. Nothing extra is needed to get that.
 
-    Scenes made by scene.create are held in memory and do NOT survive a Home
-    Assistant restart, so the default branch covers the first press after a
-    restart while the light is off, and the case where the light is
-    unavailable. That branch is a bare turn_on, which falls back to exactly the
-    Hue behaviour described above -- so the worst case is what a plain toggle
-    would have done anyway.
+    This deliberately does NOT snapshot into a scene first. That was tried and
+    it wedged the light permanently on 2026-08-14. scene.create captures
+    whatever the light looks like at that instant, and Hue's state in HA lags
+    the bulb by about a second, so pressing the button twice quickly let the
+    snapshot capture the light already off. From then on every press restored
+    that off snapshot -- the scene's timestamp advanced on each press while the
+    bulb never moved, and the branch that would have turned it on could no
+    longer be reached. Silent, permanent, and only fixable from another app.
 
-    Snapshotting the group means a restore applies one state to every member.
-    That is faithful while the room holds a single bulb; if more are added,
-    move snapshot_entities to the individual lights so per-bulb differences
-    survive.
+    If a future light in this room genuinely does not remember its own state,
+    give that light an explicit brightness/colour store in input_number and
+    input_text helpers, which persist across restarts and can never hold an
+    "off" to replay. Do not reach for scene.create.
 
     Single press only, matching the white button. Hold is left unbound.
   triggers:
@@ -637,41 +636,18 @@
         button_address: '80:e4:da:73:e3:2b'
         click_type: single
   actions:
-    - choose:
-        - conditions:
-            - condition: state
-              entity_id: light.grasshopper
-              state: 'on'
-          sequence:
-            - action: scene.create
-              data:
-                scene_id: grasshopper_lamp_previous
-                snapshot_entities:
-                  - light.grasshopper
-            - action: light.turn_off
-              target:
-                entity_id: light.grasshopper
-        - conditions:
-            - condition: state
-              entity_id: light.grasshopper
-              state: 'off'
-            - condition: template
-              value_template: '{{ states.scene.grasshopper_lamp_previous is not none }}'
-          sequence:
-            - action: scene.turn_on
-              target:
-                entity_id: scene.grasshopper_lamp_previous
-      default:
-        - action: light.turn_on
-          target:
-            entity_id: light.grasshopper
+    - action: light.toggle
+      target:
+        entity_id: light.grasshopper
   mode: single
 - id: flic_blue_bookshelf_lamp
   alias: 'Flic blue: bookshelf lamp'
   description: >-
     The blue Flic toggles light.bookshelf_lamp, the single Hue bulb in
-    grasshopper, snapshotting and restoring its colour and brightness the same
-    way the green button does for the room.
+    grasshopper. A bare toggle is all that is needed to have it come back at
+    the brightness and colour it had -- the Hue bridge restores that itself on
+    a turn_on with no attributes. See the green button for why this must not be
+    "improved" with a scene snapshot.
 
     Note that this is currently the SAME physical bulb the green button drives:
     light.grasshopper is a Hue room group whose only member is this lamp. The
@@ -679,10 +655,6 @@
     A Nanoleaf bulb in this room would not resolve it -- a Hue room group can
     only ever contain Hue bulbs, so covering both needs an HA light group or a
     multi-entity target rather than light.grasshopper.
-
-    Same restart caveat as the green button: scenes made by scene.create live
-    in memory only, so the default branch handles the first press after a Home
-    Assistant restart and falls back to a bare turn_on.
 
     Single press only. Hold is left unbound.
   triggers:
@@ -692,32 +664,7 @@
         button_address: '80:e4:da:73:d6:bd'
         click_type: single
   actions:
-    - choose:
-        - conditions:
-            - condition: state
-              entity_id: light.bookshelf_lamp
-              state: 'on'
-          sequence:
-            - action: scene.create
-              data:
-                scene_id: bookshelf_lamp_previous
-                snapshot_entities:
-                  - light.bookshelf_lamp
-            - action: light.turn_off
-              target:
-                entity_id: light.bookshelf_lamp
-        - conditions:
-            - condition: state
-              entity_id: light.bookshelf_lamp
-              state: 'off'
-            - condition: template
-              value_template: '{{ states.scene.bookshelf_lamp_previous is not none }}'
-          sequence:
-            - action: scene.turn_on
-              target:
-                entity_id: scene.bookshelf_lamp_previous
-      default:
-        - action: light.turn_on
-          target:
-            entity_id: light.bookshelf_lamp
+    - action: light.toggle
+      target:
+        entity_id: light.bookshelf_lamp
   mode: single
