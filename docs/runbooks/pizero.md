@@ -170,12 +170,45 @@ seven seconds with no SSH at all, but it is off — it makes HA scan
 continuously, and radio time on a single-core ARMv6 board is not free
 while it is also holding connections to every paired button.
 
+### "Running" does not mean it can hear anything
+
+flicd's TCP listener and its Bluetooth adapter come up independently, and
+it will happily serve clients with no radio at all. **`systemctl is-active`
+proves nothing.** The log line that matters is:
+
+```
+Successfully bound HCI socket
+```
+
+followed by `Initialization of Bluetooth controller done!`. If you only
+see `Flic server is now up and running!`, flicd is deaf — it will accept
+connections, accept a scan request, and never read it. The tell is a
+client socket whose Recv-Q never drains:
+
+```
+ss -tn | grep 5551      # Recv-Q stuck non-zero = flicd is not listening to you
+```
+
+The cause is stopping `bluetooth.service`, which leaves the radio
+rfkill-blocked for a moment. flicd binding into that window comes up deaf
+and stays that way. `flicd-install` sleeps through the window and then
+asserts on the HCI line rather than trusting the service state.
+
+**Do not add `--wait-for-hci`.** It tells flicd to carry on when it cannot
+bind the adapter, which converts a loud startup failure into a silently
+deaf daemon. Without it flicd exits, `Restart=always` retries every five
+seconds, and the journal says why.
+
 ### Debugging
 
 ```
-sudo journalctl -u flicd -f            # daemon log
+sudo journalctl -u flicd -f               # daemon log
 cd /opt/flicd && python3 test_client.py   # watch events without HA
+cd /opt/flicd && python3 test_scanner.py  # watch raw advertisements
 ```
+
+The unit runs flicd as root, unsandboxed, deliberately — this is a
+single-job appliance and easy debugging beats a tight blast radius.
 
 `test_client.py` is the tool for splitting "the button works" from "HA
 sees it". Both bundled clients connect to `localhost`.

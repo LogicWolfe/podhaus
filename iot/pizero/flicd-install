@@ -29,6 +29,11 @@ bin="$tmp/fliclib-linux-hci-master/bin/armv6l/flicd"
 [[ -x $bin ]] || { echo "flicd-install: no armv6l flicd in the tarball" >&2; exit 1; }
 
 echo "==> Installing"
+# Plain directory, not systemd StateDirectory: an earlier DynamicUser unit
+# put the database behind a /var/lib/flicd -> /var/lib/private/flicd
+# symlink, which is a trap for anyone looking for the bonds.
+[[ -L /var/lib/flicd ]] && rm -f /var/lib/flicd
+install -d -m 0755 /var/lib/flicd
 install -d -m 0755 /opt/flicd
 install -m 0755 "$bin" /opt/flicd/flicd
 # Bundled clients, for pairing and for testing flicd without Home Assistant.
@@ -36,15 +41,30 @@ install -m 0755 -t /opt/flicd "$tmp/fliclib-linux-hci-master"/clientlib/python/*
 install -m 0644 "$HERE/flicd.service" /etc/systemd/system/flicd.service
 
 # BlueZ holds hci0 through the kernel's normal channel; flicd needs the
-# adapter exclusively via HCI_CHANNEL_USER. Leaving bluetoothd running does
-# not always fail loudly — it degrades connection reliability instead.
+# adapter exclusively via HCI_CHANNEL_USER.
 echo "==> Disabling BlueZ"
 systemctl disable --now bluetooth.service 2>/dev/null || true
 
+# Stopping bluetooth.service leaves the radio rfkill-blocked for a moment,
+# and flicd binding into that window comes up deaf. Settle before starting.
+sleep 3
+
 echo "==> Starting flicd"
 systemctl daemon-reload
-systemctl enable --now flicd.service
-systemctl --no-pager --lines=0 status flicd.service
+systemctl restart flicd.service
+systemctl enable flicd.service
+sleep 3
+
+# "Flic server is now up and running!" only means the TCP listener is up.
+# The adapter is a separate thing and can fail on its own, so assert on the
+# line that actually proves the radio.
+if journalctl -u flicd --since "-1min" | grep -q "Successfully bound HCI socket"; then
+	echo "==> flicd has the radio"
+else
+	echo "flicd-install: flicd is running but never bound hci0 — it is deaf" >&2
+	journalctl -u flicd --no-pager -n 20
+	exit 1
+fi
 
 echo
 echo "flicd listening on 5551, open to the LAN."
