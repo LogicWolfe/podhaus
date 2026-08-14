@@ -116,9 +116,15 @@ power cut should instead force the strip off, that is `ALWAYS_OFF` (or
 Updates are OTA from the ESPHome dashboard on `bilby:6052`. A first flash
 on a bare board has to be over USB, since there is nothing to OTA to:
 compile in the dashboard, then write `firmware.factory.bin` to offset
-`0x0` with `esptool`. **OTA has not been exercised on this board** — it has
-only ever been flashed over USB, so assume a cable may be needed until one
-OTA has succeeded.
+`0x0` with `esptool`. Thereafter the board is reachable without a cable:
+
+```
+docker exec esphome esphome upload /config/led-strip-grasshopper.yaml --device 10.0.0.44
+```
+
+The OTA port is `3232`, not the web server's `80`. The board reboots into
+the new image and restores its previous on/off state, so an update does not
+disturb a lit strip beyond the reboot itself.
 
 Editing the config goes through the repo, and the deploy seeds the
 dashboard's config volume — see
