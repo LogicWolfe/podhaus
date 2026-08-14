@@ -666,3 +666,58 @@
           target:
             entity_id: light.grasshopper
   mode: single
+- id: flic_blue_bookshelf_lamp
+  alias: 'Flic blue: bookshelf lamp'
+  description: >-
+    The blue Flic toggles light.bookshelf_lamp, the single Hue bulb in
+    grasshopper, snapshotting and restoring its colour and brightness the same
+    way the green button does for the room.
+
+    Note that this is currently the SAME physical bulb the green button drives:
+    light.grasshopper is a Hue room group whose only member is this lamp. The
+    two stop being duplicates as soon as the room gains another Hue bulb.
+    A Nanoleaf bulb in this room would not resolve it -- a Hue room group can
+    only ever contain Hue bulbs, so covering both needs an HA light group or a
+    multi-entity target rather than light.grasshopper.
+
+    Same restart caveat as the green button: scenes made by scene.create live
+    in memory only, so the default branch handles the first press after a Home
+    Assistant restart and falls back to a bare turn_on.
+
+    Single press only. Hold is left unbound.
+  triggers:
+    - trigger: event
+      event_type: flic_click
+      event_data:
+        button_address: '80:e4:da:73:d6:bd'
+        click_type: single
+  actions:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: light.bookshelf_lamp
+              state: 'on'
+          sequence:
+            - action: scene.create
+              data:
+                scene_id: bookshelf_lamp_previous
+                snapshot_entities:
+                  - light.bookshelf_lamp
+            - action: light.turn_off
+              target:
+                entity_id: light.bookshelf_lamp
+        - conditions:
+            - condition: state
+              entity_id: light.bookshelf_lamp
+              state: 'off'
+            - condition: template
+              value_template: '{{ states.scene.bookshelf_lamp_previous is not none }}'
+          sequence:
+            - action: scene.turn_on
+              target:
+                entity_id: scene.bookshelf_lamp_previous
+      default:
+        - action: light.turn_on
+          target:
+            entity_id: light.bookshelf_lamp
+  mode: single
