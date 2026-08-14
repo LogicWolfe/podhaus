@@ -1,0 +1,52 @@
+[Unit]
+Description=Flic button daemon
+Documentation=https://github.com/50ButtonsEach/fliclib-linux-hci
+After=network-online.target
+Wants=network-online.target
+# Deliberately no dependency on bluetooth.service — flicd takes hci0
+# exclusively via HCI_CHANNEL_USER and BlueZ must be out of the way.
+Conflicts=bluetooth.service
+
+[Service]
+Type=simple
+
+# 5551 is open to the LAN on purpose. flicd's protocol has no
+# authentication and no encryption, so anyone on the network can enumerate
+# buttons and stream presses — accepted deliberately, because a firewall
+# here would eventually cost an evening's debugging and the worst case is
+# someone else seeing a doorbell press.
+#
+# -w waits for hci0 instead of exiting non-zero if the adapter is not yet
+# enumerated, which it may not be on a cold boot.
+# No -d and no -l: systemd owns the lifecycle and stderr goes to journald.
+ExecStart=/opt/flicd/flicd \
+    --db-file /var/lib/flicd/flicd.db \
+    --server-addr 0.0.0.0 \
+    --server-port 5551 \
+    --hci-dev hci0 \
+    --wait-for-hci
+
+DynamicUser=yes
+StateDirectory=flicd
+
+# HCI_CHANNEL_USER needs CAP_NET_ADMIN; opening the raw HCI socket needs
+# CAP_NET_RAW. Upstream documents only cap_net_admin via setcap, but setcap
+# is lost whenever the binary is replaced, so grant them from the unit.
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+
+# AF_BLUETOOTH is load-bearing — omit it and flicd cannot open hci0 at all.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_BLUETOOTH
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+# Flic buttons, bridged by flicd on the Pi Zero (iot/pizero/).
+#
+# The Pi owns the BLE link and nothing else: flicd holds hci0 exclusively via
+# HCI_CHANNEL_USER and serves its own protocol on TCP 5551, which this
+# integration dials. No custom code sits between the two.
+#
+# The address is a UniFi reservation (terraform/unifi.tf) rather than
+# pizero.local, because HA's container has no mDNS resolver and the name
+# would simply never resolve.
+#
+# Pairing is an explicit act, done once per button with the scan wizard on
+# the Pi -- see docs/runbooks/pizero.md. discovery is therefore off: leaving
+# it on makes HA scan continuously, which costs radio time on a single-core
+# ARMv6 board that is already holding connections to every paired button.
+# Turn it on temporarily if you would rather pair by holding a button for
+# seven seconds than by SSHing in.
+binary_sensor:
+  - platform: flic
+    host: 10.0.0.77
+    port: 5551
+    discovery: false
+    # Discard a press rather than replaying it late. Flic buttons queue
+    # presses locally while out of range, so without a bound a button that
+    # spent an hour disconnected would dump an hour of history into HA the
+    # moment it reconnects -- firing every automation attached to it.
+    timeout: 3
