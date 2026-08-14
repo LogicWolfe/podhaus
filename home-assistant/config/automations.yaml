@@ -602,3 +602,67 @@
       target:
         entity_id: light.grasshopper_led_strip_strip
   mode: single
+- id: flic_green_grasshopper_lamp
+  alias: 'Flic green: grasshopper lamp'
+  description: >-
+    The green Flic toggles the grasshopper lamp -- light.grasshopper, the Hue
+    room group, which currently holds one bulb (Bookshelf lamp). NOT
+    light.grasshopper_led_strip_strip, which is the ESP32 strip on the white
+    button.
+
+    Turning off snapshots the light into scene.grasshopper_lamp_previous first,
+    so turning it back on restores exactly the brightness and colour it had
+    rather than whatever the bulb defaults to. Hue usually restores the last
+    setting by itself on a bare turn_on, but that is the bridge's behaviour
+    rather than a guarantee, and it does not survive the bulb losing mains
+    power -- the snapshot makes the intent explicit and independent of it.
+
+    Scenes made by scene.create are held in memory and do NOT survive a Home
+    Assistant restart, so the default branch covers the first press after a
+    restart while the light is off, and the case where the light is
+    unavailable. That branch is a bare turn_on, which falls back to exactly the
+    Hue behaviour described above -- so the worst case is what a plain toggle
+    would have done anyway.
+
+    Snapshotting the group means a restore applies one state to every member.
+    That is faithful while the room holds a single bulb; if more are added,
+    move snapshot_entities to the individual lights so per-bulb differences
+    survive.
+
+    Single press only, matching the white button. Hold is left unbound.
+  triggers:
+    - trigger: event
+      event_type: flic_click
+      event_data:
+        button_address: '80:e4:da:73:e3:2b'
+        click_type: single
+  actions:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: light.grasshopper
+              state: 'on'
+          sequence:
+            - action: scene.create
+              data:
+                scene_id: grasshopper_lamp_previous
+                snapshot_entities:
+                  - light.grasshopper
+            - action: light.turn_off
+              target:
+                entity_id: light.grasshopper
+        - conditions:
+            - condition: state
+              entity_id: light.grasshopper
+              state: 'off'
+            - condition: template
+              value_template: '{{ states.scene.grasshopper_lamp_previous is not none }}'
+          sequence:
+            - action: scene.turn_on
+              target:
+                entity_id: scene.grasshopper_lamp_previous
+      default:
+        - action: light.turn_on
+          target:
+            entity_id: light.grasshopper
+  mode: single
