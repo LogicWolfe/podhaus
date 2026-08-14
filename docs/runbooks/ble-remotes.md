@@ -27,6 +27,49 @@ The API key is the load-bearing one: Home Assistant stores it in its config
 entry, so rotating it in 1Password silently breaks the integration until the
 entry is re-added.
 
+## Adopting a device into Home Assistant
+
+This applies to every ESPHome device, not just the remotes.
+
+**There is no config-as-code path, and this is not an oversight.** HA's esphome
+integration declares `CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)`
+— the marker for "accepts no YAML". Putting `esphome:` in `configuration.yaml`
+does nothing but log an error. Adoption creates a config entry in HA's own
+`.storage`, so the device YAML in `iot/esphome/config/` stays the source of
+truth for the *device*, while HA's knowledge of it is runtime state.
+
+Do not hand-edit `.storage/core.config_entries`. HA owns that file and rewrites
+it while running; a schema slip corrupts every integration's entry, not just the
+one being added.
+
+Adopt through the config-flow API, which is scriptable and does not depend on
+the device appearing under Discovered:
+
+```bash
+TOK=$(op item get "Home Assistant" --vault Homelab --fields credential --reveal)
+# 1. start the flow -> returns flow_id, asks for host
+curl -s -X POST -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
+  -d '{"handler": "esphome"}' \
+  http://172.18.0.1:8123/api/config/config_entries/flow
+# 2. POST {"host": "<ip>", "port": 6053}   to  .../flow/<flow_id>  -> asks for the key
+# 3. POST {"noise_psk": "<api key>"}       to  .../flow/<flow_id>  -> create_entry
+```
+
+The long-lived access token is the `credential` field of the 1Password Homelab
+item **Home Assistant**. The `noise_psk` is the `api key` field of the item
+**ESPHome** — the same key every device shares. Inside the esphome container it
+is `api_encryption_key` in `/config/secrets.yaml` (note the name differs from
+the 1Password field label), so a script running there can read it in-process
+rather than passing it on a command line.
+
+Run this from bilby against `172.18.0.1:8123`. HA is not exposed for API use
+off-host.
+
+Entity IDs are derived from the device's `friendly_name`, not from the entity
+name in the YAML — a light named `Strip` on a device named
+`Grasshopper LED Strip` becomes `light.grasshopper_led_strip_strip`. Read the
+real ID back from `/api/states` after adopting rather than predicting it.
+
 ## Devices
 
 | Device | Remote | BLE MAC | Config |

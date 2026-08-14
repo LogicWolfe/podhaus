@@ -28,7 +28,8 @@ data signal instead.
 | Config | [`iot/esphome/config/led-strip-grasshopper.yaml`](../../iot/esphome/config/led-strip-grasshopper.yaml) |
 | Board | Seeed XIAO ESP32C3 (`seeed_xiao_esp32c3`), ESP32-C3 QFN32 rev v0.4, 4MB flash |
 | Wifi MAC | `AC:27:6E:81:E2:D8` |
-| Entity | `light.strip`, friendly name "Grasshopper LED Strip" |
+| Entity | `light.grasshopper_led_strip_strip` |
+| HA config entry | `Grasshopper LED Strip`, domain `esphome` |
 | Control pin | `GPIO4` — silkscreen `D2` |
 
 The board name matters: `seeed_xiao_esp32c3`, **not** `esp32-c3-devkitm-1`.
@@ -124,6 +125,15 @@ identically here.
 
 ## Driving it by hand
 
+Normally: it is an ordinary HA light, so `light.turn_on` /
+`light.turn_off` on `light.grasshopper_led_strip_strip`, or the tile in the
+dashboard. Adoption into HA is a config entry, not YAML — see
+[adopting a device](ble-remotes.md) for how that entry is created and why it
+cannot live in the repo.
+
+The rest of this section is for driving the board directly, with HA out of the
+picture — useful when diagnosing whether a fault is in the device or in HA.
+
 `web_server:` on ESPHome 2026.7.4 serves a single-page app, and its REST
 routes are not what older documentation describes: `GET /light/<id>` and
 `GET /sensor/<id>` return 404, and the control routes return 411 without
@@ -152,6 +162,7 @@ docker exec esphome python /tmp/led.py on   # or off / state
 | Nothing lights | Red/black reversed, or the cable ignores colour convention | Swap red and black at the output terminals |
 | Module LED `D1` lights, strip doesn't | Output wiring or the strip | Check `OUT+`/`OUT−`, test the strip in a normal USB port |
 | Board never joins wifi | Antenna not fitted | Clip the u.FL antenna on |
+| Entity `unavailable` in HA, device pings fine | API key rotated in 1Password, or the address drifted | Re-add the config entry with the current key — see [adopting a device](ble-remotes.md) |
 | Board flashes fine then appears dead, only when the module is attached | Control wire on a strapping pin | Move it to `D2` |
 
 `D1` on the module is the useful diagnostic: it sits on the control side,

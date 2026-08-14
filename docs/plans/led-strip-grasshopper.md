@@ -1,9 +1,11 @@
 # Grasshopper LED strip — remaining integration
 
-The hardware is built, flashed and working: an API call switches the
-strip. How it is wired, how the firmware is configured and how to drive
-or troubleshoot it now live in
-[`docs/runbooks/led-strip-grasshopper.md`](../runbooks/led-strip-grasshopper.md).
+The hardware is built, flashed and working, and the device is adopted into
+Home Assistant as `light.grasshopper_led_strip_strip`. How it is wired, how
+the firmware is configured and how to drive or troubleshoot it now live in
+[`docs/runbooks/led-strip-grasshopper.md`](../runbooks/led-strip-grasshopper.md);
+how ESPHome devices get into Home Assistant lives in
+[`docs/runbooks/ble-remotes.md`](../runbooks/ble-remotes.md).
 
 What is left is integration. Delete this page once these land.
 
@@ -20,4 +22,11 @@ What is left is integration. Delete this page once these land.
       alongside the Turn Touch entry. The firmware already exposes
       `prometheus:`; nothing is collecting it.
 - [ ] **Home Assistant automation** binding a Flic press to the light.
-      This is the last piece that makes it useful without a phone.
+      This is the last piece that makes it useful without a phone, and both
+      halves now exist: the light is
+      `light.grasshopper_led_strip_strip`, and the Flic buttons fire
+      `flic_click` events via
+      [`home-assistant/config/packages/flic.yaml`](../../home-assistant/config/packages/flic.yaml).
+      Trigger on `flic_click` and match `button_address` — the buttons are
+      named after their address, so the colour mapping is in that file's
+      header.
