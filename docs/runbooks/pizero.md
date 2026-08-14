@@ -285,4 +285,4 @@ To re-run cloud-init on an existing card, bump the instance-id in
   re-pairing every button.
 - The LED strip it was originally paired with now lives on its own
   ESP32 — see
-  [`docs/plans/led-strip-grasshopper.md`](../plans/led-strip-grasshopper.md).
+  [`docs/runbooks/led-strip-grasshopper.md`](led-strip-grasshopper.md).

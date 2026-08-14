@@ -116,7 +116,9 @@ power cut should instead force the strip off, that is `ALWAYS_OFF` (or
 Updates are OTA from the ESPHome dashboard on `bilby:6052`. A first flash
 on a bare board has to be over USB, since there is nothing to OTA to:
 compile in the dashboard, then write `firmware.factory.bin` to offset
-`0x0` with `esptool`.
+`0x0` with `esptool`. **OTA has not been exercised on this board** — it has
+only ever been flashed over USB, so assume a cable may be needed until one
+OTA has succeeded.
 
 Editing the config goes through the repo, and the deploy seeds the
 dashboard's config volume — see
