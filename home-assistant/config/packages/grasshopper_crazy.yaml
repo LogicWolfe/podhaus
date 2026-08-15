@@ -6,6 +6,11 @@
 # rule is that a press must always make something happen -- unclear outcomes
 # are fine, dead presses are not.
 #
+# The one exception is a 06:45-19:30 curfew on the show, enforced on the
+# button in automations.yaml rather than here. This flag has no opinion about
+# the time: raising it from a dashboard runs the show at any hour, which is
+# how you test it without waiting for morning.
+#
 # THIS FLAG IS THE WHOLE INTERFACE. It is stateful, not momentary, and it is
 # published to Apple Home. Three consumers watch it:
 #

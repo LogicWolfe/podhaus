@@ -843,12 +843,31 @@
     A hold while the show is already running produces no edge and so starts
     nothing new. Accepted: the show is visibly running, which is the one place
     in this room where a dead press does not read as a dead room.
+
+    CURFEW: 06:45 to 19:30. Outside it a hold does nothing at all, which is a
+    deliberate exception to this room's no-dead-presses rule -- a strobing
+    light show at bedtime is worse than a button that ignores you. The rest of
+    the room stays available all night: black's short press still toggles the
+    strip, and blue and green are unrestricted.
+
+    The curfew sits on the BUTTON, not on the flag or the scripts. Everything
+    downstream keeps treating "flag on" as "the show is running", with no
+    second opinion about whether it should be, so crazy mode can still be
+    triggered from a dashboard at any hour for testing.
+
+    A show started at 19:29 runs its full 30 seconds past the boundary. Not
+    worth guarding -- cutting it short would be a stranger result than letting
+    it finish.
   triggers:
     - trigger: event
       event_type: flic_click
       event_data:
         button_address: '80:e4:da:73:e3:32'
         click_type: hold
+  conditions:
+    - condition: time
+      after: '06:45:00'
+      before: '19:30:00'
   actions:
     - action: input_boolean.turn_on
       target:

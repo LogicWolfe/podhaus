@@ -161,6 +161,12 @@ drive unrelated things — its short press is the strip, its hold is the
 whole-room light show. Crazy mode has no cancel: it runs 30 seconds and ends
 itself, so the hold only ever means "start" and the button is safe to hammer.
 
+**Crazy mode is under a 06:45–19:30 curfew**, enforced on the button. Outside
+those hours the hold does nothing; everything else in the room, including
+black's short press, works all night. If the show needs testing after hours,
+turn on `input_boolean.grasshopper_crazy_active` from a dashboard — the
+curfew is on the button, not on the flag.
+
 The grasshopper lamp is a Nanoleaf owned by Apple Home, so blue does not
 command it: it raises a request boolean that an Apple Shortcut on the HomePod
 acts on. That lamp's palette lives in the Shortcut and is not in this repo.

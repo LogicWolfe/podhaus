@@ -16,7 +16,14 @@ substitute alternatives, do not add gestures, do not propose hardware.
 
 Crazy mode's core: **a series of changing lights over a period of time, with
 some randomization.** It has **no cancel** — it runs its 30 seconds and ends
-itself, so the hold only ever means "start".
+itself, so the hold only ever means "start" — and a **06:45–19:30 curfew**,
+outside which the hold does nothing.
+
+The curfew is the one deliberate exception to the no-dead-presses rule below:
+a strobing light show at bedtime is worse than a button that ignores you.
+Nothing else in the room is time-restricted, and the curfew sits on the button
+rather than on the flag, so the show can still be triggered from a dashboard
+at any hour for testing.
 
 **Rearranged 2026-08-15**, when the room went from four buttons to three. The
 strip moved onto black's short press and crazy mode onto black's hold. One
