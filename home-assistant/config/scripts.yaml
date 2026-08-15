@@ -11,16 +11,25 @@
 # not to these scripts. One owner, so a script dying cannot strand the flag on
 # and make crazy mode permanently untriggerable.
 #
-# The iteration cap is a backstop, not the duration control. At an average
-# 2.5s cycle, 40 iterations is ~100s -- comfortably beyond the 32s the timer
-# allows, so it only ever fires if the timer itself failed.
+# The iteration caps are backstops, not the duration control -- they should
+# only ever fire if the timer itself failed. Size them against the FASTEST
+# possible run, not the average, or the cap silently becomes the duration
+# control and the light stops early while the rest of the room keeps going.
+# Worst case is every delay landing on its minimum: 1.0s per cycle for the
+# Hue (32 in 32s, under its 40) and 0.5s for the strip (64 in 32s, hence 80).
 
 grasshopper_crazy_strip:
   alias: 'Crazy mode: LED strip flicker'
   description: >-
-    Flickers the pink LED strip: on for a random 0.5-3s, off for a random
-    0.5-1s. The strip is binary -- one colour, no brightness -- so flicker is
-    the whole of its vocabulary.
+    Flickers the pink LED strip: on for a random 0.25-1.5s, off for a random
+    0.25-0.5s. The strip is binary -- one colour, no brightness -- so flicker
+    is the whole of its vocabulary, and it therefore runs at twice the Hue's
+    rate: the only way to make it more interesting is to make it faster.
+
+    It can afford that and the Hue cannot. This is an ESPHome light over the
+    native API, so a command is a local socket write, whereas every Hue command
+    crosses a bridge that rate-limits and visibly ramps between colours rather
+    than snapping.
   mode: restart
   sequence:
     - variables:
@@ -31,18 +40,18 @@ grasshopper_crazy_strip:
             entity_id: input_boolean.grasshopper_crazy_active
             state: "on"
           - condition: template
-            value_template: "{{ repeat.index <= 40 }}"
+            value_template: "{{ repeat.index <= 80 }}"
         sequence:
           - action: light.turn_on
             target:
               entity_id: light.grasshopper_led_strip_strip
           - delay:
-              milliseconds: "{{ range(500, 3001) | random }}"
+              milliseconds: "{{ range(250, 1501) | random }}"
           - action: light.turn_off
             target:
               entity_id: light.grasshopper_led_strip_strip
           - delay:
-              milliseconds: "{{ range(500, 1001) | random }}"
+              milliseconds: "{{ range(250, 501) | random }}"
     - if:
         - condition: template
           value_template: "{{ was_on }}"

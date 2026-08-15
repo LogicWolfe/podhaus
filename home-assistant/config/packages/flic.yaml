@@ -13,10 +13,9 @@
 # Automations should trigger on the flic_click event and match
 # button_address, so this table is the only place the colours are recorded:
 #
-#   Blue    80:e4:da:73:d6:bd
-#   Green   80:e4:da:73:e3:2b
-#   White   80:e4:da:73:c4:f1
-#   Black   80:e4:da:73:e3:32
+#   Blue    80:e4:da:73:d6:bd   Nanoleaf lamp: toggle / palette
+#   Green   80:e4:da:73:e3:2b   bookshelf lamp: toggle / colour
+#   Black   80:e4:da:73:e3:32   LED strip toggle / crazy mode
 #
 # Pairing is an explicit act, done once per button with the scan wizard on
 # the Pi -- see docs/runbooks/pizero.md. discovery is therefore off: leaving

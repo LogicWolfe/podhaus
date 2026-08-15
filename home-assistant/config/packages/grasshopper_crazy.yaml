@@ -1,9 +1,10 @@
 # Crazy mode, loaded as a package (see ../homeassistant.yaml).
 #
-# The black Flic in grasshopper: short press starts a 30-second light show
-# across all three of the room's lights, long press cancels it. It is a
-# 4-year-old's button, so the design rule is that a press must always make
-# something happen -- unclear outcomes are fine, dead presses are not.
+# The black Flic in grasshopper: HOLDING it starts a 30-second light show
+# across all three of the room's lights, which then ends on its own. Its short
+# press belongs to the LED strip. It is a 4-year-old's button, so the design
+# rule is that a press must always make something happen -- unclear outcomes
+# are fine, dead presses are not.
 #
 # THIS FLAG IS THE WHOLE INTERFACE. It is stateful, not momentary, and it is
 # published to Apple Home. Three consumers watch it:
@@ -20,19 +21,30 @@
 # periods with the light off, so "off" cannot also mean "stop". The stop
 # signal has to be out of band.
 #
-# WHY STATEFUL, WHEN EVERY OTHER REQUEST HERE IS MOMENTARY. Both black
-# gestures are absolute -- set the flag, clear the flag -- so repeating either
-# is harmless and the button is safe to hammer. It also makes overlapping runs
-# impossible: while the show runs there is no off->on edge to start a second
-# one. That sidesteps an undocumented question about how Apple treats a
-# re-trigger during a running Repeat, by never asking it.
+# WHY STATEFUL, WHEN EVERY OTHER REQUEST HERE IS MOMENTARY. Because the flag
+# has to be readable, not merely raisable: the Nanoleaf's Shortcut polls it
+# once per iteration to decide whether to keep looping, and a momentary
+# boolean would clear itself long before the second poll.
 #
-# The two dead-press cases, accepted rather than overlooked: a short press
-# while the show runs does nothing new (but the show is visibly running, so
-# the room is not dead), and a long press while it is not running does
-# nothing at all.
+# It also makes overlapping runs impossible. While the show runs the flag is
+# already on, so there is no off->on edge for a second run to start from.
+# That sidesteps an undocumented question about how Apple treats a re-trigger
+# during a running Repeat, by never asking it.
+#
+# THERE IS NO CANCEL. The hold only ever raises this flag; the show runs its
+# 30 seconds and grasshopper_crazy_timer lowers it. So the gesture stays
+# absolute even though it is now the only one black has left for this -- press
+# it as many times as you like and the answer is always "start", which is the
+# property that makes the button safe to hammer.
+#
+# initial: off, and this is load-bearing rather than tidiness. With no cancel
+# gesture, the timer is the only thing that can lower the flag; a Home
+# Assistant restart mid-show would drop that pending delay and leave the flag
+# stuck on with nothing left to clear it, making crazy mode permanently
+# untriggerable. Forcing off at startup is the whole recovery path.
 
 input_boolean:
   grasshopper_crazy_active:
     name: Grasshopper crazy mode
     icon: mdi:party-popper
+    initial: off

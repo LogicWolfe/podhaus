@@ -1,6 +1,6 @@
 # Bookshelf lamp colour cycle, loaded as a package (see ../homeassistant.yaml).
 #
-# The blue Flic's long press steps this lamp through three colours. Unlike the
+# The green Flic's long press steps this lamp through three colours. Unlike the
 # grasshopper lamp, this is a Hue bulb Home Assistant controls directly -- no
 # bridge, no Apple Home, and HA can see its real state -- so the palette lives
 # here in the repo rather than hand-authored in an Apple Shortcut.

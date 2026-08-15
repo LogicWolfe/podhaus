@@ -150,18 +150,27 @@ very little and eventually costs an evening's debugging.
 
 ### The buttons
 
-| Button | Address | Single press |
-|---|---|---|
-| Blue | `80:e4:da:73:d6:bd` | toggle the bookshelf lamp |
-| Green | `80:e4:da:73:e3:2b` | toggle the grasshopper lamp |
-| White | `80:e4:da:73:c4:f1` | toggle the grasshopper LED strip |
-| Black | `80:e4:da:73:e3:32` | — |
+| Button | Address | Single press | Hold |
+|---|---|---|---|
+| Blue | `80:e4:da:73:d6:bd` | toggle the grasshopper lamp | next lamp colour |
+| Green | `80:e4:da:73:e3:2b` | toggle the bookshelf lamp | next lamp colour |
+| Black | `80:e4:da:73:e3:32` | toggle the LED strip | start crazy mode |
+
+Three buttons cover four jobs, which is why black is the one whose gestures
+drive unrelated things — its short press is the strip, its hold is the
+whole-room light show. Crazy mode has no cancel: it runs 30 seconds and ends
+itself, so the hold only ever means "start" and the button is safe to hammer.
+
+The grasshopper lamp is a Nanoleaf owned by Apple Home, so blue does not
+command it: it raises a request boolean that an Apple Shortcut on the HomePod
+acts on. That lamp's palette lives in the Shortcut and is not in this repo.
+See [`../plans/grasshopper-buttons.md`](../plans/grasshopper-buttons.md).
 
 Bindings are automations in `home-assistant/config/automations.yaml`,
 triggered on the `flic_click` event and matched by `button_address`. Trigger
 on the event, never on the button's `binary_sensor`: the integration
 initialises every one of them to `on` at startup, so a state trigger fires on
-every Home Assistant restart and reload. Hold is unbound on all four.
+every Home Assistant restart and reload.
 
 flicd knows them only as addresses and HA names its entities after them
 (`binary_sensor.flic_80e4da73d6bd`), so this table is the only record of

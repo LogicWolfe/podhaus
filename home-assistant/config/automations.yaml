@@ -574,42 +574,21 @@
               - light.haiku_fan_4
               - light.shapes_4108
   mode: restart
-- id: flic_white_grasshopper_strip
-  alias: 'Flic white: grasshopper LED strip'
+- id: flic_blue_grasshopper_lamp
+  alias: 'Flic blue: grasshopper lamp'
   description: >-
-    The white Flic toggles the LED strip in grasshopper -- the ESP32-driven
-    strip on light.grasshopper_led_strip_strip, NOT light.grasshopper, which is
-    the room's existing bulb.
+    The blue Flic drives the grasshopper lamp -- the Nanoleaf Essentials NL45,
+    through the Apple Home relay in packages/grasshopper_lamp.yaml. NOT
+    light.grasshopper_led_strip_strip (the ESP32 strip, now on black), and not
+    light.grasshopper, the Hue room group, which holds only the bookshelf lamp
+    and so would duplicate green.
 
     Triggered on the flic_click event rather than the button's binary_sensor.
     The flic integration initialises every one of its binary_sensors to `on`
     at startup, so a state trigger would fire this on every Home Assistant
     restart and reload. The event carries button_address and click_type and is
-    only emitted by a real press.
-
-    Single press only. Hold is deliberately left unbound so it stays available
-    for a second action on the same button; double is not reported at all,
-    because enabling it would make every single press wait out the
-    disambiguation window before firing.
-  triggers:
-    - trigger: event
-      event_type: flic_click
-      event_data:
-        button_address: '80:e4:da:73:c4:f1'
-        click_type: single
-  actions:
-    - action: light.toggle
-      target:
-        entity_id: light.grasshopper_led_strip_strip
-  mode: single
-- id: flic_green_grasshopper_lamp
-  alias: 'Flic green: grasshopper lamp'
-  description: >-
-    The green Flic drives the grasshopper lamp -- the Nanoleaf Essentials NL45,
-    through the Apple Home relay in packages/grasshopper_lamp.yaml. NOT
-    light.grasshopper_led_strip_strip (the ESP32 strip, on the white button),
-    and no longer light.grasshopper, the Hue room group, which holds only the
-    bookshelf lamp and so duplicated the blue button.
+    only emitted by a real press. Every Flic automation in this file works that
+    way, for that reason.
 
     There is no HA entity for this bulb and there cannot be one: it is a
     HomeKit-over-Thread accessory paired to Apple Home, and HAP allows a single
@@ -636,7 +615,7 @@
     - trigger: event
       event_type: flic_click
       event_data:
-        button_address: '80:e4:da:73:e3:2b'
+        button_address: '80:e4:da:73:d6:bd'
         click_type: single
   actions:
     - action: input_boolean.turn_on
@@ -644,10 +623,10 @@
         entity_id: input_boolean.grasshopper_lamp_toggle_request
   mode: queued
   max: 5
-- id: flic_green_grasshopper_lamp_colour
-  alias: 'Flic green (hold): grasshopper lamp colour'
+- id: flic_blue_grasshopper_lamp_colour
+  alias: 'Flic blue (hold): grasshopper lamp colour'
   description: >-
-    Holding the green Flic advances the grasshopper lamp through its palette:
+    Holding the blue Flic advances the grasshopper lamp through its palette:
     an evening reading amber, a pink, a blue and a deep green.
 
     The palette is NOT here. It is hand-authored as `If` branches in an Apple
@@ -657,7 +636,7 @@
     - trigger: event
       event_type: flic_click
       event_data:
-        button_address: '80:e4:da:73:e3:2b'
+        button_address: '80:e4:da:73:d6:bd'
         click_type: hold
   actions:
     - action: input_boolean.turn_on
@@ -701,39 +680,38 @@
         entity_id: "{{ trigger.entity_id }}"
   mode: parallel
   max: 10
-- id: flic_blue_bookshelf_lamp
-  alias: 'Flic blue: bookshelf lamp'
+- id: flic_green_bookshelf_lamp
+  alias: 'Flic green: bookshelf lamp'
   description: >-
-    The blue Flic toggles light.bookshelf_lamp, the single Hue bulb in
+    The green Flic toggles light.bookshelf_lamp, the single Hue bulb in
     grasshopper. A bare toggle is all that is needed to have it come back at
     the brightness and colour it had -- the Hue bridge restores that itself on
-    a turn_on with no attributes. See the green button for why this must not be
+    a turn_on with no attributes. See the blue button for why this must not be
     "improved" with a scene snapshot.
 
-    Note that this is currently the SAME physical bulb the green button drives:
-    light.grasshopper is a Hue room group whose only member is this lamp. The
-    two stop being duplicates as soon as the room gains another Hue bulb.
-    A Nanoleaf bulb in this room would not resolve it -- a Hue room group can
-    only ever contain Hue bulbs, so covering both needs an HA light group or a
-    multi-entity target rather than light.grasshopper.
+    Addressed as the bulb, not as light.grasshopper. That Hue room group holds
+    only this lamp, so today they behave identically -- but a Hue room group
+    can only ever contain Hue bulbs, so it would never grow to cover the room's
+    Nanoleaf or the strip. Naming the bulb keeps the button honest about what
+    it actually controls.
 
     Single press toggles; hold advances the colour (see
-    flic_blue_bookshelf_lamp_colour below).
+    flic_green_bookshelf_lamp_colour below).
   triggers:
     - trigger: event
       event_type: flic_click
       event_data:
-        button_address: '80:e4:da:73:d6:bd'
+        button_address: '80:e4:da:73:e3:2b'
         click_type: single
   actions:
     - action: light.toggle
       target:
         entity_id: light.bookshelf_lamp
   mode: single
-- id: flic_blue_bookshelf_lamp_colour
-  alias: 'Flic blue (hold): bookshelf lamp colour'
+- id: flic_green_bookshelf_lamp_colour
+  alias: 'Flic green (hold): bookshelf lamp colour'
   description: >-
-    Holding the blue Flic advances the bookshelf lamp's colour, cycling
+    Holding the green Flic advances the bookshelf lamp's colour, cycling
     Blue -> Red -> Blue + red -> Blue. input_select.select_next cycles by
     default, so there is no end stop.
 
@@ -750,7 +728,7 @@
     - trigger: event
       event_type: flic_click
       event_data:
-        button_address: '80:e4:da:73:d6:bd'
+        button_address: '80:e4:da:73:e3:2b'
         click_type: hold
   actions:
     - action: input_select.select_next
@@ -821,21 +799,23 @@
                 rgb_color: [255, 0, 255]
   mode: queued
   max: 5
-- id: flic_black_crazy_start
-  alias: 'Flic black: start crazy mode'
+- id: flic_black_grasshopper_strip
+  alias: 'Flic black: grasshopper LED strip'
   description: >-
-    The black Flic is the fun button. A short press starts a 30-second light
-    show across all three lights in the room; holding it cancels (see
-    flic_black_crazy_stop).
+    The black Flic toggles the LED strip -- the ESP32-driven strip on
+    light.grasshopper_led_strip_strip, NOT light.grasshopper, which is the
+    room's Hue bulb.
 
-    Both gestures are ABSOLUTE -- set the flag, clear the flag -- so repeating
-    either is harmless. Black is the one button in this room that is entirely
-    safe to hammer, which is fitting given whose favourite it will be.
+    Black is the only button here whose two gestures drive unrelated things: a
+    short press is the strip, a hold is the whole-room light show. That is
+    deliberate -- three buttons cover four jobs, so the show had to share, and
+    it belongs on the gesture that cannot be hit by accident.
 
-    Pressing again while the show runs produces no edge and so starts nothing
-    new. Accepted: the show is visibly running, so this is the one place a
-    dead press does not read as a dead room. It also makes overlapping runs
-    structurally impossible.
+    Toggling the strip DURING a show does not stick. script.grasshopper_crazy_strip
+    captures the strip's state when the show starts and restores it at the end,
+    so a press mid-show is overwritten ~30s later. Accepted rather than fixed:
+    the press still visibly does something at the time, which is the rule that
+    matters in this room.
   triggers:
     - trigger: event
       event_type: flic_click
@@ -843,19 +823,26 @@
         button_address: '80:e4:da:73:e3:32'
         click_type: single
   actions:
-    - action: input_boolean.turn_on
+    - action: light.toggle
       target:
-        entity_id: input_boolean.grasshopper_crazy_active
+        entity_id: light.grasshopper_led_strip_strip
   mode: single
-- id: flic_black_crazy_stop
-  alias: 'Flic black (hold): cancel crazy mode'
+- id: flic_black_crazy
+  alias: 'Flic black (hold): crazy mode'
   description: >-
-    Holding the black Flic clears the crazy flag. All three consumers -- the
-    two HA scripts and the Nanoleaf's Apple Shortcut -- check it between
-    iterations, so the room stops within one on/off cycle rather than
-    instantly, and each restores the light it owns.
+    Holding the black Flic starts the 30-second light show across all three
+    lights. There is no cancel gesture: the show runs to the end and stops
+    itself.
 
-    A hold while nothing is running is a genuinely dead press. Accepted.
+    turn_on, NOT toggle. The flag is raised here and lowered only by
+    grasshopper_crazy_timer, which keeps the gesture absolute -- holding again
+    at any point can only ever mean "start", never "stop". That is what makes
+    black safe to hammer, and hammering is the expected way this button gets
+    used. A toggle would have let two holds in a row start the show and kill it.
+
+    A hold while the show is already running produces no edge and so starts
+    nothing new. Accepted: the show is visibly running, which is the one place
+    in this room where a dead press does not read as a dead room.
   triggers:
     - trigger: event
       event_type: flic_click
@@ -863,7 +850,7 @@
         button_address: '80:e4:da:73:e3:32'
         click_type: hold
   actions:
-    - action: input_boolean.turn_off
+    - action: input_boolean.turn_on
       target:
         entity_id: input_boolean.grasshopper_crazy_active
   mode: single
@@ -896,17 +883,24 @@
 - id: grasshopper_crazy_timer
   alias: 'Crazy mode: end the show'
   description: >-
-    Owns the flag's lifecycle, and is the ONLY thing that clears it on a normal
-    run. The show is 30 seconds; this allows 32 so the loops finish their last
-    cycle rather than being cut mid-flicker.
+    Owns the flag's lifetime and is the ONLY thing that clears it -- there is
+    no cancel gesture. The show is 30 seconds; this allows 32 so the loops
+    finish their last cycle rather than being cut mid-flicker.
 
     Single owner on purpose. The Nanoleaf's half runs on a hub that kills
     shortcuts at ten minutes, and a killed shortcut cannot clear anything -- so
     if the flag's lifetime depended on the loops finishing, one hub-side kill
     would strand it on and make crazy mode permanently untriggerable.
 
-    Restart mode so pressing black again mid-show extends from the new press
-    rather than ending early on the original timer.
+    Being the sole owner makes this a single point of failure: a Home Assistant
+    restart during the 32-second delay would drop it and leave the flag stuck
+    on, with nothing left to lower it. `initial: off` on the boolean
+    (packages/grasshopper_crazy.yaml) is what closes that -- it is the reason
+    that key is there.
+
+    Restart mode is defensive rather than load-bearing. The flag cannot
+    normally be re-raised while it is on, so a second run has nothing to
+    restart; it matters only if someone flips the boolean from a dashboard.
   triggers:
     - trigger: state
       entity_id: input_boolean.grasshopper_crazy_active
