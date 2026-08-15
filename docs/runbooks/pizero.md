@@ -204,6 +204,32 @@ seven seconds with no SSH at all, but it is off — it makes HA scan
 continuously, and radio time on a single-core ARMv6 board is not free
 while it is also holding connections to every paired button.
 
+### Unpairing a button
+
+Leaving a dead button paired is not free: flicd keeps trying to reconnect
+it forever, on the one core the section above exists to protect.
+
+`fliclib.delete_button(bd_addr)` takes a single address, so it cannot
+touch the other pairings. Back the bond database up first anyway — it is
+the only copy, and nothing else backs it up:
+
+```
+sudo cp -n /var/lib/flicd/flicd.db /var/lib/flicd/flicd.db.bak-$(date +%Y%m%d)
+```
+
+Then from `/opt/flicd`, connect with `fliclib.FlicClient("localhost")`,
+call `get_info` to confirm which addresses are verified, call
+`delete_button` on the one you want, and wait for the `EvtButtonDeleted`
+event before re-reading `get_info` to confirm. flicd applies it live; no
+restart.
+
+**Home Assistant does not notice.** The `flic` platform enumerates
+buttons once at setup, so the orphaned `binary_sensor.flic_<addr>` stays
+`on` in the state machine indefinitely. Remove its entity-registry entry
+(`config/entity_registry/remove` over the websocket API, or delete the
+entity in the UI) — that drops it immediately and it will not return,
+because the next HA start asks flicd for a button it no longer has.
+
 ### "Running" does not mean it can hear anything
 
 flicd's TCP listener and its Bluetooth adapter come up independently, and
@@ -249,7 +275,12 @@ sees it". Both bundled clients connect to `localhost`.
 
 **Losing `/var/lib/flicd/flicd.db` un-pairs every button.** It is the
 only state on this device that is not reproducible from the repo, and
-nothing backs it up. Re-pairing is the recovery.
+nothing backs it up on a schedule. Re-pairing is the recovery.
+
+There are manual `flicd.db.bak-<date>` copies beside it, dropped by hand
+before destructive edits. Do not mistake them for a backup: they are as
+old as whenever someone last remembered, and they live on the same card
+as the original, so the failure that loses one loses both.
 
 ## GPIO
 
