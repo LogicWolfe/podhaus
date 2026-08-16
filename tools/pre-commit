@@ -16,6 +16,11 @@
 #                                   stacks — Komodo's Sync Deploy sub-
 #                                   stage duplicates Stage 2 and breaks
 #                                   on transient linked-repo timeouts.
+#   - render-pomerium-keys.py --verify:
+#                                   catches pomerium/config.yaml or
+#                                   stack.toml key material that no longer
+#                                   matches the Ansible inventory (the one
+#                                   authoritative home for SSH keys).
 set -e
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -33,3 +38,4 @@ fi
 mise exec -- pipenv run python "$root/tools/lint-stack-env.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-content-hash.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-toml.py"
+mise exec -- pipenv run python "$root/tools/render-pomerium-keys.py" --verify

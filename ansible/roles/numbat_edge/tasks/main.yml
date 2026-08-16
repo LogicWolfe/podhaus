@@ -128,3 +128,13 @@
     mode: "0644"
     validate: /usr/sbin/sshd -t -f %s
   notify: Reload sshd
+
+- name: Remove the first-boot sshd drop-in
+  # cloud-init's bringup wrote 00-podhaus.conf; the file above superseded it
+  # the same day, but the original was left behind duplicating every
+  # directive. Nothing in the repo references it — an unmanaged copy whose
+  # only future is drifting from the managed one.
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/00-podhaus.conf
+    state: absent
+  notify: Reload sshd

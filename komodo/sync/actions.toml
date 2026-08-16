@@ -667,3 +667,77 @@ await cloudflare(`/zones/${zoneLookup.result[0].id}/purge_cache`, {
 });
 console.log(`[podhaus-purge-stack-cache] stack=${stackName} zone=${zone} tags=${purgeTags.join(',')}`);
 """
+
+[[action]]
+name = "podhaus-assert-fresh-checkout"
+description = """
+Refuse to push-deploy from a stale bilby checkout. Every stage of \
+`podhaus-push-deploy` reads bilby's working clone (bind-mounted at \
+/syncs/podhaus), and nothing in the pipeline pulls it — a push made from \
+any other machine runs the whole procedure against yesterday's tree and \
+green-lights a deploy of nothing (see \
+docs/plans/push-deploy-stale-bilby-checkout.md). Until a fix option from \
+that plan lands, this stage turns the silent no-op into a loud failure: \
+compare the clone's HEAD against GitHub's main and abort the procedure \
+on mismatch. Recovery is the plan's interim rule: pull on bilby, rerun \
+./komodo-sync.\
+"""
+tags = ["podhaus"]
+
+[action.config]
+run_at_startup = false
+schedule_enabled = false
+schedule = ""
+failure_alert = true
+webhook_enabled = false
+reload_deno_deps = false
+
+file_contents = """
+// podhaus-assert-fresh-checkout
+//
+// Stage 0 of `podhaus-push-deploy`. Fails the procedure when the
+// bind-mounted clone is not at GitHub's main. Fails closed on any error
+// — an unverifiable checkout gets no deploy, because 'green run, nothing
+// deployed' is the exact defect this guard exists to prevent.
+
+const GIT_DIR = '/syncs/podhaus/.git';
+const API = 'https://api.github.com/repos/LogicWolfe/podhaus/commits/main';
+
+async function localHead() {
+  const head = (await Deno.readTextFile(GIT_DIR + '/HEAD')).trim();
+  if (!head.startsWith('ref: ')) return head; // detached HEAD: bare SHA
+  const ref = head.slice(5);
+  try {
+    return (await Deno.readTextFile(GIT_DIR + '/' + ref)).trim();
+  } catch {
+    // Ref not loose — resolve through packed-refs.
+    const packed = await Deno.readTextFile(GIT_DIR + '/packed-refs');
+    for (const line of packed.split(String.fromCharCode(10))) {
+      if (line.endsWith(' ' + ref)) return line.split(' ')[0];
+    }
+    throw new Error('could not resolve ' + ref + ' in ' + GIT_DIR);
+  }
+}
+
+const resp = await fetch(API, {
+  headers: { Accept: 'application/vnd.github+json' },
+});
+if (!resp.ok) {
+  throw new Error(
+    'GitHub API returned ' + resp.status +
+    ' — cannot verify the bilby checkout is fresh, refusing to deploy from it',
+  );
+}
+const remote = (await resp.json()).sha;
+const local = await localHead();
+
+if (local !== remote) {
+  throw new Error(
+    'bilby checkout is stale: local ' + local.slice(0, 12) +
+    ' != github main ' + remote.slice(0, 12) +
+    '. Pull on bilby and rerun ./komodo-sync ' +
+    '(docs/plans/push-deploy-stale-bilby-checkout.md).',
+  );
+}
+console.log('bilby checkout is at github main (' + local.slice(0, 12) + ')');
+"""

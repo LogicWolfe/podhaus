@@ -3,11 +3,13 @@
 # Both a podhaus host and Nathan's remote development machine, so it takes
 # Ansible (machine state) and chezmoi (user state) together.
 ---
-# 10.0.0.70 is the WINDOWS host, which forwards only :22 into the guest.
-# The guest's own address (172.19.x/20) is WSL NAT and unreachable from the
-# LAN. Once the rathole SSH origin is live this becomes fractal.pod.haus
-# through Pomerium, which removes the dependency on that Windows forward.
-ansible_host: 10.0.0.70
+# The split-horizon name (podhaus terraform/dns_unifi_split_horizon.tf),
+# which on the LAN resolves to the WINDOWS host; Windows forwards only :22
+# into the guest. The guest's own address (172.19.x/20) is WSL NAT and
+# unreachable from the LAN. Terraform is the only owner of the IP — Ansible
+# rides the name, so a re-address is a Terraform change alone. Runs are
+# LAN-only by construction: off-LAN the name does not resolve at all.
+ansible_host: fractal.pod.haus
 ansible_user: nathan
 
 # WSL2 specifics -------------------------------------------------------
@@ -20,14 +22,13 @@ podhaus_is_wsl: true
 # also gets it applied immediately.
 podhaus_hostname: fractal
 
-# There is no TPM and no USB passthrough in this guest (verified: /dev/tpm*
-# absent, /sys/class/tpm empty, no USB devices exposed). Hardware-resident
-# machine keys are therefore impossible here; the identity is a soft
+# The machine identity. There is no TPM and no USB passthrough in this
+# guest (verified: /dev/tpm* absent, /sys/class/tpm empty, no USB devices
+# exposed), so unlike bilby (YubiKey PIV) and voltaire (TPM) this is a soft
 # ed25519 key on the LUKS-encrypted /home. chezmoi mints and holds it —
 # Ansible only installs the tooling, never key material.
-podhaus_machine_key_mode: soft
-
-# The soft key itself. An earlier ~/.ssh/id_ was minted a minute before this
+#
+# An earlier ~/.ssh/id_ was minted a minute before this
 # one, while the guest still answered to its pre-rename hostname, and it was
 # registered with Pomerium and left there — a drifted duplicate that no agent
 # ever served. Deregistered 2026-08-13; this is the live identity, and the

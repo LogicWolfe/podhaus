@@ -35,6 +35,13 @@ webhook run is not evidence anything deployed.**
 
 ## Interim operating rule (until the fix lands)
 
+Since 2026-08-16 the procedure opens with the
+`podhaus-assert-fresh-checkout` Action (komodo/sync/actions.toml), which
+compares the bind-mounted clone's HEAD against GitHub main and fails the
+run on mismatch — the silent no-op is now a loud failure with a
+failure_alert. The defect itself (nothing pulls the clone) still stands,
+so the recovery below is unchanged.
+
 After any push from a machine that is not bilby:
 
 ```

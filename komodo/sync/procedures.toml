@@ -81,6 +81,17 @@ config.webhook_enabled = true
 config.schedule_enabled = false
 
 [[procedure.config.stage]]
+# Guard, not a fix: every later stage reads bilby's bind-mounted clone,
+# which nothing here pulls. A push from any other machine would otherwise
+# run the procedure against a stale tree and deploy nothing while
+# reporting success (docs/plans/push-deploy-stale-bilby-checkout.md).
+name = "Refuse a stale bilby checkout"
+enabled = true
+executions = [
+  { execution.type = "RunAction", execution.params = { action = "podhaus-assert-fresh-checkout" }, enabled = true }
+]
+
+[[procedure.config.stage]]
 name = "Reconcile stack definitions (sync TOML → Komodo)"
 enabled = true
 executions = [
