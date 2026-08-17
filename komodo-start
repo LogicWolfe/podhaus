@@ -62,6 +62,21 @@ seed_variable() {
   echo "  ${name}"
 }
 
+poll_until_complete() {
+  local update_id="$1" label="$2"
+  local update status success
+  while :; do
+    update=$(komodo_api read "$(jq -n --arg u "$update_id" \
+      '{type:"GetUpdate",params:{id:$u}}')")
+    status=$(echo "$update" | jq -r '.status')
+    [ "$status" = "Complete" ] && break
+    sleep 2
+  done
+  success=$(echo "$update" | jq -r '.success')
+  echo "  ${label}: success=${success}"
+  [ "$success" = "true" ]
+}
+
 echo "Seeding 1Password variables into Komodo..."
 seed_variable "ONEPASSWORD_CREDENTIALS" \
   "$(op document get "Homelab Credentials File" --vault Homelab)"
@@ -70,16 +85,17 @@ seed_variable "ONEPASSWORD_CONNECT_TOKEN" \
 seed_variable "ONEPASSWORD_API_KEY" "$api_key"
 seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
 
-# PODHAUS_REPO is host-discovered (= $PWD at bootstrap time), so it can't
-# live in komodo/sync/variables.toml — it'd be wrong on any host that
-# clones the repo elsewhere. Seeded here so stacks that bind-mount via
-# ${PODHAUS_REPO}/<stack>/<file> have a value to interpolate.
+# PODHAUS_CHECKOUT is host-discovered (= $PWD at bootstrap time) and
+# consumed only by home-assistant's live UI-editable config bind — the
+# one deliberate read-write checkout bind in the repo. Every other stack
+# binds the deploy tree via the fixed PODHAUS_REPO declared in
+# komodo/sync/variables.toml.
 #
 # TZ and MEDIA_DIR (other global non-secret vars) live in
 # komodo/sync/variables.toml and apply via the ResourceSync's
 # include_variables=true config. They're not seeded here.
 echo "Seeding host-discovered variable into Komodo..."
-seed_variable "PODHAUS_REPO"  "$PWD"            false
+seed_variable "PODHAUS_CHECKOUT"  "$PWD"            false
 
 # Fenwick stack-private vars (FENWICK_SIGNAL_*, FENWICK_ADMIN_*) live
 # in fenwick/stack.toml as [[variable]] blocks and apply via the
@@ -95,6 +111,37 @@ seed_variable "PODHAUS_REPO"  "$PWD"            false
 # host token mapping. Bilby's prior /etc/komodo/rclone/ host-side render
 # is no longer needed; the directory can be cleaned up but is left in
 # place to avoid breaking any uncovered consumers.
+
+# This populates /etc/komodo/repos/podhaus-deploy — mounted into Core at
+# /syncs/podhaus — before the first RunSync reads it; without this, a cold
+# bootstrap syncs an empty tree (Docker auto-creates the missing bind
+# source as an empty dir). Exists-check first, mirroring the
+# CreateResourceSync pattern below; the later RunSync adopts/reconciles
+# the full repo definition (including on_pull) from komodo/sync/repos.toml.
+echo "Ensuring podhaus-deploy Repo exists..."
+if komodo_api read '{"type":"GetRepo","params":{"repo":"podhaus-deploy"}}' > /dev/null 2>&1; then
+  echo "  podhaus-deploy Repo already exists"
+else
+  echo "  Creating podhaus-deploy Repo (first boot)..."
+  komodo_api write '{
+    "type": "CreateRepo",
+    "params": {
+      "name": "podhaus-deploy",
+      "config": {
+        "server": "podhaus",
+        "git_provider": "github.com",
+        "git_account": "LogicWolfe",
+        "repo": "LogicWolfe/podhaus",
+        "branch": "main"
+      }
+    }
+  }' > /dev/null
+fi
+
+echo "Pulling podhaus-deploy..."
+pull_resp=$(komodo_api execute '{"type":"PullRepo","params":{"repo":"podhaus-deploy"}}')
+pull_update_id=$(echo "$pull_resp" | jq -r '._id."$oid"')
+poll_until_complete "$pull_update_id" "podhaus-deploy pull"
 
 # Bootstrap the podhaus ResourceSync resource. The CreateResourceSync
 # API errors on duplicate name (`Resource with name 'X' already exists`,

@@ -72,10 +72,15 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
             <li>Brings up Komodo Core (Postgres, FerretDB, Core, Periphery).</li>
             <li>Waits for Core to be healthy.</li>
             <li>Seeds the five chicken-and-egg variables (4
-              <code>ONEPASSWORD_*</code> + <code>PODHAUS_REPO</code>).
-              <code>TZ</code> + <code>MEDIA_DIR</code> live in
+              <code>ONEPASSWORD_*</code> + <code>PODHAUS_CHECKOUT</code>).
+              <code>TZ</code>, <code>MEDIA_DIR</code>, and the fixed
+              <code>PODHAUS_REPO</code> (deploy-tree path) live in
               <code>komodo/sync/variables.toml</code> and apply via
               the sync's <code>include_variables=true</code>.</li>
+            <li>Ensures the <code>podhaus-deploy</code> Repo resource
+              exists and pulls it, populating the deploy tree at
+              <code>/etc/komodo/repos/podhaus-deploy</code> before the
+              first sync reads it.</li>
             <li>Idempotently creates the podhaus ResourceSync (with
               <code>include_variables=true</code>; GetResourceSync first
               so re-runs are clean).</li>

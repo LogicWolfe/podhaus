@@ -138,3 +138,38 @@ git_provider = "github.com"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"
 branch = "main"
+
+# Bilby's deploy tree — the single tree every podhaus deploy decision
+# reads (Komodo Core's /syncs/podhaus bind, bilby Periphery's
+# /etc/komodo/repo bind, and every files_on_host stack's
+# run_directory). Bilby's own working checkout (~/repos/podhaus) is
+# never read by the pipeline; this Repo resource is the source of
+# truth instead, fed two ways: podhaus-push-deploy's Stage 0
+# `PullRepo podhaus-deploy` forces it to origin/main on every webhook
+# push, and ./komodo-sync's `podhaus-load-local-tree` action overlays
+# it with the local checkout's current state (tracked + untracked)
+# for debug iteration. Last writer wins in both directions.
+#
+# on_pull runs `git clean -fd` after every pull. Komodo's pull
+# (lib/git/src/pull.rs) is `git fetch --all --prune` -> `git checkout
+# -f <branch>` (discards tracked-file modifications) -> `git pull
+# --rebase --force` — none of which touches untracked files, so a
+# stray left behind by a prior local-checkout overlay would otherwise
+# survive indefinitely. `-fd` clears those. `-x` is deliberately NOT
+# used: it would also remove gitignored files, and Komodo deploy-writes
+# `.env` into each stack directory (resolved secrets + the stamped
+# STACK_CONTENT_HASH) — gitignored by design, must survive every pull.
+[[repo]]
+name = "podhaus-deploy"
+description = "Komodo-managed podhaus deploy tree on bilby's Periphery"
+tags = ["podhaus", "bilby"]
+
+[repo.config]
+server = "podhaus"             # = bilby
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/podhaus"
+branch = "main"
+
+[repo.config.on_pull]
+command = "git clean -fd"

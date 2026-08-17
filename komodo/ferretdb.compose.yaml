@@ -93,7 +93,15 @@ services:
       TZ: ${TZ}
     volumes:
       - ${COMPOSE_KOMODO_BACKUPS_PATH}:/backups
-      - ${COMPOSE_KOMODO_REPO_PATH}:/syncs/podhaus
+      # Deploy tree: a Komodo-managed clone (Repo resource "podhaus-deploy"),
+      # pulled to origin/main by the push webhook and overlaid with the
+      # local checkout by komodo-sync. ResourceSync and the hash-injection
+      # action both read this path.
+      - /etc/komodo/repos/podhaus-deploy:/syncs/podhaus
+      # Working checkout, read-only. Consumed solely by the
+      # podhaus-load-local-tree action, which overlays it onto the deploy
+      # tree above during komodo-sync.
+      - ${COMPOSE_KOMODO_REPO_PATH}:/syncs/podhaus-local:ro
       # v2 PKI: X25519 keypairs for noise-handshake auth. Shared with the
       # bilby periphery service below (same compose, same bind), so Core
       # auto-trusts bilby's periphery via file:/config/keys/bilby-periphery.pub
@@ -139,7 +147,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /proc:/proc
       - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
-      - ${COMPOSE_KOMODO_REPO_PATH}:/etc/komodo/repo
+      # Deploy tree, same clone as Core's /syncs/podhaus above. This alias
+      # bind keeps /etc/komodo/repo as the in-container path so every
+      # stack.toml run_directory (/etc/komodo/repo/<name>) stays unchanged.
+      - /etc/komodo/repos/podhaus-deploy:/etc/komodo/repo
       - ${COMPOSE_KOMODO_KEYS_PATH}:/config/keys
     # Periphery returns HTTP 405 on `GET /` when alive (it only accepts
     # POST for its API). curl without -f exits 0 on any HTTP response,

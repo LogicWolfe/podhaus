@@ -11,26 +11,186 @@
 # User script lives inside an implicit `async function main()`.
 #
 # Filesystem: scripts run inside the Komodo Core container, which
-# bind-mounts the podhaus repo at `/syncs/podhaus`. The full repo tree
-# is readable from there — same content the Periphery on bilby sees
-# at `/etc/komodo/repo/`, just a different mount point.
+# bind-mounts the Komodo-owned deploy tree at `/syncs/podhaus` — same
+# content the Periphery on bilby sees at `/etc/komodo/repo/`, just a
+# different mount point. Core additionally bind-mounts bilby's working
+# checkout read-only at `/syncs/podhaus-local`, read only by
+# podhaus-load-local-tree.
+
+[[action]]
+name = "podhaus-load-local-tree"
+description = """
+Mirrors bilby's working checkout (tracked + untracked-unignored files) \
+into the deploy tree at /syncs/podhaus, so ./komodo-sync deploys \
+exactly what is local regardless of origin/main. Counterpart feeder to \
+podhaus-push-deploy's PullRepo stage; step 0 of komodo-sync, run before \
+the out-of-procedure RunSync which reads the tree this writes. See \
+docs/plans/push-deploy-stale-bilby-checkout.md.\
+"""
+tags = ["podhaus"]
+
+[action.config]
+run_at_startup = false
+schedule_enabled = false
+schedule = ""
+failure_alert = true
+webhook_enabled = false
+reload_deno_deps = false
+
+file_contents = """
+// podhaus-load-local-tree
+//
+// Mirrors the working checkout (bind-mounted read-only at
+// /syncs/podhaus-local) into the Komodo-owned deploy tree
+// (/syncs/podhaus) that every deploy-side consumer reads: the
+// ResourceSync, the content-hash action, and every files_on_host
+// stack's run_directory. Step 0 of komodo-sync — must run before the
+// out-of-procedure RunSync, which reads the tree this writes.
+//
+// \"Tracked + untracked-unignored\" is git's own ls-files vocabulary:
+// enumerate that set on both sides, copy the source set onto the
+// deploy tree, then delete anything the deploy tree has that the
+// source set doesn't. Never touches .git/ or anything git-ignored,
+// which is exactly what keeps Komodo's deploy-written `.env` (rendered
+// secrets + STACK_CONTENT_HASH) alive across every run: `.env` is
+// git-ignored, so git never lists it on either side and the deletion
+// pass never sees it.
+
+const SRC = '/syncs/podhaus-local';
+const DST = '/syncs/podhaus';
+const NUL = String.fromCharCode(0);
+
+async function exists(path) {
+  try {
+    await Deno.stat(path);
+    return true;
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) return false;
+    throw e;
+  }
+}
+
+// Enumerate tracked + untracked-but-not-ignored files in a repo via git
+// itself, rather than a hand-rolled directory walk (AGENTS.md \"Use
+// upstream primitives over hand-rolled regex/utility code\"). `-c
+// safe.directory=<dir>` is required for SRC (nathan-owned; Core runs as
+// root and git refuses to operate on a repo owned by another uid
+// without it) and harmless for DST (already root-owned).
+async function enumerate(dir) {
+  const cmd = new Deno.Command('git', {
+    args: [
+      '-C', dir,
+      '-c', `safe.directory=${dir}`,
+      'ls-files', '--cached', '--others', '--exclude-standard', '-z',
+    ],
+    stdout: 'piped',
+    stderr: 'piped',
+  });
+  const { code, stdout, stderr } = await cmd.output();
+  if (code !== 0) {
+    throw new Error(`git ls-files failed in ${dir}: ${new TextDecoder().decode(stderr)}`);
+  }
+  return new TextDecoder().decode(stdout)
+    .split(NUL)
+    .filter((rel) => rel.length > 0);
+}
+
+// --- main ---
+
+if (!(await exists(`${DST}/.git`))) {
+  throw new Error(`${DST}/.git is missing — the komodo-start bootstrap has not created the deploy tree yet`);
+}
+if (!(await exists(`${SRC}/.git`))) {
+  throw new Error(`${SRC}/.git is missing — the /syncs/podhaus-local mount is absent or misconfigured`);
+}
+
+// Copy pass: mirror every file the checkout enumerates. A path that's
+// indexed but missing on disk (e.g. an uncommitted `git rm`) is skipped
+// and excluded from the \"present\" set below — a deleted-but-still-
+// indexed file must never deploy.
+const srcFiles = await enumerate(SRC);
+const present = new Set();
+let copied = 0;
+let skippedMissing = 0;
+
+for (const rel of srcFiles) {
+  const srcPath = `${SRC}/${rel}`;
+  let st;
+  try {
+    st = await Deno.stat(srcPath);
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) {
+      skippedMissing++;
+      continue;
+    }
+    throw e;
+  }
+  if (!st.isFile) continue;
+
+  const dstPath = `${DST}/${rel}`;
+  const lastSlash = rel.lastIndexOf('/');
+  if (lastSlash !== -1) {
+    await Deno.mkdir(`${DST}/${rel.substring(0, lastSlash)}`, { recursive: true });
+  }
+  await Deno.copyFile(srcPath, dstPath); // preserves the executable bit
+  present.add(rel);
+  copied++;
+}
+
+// Delete pass: anything the deploy tree has (per its own git
+// enumeration) that the checkout's present set doesn't. Ignored files
+// on either side (.env, komodo/.runtime, OP_SERVICE_ACCOUNT_TOKEN)
+// never appear in either enumeration, so they're never candidates here.
+const dstFiles = await enumerate(DST);
+let deleted = 0;
+const deletedParents = new Set();
+for (const rel of dstFiles) {
+  if (present.has(rel)) continue;
+  await Deno.remove(`${DST}/${rel}`);
+  deleted++;
+  const lastSlash = rel.lastIndexOf('/');
+  if (lastSlash !== -1) deletedParents.add(`${DST}/${rel.substring(0, lastSlash)}`);
+}
+
+// Prune directories left empty by the delete pass, walking up from each
+// deleted file's parent and stopping at DST. \"Not empty\" is expected
+// (a sibling file still lives there, or a nested walk already pruned
+// down to here) and swallowed; anything else propagates.
+for (const startDir of deletedParents) {
+  let dir = startDir;
+  while (dir.length > DST.length && dir.startsWith(`${DST}/`)) {
+    try {
+      await Deno.remove(dir);
+    } catch (e) {
+      if (e instanceof Deno.errors.NotFound) break; // already pruned by another walk
+      if (/not empty/i.test(e.message ?? '')) break; // still has content; so do its parents
+      throw e;
+    }
+    dir = dir.substring(0, dir.lastIndexOf('/'));
+  }
+}
+
+console.log(
+  `[podhaus-load-local-tree] copied=${copied} skipped-missing=${skippedMissing} deleted=${deleted}`
+);
+"""
 
 [[action]]
 name = "podhaus-inject-content-hashes"
 description = """
-Compute per-service content hashes from the bilby-side repo, inject \
+Compute per-service content hashes from the deploy tree, inject \
 STACK_CONTENT_HASH + per-service BUILD_HASH_<name> into each podhaus \
 stack's stored env, then force-deploy any stack whose running container \
 carries a stale label or baked build hash while its compose text is unchanged — the \
 config-only / build-context changes Komodo's DeployStackIfChanged can't \
-see. Stage 1 of `podhaus-push-deploy`. See AGENTS.md \"Content-hash \
+see. Stage 1 of `podhaus-deploy`. See AGENTS.md \"Content-hash \
 change detection\" for the architectural rationale.\
 """
 tags = ["podhaus"]
 
 [action.config]
-# Triggered only as a stage of `podhaus-push-deploy` (and the parallel
-# komodo-sync path that invokes the same procedure). Never on schedule,
+# Triggered only as a stage of `podhaus-deploy` (reached through the
+# podhaus-push-deploy webhook and through komodo-sync). Never on schedule,
 # never at Komodo Core startup (the latter being a chicken-and-egg
 # window where stacks may not yet be loaded).
 run_at_startup = false
@@ -46,7 +206,7 @@ reload_deno_deps = false
 file_contents = """
 // podhaus-inject-content-hashes
 //
-// Two responsibilities, run as Stage 1 of `podhaus-push-deploy`:
+// Two responsibilities, run as Stage 1 of `podhaus-deploy`:
 //   (1) inject per-stack content hashes into stored env, and
 //   (2) force-deploy stacks whose running containers carry a stale hash
 //       label or baked build hash but whose compose text is unchanged (the reconcile at the
@@ -81,7 +241,7 @@ file_contents = """
 // hash change alone (proven 2026-06-18). The reconcile below is the
 // trigger; Stage 2 is left to own compose-text changes + new stacks.
 // Works uniformly for files_on_host and linked_repo stacks — the hashes
-// come from bilby's view of the repo, and the reconcile reads each
+// come from the deploy tree, and the reconcile reads each
 // stack's containers on their own host.
 
 const REPO_ROOT = '/syncs/podhaus';
@@ -666,78 +826,4 @@ await cloudflare(`/zones/${zoneLookup.result[0].id}/purge_cache`, {
   body: JSON.stringify({ tags: purgeTags }),
 });
 console.log(`[podhaus-purge-stack-cache] stack=${stackName} zone=${zone} tags=${purgeTags.join(',')}`);
-"""
-
-[[action]]
-name = "podhaus-assert-fresh-checkout"
-description = """
-Refuse to push-deploy from a stale bilby checkout. Every stage of \
-`podhaus-push-deploy` reads bilby's working clone (bind-mounted at \
-/syncs/podhaus), and nothing in the pipeline pulls it — a push made from \
-any other machine runs the whole procedure against yesterday's tree and \
-green-lights a deploy of nothing (see \
-docs/plans/push-deploy-stale-bilby-checkout.md). Until a fix option from \
-that plan lands, this stage turns the silent no-op into a loud failure: \
-compare the clone's HEAD against GitHub's main and abort the procedure \
-on mismatch. Recovery is the plan's interim rule: pull on bilby, rerun \
-./komodo-sync.\
-"""
-tags = ["podhaus"]
-
-[action.config]
-run_at_startup = false
-schedule_enabled = false
-schedule = ""
-failure_alert = true
-webhook_enabled = false
-reload_deno_deps = false
-
-file_contents = """
-// podhaus-assert-fresh-checkout
-//
-// Stage 0 of `podhaus-push-deploy`. Fails the procedure when the
-// bind-mounted clone is not at GitHub's main. Fails closed on any error
-// — an unverifiable checkout gets no deploy, because 'green run, nothing
-// deployed' is the exact defect this guard exists to prevent.
-
-const GIT_DIR = '/syncs/podhaus/.git';
-const API = 'https://api.github.com/repos/LogicWolfe/podhaus/commits/main';
-
-async function localHead() {
-  const head = (await Deno.readTextFile(GIT_DIR + '/HEAD')).trim();
-  if (!head.startsWith('ref: ')) return head; // detached HEAD: bare SHA
-  const ref = head.slice(5);
-  try {
-    return (await Deno.readTextFile(GIT_DIR + '/' + ref)).trim();
-  } catch {
-    // Ref not loose — resolve through packed-refs.
-    const packed = await Deno.readTextFile(GIT_DIR + '/packed-refs');
-    for (const line of packed.split(String.fromCharCode(10))) {
-      if (line.endsWith(' ' + ref)) return line.split(' ')[0];
-    }
-    throw new Error('could not resolve ' + ref + ' in ' + GIT_DIR);
-  }
-}
-
-const resp = await fetch(API, {
-  headers: { Accept: 'application/vnd.github+json' },
-});
-if (!resp.ok) {
-  throw new Error(
-    'GitHub API returned ' + resp.status +
-    ' — cannot verify the bilby checkout is fresh, refusing to deploy from it',
-  );
-}
-const remote = (await resp.json()).sha;
-const local = await localHead();
-
-if (local !== remote) {
-  throw new Error(
-    'bilby checkout is stale: local ' + local.slice(0, 12) +
-    ' != github main ' + remote.slice(0, 12) +
-    '. Pull on bilby and rerun ./komodo-sync ' +
-    '(docs/plans/push-deploy-stale-bilby-checkout.md).',
-  );
-}
-console.log('bilby checkout is at github main (' + local.slice(0, 12) + ')');
 """

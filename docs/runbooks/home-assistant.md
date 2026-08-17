@@ -23,9 +23,15 @@ HA's `/config` mixes version-controllable YAML with state that must never be
 in git. The split:
 
 - **In the repo** — `home-assistant/config/`, bind-mounted to `/config/podhaus`
-  via `${PODHAUS_REPO}/home-assistant/config:/config/podhaus:z`. (That bind
-  needs `PODHAUS_REPO=[[PODHAUS_REPO]]` in `home-assistant/stack.toml`'s
-  environment, or `${PODHAUS_REPO}` expands empty.)
+  via `${PODHAUS_CHECKOUT}/home-assistant/config:/config/podhaus:z` — the one
+  deliberate read-write checkout bind in the repo. Every other stack's
+  `${PODHAUS_REPO}` bind is read-only against the Komodo-managed **deploy
+  tree**; this one reads bilby's live working checkout (`~/repos/podhaus`)
+  instead, so the UI editor's atomic-rename saves land somewhere committable
+  rather than in a tree the push webhook can force-reset at any time. See
+  [Komodo → operating models](/komodo.html#operating-models). (That bind
+  needs `PODHAUS_CHECKOUT=[[PODHAUS_CHECKOUT]]` in `home-assistant/stack.toml`'s
+  environment, or `${PODHAUS_CHECKOUT}` expands empty.)
 - **On the host, never in git** — `.storage/` (auth tokens, the entity/device/
   area registries, HomeKit pairing state), the recorder DB
   (`home-assistant_v2.db`), and logs.
@@ -286,9 +292,10 @@ then an empty body to complete the `link` step). It returns
 
 ## Deploy
 
-Config changes ship like any stack: commit + push → the `podhaus-push-deploy`
-procedure's content-hash mechanism sees the changed files in `home-assistant/`
-and recreates the container. Validate first with:
+Config changes ship like any stack: commit + push → `podhaus-push-deploy` pulls
+the deploy tree and runs the internal `podhaus-deploy` procedure, whose
+content-hash mechanism sees the changed files in `home-assistant/` and
+recreates the container. Validate first with:
 
 ```sh
 docker exec home-assistant python -m homeassistant --script check_config -c /config

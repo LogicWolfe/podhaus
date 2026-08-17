@@ -7,3 +7,8 @@ description = "NFS4 mount for media storage on kangaroo NAS"
 name = "TZ"
 value = "Australia/Perth"
 description = "Timezone for all services"
+
+[[variable]]
+name = "PODHAUS_REPO"
+value = "/etc/komodo/repos/podhaus-deploy"
+description = "Fixed path of bilby's deploy tree (Komodo-managed clone); consumed by bilby stacks' bind mounts via per-stack PODHAUS_REPO=[[PODHAUS_REPO]] env mappings; no longer host-discovered (komodo-start seeds only PODHAUS_CHECKOUT now)."

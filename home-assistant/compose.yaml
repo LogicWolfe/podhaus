@@ -26,7 +26,11 @@ services:
       # homeassistant/http blocks). Directory bind so atomic-rename saves
       # from the UI editor land correctly. The host /config/configuration.yaml
       # !includes from podhaus/ — see config/configuration.root.yaml.
-      - ${PODHAUS_REPO}/home-assistant/config:/config/podhaus:z
+      # This is the ONE deliberate read-write checkout bind in the repo —
+      # the UI editor's atomic-rename saves must land in ~/repos/podhaus
+      # for committing, so it reads the live checkout (PODHAUS_CHECKOUT),
+      # not the deploy tree (PODHAUS_REPO).
+      - ${PODHAUS_CHECKOUT}/home-assistant/config:/config/podhaus:z
       - /run/dbus:/run/dbus:ro
     labels:
       autoheal: "true"

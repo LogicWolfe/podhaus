@@ -116,7 +116,8 @@
         disaster-recovery path. The only direct-seeded variables (in <code>komodo-start</code>)
         are chicken-and-egg credentials (the four <code>ONEPASSWORD_*</code>
         that <code>komodo-op</code> itself needs to talk to 1Password)
-        plus host-discovered <code>PODHAUS_REPO</code>. Everything else
+        plus host-discovered <code>PODHAUS_CHECKOUT</code> (consumed only
+        by Home Assistant's live UI-editable config bind). Everything else
         — global non-secret vars (<code>TZ</code>, <code>MEDIA_DIR</code>)
         and stack-private ones (<code>FENWICK_*</code>, etc.) — lives
         in TOML and applies via the ResourceSync's

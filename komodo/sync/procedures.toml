@@ -3,9 +3,26 @@
 # Why a procedure instead of per-stack webhooks: GitHub hard-caps a
 # repo at 20 `push` webhooks ("the push event cannot have more than 20
 # hooks"). One per stack does not scale past 20. Instead ONE GitHub
-# webhook hits this procedure's listener
+# webhook hits podhaus-push-deploy's listener
 # (komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main,
 # branch-filtered to main), and the procedure fans out internally.
+#
+# The deploy tree. Every stage below reads a single Komodo-managed clone
+# of this repo, the Repo resource `podhaus-deploy` (komodo/sync/repos.toml)
+# at /etc/komodo/repos/podhaus-deploy on bilby — Core mounts it at
+# /syncs/podhaus, bilby's Periphery mounts it at /etc/komodo/repo. Bilby's
+# own working checkout (~/repos/podhaus) is never read by either pipeline
+# path. The two entrypoints differ only in how they feed the deploy tree:
+# podhaus-push-deploy's first stage force-pulls it to origin/main (so a
+# push from any machine deploys main and never touches ~/repos/podhaus),
+# while ./komodo-sync instead overlays it with the local checkout's
+# current state and invokes podhaus-deploy directly, deliberately
+# skipping the pull stage.
+#
+# podhaus-deploy — deploys whatever the deploy tree currently holds.
+# Source-agnostic: it doesn't care whether the tree just got pulled to
+# origin/main or overlaid with local state, only that it reflects one or
+# the other. Four stages:
 #
 # Stage 0 — reconcile stack defs from disk (sync TOML → Komodo). Komodo
 # separates the *stack resource definition* (what the env block, server,
@@ -47,7 +64,7 @@
 # labels and force-deploys stale stacks whose compose text is unchanged.
 # This is the load-bearing path for config-only and build-context edits,
 # and it works for files_on_host and linked_repo stacks because hashes
-# come from bilby's current repo view.
+# come from the deploy tree's current state.
 #
 # Stage 2: BatchDeployStackIfChanged owns compose-text changes and new
 # stacks. Stage 1 deliberately leaves those alone, so the stages do not
@@ -70,26 +87,26 @@
 #
 # Wildcard `*` means new stacks are covered automatically — no repo
 # edit, no list, no 20-cap, ever.
+#
+# podhaus-deploy is internal only — both webhook_enabled and
+# schedule_enabled are pinned false so nothing but podhaus-push-deploy's
+# RunProcedure stage and ./komodo-sync can trigger it.
+#
+# Caveat (unchanged): a push that edits procedure definitions in this
+# file still needs a follow-up `./komodo-sync`. Komodo's
+# `resource::update::<Procedure>` has a busy guard — a procedure can't
+# be modified while it's running — so podhaus-push-deploy's own Stage 0
+# RunSync can't apply a change to its own (or podhaus-deploy's)
+# definition mid-run; the sync loop retries and bails, and later stages
+# don't run. `./komodo-sync`'s out-of-procedure RunSync call isn't
+# subject to the guard and applies the change directly.
 
 [[procedure]]
-name = "podhaus-push-deploy"
-description = "Push-to-deploy fan-out: reconcile stack defs from disk, inject per-stack content hashes, deploy-if-changed all stacks, restart ofelia. Triggered by the single GitHub push webhook (and by ./komodo-sync for the equivalent local path)."
+name = "podhaus-deploy"
+description = "Deploys whatever the deploy tree currently holds: reconcile stack defs from disk, inject per-stack content hashes, deploy-if-changed all stacks, restart ofelia. Invoked by podhaus-push-deploy after pulling the deploy tree to origin/main, and by ./komodo-sync after overlaying the local checkout."
 tags = ["podhaus"]
-config.webhook_enabled = true
-# Webhook-only — no schedule. (schedule_enabled defaults true in
-# Komodo; pinned false so it's unambiguous this never runs on a timer.)
+config.webhook_enabled = false
 config.schedule_enabled = false
-
-[[procedure.config.stage]]
-# Guard, not a fix: every later stage reads bilby's bind-mounted clone,
-# which nothing here pulls. A push from any other machine would otherwise
-# run the procedure against a stale tree and deploy nothing while
-# reporting success (docs/plans/push-deploy-stale-bilby-checkout.md).
-name = "Refuse a stale bilby checkout"
-enabled = true
-executions = [
-  { execution.type = "RunAction", execution.params = { action = "podhaus-assert-fresh-checkout" }, enabled = true }
-]
 
 [[procedure.config.stage]]
 name = "Reconcile stack definitions (sync TOML → Komodo)"
@@ -117,6 +134,36 @@ name = "Restart ofelia so it re-reads container labels"
 enabled = true
 executions = [
   { execution.type = "RestartStack", execution.params = { stack = "ofelia" }, enabled = true }
+]
+
+
+# podhaus-push-deploy — the GitHub webhook entrypoint. Forces the deploy
+# tree to origin/main, then deploys whatever the deploy tree holds. Kept
+# as two thin stages rather than folded into podhaus-deploy so
+# ./komodo-sync can invoke podhaus-deploy directly and deliberately skip
+# the pull, per the file-level comment above.
+
+[[procedure]]
+name = "podhaus-push-deploy"
+description = "Push-to-deploy entrypoint: force the deploy tree to origin/main, then run podhaus-deploy. Triggered by the single GitHub push webhook."
+tags = ["podhaus"]
+config.webhook_enabled = true
+# Webhook-only — no schedule. (schedule_enabled defaults true in
+# Komodo; pinned false so it's unambiguous this never runs on a timer.)
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Pull deploy tree to origin/main"
+enabled = true
+executions = [
+  { execution.type = "PullRepo", execution.params = { repo = "podhaus-deploy" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy the deploy tree"
+enabled = true
+executions = [
+  { execution.type = "RunProcedure", execution.params = { procedure = "podhaus-deploy" }, enabled = true }
 ]
 
 

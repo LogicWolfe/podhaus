@@ -97,24 +97,33 @@
           </tr>
           <tr>
             <td>How the repo gets there</td>
-            <td>Cloned manually + bind-mounted into Core and Periphery</td>
+            <td>A Komodo-managed clone — the <strong>deploy tree</strong>
+              (Repo resource <code>podhaus-deploy</code>) — bind-mounted
+              into Core and Periphery. bilby's own working checkout
+              (<code>~/repos/podhaus</code>) is never read by the
+              pipeline; the deploy tree is fed by the push webhook's
+              pull stage or by <code>komodo-sync</code>'s local-checkout
+              overlay.</td>
             <td>Komodo clones via HTTPS + a GitHub PAT, stored at
               <code>/etc/komodo/repos/&lt;repo-name&gt;/</code> inside the Periphery container</td>
           </tr>
           <tr>
             <td>Deploy workflow</td>
-            <td>Commit + push → the single webhook runs the
-              <code>podhaus-push-deploy</code> procedure. Stage 1 stamps
-              content hashes and directly reconciles stale running stacks
-              when committed config or build context changed without a
-              compose-text change. Stage 2's
+            <td>Commit + push → the single webhook runs
+              <code>podhaus-push-deploy</code>, which force-pulls the
+              deploy tree to <code>origin/main</code> and then runs the
+              internal <code>podhaus-deploy</code> procedure. Its Stage 1
+              stamps content hashes and directly reconciles stale
+              running stacks when committed config or build context
+              changed without a compose-text change. Stage 2's
               <code>BatchDeployStackIfChanged&nbsp;"*"</code> handles
               compose-text changes and new stacks.
-              For local iteration: save +
-              <code>./komodo-sync</code> invokes the same procedure
-              (out-of-procedure pre-sync first, then RunProcedure).</td>
+              For local iteration: <code>./komodo-sync</code> overlays
+              the deploy tree with the working checkout's current state
+              and invokes <code>podhaus-deploy</code> directly —
+              deliberately skipping the pull stage.</td>
             <td>Same workflow and the same Stage 1 / Stage 2. Hashes are
-              computed from bilby's view of the repo and compared with
+              computed from the deploy tree's current state and compared with
               the labels on containers running at the target host, so
               linked-repo config-only and build-context edits do not rely
               on an env diff. New linked-repo hosts inherit the
@@ -154,12 +163,16 @@
         Komodo's native <code>DeployStackIfChanged</code> only considers
         compose text. It does not see a changed value behind a
         <code>${STACK_CONTENT_HASH}</code> or
-        <code>${BUILD_HASH_*}</code> reference. The push procedure closes
-        that gap via Stage 1's
+        <code>${BUILD_HASH_*}</code> reference. The internal
+        <code>podhaus-deploy</code> procedure — invoked by
+        <code>podhaus-push-deploy</code> after pulling the deploy tree
+        to <code>origin/main</code>, and directly by
+        <code>komodo-sync</code> after overlaying it with the local
+        checkout — closes that gap via its Stage 1's
         <code>RunAction&nbsp;"podhaus-inject-content-hashes"</code>:
         the Action computes (a) a content hash of each stack directory
         and (b) per-service hashes for every <code>build:</code>
-        context, both from bilby's view of the repo, and stamps
+        context, both from the deploy tree's current state, and stamps
         <code>STACK_CONTENT_HASH=&lt;hash&gt;</code> +
         <code>BUILD_HASH_&lt;UPPER_SERVICE&gt;=&lt;hash&gt;</code>
         into the stack's stored env. The Action then compares the expected
@@ -220,22 +233,42 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
       <ul>
         <li><code>komodo/sync/servers.toml</code> — bilby and kangaroo Server entries.</li>
         <li><code>komodo/sync/repos.toml</code> — the <code>podhaus</code> Linked Repo for
-          kangaroo.</li>
+          kangaroo, plus the <code>podhaus-deploy</code> Repo resource:
+          bilby's own Komodo-managed <strong>deploy tree</strong>
+          (<code>/etc/komodo/repos/podhaus-deploy</code>), the single
+          tree every deploy decision reads. It's fed two ways: the push
+          webhook force-pulls it to <code>origin/main</code>
+          (<code>on_pull</code> runs <code>git clean -fd</code> to clear
+          untracked strays without touching gitignored files like the
+          deploy-written <code>.env</code>), and <code>komodo-sync</code>
+          overlays it with bilby's working checkout via the
+          <code>podhaus-load-local-tree</code> action.</li>
         <li><code>komodo/sync/variables.toml</code> — global non-secret
-          variable declarations (<code>TZ</code>, <code>MEDIA_DIR</code>).
+          variable declarations (<code>TZ</code>, <code>MEDIA_DIR</code>,
+          and <code>PODHAUS_REPO</code> — the deploy tree's fixed path).
           Authoritative — the podhaus sync runs with
           <code>include_variables = true</code>, so a
           <code>RunSync</code> applies these. Stack-private vars (e.g.
           <code>FENWICK_*</code>) live as inline
           <code>[[variable]]</code> blocks in the relevant
           <code>&lt;stack&gt;/stack.toml</code> instead.</li>
-        <li><code>komodo/sync/procedures.toml</code> — the
-          <code>podhaus-push-deploy</code> procedure (the single
-          push-to-deploy fan-out; see the Auto-deploy note below).</li>
+        <li><code>komodo/sync/procedures.toml</code> — two procedures:
+          <code>podhaus-push-deploy</code>, the GitHub webhook
+          entrypoint (pulls the deploy tree to <code>origin/main</code>,
+          then runs the procedure below), and the internal
+          <code>podhaus-deploy</code>, which carries the four-stage
+          fan-out and deploys whatever the deploy tree currently holds
+          — see the Auto-deploy note below.</li>
         <li><code>komodo/sync/actions.toml</code> — Komodo Actions
-          referenced by procedures. <code>podhaus-inject-content-hashes</code>
-          is Stage 1 of the podhaus push procedure. It walks every stack at Komodo Core's
-          <code>/syncs/podhaus</code> mount, hashes each committed stack
+          referenced by procedures and by <code>komodo-sync</code>.
+          <code>podhaus-load-local-tree</code> is <code>komodo-sync</code>'s
+          first step: mirrors bilby's working checkout (read-only at
+          <code>/syncs/podhaus-local</code>) into the deploy tree at
+          <code>/syncs/podhaus</code> via <code>git ls-files</code>
+          enumeration on both sides.
+          <code>podhaus-inject-content-hashes</code>
+          is Stage 1 of the internal <code>podhaus-deploy</code> procedure. It walks every stack at Komodo Core's
+          <code>/syncs/podhaus</code> mount (the deploy tree), hashes each committed stack
           directory plus every build context, stamps the hashes into stored
           env, and directly deploys running stacks whose hash labels are stale
           while compose text is unchanged. The deploy-written <code>.env</code>
@@ -306,8 +339,20 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         (the procedure's <code>webhook_secret</code> is empty → the global
         secret applies).
         <br><br>
-        The procedure (<code>komodo/sync/procedures.toml</code>) fans out
-        across four stages:
+        <code>podhaus-push-deploy</code> itself is two thin stages: Stage 0
+        <code>PullRepo&nbsp;"podhaus-deploy"</code> force-pulls bilby's
+        Komodo-managed <strong>deploy tree</strong>
+        (<code>/etc/komodo/repos/podhaus-deploy</code>) to
+        <code>origin/main</code>, then Stage 1
+        <code>RunProcedure&nbsp;"podhaus-deploy"</code> runs the internal
+        procedure below. bilby's own working checkout
+        (<code>~/repos/podhaus</code>) is never touched by this path.
+        <br><br>
+        The internal <code>podhaus-deploy</code> procedure
+        (<code>komodo/sync/procedures.toml</code>) deploys whatever the
+        deploy tree currently holds — source-agnostic, so the same four
+        stages serve both a fresh pull and, via <code>komodo-sync</code>,
+        a local-checkout overlay:
         <strong>Stage 0</strong>
         <code>RunSync&nbsp;"podhaus"</code> — reconcile stack definitions
         + TOML-declared variables from disk to Komodo's stored resource
@@ -323,7 +368,7 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <strong>Stage 1</strong>
         <code>RunAction&nbsp;"podhaus-inject-content-hashes"</code> —
         walks every stack visible at Core's
-        <code>/syncs/podhaus</code> mount, computes a deterministic
+        <code>/syncs/podhaus</code> mount (the deploy tree), computes a deterministic
         content hash of each stack directory (including bind-mounted
         runtime paths) and per-service build-context hashes for any
         service with <code>build:</code>, and stamps
@@ -350,9 +395,15 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         Stages run sequentially so each completes before the next
         fires (deterministic, vs the asynchronous polling of
         <code>managed: true</code>).
-        <code>./komodo-sync</code> invokes the same procedure (after a
-        pre-sync round-trip to handle procedure-stage edits — see the
-        komodo-sync row in the scripts table below).
+        <code>./komodo-sync</code> runs a first step,
+        <code>RunAction&nbsp;"podhaus-load-local-tree"</code>, which
+        overlays the deploy tree with bilby's working checkout's current
+        state (tracked + untracked-unignored files), then invokes
+        <code>podhaus-deploy</code> directly — deliberately <em>not</em>
+        <code>podhaus-push-deploy</code>, whose pull stage would clobber
+        that overlay — after the same out-of-procedure pre-sync round-trip
+        to handle procedure-stage edits (see the komodo-sync row in the
+        scripts table below).
         Single point of failure: a broken procedure breaks all
         push-deploys — komodo-sync is the fallback.
       </blockquote>
@@ -361,10 +412,10 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
       <table>
         <thead><tr><th>Script</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>komodo-start</code></td><td>First-boot or post-recovery: starts the Komodo Core stack; seeds the five chicken-and-egg variables (4 ONEPASSWORD_* + PODHAUS_REPO); idempotently creates the podhaus ResourceSync (with <code>include_variables = true</code>); runs the bootstrap double-sync (first sync registers stacks + TOML-declared vars; wait for komodo-op to backfill OP secrets; second sync re-renders stack env blocks). Stops there — deploys are a separate concern (push or <code>./komodo-sync</code>). Idempotent — safe to re-run.</td></tr>
+          <tr><td><code>komodo-start</code></td><td>First-boot or post-recovery: starts the Komodo Core stack; seeds the five chicken-and-egg variables (4 ONEPASSWORD_* + PODHAUS_CHECKOUT, the host-discovered <code>$PWD</code> consumed only by home-assistant's live config bind); idempotently bootstraps the deploy tree (<code>CreateRepo podhaus-deploy</code> + <code>PullRepo</code> + poll, so <code>/syncs/podhaus</code> is populated before the first sync reads it); idempotently creates the podhaus ResourceSync (with <code>include_variables = true</code>); runs the bootstrap double-sync (first sync registers stacks + TOML-declared vars; wait for komodo-op to backfill OP secrets; second sync re-renders stack env blocks). Stops there — deploys are a separate concern (push or <code>./komodo-sync</code>). Idempotent — safe to re-run.</td></tr>
           <tr><td><code>komodo-stop</code></td><td>Stops the Komodo Core stack (everything else stays running, since Komodo's job is just orchestration; the running containers are managed by Docker directly).</td></tr>
           <tr><td><code>komodo-status</code></td><td>Shows the Komodo Core container status.</td></tr>
-          <tr><td><code>komodo-sync</code></td><td>Steady-state debug-iterate tool, <strong>and</strong> the recovery path for <code>komodo/sync/procedures.toml</code> edits. Step 1 calls <code>RunSync(podhaus)</code> directly via the API (out-of-procedure, so Komodo's <code>resource::update::&lt;Procedure&gt;</code> busy guard doesn't fire — procedure-stage changes land here cleanly, surgically). Step 2 invokes <code>podhaus-push-deploy</code>; Step 3 invokes <code>fenwick-push-deploy</code>. Use when iterating locally without pushing, or after a push that touches procedures.toml (whose in-procedure RunSync can't update its own running procedure).</td></tr>
+          <tr><td><code>komodo-sync</code></td><td>Steady-state debug-iterate tool, <strong>and</strong> the recovery path for <code>komodo/sync/procedures.toml</code> edits. Step 0 calls <code>RunAction(podhaus-load-local-tree)</code> to overlay the deploy tree with bilby's working checkout's current state. Step 1 calls <code>RunSync(podhaus)</code> directly via the API (out-of-procedure, so Komodo's <code>resource::update::&lt;Procedure&gt;</code> busy guard doesn't fire — procedure-stage changes land here cleanly, surgically), now reading the overlaid tree. Step 2 invokes <code>podhaus-deploy</code> directly (deliberately not <code>podhaus-push-deploy</code>, whose pull stage would clobber the overlay); further steps invoke <code>fenwick-push-deploy</code>, <code>pets-push-deploy</code>, <code>docs-push-deploy</code>. Use when iterating locally without pushing, or after a push that touches procedures.toml (whose in-procedure RunSync can't update its own running procedure).</td></tr>
           <tr><td><code>komodo-upgrade</code></td><td>Pulls latest Komodo images, restarts the Core stack.</td></tr>
           <tr><td><code>kangaroo_bootstrap</code></td><td>Idempotent kangaroo bring-up. Renders Periphery config from 1Password, ships compose + keys to the QNAP, starts outbound-mode Periphery, installs the native QNAP boot-DOM autorun hook, and verifies the committed kangaroo Server definition.</td></tr>
         </tbody>

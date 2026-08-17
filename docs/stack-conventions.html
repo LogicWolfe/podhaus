@@ -38,11 +38,13 @@
           consumer pattern — see <a href="#content-hash-wiring">Content-hash
           wiring</a>. The pre-commit lint will block the commit if anything
           is missing.</li>
-        <li><strong>Commit and push.</strong> The push fires the
-          <code>podhaus-push-deploy</code> procedure: Stage 0 RunSync
-          registers the new stack + any TOML-declared variables (config
-          reconcile only — Sync Deploy no-ops because every podhaus stack
-          omits <code>deploy = true</code>); Stage 1
+        <li><strong>Commit and push.</strong> The push fires
+          <code>podhaus-push-deploy</code>, which pulls bilby's
+          Komodo-managed deploy tree to <code>origin/main</code> and then
+          runs the internal <code>podhaus-deploy</code> procedure: Stage 0
+          RunSync registers the new stack + any TOML-declared variables
+          (config reconcile only — Sync Deploy no-ops because every
+          podhaus stack omits <code>deploy = true</code>); Stage 1
           (<code>RunAction "podhaus-inject-content-hashes"</code>) stamps
           per-stack content hashes; Stage 2
           <code>BatchDeployStackIfChanged "*"</code> first-deploys the new
@@ -52,7 +54,9 @@
           <code>bin/core/src/api/execute/stack.rs:368-447</code>);
           Stage 3 restarts ofelia so any new schedule labels take effect.
           No manual <em>Deploy</em> click. For local debug iteration
-          without pushing, <code>./komodo-sync</code>.</li>
+          without pushing, <code>./komodo-sync</code> (overlays the deploy
+          tree with the local checkout, then invokes
+          <code>podhaus-deploy</code> directly).</li>
       </ol>
 
       <h2 id="multi-host">Adding a stack to a multi-host shared service</h2>
@@ -77,9 +81,11 @@
           <code>config.json.tmpl</code>), put it at
           <code>&lt;service&gt;/&lt;host&gt;/&lt;template&gt;</code> and reference it via the
           per-host overlay's bind mount.</li>
-        <li>Commit + push. The push procedure (<code>podhaus-push-deploy</code>) reconciles
-          the new stack via Stage&nbsp;0 (RunSync), stamps content hashes via Stage&nbsp;1
-          (RunAction), and deploys via Stage&nbsp;2 (BatchDeployStackIfChanged) — same path
+        <li>Commit + push. <code>podhaus-push-deploy</code> pulls the deploy tree
+          to <code>origin/main</code> and runs the internal <code>podhaus-deploy</code>
+          procedure, which reconciles the new stack via Stage&nbsp;0 (RunSync), stamps
+          content hashes via Stage&nbsp;1 (RunAction), and deploys via Stage&nbsp;2
+          (BatchDeployStackIfChanged) — same path
           for files_on_host and linked_repo hosts. New stacks first-deploy via
           the <code>(None, _) =&gt; FullDeploy</code> arm in
           <code>DeployStackIfChanged</code>, which ignores
@@ -124,8 +130,9 @@
       <h2 id="content-hash-wiring">Content-hash wiring</h2>
       <p>
         Every podhaus stack participates in the content-hash change-detection
-        mechanism. Stage&nbsp;1 of <code>podhaus-push-deploy</code> computes per-stack and
-        per-service hashes from bilby's view of the repo and injects them as env vars on
+        mechanism. Stage&nbsp;1 of the internal <code>podhaus-deploy</code> procedure
+        computes per-stack and per-service hashes from the deploy tree's current state
+        and injects them as env vars on
         each stack; compose services consume them via labels and build args so a file
         change actually recreates the right containers. The pre-commit lint
         (<code>tools/lint-stack-content-hash.py</code>) enforces three rules on every
@@ -301,9 +308,22 @@ description = "Service port (well-known, not a secret)"</code></pre>
   # renames don't break the link to the container.
   - ${PODHAUS_REPO}/&lt;stack&gt;/conf:/conf:ro</code></pre>
       <p>
-        <code>PODHAUS_REPO</code> is seeded by <code>komodo-start</code> with the host's
-        absolute path to the repo clone. This keeps the repo portable across hosts and
-        environments.
+        <code>PODHAUS_REPO</code> is a fixed variable (declared in
+        <code>komodo/sync/variables.toml</code>) pointing at bilby's
+        Komodo-managed <strong>deploy tree</strong>
+        (<code>/etc/komodo/repos/podhaus-deploy</code>) — a clone fed by
+        the push webhook (pulled to <code>origin/main</code>) or by
+        <code>./komodo-sync</code> (overlaid with the working checkout).
+        Every <code>${PODHAUS_REPO}</code> bind in the repo is
+        <code>:ro</code> except one: home-assistant's UI-editable config
+        mount uses <code>${PODHAUS_CHECKOUT}</code> instead — a
+        host-discovered variable seeded by <code>komodo-start</code>
+        pointing at bilby's live working checkout, so the UI editor's
+        saves land somewhere committable rather than in a tree the
+        webhook can reset at any time. See
+        <a href="/secrets.html#non-secret-variables">Secrets → non-secret
+        variables</a> and <a href="/komodo.html#operating-models">Komodo
+        → operating models</a>.
       </p>
       <blockquote>
         <p><strong>Never use single-file bind mounts</strong></p>
@@ -568,7 +588,7 @@ chmod +x .git/hooks/pre-commit</code></pre>
       <h2 id="checklist">Quick checklist when adding a stack</h2>
       <ul>
         <li>☐ <code>compose.yaml</code> + <code>stack.toml</code> in <code>&lt;name&gt;/</code></li>
-        <li>☐ <code>stack.toml</code> <strong>omits</strong> <code>deploy = true</code> (Komodo's Sync Deploy auto-deploys are not used; Stage 2 of <code>podhaus-push-deploy</code> is the deploy authority — the pre-commit lint enforces this)</li>
+        <li>☐ <code>stack.toml</code> <strong>omits</strong> <code>deploy = true</code> (Komodo's Sync Deploy auto-deploys are not used; Stage 2 of <code>podhaus-deploy</code> is the deploy authority — the pre-commit lint enforces this)</li>
         <li>☐ <code>dockernet</code> external network declared (if reachable from other containers)</li>
         <li>☐ Bind mounts use <code>${PODHAUS_REPO}/...</code>, not relative paths</li>
         <li>☐ All bind mounts are <strong>directory</strong> binds, never single files (see above)</li>
