@@ -1,12 +1,12 @@
 # Provider configurations for the consolidated podhaus root.
 #
-# The chezmoi-installed fish hook runs `op inject` when the shell enters
-# ~/repos/podhaus, exports the standard provider variables, and unsets them on
-# exit. The Homelab-scoped 1P service-account token is the only raw secret on
-# disk; the AWS credentials are limited to the terraform-state bucket.
+# `op-vault dev -- op run --env-file=terraform/terraform.env.op` supplies the
+# standard provider variables only to Terraform's process tree. The selected
+# machine service account grants Homelab access only on Podhaus operators; the
+# AWS credentials are limited to the terraform-state bucket.
 
 provider "cloudflare" {
-  # api_token from CLOUDFLARE_API_TOKEN env var (PWD-scoped op inject).
+  # api_token from CLOUDFLARE_API_TOKEN env var (explicit op run boundary).
 }
 
 provider "unifi" {
@@ -71,7 +71,7 @@ provider "minio" {
 }
 
 # The 1Password provider is deliberately selective. Backend and provider
-# credentials use the PWD hook; data sources and managed items stay here when
+# credentials use the op run environment file; data sources and managed items stay here when
 # their field shapes are stable, as with Pocket ID, Pouch MinIO, and Forgejo.
 
 provider "pocketid" {

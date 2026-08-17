@@ -12,11 +12,11 @@
       <ul>
         <li>A working 1Password vault with the Homelab vault access and the
           <strong>Emergency Kit hardcopy</strong> (recovers Login).</li>
-        <li>A 1Password Service Account token at the repo root in a file named
-          <code>OP_SERVICE_ACCOUNT_TOKEN</code> — Komodo Connect uses this for the
-          chicken-and-egg first boot, before the Komodo Variable for it has been seeded into
-          Komodo itself.</li>
-        <li>SSH access to the target host (UniFi-managed, configured separately).</li>
+        <li>A separately revocable 1Password service account for the recovery
+          machine, granted only the Dev and Homelab vaults and enrolled locally
+          with <code>op-vault mint dev</code>. Do not put its token in the repo.</li>
+        <li>The control node's machine SSH key loaded in
+          <code>$SSH_AUTH_SOCK</code>.</li>
         <li>The restic-repo-password if restoring from OneDrive (in 1P).</li>
       </ul>
 
@@ -51,21 +51,23 @@ done</code></pre>
 sudo mount -t nfs -o vers=4.1 10.0.0.25:/Jump  /mnt/jump
 sudo mount -t nfs -o vers=4.1 10.0.0.25:/Pouch /mnt/pouch</code></pre>
         </li>
-        <li>Clone the repo, put the service-account token at the repo root:
-          <pre><code>git clone &lt;repo&gt; ~/repos/podhaus
-cd ~/repos/podhaus
-echo &lt;token&gt; &gt; OP_SERVICE_ACCOUNT_TOKEN
-chmod 600 OP_SERVICE_ACCOUNT_TOKEN</code></pre>
-        </li>
+        <li>Clone the repo, apply the dotfiles, and enrol bilby's new service
+          account through the interactive local mint path:
+          <pre><code>git clone &lt;dotfiles-repo&gt; ~/.local/share/chezmoi
+chezmoi init --apply ~/.local/share/chezmoi
+git clone &lt;podhaus-repo&gt; ~/repos/podhaus
+op-vault mint dev</code></pre>
+          The token paste stays on bilby's terminal and is never written to the
+          checkout or sent over SSH.</li>
         <li>Lay down host state with the bilby playbook (Docker daemon config,
           dockernet + fenwick networks, NFS-bind hardening, firewall, Komodo
           host directories) — bootstrap the repo venv per <code>README.md</code>
           first:
           <pre><code>cd ansible
-ansible-playbook playbooks/bilby.yml --check --diff   # read first
-ansible-playbook playbooks/bilby.yml</code></pre>
+op-vault dev -- ansible-playbook playbooks/bilby.yml --check --diff   # read first
+op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
         </li>
-        <li>Run <code>./komodo-start</code>. This:
+        <li>Run <code>op-vault dev -- ./komodo-start</code>. This:
           <ul>
             <li>Brings up Komodo Core (Postgres, FerretDB, Core, Periphery).</li>
             <li>Waits for Core to be healthy.</li>
@@ -124,8 +126,8 @@ ansible-playbook playbooks/bilby.yml</code></pre>
           backend setup.</li>
         <li>Deploy every other stack from the Komodo UI in dependency order. The repo's
           ResourceSync has already created the stack definitions.</li>
-        <li>Verify DNS (stock <code>terraform</code>, no wrapper, creds from the
-          chezmoi fish env): <code>cd terraform && terraform plan</code>
+        <li>Verify DNS with
+          <code>op-vault dev -- op run --env-file=terraform/terraform.env.op -- terraform -chdir=terraform plan</code>
           from the working directory. Should report no changes (state restored from
           Backrest matches the deployed Cloudflare + UniFi resources). If there's drift,
           stop and investigate before applying — drift here means either the restored
@@ -190,9 +192,9 @@ ansible-playbook playbooks/bilby.yml</code></pre>
           create the replacement first. Terraform then provisions the VM, both addresses,
           DNS, PKI, Pocket ID client, and 1Password handoffs.</li>
         <li>From bilby (it streams the Periphery keys from <code>/opt/komodo/keys</code>
-          and polls Core on localhost), with the op-unlock SSH agent active, run
+          and polls Core on localhost), with bilby's machine-key agent active, run
           <pre><code>cd ansible
-ansible-playbook playbooks/numbat-bootstrap.yml</code></pre>
+op-vault dev -- ansible-playbook playbooks/numbat-bootstrap.yml</code></pre>
           First contact is pinned against the Terraform-generated host key published to
           1Password; the play connects to the application IP on first-boot port 2222,
           reconciles Rocky, Docker, nftables and dockernet, starts the public relay first,

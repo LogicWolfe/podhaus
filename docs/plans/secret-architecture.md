@@ -1,4 +1,4 @@
-# Secret architecture — longer-term goals
+# Secret architecture: longer-term goals
 
 Captures the target state for how secrets reach each host, and the gaps
 between that and what runs today. Written after a `chezmoi update`
@@ -17,7 +17,7 @@ they do not obtain secret data.
 
 Explicitly *not* in scope, and deliberately tolerated for now:
 
-- Live compromise — code execution as `nathan` on a running host. Any
+- Live compromise: code execution as `nathan` on a running host. Any
   scheme that supports unattended operation loses here by construction,
   because the credential that unlocks the hardware must itself be
   reachable without a human.
@@ -29,13 +29,13 @@ Explicitly *not* in scope, and deliberately tolerated for now:
 secret storage is not a substitute for it.**
 
 On a host with no disk encryption, an attacker who takes the machine does
-not need to log in — they pull the disk or boot external media and read
+not need to log in. They pull the disk or boot external media and read
 the filesystem. At that point the mechanism protecting a secret is
 irrelevant: a plaintext file, a YubiKey PIV data object, and an
 age-encrypted blob are equally compromised, because the PIN or identity
 material that unlocks the hardware is on the same unencrypted disk.
 
-Hardware-backed storage defends a *different* case — theft of a disk,
+Hardware-backed storage defends a *different* case: theft of a disk,
 backup, or snapshot **without** the accompanying hardware token. That is
 worth having, but it is defense in depth layered on encryption, not a
 replacement for it.
@@ -44,10 +44,12 @@ replacement for it.
 
 | Host | Class | Secret path | Rests on |
 |---|---|---|---|
-| bilby | Asahi (Apple Silicon), YubiKey PIV | 1P Homelab vault, direct | hardware + FDE *(gap)* |
+| MacBook Air | macOS personal development client | per-machine Dev service accounts | device-bound Keychain row keys protected by Secure Enclave + FileVault, pending local audit |
+| bilby | Asahi (Apple Silicon), YubiKey PIV SSH identity | per-machine Dev and Homelab service account, backend decision pending | unencrypted disk today; arbitrary PIV data objects are not a confidentiality boundary *(gap)* |
 | kangaroo | QNAP QTS appliance | Komodo variable interpolation | network auth only |
 | numbat | BinaryLane Rocky Linux VM | Komodo interpolation + Terraform-managed 1P handoffs | provider disk + rendered stack env *(gap)* |
 | fractal | Fedora WSL2, encrypted `/home` | Ansible 1P lookups + Komodo interpolation | LUKS `/home`; Periphery and rendered stack env under unencrypted `/opt` *(gap)* |
+| voltaire | Fedora Workstation development host | per-machine Dev service accounts | TPM NV for tokens; rendered stack env on disk |
 
 Kangaroo already receives service secrets through the
 `1P Homelab → komodo-op → Komodo Variables → [[VARIABLE]]` path
@@ -61,11 +63,11 @@ Ordered by dependency, not by schedule. Each is independently useful.
 
 The prerequisite for the threat model above. Undecided whether this is
 full-disk or a partial scheme covering only the paths that hold secrets
-— that choice drives everything else here.
+because that choice drives everything else here.
 
 **bilby has no encryption today** (verified: no LUKS volumes, no
 `/etc/crypttab`; `/home` is plain btrfs on `nvme0n1p6`). It also has **no
-TPM** — Apple Silicon does not expose one to Linux, which is why it uses
+TPM**. Apple Silicon does not expose one to Linux, which is why it uses
 a YubiKey for machine-ssh. So TPM-bound auto-unlock is unavailable and
 some other unlock method is required.
 
@@ -75,7 +77,7 @@ none yet chosen:
 - **Clevis + Tang (network-bound).** Unlocks only when the host can reach
   a Tang server on the LAN; a stolen machine taken off-network stays
   encrypted, and reboots stay unattended. Fails if the whole rack is
-  taken together — mitigated by hosting Tang somewhere not co-located, or
+  taken together. Mitigate that by hosting Tang somewhere not co-located, or
   an SSS policy requiring 2-of-N.
 - **Remote unlock via SSH in initramfs** (dracut + dropbear). Strongest
   of the practical options and depends on no server that might be stolen
@@ -86,7 +88,7 @@ none yet chosen:
   boot.
 
 Retrofitting means either in-place `cryptsetup reencrypt` or a
-backup-and-restore cycle on a 159 GB `/home` — real risk and real
+backup-and-restore cycle on a 159 GB `/home`, with real risk and real
 downtime either way. `/boot` stays unencrypted regardless.
 
 kangaroo cannot participate: QTS is an appliance OS. Its secrets are
@@ -94,8 +96,8 @@ protected by the next item instead.
 
 ### Secrets at rest on periphery hosts
 
-Komodo writes a rendered `.env` — resolved secrets plus the stamped
-`STACK_CONTENT_HASH` — into each stack's `run_directory` at deploy time.
+Komodo writes a rendered `.env`, containing resolved secrets plus the stamped
+`STACK_CONTENT_HASH`, into each stack's `run_directory` at deploy time.
 So the Komodo path distributes secrets from 1Password without a bespoke
 channel, but it **does not keep them off disk**.
 
@@ -118,40 +120,23 @@ the stolen key.
 
 ### Service account token on disk
 
-`OP_SERVICE_ACCOUNT_TOKEN` at the repo root is plaintext, `0600`, and
-gitignored.
+The active migration is tracked in
+[Unified development identity and limited MacBook management](hardware-sealed-op-tokens.md).
+It covers the repo-root token's nine direct consumers, per-machine accounts,
+TPM/Keychain/encrypted-file storage, bilby's explicit storage decision, the
+MacBook's limited management boundary, and removal of automatic Personal-vault
+fallbacks.
 
-Removing it is wider than it looks: **nine executable paths read the file
-directly** — `komodo-start`, `komodo-sync`, `komodo-upgrade`,
-`kangaroo_bootstrap`, and five `paperless/*` maintenance scripts. The
-`OP_SERVICE_ACCOUNT_TOKEN` passed to the `onepassword` stack is a different
-Komodo variable carrying the 1Password Connect token. Terraform credentials now
-come from the chezmoi-installed, repository-scoped shell hook rather than this
-repo-root file.
-
-The token grants exactly the **Homelab** vault and nothing else
-(verified: the service account sees one vault). That scoping is already
-correct and is what makes the blast radius tolerable.
-
-Hardware-backed storage as a YubiKey PIV data object on bilby is feasible:
-the token is 853 bytes, `ykman`
-5.9.0 supports arbitrary PIV object import/export and is already
-installed, and only PIV slot 9A is occupied (the machine-ssh key), so the
-retired slots are free. Whether a chosen object is PIN-gated on read
-needs verifying empirically rather than assumed.
-
-**But per the governing conclusion, most of this value is subsumed by
-FDE.** Once the disk is encrypted, moving the token into hardware defends
-only the stolen-backup case. Reassess priority after encryption lands
-rather than building it first. If a master copy is ever needed for
-re-provisioning, it belongs in the **Personal** vault — human-authenticated
-and deliberately unreadable by the service account itself.
+The `OP_SERVICE_ACCOUNT_TOKEN` passed to the `onepassword` stack is a different
+Komodo variable carrying the 1Password Connect token. It is outside that
+migration. Any master copies needed for re-provisioning belong in the
+**Personal** vault, readable only through Nathan's explicit personal override.
 
 ## Known caveats
 
 **Secret rotation does not auto-redeploy.** `hashDir` excludes the
 deploy-written `.env`, so `STACK_CONTENT_HASH` does not change when a
-1Password value changes — only committed in-stack content triggers a
+1Password value changes. Only committed in-stack content triggers a
 redeploy. AGENTS.md records this as a deliberate non-goal, but it means
 rotating a credential silently leaves stale values running until the next
 committed change. This directly weakens the "rotate rather than keep

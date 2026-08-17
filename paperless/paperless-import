@@ -6,12 +6,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 mkdir -p "$HOME/repos/podhaus-migration-state"
 
-# Load service account token and read Paperless admin password from 1P.
-if [ ! -f OP_SERVICE_ACCOUNT_TOKEN ]; then
-    echo "ERROR: OP_SERVICE_ACCOUNT_TOKEN not present at repo root" >&2
-    exit 1
-fi
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+# Read the Paperless admin password through the caller-selected machine account.
+: "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./paperless/paperless-import}"
 PAPERLESS_PASSWORD="$(op read 'op://Homelab/Paperless Admin Password/password')"
 if [ -z "$PAPERLESS_PASSWORD" ]; then
     echo "ERROR: failed to read Paperless Admin Password from 1P" >&2

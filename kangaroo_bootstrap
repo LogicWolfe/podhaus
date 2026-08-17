@@ -32,7 +32,7 @@ KANGAROO_DOCKER="${KANGAROO_DOCKER:-/share/CACHEDEV2_DATA/.qpkg/container-statio
 PERIPHERY_HEALTH_TIMEOUT="${PERIPHERY_HEALTH_TIMEOUT:-120}"
 BILBY_KEYS_DIR="${BILBY_KEYS_DIR:-/opt/komodo/keys}"
 
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+: "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./kangaroo_bootstrap}"
 
 log()  { printf '\e[1;34m▸\e[0m %s\n' "$*"; }
 warn() { printf '\e[1;33m!\e[0m %s\n' "$*" >&2; }

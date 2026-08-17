@@ -3,11 +3,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-if [ ! -f OP_SERVICE_ACCOUNT_TOKEN ]; then
-    echo "ERROR: OP_SERVICE_ACCOUNT_TOKEN not present at repo root" >&2
-    exit 1
-fi
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+: "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./paperless/paperless-wipe}"
 PAPERLESS_PASSWORD="$(op read 'op://Homelab/Paperless Admin Password/password')"
 
 TTY_FLAG=""

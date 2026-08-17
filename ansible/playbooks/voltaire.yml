@@ -1,6 +1,6 @@
 # Provision voltaire: podhaus host + Nathan's work development machine.
 #
-# Run from any machine with the op-unlock agent active:
+# Run from a development machine with its machine-key agent active:
 #   cd ansible
 #   ansible-playbook playbooks/voltaire.yml --check --diff   # read first
 #   ansible-playbook playbooks/voltaire.yml

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+: "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./komodo-start}"
 
 # Repo root is auto-discovered from the script's working directory. Keeps
 # podhaus portable: clone anywhere, run ./komodo-start, and Komodo + every

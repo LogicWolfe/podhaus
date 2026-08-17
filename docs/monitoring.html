@@ -466,11 +466,16 @@ $DK restart alloy backrest                           # reattach by name + rebuil
           <code>X-Podhaus-Gateway-Token</code> using field
           <code>hyperdx_mcp</code> from the <code>Pomerium Gateway Tokens</code>
           1Password item. The public Pomerium route is limited to
-          <code>/api/mcp</code>, and Caddy checks the token before HyperDX.</li>
+          <code>/api/mcp</code>, and Caddy checks the token before HyperDX.
+          Development machines receive this client credential through the
+          <code>Podhaus HyperDX</code> item in the Dev vault. Komodo keeps its
+          Homelab copy because the runtime secret sync has no Dev-vault grant.</li>
         <li><strong>HyperDX Personal API Access Key</strong> as
           <code>Authorization: Bearer &lt;key&gt;</code> — the per-user
-          <code>accessKey</code> (HyperDX Team Settings → API Keys). Stored in 1Password as
-          <code>clickstack-hyperdx-mcp-key</code>; also persisted in Mongo
+          <code>accessKey</code> (HyperDX Team Settings → API Keys). Runtime administration
+          keeps <code>clickstack-hyperdx-mcp-key</code> in Homelab. Development machines use
+          a separate key stored as <code>api key</code> in the Dev-vault
+          <code>Podhaus HyperDX</code> item. Both are persisted in Mongo
           (<code>hyperdx</code> db, <code>users.accessKey</code>) and captured by the
           nightly mongodump → Backrest backup.</li>
       </ol>
@@ -482,10 +487,9 @@ $DK restart alloy backrest                           # reattach by name + rebuil
   --header "X-Podhaus-Gateway-Token: &lt;gateway-token&gt;" \
   --header "Authorization: Bearer &lt;key&gt;"</code></pre>
       <p>
-        On bilby the client config (<code>~/.claude.json</code>) is
+        On development machines the client config (<code>~/.claude.json</code>) is
         <strong>chezmoi-managed</strong> — the <code>hyperdx</code> MCP block and the key
-        (templated from 1Password <code>clickstack-hyperdx-mcp-key</code> and
-        <code>Pomerium Gateway Tokens</code>) live in the
+        (templated from the Dev-vault <code>Podhaus HyperDX</code> item) live in the
         chezmoi source, <strong>not</strong> hand-edited into <code>~/.claude.json</code>
         (chezmoi regenerates and would clobber a manual <code>claude mcp add</code>). The
         same command works from any machine through Numbat, with no LAN dependency.

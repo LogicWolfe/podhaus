@@ -78,8 +78,6 @@
     state: present
 
 - name: Verify the 1Password CLI is usable
-  # `op` is the entry point for the opt-in op-unlock developer path, so a
-  # broken install should surface here rather than the first time Nathan
-  # needs a secret.
+  # op-vault supplies the selected machine service account at execution time.
   ansible.builtin.command: op --version
   changed_when: false

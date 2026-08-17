@@ -24,8 +24,8 @@ podhaus_dockernet_gateway: 172.18.0.1
 # must always use podhaus_operator for OS-account work.
 podhaus_operator: nathan
 
-# Auth to every host rides the operator's agent. On bilby that is op-unlock;
-# pinned explicitly rather than left ambient so a future `Host *`
+# Auth to every host rides the operator's machine-key agent. It is pinned
+# explicitly rather than left ambient so a future `Host *`
 # IdentityAgent line in ~/.ssh/config cannot silently redirect it (the same
 # trap the ssh procedure and numbat bootstrap already guard against).
 ansible_ssh_common_args: >-

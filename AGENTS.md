@@ -42,6 +42,15 @@ read it first.** Plex and Paperless in particular have non-obvious
 constraints (identity preservation, dockernet-only access pattern) that
 aren't obvious from the compose files alone.
 
+### Development authentication
+
+Use `op-vault dev -- <command>` for Podhaus and personal Dev-vault work, and
+`op-vault switch -- <command>` for Switch Dev-vault work. A missing token,
+hardware backend, or vault grant is an authorization boundary. Never invoke,
+request, or recommend `op-unlock`, a personal 1Password session, or a Personal
+vault read unless Nathan explicitly asks for that personal operation in the
+current conversation. Git, SSH, signing, and Ansible use the machine SSH key.
+
 ---
 
 ## What podhaus is
@@ -373,9 +382,8 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
    route to `pomerium/config.yaml`, and add its private-origin host to
    `caddy/Caddyfile`. Podhaus services do not get Cloudflare Tunnel or
    Access resources.
-   `cd terraform && terraform apply` to publish (creds are ambient
-   after the chezmoi-installed fish hook runs `op inject`; no wrapper, runs from any
-   machine).
+   Run `op-vault dev -- op run --env-file=terraform/terraform.env.op --
+   terraform -chdir=terraform apply` to publish from a Podhaus operator.
 
 ## When adding a new instance of a shared service to another host
 

@@ -2,8 +2,8 @@
 # provider for the whole fleet — replaces the historical split between
 # cloudflare/, minio/terraform/, and the relay-only terraform/. See
 # /docs/terraform.html for the bootstrap story (komodo-start guarantees
-# the terraform-state bucket; one apply needs only the 1P service-
-# account token + the PWD-scoped MinIO bucket creds).
+# the terraform-state bucket; one apply needs only the selected 1P machine
+# identity plus the process-scoped MinIO bucket credentials).
 terraform {
   required_version = ">= 1.10.0"
 

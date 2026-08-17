@@ -34,7 +34,8 @@ Every piece of state that crosses hosts follows one rule set:
 - **One channel.** 1Password is the only distribution path for anything
   that crosses hosts. Terraform publishes there; Ansible reads there
   (`community.general.onepassword` lookups run on the control node, so
-  targets need no op auth); chezmoi reads there via `op-homelab`.
+  targets need no op auth); chezmoi and operator commands read there through
+  `op-vault` using the selected machine service account.
 - **Zero copies.** The repo carries no file whose content is derivable
   from Terraform state. The narrow exception is a root-of-trust literal
   a fresh machine needs before it can reach any channel — the Forgejo
@@ -135,14 +136,20 @@ in the repo's `.venv`.
 
 ```sh
 cd ansible
-ansible-playbook playbooks/fractal.yml --check --diff   # read first
-ansible-playbook playbooks/fractal.yml
+op-vault dev -- ansible-playbook playbooks/fractal.yml --check --diff
+op-vault dev -- ansible-playbook playbooks/fractal.yml
 ```
 
-Authentication is the op-unlock agent — `group_vars/all.yml` passes
-`IdentityAgent` through from `$SSH_AUTH_SOCK`, so the same unlock that
-lets you `ssh` a host lets Ansible reach it. No key material is
-configured anywhere in the layer.
+Authentication uses the caller's machine-key agent. `group_vars/all.yml`
+passes `IdentityAgent` through from `$SSH_AUTH_SOCK`, so the same machine key
+that lets the control node `ssh` to a host lets Ansible reach it. Personal
+1Password authentication is not part of this path, and no private key material
+is configured in Ansible.
+
+Ansible lookups that need 1Password run from a Podhaus operator under the
+machine's `dev` service account. Keeping every playbook inside the same
+explicit boundary avoids a second invocation pattern for plays that do not
+currently read a secret.
 
 > **Ansible is not wired into push-to-deploy.** The GitHub webhook fires
 > `podhaus-push-deploy`, which touches Komodo stacks only. Host state

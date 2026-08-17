@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+: "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./paperless/paperless-extract-zips}"
 PAPERLESS_PASSWORD="$(op read 'op://Homelab/Paperless Admin Password/password')"
 
 TTY_FLAG=""

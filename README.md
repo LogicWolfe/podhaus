@@ -70,19 +70,20 @@ Bootstrap the remote hosts from bilby:
 ## Terraform
 
 `terraform/` is the single Terraform root for BinaryLane, Cloudflare, UniFi,
-GitHub, Tailscale, MinIO, and Pocket ID. Run stock Terraform from that
-directory. Credentials come from the chezmoi-installed, repository-scoped shell
-hook, which runs `op inject` when the shell enters this repository.
+GitHub, Tailscale, MinIO, and Pocket ID. `op-vault` selects the machine's
+Podhaus service account and `op run` supplies credentials only to Terraform's
+process tree.
 
 ```sh
-cd terraform
-terraform plan
-terraform apply
+op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
+  terraform -chdir=terraform plan
+op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
+  terraform -chdir=terraform apply
 ```
 
 State lives in MinIO at `s3://terraform-state/podhaus.tfstate` through
-`https://storage.pod.haus`. There is no Terraform wrapper and DNSControl has
-been retired.
+`https://storage.pod.haus`. There is no shell hook or Terraform wrapper, and
+DNSControl has been retired.
 
 ## Repository map
 

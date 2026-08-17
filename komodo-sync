@@ -39,7 +39,7 @@
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
-export OP_SERVICE_ACCOUNT_TOKEN="$(cat OP_SERVICE_ACCOUNT_TOKEN)"
+: "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./komodo-sync}"
 
 api_key=$(op read "op://Homelab/Komodo API OnePassword Sync/username")
 api_secret=$(op read "op://Homelab/Komodo API OnePassword Sync/credential")

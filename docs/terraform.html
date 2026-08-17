@@ -93,23 +93,25 @@
 
       <h2 id="runner">Running Terraform (stock, from any machine)</h2>
       <p>
-        There is <strong>no wrapper script</strong>. Run stock
-        <code>terraform</code> directly:
+        There is <strong>no shell hook or Terraform wrapper</strong>.
+        <code>op-vault</code> selects the machine's Podhaus service account and
+        <code>op run</code> supplies credentials only to Terraform's process tree:
       </p>
-      <pre><code>cd terraform
-terraform init   # one-time per machine
-terraform plan
-terraform apply</code></pre>
+      <pre><code>op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
+  terraform -chdir=terraform init   # one-time per machine
+op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
+  terraform -chdir=terraform plan
+op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
+  terraform -chdir=terraform apply</code></pre>
       <p>
-        <strong>Hard requirement: this works from any machine</strong> —
-        clone podhaus + have the chezmoi hook and local Homelab service-account
-        token ⇒ <code>terraform</code> runs. When a fish shell enters the podhaus
-        tree, <code>~/.config/fish/conf.d/podhaus-tf.fish</code> reads the token,
-        runs <code>op inject</code> against its 1Password references, and exports
-        the standard provider, backend, and <code>TF_VAR_*</code> variables. The
-        hook unsets them when the shell leaves the tree. Stock Terraform therefore
-        needs no wrapper or credential flags. Leave and re-enter the tree, or start
-        a new shell inside it, after rotating a credential. The
+        <strong>Hard requirement: this works from any Podhaus operator</strong>.
+        Clone Podhaus, enrol that machine's scoped <code>dev</code> service
+        account with <code>op-vault mint dev</code>, and run the command above.
+        The committed <code>terraform/terraform.env.op</code> contains only
+        <code>op://</code> references. Provider, backend, and
+        <code>TF_VAR_*</code> values exist only in the child process. Bash and fish
+        use the same command, and leaving the repository cannot leak an ambient
+        credential environment. The
         <code>.terraform.lock.hcl</code> is <strong>not</strong> committed;
         each machine self-locks within the <code>~&gt;</code> version
         constraints (no cross-platform hash drift, zero maintenance).
@@ -125,11 +127,11 @@ terraform apply</code></pre>
       </blockquote>
       <blockquote>
         <p><strong>Credential split is intentional</strong></p>
-        The PWD hook is authoritative for Terraform backend and provider
-        credentials. The S3 backend must authenticate before Terraform can
+        The committed <code>op run</code> environment file is authoritative for
+        Terraform backend and provider credentials. The S3 backend must authenticate before Terraform can
         evaluate provider data sources. Existing Homelab provider items also use
         custom root fields with random IDs, so restructuring them would ripple to
-        the hook's 1Password references and komodo-op variable names.
+        the environment file's 1Password references and komodo-op variable names.
         The <code>1Password/onepassword</code> provider remains for credentials it
         can read or manage cleanly, including Pocket ID, Pouch MinIO, Forgejo, and
         the Sky backup accounts.
