@@ -1,13 +1,10 @@
 # Secret architecture: longer-term goals
 
 Captures the target state for how secrets reach each host, and the gaps
-between that and what runs today. Written after a `chezmoi update`
-failure on bilby surfaced the fact that the 1Password CLI has no session
-on machine-ssh hosts; the investigation widened into where secrets live
-at rest across the homelab.
-
-Nothing here is urgent. The immediate `chezmoi` breakage is tracked
-separately in the dotfiles repo and does not depend on any of this.
+between that and what runs today. A `chezmoi update` failure on bilby exposed
+the old dependency on an interactive 1Password session and widened the audit
+into where secrets live at rest across the homelab. The Linux development-auth
+migration now uses `op-vault`; the longer-term storage gaps remain here.
 
 ## Threat model
 
@@ -44,12 +41,12 @@ replacement for it.
 
 | Host | Class | Secret path | Rests on |
 |---|---|---|---|
-| MacBook Air | macOS personal development client | per-machine Dev service accounts | device-bound Keychain row keys protected by Secure Enclave + FileVault, pending local audit |
-| bilby | Asahi (Apple Silicon), YubiKey PIV SSH identity | per-machine Dev and Homelab service account, backend decision pending | unencrypted disk today; arbitrary PIV data objects are not a confidentiality boundary *(gap)* |
+| MacBook Air | macOS personal development client | per-machine Dev service accounts, pending local implementation | planned device-bound Data Protection Keychain rows protected by Secure Enclave + FileVault |
+| bilby | Asahi (Apple Silicon), YubiKey PIV SSH identity | per-machine Dev and Homelab service account through `op-vault` | mode `0600` token file on an unencrypted disk *(accepted gap)* |
 | kangaroo | QNAP QTS appliance | Komodo variable interpolation | network auth only |
 | numbat | BinaryLane Rocky Linux VM | Komodo interpolation + Terraform-managed 1P handoffs | provider disk + rendered stack env *(gap)* |
-| fractal | Fedora WSL2, encrypted `/home` | Ansible 1P lookups + Komodo interpolation | LUKS `/home`; Periphery and rendered stack env under unencrypted `/opt` *(gap)* |
-| voltaire | Fedora Workstation development host | per-machine Dev service accounts | TPM NV for tokens; rendered stack env on disk |
+| fractal | Fedora WSL2, encrypted `/home` | per-machine Dev, Homelab, and Switch Dev service accounts through `op-vault`; Ansible 1P lookups + Komodo interpolation | mode `0600` token files in LUKS `/home`; Periphery and rendered stack env under unencrypted `/opt` *(gap)* |
+| voltaire | Fedora Workstation development host | per-machine Dev service accounts through `op-vault` | TPM NV for tokens; rendered stack env on disk |
 
 Kangaroo already receives service secrets through the
 `1P Homelab → komodo-op → Komodo Variables → [[VARIABLE]]` path
@@ -120,12 +117,13 @@ the stolen key.
 
 ### Service account token on disk
 
-The active migration is tracked in
+The Linux migration is implemented and its MacBook work is tracked in
 [Unified development identity and limited MacBook management](hardware-sealed-op-tokens.md).
-It covers the repo-root token's nine direct consumers, per-machine accounts,
-TPM/Keychain/encrypted-file storage, bilby's explicit storage decision, the
-MacBook's limited management boundary, and removal of automatic Personal-vault
-fallbacks.
+The nine repo-root-token consumers now cross one explicit `op-vault` boundary.
+Voltaire uses TPM NV; bilby uses the accepted mode `0600` file on its
+unencrypted disk; fractal uses mode `0600` files inside its encrypted home.
+Automatic Personal-vault fallbacks have been removed. The MacBook's Keychain
+backend and limited management boundary are the remaining implementation.
 
 The `OP_SERVICE_ACCOUNT_TOKEN` passed to the `onepassword` stack is a different
 Komodo variable carrying the 1Password Connect token. It is outside that

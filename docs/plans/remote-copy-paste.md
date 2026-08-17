@@ -47,8 +47,8 @@ isn't in the Ansible inventory at all. Within that:
   `cc-clip update`, and a host registry (`cc-clip hosts list`), and
   the claude-wrapper dance has to track CC's installer layout;
   forking that into chezmoi means we maintain it.
-- **Per-host enrolment is a deliberate human act** (machine-key /
-  op-vault-mint pattern): `cc-clip setup <host>` from the Mac, once
+- **Per-host enrolment is a deliberate human act** (the machine-key enrolment
+  pattern): `cc-clip setup <host>` from the Mac, once
   per devbox — but chezmoi detects the gap: after a Mac
   `chezmoi-update`, `__ccclip_nudge` (added 2026-08-11) diffs the
   fleet.toml devbox list against `cc-clip hosts list` and prints the

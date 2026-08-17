@@ -50,41 +50,53 @@ The work is complete only when all of these are true:
 9. Durable documentation describes the resulting system, then this plan is
    deleted.
 
-## Audited starting point
+## Current state
 
 Audit date: 2026-08-17.
 
 | Machine | Current identity and token state | Required change |
 |---|---|---|
-| **voltaire** | Live verified. TPM NV `0x01800052` holds a `my/Dev` service token, `0x01800051` holds a `switchtechnologies/Dev` service token, and the TPM machine SSH key is loaded. The old repo-root token file is absent. | Complete after the common runner and legacy-path removal deployed successfully. |
-| **bilby** | Live verified. The YubiKey PIV machine SSH key is active. The disk has no LUKS or encrypted home, and the old shared Homelab token remains until its replacement account passes verification. | Enrol only `bilby-dev` in the mode `0600` file backend, verify consumers, then delete the shared token. Bilby has no Switch access. Full-disk encryption remains separate security debt. |
-| **fractal** | Live verified. Its software machine SSH key is active and its home is LUKS-backed. The old shared Homelab token remains until replacement accounts pass verification. | Enrol the two per-machine accounts in the encrypted-home file backend, verify consumers, then delete the shared token. |
+| **voltaire** | Live verified. TPM NV `0x01800052` holds the `my/Dev` token and `0x01800051` holds the `switchtechnologies/Dev` token. The TPM machine SSH key is loaded. | Linux implementation complete. Move the two old token backup notes out of Dev vaults and revoke the retired shared account as human-only 1Password administration. |
+| **bilby** | Live verified. The YubiKey PIV machine SSH key is active. `bilby-dev` uses the accepted mode `0600` file backend and sees exactly Dev and Homelab. `switch` is unsupported. The old shared token file is absent. | Linux implementation complete. Full-disk encryption remains separate security debt. |
+| **fractal** | Live verified. Its software machine SSH key is active and its home is LUKS-backed. Its mode `0600` file backends see exactly Dev and Homelab for `dev`, and Dev for `switch`. The old shared token file is absent. | Linux implementation complete. |
 | **MacBook Air** | Darwin currently has `machine-key-mode=none`, uses the 1Password desktop SSH agent for Git and SSH, and has no fleet or Ansible entry. It is intentionally unreachable inbound. | Audit and implement locally after Linux closeout. Add only the limited client surface described below. |
 
-The current warning on voltaire is a lookup bug, not a missing TPM token.
-`op-homelab` only checks `~/repos/podhaus/OP_SERVICE_ACCOUNT_TOKEN`; it does not
-call the working TPM-backed `op-vault` path.
+The original warning on voltaire was a lookup bug, not a missing TPM token.
+The deleted `op-homelab` command checked only
+`~/repos/podhaus/OP_SERVICE_ACCOUNT_TOKEN`; the replacement uses the existing
+TPM-backed `op-vault` path.
 
 ## Implementation status
 
-The common Linux implementation landed in dotfiles commit `d6211b7` and is
-deployed on voltaire, bilby, and fractal. The three hosts pass the shared runner
-tests, use their machine SSH keys, and no longer install the legacy automatic
-personal-authentication commands. Voltaire passes both live service-account
-identity checks from its TPM backend.
+The common Linux implementation landed in dotfiles commits `d6211b7`,
+`ca476b9`, and `2dcb0d1` and is deployed on voltaire, bilby, and fractal. The
+three hosts pass the shared runner tests, use their machine SSH keys, and no
+longer install the legacy automatic personal-authentication commands. Every
+configured identity passes its live service-account and exact-vault-grant
+check. Bilby refuses `switch` before reading any token.
 
-The Podhaus consumer migration is implemented in this change. Nine scripts now
-require the service-account environment from `op-vault dev`, Terraform uses one
-committed `op run` environment file, and operator and agent guidance names the
-same explicit boundary. The shared token files on bilby and fractal are
-deliberately still present because deleting them before their new accounts are
-created would remove the only recovery copy available on those machines.
+The Podhaus consumer migration landed in commits `42ef337`, `8870e57`,
+`2b901ee`, and `f348350`. Nine scripts require the service-account environment
+from `op-vault dev`, Terraform uses one committed `op run` environment file,
+and operator and agent guidance names the same explicit boundary. The existing
+HyperDX item is now `my/Dev/Podhaus HyperDX`; the Auth0 item is now
+`switchtechnologies/Dev/AUTH0_CLIENT_SECRETS`. Their rendered consumers pass.
+The old shared token files on bilby and fractal have been permanently deleted.
 
-Linux closeout is waiting only on human-controlled 1Password state: create and
-paste the three per-machine service-account tokens, move the work item to its Dev
-vault, move and rename the existing client-side HyperDX item into Dev, add the
-gateway client token to it, and revoke the old shared account after verification.
-No Mac-specific implementation has started.
+The automated Linux closeout is complete. Chezmoi and Ansible are idempotent,
+Git fetch and signed commits use each machine key, the Podhaus checks pass, and
+the live tailnet Terraform plan has no changes. The source, configuration, and
+tests changed by this effort total 502 additions and 953 deletions, net 451
+lines removed. Documentation, reported separately, totals 962 additions and
+378 deletions.
+
+Two human-only 1Password administration steps remain. Move
+`my/Dev/voltaire-dev service account` to `my/Personal`, move
+`switchtechnologies/Dev/voltaire-switch service account` to
+`switchtechnologies/Employee`, then revoke the retired shared service account
+with integration ID `5GJUR2DJMFGC3NMEZOCJ77YH5U`. Current service-account
+listings confirm that both backup notes are still in Dev. No Mac-specific
+implementation has started.
 
 The source audit found these overlapping systems to remove or collapse:
 
