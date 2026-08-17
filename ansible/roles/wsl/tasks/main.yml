@@ -95,13 +95,23 @@
 # second entry gets used on rotation, which turns a clean failure into
 # intermittently missing internal names.
 
+- name: Inspect the bringup resolv.conf attributes
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+    get_attributes: true
+  register: wsl_resolv_conf
+
 - name: Clear the immutable flag from the bringup resolv.conf
   # Redundant once WSL is told not to generate the file, and it blocks the
-  # write below. A no-op on a file that is already mutable.
+  # write below. Gate the relative attribute operation on the actual flag;
+  # ansible.builtin.file otherwise reports it changed on every run because the
+  # normal extents flag remains present.
   ansible.builtin.file:
     path: /etc/resolv.conf
     attributes: "-i"
-  when: podhaus_wsl_resolver is defined
+  when:
+    - podhaus_wsl_resolver is defined
+    - "'immutable' in wsl_resolv_conf.stat.attributes"
 
 - name: Point the guest at the LAN resolver
   ansible.builtin.copy:
