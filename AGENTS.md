@@ -45,11 +45,13 @@ aren't obvious from the compose files alone.
 ### Development authentication
 
 Use `op-vault dev -- <command>` for Podhaus and personal Dev-vault work, and
-`op-vault switch -- <command>` for Switch Dev-vault work. A missing token,
-hardware backend, or vault grant is an authorization boundary. Never invoke,
-request, or recommend `op-unlock`, a personal 1Password session, or a Personal
-vault read unless Nathan explicitly asks for that personal operation in the
-current conversation. Git, SSH, signing, and Ansible use the machine SSH key.
+`op-vault switch -- <command>` for Switch Dev-vault work only on a machine that
+declares Switch development access. Bilby deliberately has no Switch identity.
+A missing token, hardware backend, or vault grant is an authorization boundary.
+Never invoke, request, or recommend `op-unlock`, a personal 1Password session,
+or a Personal vault read unless Nathan explicitly asks for that personal
+operation in the current conversation. Git, SSH, signing, and Ansible use the
+machine SSH key.
 
 ---
 

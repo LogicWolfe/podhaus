@@ -57,7 +57,7 @@ Audit date: 2026-08-17.
 | Machine | Current identity and token state | Required change |
 |---|---|---|
 | **voltaire** | Live verified. TPM NV `0x01800052` holds a `my/Dev` service token, `0x01800051` holds a `switchtechnologies/Dev` service token, and the TPM machine SSH key is loaded. The old repo-root token file is absent. | Complete after the common runner and legacy-path removal deployed successfully. |
-| **bilby** | Live verified. The YubiKey PIV machine SSH key is active. The disk has no LUKS or encrypted home, and the old shared Homelab token remains until replacement accounts pass verification. | Enrol the two per-machine accounts in the mode `0600` file backend, verify consumers, then delete the shared token. Full-disk encryption remains separate security debt. |
+| **bilby** | Live verified. The YubiKey PIV machine SSH key is active. The disk has no LUKS or encrypted home, and the old shared Homelab token remains until its replacement account passes verification. | Enrol only `bilby-dev` in the mode `0600` file backend, verify consumers, then delete the shared token. Bilby has no Switch access. Full-disk encryption remains separate security debt. |
 | **fractal** | Live verified. Its software machine SSH key is active and its home is LUKS-backed. The old shared Homelab token remains until replacement accounts pass verification. | Enrol the two per-machine accounts in the encrypted-home file backend, verify consumers, then delete the shared token. |
 | **MacBook Air** | Darwin currently has `machine-key-mode=none`, uses the 1Password desktop SSH agent for Git and SSH, and has no fleet or Ansible entry. It is intentionally unreachable inbound. | Audit and implement locally after Linux closeout. Add only the limited client surface described below. |
 
@@ -81,7 +81,7 @@ deliberately still present because deleting them before their new accounts are
 created would remove the only recovery copy available on those machines.
 
 Linux closeout is waiting only on human-controlled 1Password state: create and
-paste the four per-machine service-account tokens, move the work item to its Dev
+paste the three per-machine service-account tokens, move the work item to its Dev
 vault, create the dedicated HyperDX development API key, publish the existing
 gateway client token into the Dev item, and revoke the old shared account after
 verification. No Mac-specific implementation has started.
@@ -125,15 +125,17 @@ for its machine. Losing one machine revokes only that machine.
 
 | Machine | `my` account grants | `switchtechnologies` grants | Podhaus operator | Runtime host |
 |---|---|---|---|---|
-| bilby | Dev, Homelab | Dev | yes | existing |
+| bilby | Dev, Homelab | none | yes | existing |
 | fractal | Dev, Homelab | Dev | yes | existing |
 | voltaire | Dev | Dev | no | existing |
 | MacBook Air | Dev | Dev | no | no |
 
 `my/Dev` is the routine personal-development vault. `my/Homelab` is added to
 the same machine account only where Podhaus administration requires it.
-`switchtechnologies/Dev` is the routine work-development vault. No service
-account receives Personal, Employee, or another broad vault.
+`switchtechnologies/Dev` is the routine work-development vault on fractal,
+voltaire, and later the MacBook. Bilby has no account or token in
+`switchtechnologies`. No service account receives Personal, Employee, or
+another broad vault.
 
 Move the work `AUTH0_CLIENT_SECRETS` item from Employee to the work Dev vault
 after confirming its consumers. Create a dedicated HyperDX API key for
@@ -200,7 +202,7 @@ extension system.
 | Machine | Service-token backend | Machine SSH identity |
 |---|---|---|
 | voltaire | Existing TPM NV indices `0x01800052` for `dev` and `0x01800051` for `switch` | Existing TPM key |
-| bilby | Decision gate below | Existing YubiKey PIV key |
+| bilby | One mode `0600` file for `dev`; no `switch` backend | Existing YubiKey PIV key |
 | fractal | Two mode `0600` files inside the LUKS-backed home | Existing software Ed25519 key inside the encrypted home |
 | MacBook Air | Two device-bound Data Protection Keychain items, implemented last | New mode `0600` software Ed25519 machine key inside FileVault |
 
@@ -377,14 +379,15 @@ Changes:
   absent.
 - Implement only the selected backend. Prefer reusing fractal's encrypted-file
   adapter if the encryption work lands.
-- Create `bilby-dev` in `my` with Dev and Homelab and `bilby-switch` in
-  `switchtechnologies` with Dev. Nathan performs token creation and the one-time
-  local paste.
+- Create `bilby-dev` in `my` with Dev and Homelab. Nathan performs token
+  creation and the one-time local paste. Do not create a Bilby account in
+  `switchtechnologies`.
 - Verify machine SSH use independently of any personal agent.
 
 Exit check:
 
-- Both accounts report the expected identity and exact grants.
+- The account reports the expected identity and exact grants. `op-vault
+  switch` refuses Bilby before reading a token.
 - Personal reads fail; Homelab succeeds only through `dev`.
 - Reboot/lock/absence behaviour matches the backend decision and is recorded
   accurately.
@@ -635,10 +638,9 @@ boundary on each machine.
 
 ### Per-machine identity checks
 
-On each machine:
+On each machine, for every identity in its grant-matrix row:
 
-1. `op-vault dev -- op whoami` and `op-vault switch -- op whoami` report that
-   machine's two service accounts.
+1. `op-vault <identity> -- op whoami` reports that machine's service account.
 2. Vault listing matches the grant matrix exactly. Personal reads fail on all
    machines. Homelab reads fail on Voltaire and the MacBook.
 3. `chezmoi apply` succeeds without a personal session, interactive prompt, or
@@ -647,6 +649,9 @@ On each machine:
    recorded machine-key fingerprint.
 5. A new non-interactive shell creates no personal session or personal SSH
    agent.
+
+On Bilby, `op-vault switch` fails as an unsupported identity even if a stray
+`switch.token` file exists.
 
 On bilby and fractal only:
 
