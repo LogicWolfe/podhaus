@@ -121,7 +121,11 @@
               For local iteration: <code>./komodo-sync</code> overlays
               the deploy tree with the working checkout's current state
               and invokes <code>podhaus-deploy</code> directly —
-              deliberately skipping the pull stage.</td>
+              deliberately skipping the pull stage. The two feeders are
+              last-writer-wins: a push after a WIP
+              <code>komodo-sync</code> reverts the fleet to main, and a
+              <code>komodo-sync</code> after a push overlays local state
+              again.</td>
             <td>Same workflow and the same Stage 1 / Stage 2. Hashes are
               computed from the deploy tree's current state and compared with
               the labels on containers running at the target host, so

@@ -25,7 +25,7 @@ into the deploy tree at /syncs/podhaus, so ./komodo-sync deploys \
 exactly what is local regardless of origin/main. Counterpart feeder to \
 podhaus-push-deploy's PullRepo stage; step 0 of komodo-sync, run before \
 the out-of-procedure RunSync which reads the tree this writes. See \
-docs/plans/push-deploy-stale-bilby-checkout.md.\
+docs/komodo.html#operating-models.\
 """
 tags = ["podhaus"]
 
