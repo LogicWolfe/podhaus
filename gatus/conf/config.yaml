@@ -781,3 +781,4 @@ external-endpoints:
         failure-threshold: 2
         success-threshold: 1
         send-on-resolved: true
+# Deploy-tree cutover verification marker (2026-08-17); removed by the follow-up docs commit.
