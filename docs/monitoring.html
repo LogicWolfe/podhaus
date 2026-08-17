@@ -472,10 +472,9 @@ $DK restart alloy backrest                           # reattach by name + rebuil
           Homelab copy because the runtime secret sync has no Dev-vault grant.</li>
         <li><strong>HyperDX Personal API Access Key</strong> as
           <code>Authorization: Bearer &lt;key&gt;</code> — the per-user
-          <code>accessKey</code> (HyperDX Team Settings → API Keys). Runtime administration
-          keeps <code>clickstack-hyperdx-mcp-key</code> in Homelab. Development machines use
-          a separate key stored as <code>api key</code> in the Dev-vault
-          <code>Podhaus HyperDX</code> item. Both are persisted in Mongo
+          <code>accessKey</code> (HyperDX Team Settings → API Keys). It is stored as
+          <code>credential</code> in the Dev-vault <code>Podhaus HyperDX</code> item and
+          persisted in Mongo
           (<code>hyperdx</code> db, <code>users.accessKey</code>) and captured by the
           nightly mongodump → Backrest backup.</li>
       </ol>

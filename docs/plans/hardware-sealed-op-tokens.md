@@ -82,9 +82,9 @@ created would remove the only recovery copy available on those machines.
 
 Linux closeout is waiting only on human-controlled 1Password state: create and
 paste the three per-machine service-account tokens, move the work item to its Dev
-vault, create the dedicated HyperDX development API key, publish the existing
-gateway client token into the Dev item, and revoke the old shared account after
-verification. No Mac-specific implementation has started.
+vault, move and rename the existing client-side HyperDX item into Dev, add the
+gateway client token to it, and revoke the old shared account after verification.
+No Mac-specific implementation has started.
 
 The source audit found these overlapping systems to remove or collapse:
 
@@ -138,13 +138,14 @@ voltaire, and later the MacBook. Bilby has no account or token in
 another broad vault.
 
 Move the work `AUTH0_CLIENT_SECRETS` item from Employee to the work Dev vault
-after confirming its consumers. Create a dedicated HyperDX API key for
-development in `my/Dev/Podhaus HyperDX`. The existing `hyperdx_mcp` gateway
-token is already a client credential, so publish that same value as the item's
-`gateway token` field while retaining its Homelab copy for Komodo's runtime
-secret sync. Do not copy the Homelab HyperDX API key. These changes remove the
-only known reasons ordinary development still needs broad vaults without adding
-a second gateway-token path to Caddy.
+after confirming its consumers. The Homelab `clickstack-hyperdx-mcp-key` item
+already holds the client-side HyperDX access key and is not a Komodo runtime
+input. Move it to `my/Dev`, rename it `Podhaus HyperDX`, keep its existing
+`credential` field, and update the stale Cloudflare Access description. Add
+the existing `hyperdx_mcp` gateway client token as `gateway token`; keep that
+token's Homelab copy because Komodo supplies it to Caddy. This reuses the
+credential already made for Claude MCP and avoids a second HyperDX API key or
+gateway-token path.
 
 Keep the 1Password Connect token used inside the Podhaus `onepassword` stack
 out of this migration. It is runtime infrastructure, not a developer service
