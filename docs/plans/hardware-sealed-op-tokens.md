@@ -56,7 +56,7 @@ Audit date: 2026-08-17.
 
 | Machine | Current identity and token state | Required change |
 |---|---|---|
-| **voltaire** | Live verified. TPM NV `0x01800052` holds the `my/Dev` token and `0x01800051` holds the `switchtechnologies/Dev` token. The TPM machine SSH key is loaded. | Linux implementation complete. Move the two old token backup notes out of Dev vaults and revoke the retired shared account as human-only 1Password administration. |
+| **voltaire** | Live verified. TPM NV `0x01800052` holds the `my/Dev` token and `0x01800051` holds the `switchtechnologies/Dev` token. The TPM machine SSH key is loaded. Nathan intentionally keeps each token's recovery note in its Dev vault. | Linux implementation complete. |
 | **bilby** | Live verified. The YubiKey PIV machine SSH key is active. `bilby-dev` uses the accepted mode `0600` file backend and sees exactly Dev and Homelab. `switch` is unsupported. The old shared token file is absent. | Linux implementation complete. Full-disk encryption remains separate security debt. |
 | **fractal** | Live verified. Its software machine SSH key is active and its home is LUKS-backed. Its mode `0600` file backends see exactly Dev and Homelab for `dev`, and Dev for `switch`. The old shared token file is absent. | Linux implementation complete. |
 | **MacBook Air** | Darwin currently has `machine-key-mode=none`, uses the 1Password desktop SSH agent for Git and SSH, and has no fleet or Ansible entry. It is intentionally unreachable inbound. | Audit and implement locally after Linux closeout. Add only the limited client surface described below. |
@@ -90,13 +90,10 @@ tests changed by this effort total 502 additions and 953 deletions, net 451
 lines removed. Documentation, reported separately, totals 962 additions and
 378 deletions.
 
-Two human-only 1Password administration steps remain. Move
-`my/Dev/voltaire-dev service account` to `my/Personal`, move
-`switchtechnologies/Dev/voltaire-switch service account` to
-`switchtechnologies/Employee`, then revoke the retired shared service account
-with integration ID `5GJUR2DJMFGC3NMEZOCJ77YH5U`. Current service-account
-listings confirm that both backup notes are still in Dev. No Mac-specific
-implementation has started.
+Nathan confirmed the recovery notes in `my/Dev` and
+`switchtechnologies/Dev` are deliberate. Their placement is part of his
+1Password recovery policy and does not block Linux closeout. The MacBook is the
+only remaining implementation and no Mac-specific change has started.
 
 The source audit found these overlapping systems to remove or collapse:
 

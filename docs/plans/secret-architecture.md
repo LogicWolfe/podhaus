@@ -127,8 +127,9 @@ backend and limited management boundary are the remaining implementation.
 
 The `OP_SERVICE_ACCOUNT_TOKEN` passed to the `onepassword` stack is a different
 Komodo variable carrying the 1Password Connect token. It is outside that
-migration. Any master copies needed for re-provisioning belong in the
-**Personal** vault, readable only through Nathan's explicit personal override.
+migration. Nathan owns the placement of recovery copies in 1Password. The
+machine runner's contract is limited to selecting the configured service
+account and enforcing its granted vaults.
 
 ## Known caveats
 
