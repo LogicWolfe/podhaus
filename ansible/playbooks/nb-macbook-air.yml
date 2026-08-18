@@ -1,0 +1,22 @@
+# nb-macbook-air steady state: root SSH policy and safety assertions for
+# the MacBook development client. Deliberately tiny — the Mac joins the
+# managed development surface (machine identity, op-vault, managed SSH via
+# chezmoi) but none of Podhaus runtime management.
+#
+# Run from bilby (or any meshed development machine on the home LAN):
+#   cd ansible
+#   ansible-playbook playbooks/nb-macbook-air.yml -K --check --diff
+#   ansible-playbook playbooks/nb-macbook-air.yml -K
+# -K because escalation is Nathan's account password; the Mac has no
+# passwordless sudo rule and must not gain one.
+#
+# chezmoi is applied separately, by Nathan, as himself — same boundary as
+# every other host.
+---
+- name: Manage the MacBook development client
+  hosts: mac_clients
+  gather_facts: true
+
+  roles:
+    - role: mac_ssh
+      tags: [ssh]

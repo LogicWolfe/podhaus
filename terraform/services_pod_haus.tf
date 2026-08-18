@@ -21,6 +21,9 @@ locals {
   # The ESP32 switching the grasshopper LED strip. Reserved for the same
   # reason as the Turn Touch: Alloy scrapes its /metrics by IP.
   led_strip_grasshopper_ip = "10.0.0.44"
+  # Nathan's MacBook Air (wifi). Reserved so the split-horizon
+  # nb-macbook-air.pod.haus record and its Ansible connection stay truthful.
+  nb_macbook_air_ip = "10.0.0.202"
 
   pod_haus_service_dns = {
     backup          = local.numbat_application_ipv4

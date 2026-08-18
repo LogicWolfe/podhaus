@@ -45,11 +45,10 @@ ansible_ssh_common_args: >-
 # through hostvars, so adding a machine key to a host is one line and the
 # fleet's access policy follows from group membership alone.
 
-# Nathan's personal key. The MacBook has no machine key — machine-key-mode
-# returns none on darwin by construction — so this is the identity it, and
-# he, connect with. Also injected into numbat at create time by Terraform
-# (terraform/ssh_authorized_key.pub), which is upstream of Ansible and
-# stays a separate copy for that reason.
+# Nathan's personal key — the identity he connects with from anything that
+# is not a fleet machine. Also injected into numbat at create time by
+# Terraform (terraform/ssh_authorized_key.pub), which is upstream of
+# Ansible and stays a separate copy for that reason.
 podhaus_personal_key: >-
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZSaoga8/dYnCgeiOSaV+3Xe5Tl6AkBpqO0T863ZajR
   Nathan personal key

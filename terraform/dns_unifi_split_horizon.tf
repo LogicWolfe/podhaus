@@ -90,6 +90,19 @@ resource "unifi_dns_record" "fractal_pod_haus" {
   enabled     = true
 }
 
+# nb-macbook-air.pod.haus → the MacBook Air's reserved wifi address, LAN
+# only. SSH-only, like fractal: there is no HTTPS route and deliberately no
+# public or Pomerium record — the Mac has no inbound path from outside the
+# home network. LAN clients (bilby-resident agents running its Ansible
+# playbook, and Nathan moving between machines) connect direct.
+resource "unifi_dns_record" "nb_macbook_air_pod_haus" {
+  name        = "nb-macbook-air.pod.haus"
+  record_type = "A"
+  value       = local.nb_macbook_air_ip
+  ttl         = "5m0s"
+  enabled     = true
+}
+
 # music.pod.haus → bilby (Caddy) on LAN. Home Assistant runs on bilby and
 # its server-to-server websocket to Music Assistant can't carry a
 # browser session, so it must reach MA without traversing the

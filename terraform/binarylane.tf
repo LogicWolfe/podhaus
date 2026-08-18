@@ -66,10 +66,10 @@ resource "onepassword_item" "numbat_root" {
 
 # Numbat is the Perth gateway replacing Kookaburra after cutover.
 resource "binarylane_server" "numbat" {
-  name              = "numbat.pod.haus"
-  region            = "per"
-  image             = "rocky-10"
-  size              = "std-min"
+  name   = "numbat.pod.haus"
+  region = "per"
+  image  = "rocky-10"
+  size   = "std-min"
   # std-min ships 1024 MB and there is no 1.5 GB plan; BinaryLane's
   # Standard sizes instead take memory à la carte (multiple of 128 below
   # 2048) at $0.0037109375/MB/month, so +512 MB is $1.90/mo against $9.80

@@ -1,0 +1,24 @@
+# nb-macbook-air — Nathan's MacBook Air (macOS, Apple Silicon), a managed
+# development client. Not a Podhaus runtime host: no Docker, Periphery,
+# Alloy, Komodo, or log shipping — playbooks/nb-macbook-air.yml owns only
+# root SSH policy and safety assertions.
+#
+# Reached over the home LAN only (split-horizon nb-macbook-air.pod.haus →
+# UniFi-reserved wifi address, both in terraform/). It has no inbound path
+# from outside the home network and dials out for everything else.
+---
+ansible_host: nb-macbook-air.pod.haus
+ansible_user: nathan
+
+# macOS ships no system Python and the Command Line Tools one (3.9) is too
+# old for current ansible-core managed-node support. The mise-managed
+# interpreter tracks the current stable minor and keeps this path.
+ansible_python_interpreter: /Users/nathan/.local/share/mise/installs/python/3.13/bin/python3
+
+# Machine key: a passphrase-less on-disk ed25519 inside FileVault, read
+# directly by ssh and ssh-keygen (no agent). Public half declared here so
+# the authorized_keys role grants it on the Linux mesh; see
+# group_vars/all.yml.
+podhaus_machine_key: >-
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC5zEJO7pWBiUNL3Sx7VvTUCpIIaZoKVvNeqMKymgDl3
+  nb-macbook-air machine key

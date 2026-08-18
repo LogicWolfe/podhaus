@@ -1,0 +1,105 @@
+# Root-owned SSH policy for the MacBook development client — the whole of
+# what Ansible manages on it. User state is chezmoi's; there is no Docker,
+# Periphery, Alloy, or Komodo here and this role must never grow any.
+#
+# Remote Login stays enabled as steady state (Nathan's decision, 2026-08:
+# the shields window mechanism was dropped). Exposure is the home LAN and
+# tailnet member devices only — the Mac sits behind NAT with no public or
+# Pomerium inbound path — and this role narrows sshd to key-only access
+# for Nathan.
+#
+# No reload handler: macOS launchd spawns sshd per connection, so both the
+# config fragment and the authorized keys are read fresh on every attempt.
+---
+- name: Require FileVault before managing anything
+  ansible.builtin.command: fdesetup status
+  register: mac_ssh_filevault
+  changed_when: false
+  failed_when: "'FileVault is On.' not in mac_ssh_filevault.stdout"
+
+- name: Refuse runtime-group membership
+  # The development-client boundary, asserted where it would first be
+  # crossed: joining a runtime group must fail this play, not quietly
+  # widen the Mac's management surface.
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname not in (groups['provisioned'] | default([]))
+      - inventory_hostname not in (groups['docker_hosts'] | default([]))
+      - inventory_hostname not in (groups['komodo_periphery_hosts'] | default([]))
+      - inventory_hostname not in (groups['homelab_targets'] | default([]))
+    fail_msg: >-
+      {{ inventory_hostname }} is in a Podhaus runtime group. It is a
+      development client; remove the membership rather than provisioning it.
+
+- name: Work out which machines may log into this host
+  # The development mesh, same policy source as the Linux authorized_keys
+  # role: every remote_dev_machines peer, plus Nathan's personal key so a
+  # device that is not yet in the mesh can still reach his laptop.
+  ansible.builtin.set_fact:
+    mac_ssh_peers: >-
+      {{ groups['remote_dev_machines'] | difference([inventory_hostname]) | sort }}
+
+- name: Require a declared machine key for every peer
+  ansible.builtin.assert:
+    that: hostvars[item].podhaus_machine_key is defined
+    fail_msg: >-
+      {{ item }} is in an SSH access group but declares no
+      podhaus_machine_key in host_vars.
+  loop: "{{ mac_ssh_peers }}"
+
+- name: Assemble the authorized key set
+  ansible.builtin.set_fact:
+    podhaus_authorized_key_set: >-
+      {{ ([podhaus_personal_key] +
+          (mac_ssh_peers | map('extract', hostvars, 'podhaus_machine_key') | list))
+         | unique }}
+
+- name: Provision the authorized keys directory
+  ansible.builtin.file:
+    path: /etc/ssh/authorized_keys
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0755"
+
+- name: Install the operator's authorized keys
+  # The shared fleet template: rendered whole, root-owned, off $HOME, so
+  # membership is the only input and the account it authorizes cannot
+  # edit it.
+  ansible.builtin.template:
+    src: ../../authorized_keys/templates/authorized_keys.j2
+    dest: "/etc/ssh/authorized_keys/{{ podhaus_operator }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+
+- name: Install the sshd access policy
+  # 000- so it sorts before Apple's 100-macos.conf; sshd takes the first
+  # value it sees per keyword.
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/000-podhaus.conf
+    content: |
+      # Managed by Ansible (podhaus mac_ssh role).
+      # Key-only access for the operator; the authorized keys live in the
+      # root-owned path so a compromised account cannot authorize itself.
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      AllowUsers {{ podhaus_operator }}
+      AuthorizedKeysFile /etc/ssh/authorized_keys/%u
+    owner: root
+    group: wheel
+    mode: "0644"
+
+- name: Validate the combined sshd configuration
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+
+- name: Read the Remote Login state
+  ansible.builtin.command: systemsetup -getremotelogin
+  register: mac_ssh_remote_login
+  changed_when: false
+
+- name: Keep Remote Login enabled
+  ansible.builtin.command: systemsetup -setremotelogin on
+  when: "'On' not in mac_ssh_remote_login.stdout"
