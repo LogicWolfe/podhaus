@@ -90,6 +90,25 @@ resource "github_repository_webhook" "pets_deploy" {
 # BatchDeployStack "docs" — linked_repo + run_build, so Komodo builds
 # the image on bilby; the layer cache makes an unchanged push a
 # container-level no-op. /main is the branch filter.
+# nb-macbook-air's machine key, read from the same file that feeds the
+# Forgejo ssh_keys claim in pocket_id.tf. Requires the admin:public_key
+# scope on the Homelab GitHub PAT.
+#
+# Only the type and key-material fields are sent: GitHub stores keys with
+# the comment stripped, and the provider's DiffSuppressFunc only trims
+# whitespace — a comment-bearing value would diff forever and, with
+# ForceNew on `key`, delete and recreate the key on every apply.
+#
+# Reference doc (integrations/github v6):
+#   https://registry.terraform.io/providers/integrations/github/latest/docs/resources/user_ssh_key
+resource "github_user_ssh_key" "nb_macbook_air_machine" {
+  title = "nb-macbook-air machine key"
+  key = join(" ", slice(
+    split(" ", trimspace(file("${path.module}/../forgejo/keys/nathan/nb-macbook-air-machine.pub"))),
+    0, 2,
+  ))
+}
+
 resource "github_repository_webhook" "docs_deploy" {
   repository = "docs-server"
   events     = ["push"]
