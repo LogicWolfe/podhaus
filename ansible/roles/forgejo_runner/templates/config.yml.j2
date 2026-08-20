@@ -25,6 +25,9 @@ cache:
 container:
   network: ""
   privileged: false
+  # Checkout and promotion run inside job containers, so they need the same
+  # direct-origin resolution as the daemon's Actions protocol.
+  options: --add-host git.pod.haus:{{ podhaus_forgejo_runner_instance_address }}
   valid_volumes: []
   # The daemon uses the mounted socket to create job containers; jobs never
   # receive the socket themselves.
