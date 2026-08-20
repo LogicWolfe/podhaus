@@ -63,16 +63,21 @@ resource "forgejo_repository" "fenwick" {
   }
 }
 
-# Main is review + CI territory. Status contexts are enabled after the first
-# workflow run establishes their exact Forgejo names; until then the workflow's
-# deploy-branch promotion is still green-only by construction.
+# Main is review + CI territory. These are the exact contexts emitted by the
+# proven pull-request workflow; the post-merge main workflow independently
+# gates deployment before it may advance `deploy`.
 resource "forgejo_repository_branch_rule" "fenwick_main" {
   repository               = forgejo_repository.fenwick.full_name
   protected_branch_pattern = "main"
   enable_push              = true
   enable_push_whitelist    = true
   push_whitelist_usernames = ["LogicWolfe"]
-  enable_status_check      = false
+  enable_status_check      = true
+  status_check_contexts = [
+    "CI / deno (pull_request)",
+    "CI / webui (pull_request)",
+    "CI / web-agent (pull_request)",
+  ]
   block_on_outdated_branch = true
   dismiss_stale_approvals  = true
 }
