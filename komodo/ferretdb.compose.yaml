@@ -54,6 +54,10 @@ services:
     labels:
       komodo.skip:
     restart: unless-stopped
+    # ResourceSync clones happen in Core; use the direct Forgejo origin while
+    # preserving git.pod.haus for TLS and repository identity.
+    extra_hosts:
+      - "git.pod.haus:host-gateway"
     init: true
     # SELinux enforcing on Fedora Asahi denies the container from reading
     # the bind-mounted repo at /syncs/podhaus; label:disable lifts that
