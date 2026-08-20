@@ -130,6 +130,11 @@ services:
       autoheal: "true"
     restart: unless-stopped
     init: true
+    # Linked Repo HTTPS traffic must reach Forgejo directly. The public route
+    # is Pomerium's browser boundary and redirects Git's authenticated request.
+    # Preserve the hostname/TLS SNI while routing to this host's Caddy.
+    extra_hosts:
+      - "git.pod.haus:host-gateway"
     # SELinux enforcing on Fedora Asahi denies cross-label writes to
     # /var/run/docker.sock; label:disable exempts the periphery container
     # from SELinux confinement so it can talk to the Docker daemon.
