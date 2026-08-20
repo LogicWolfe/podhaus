@@ -1,6 +1,4 @@
-# Forgejo (git.pod.haus) — deploy-pipeline wiring for repos that moved
-# off GitHub. Currently just LogicWolfe/nathanbaxter, migrated 2026-08
-# (Forgejo is the source of truth; the GitHub copy is dead).
+# Forgejo (git.pod.haus) — repository policy and deploy-pipeline wiring.
 #
 # Provider choice: kfkonrad/forgejo (Forgejo-native, actively released
 # fork of svalabs/forgejo) over go-gitea/gitea. It tracks Forgejo's own
@@ -33,6 +31,66 @@ provider "forgejo" {
 data "forgejo_repository" "nathanbaxter" {
   owner = "LogicWolfe"
   name  = "nathanbaxter"
+}
+
+# Fenwick was migrated through Forgejo's repository migration API, then
+# imported into this resource. Terraform owns repository policy but must never
+# be able to destroy source history.
+resource "forgejo_repository" "fenwick" {
+  owner       = "LogicWolfe"
+  name        = "fenwick"
+  description = "Fenwick — stateful Signal/email home-helper bot"
+  private     = true
+
+  default_branch    = "main"
+  has_actions       = true
+  has_issues        = true
+  has_packages      = false
+  has_projects      = false
+  has_pull_requests = true
+  has_releases      = true
+  has_wiki          = false
+
+  allow_merge_commits   = false
+  allow_rebase          = false
+  allow_rebase_explicit = false
+  allow_squash_merge    = true
+  default_merge_style   = "squash"
+  archive_on_destroy    = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# Main is review + CI territory. Status contexts are enabled after the first
+# workflow run establishes their exact Forgejo names; until then the workflow's
+# deploy-branch promotion is still green-only by construction.
+resource "forgejo_repository_branch_rule" "fenwick_main" {
+  repository               = forgejo_repository.fenwick.full_name
+  protected_branch_pattern = "main"
+  enable_push              = true
+  enable_push_whitelist    = true
+  push_whitelist_usernames = ["LogicWolfe"]
+  enable_status_check      = false
+  block_on_outdated_branch = true
+  dismiss_stale_approvals  = true
+}
+
+# `deploy` is the auditable promotion pointer. The green main workflow moves it
+# forward without force; this webhook is the sole automatic deploy trigger.
+resource "forgejo_repository_webhook" "fenwick_deploy" {
+  repository    = forgejo_repository.fenwick.full_name
+  type          = "forgejo"
+  url           = "https://komodo.pod.haus/listener/github/procedure/fenwick-push-deploy/deploy"
+  content_type  = "json"
+  secret        = var.komodo_webhook_secret
+  branch_filter = "deploy"
+  active        = true
+
+  events {
+    push = true
+  }
 }
 
 # Read-only deploy key for the nathanbaxter-deploy builder container.

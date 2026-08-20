@@ -1,0 +1,155 @@
+# Persistent Forgejo Actions runner on a remote development host.
+#
+# The daemon waits cheaply; each job runs in a disposable Docker container.
+# It mounts the local Docker socket so the runner can create those containers,
+# but `container.docker_host = "-"` deliberately withholds that socket from job
+# containers. The registration token is fetched just-in-time and used only
+# when the durable runner registration is absent.
+---
+- name: Create the Forgejo runner directory
+  ansible.builtin.file:
+    path: "{{ podhaus_forgejo_runner_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the runner-owned data directory
+  ansible.builtin.file:
+    path: "{{ podhaus_forgejo_runner_dir }}/data"
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0755"
+
+- name: Read the Docker socket group
+  ansible.builtin.stat:
+    path: /var/run/docker.sock
+  register: forgejo_runner_docker_socket
+
+- name: Install the Forgejo runner configuration
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: "{{ podhaus_forgejo_runner_dir }}/config.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart forgejo runner
+
+- name: Install the Forgejo runner compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ podhaus_forgejo_runner_dir }}/compose.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart forgejo runner
+
+- name: Install scoped Forgejo runner cache cleanup
+  ansible.builtin.template:
+    src: forgejo-runner-cleanup.service.j2
+    dest: /etc/systemd/system/forgejo-runner-cleanup.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install Forgejo runner cleanup schedule
+  ansible.builtin.template:
+    src: forgejo-runner-cleanup.timer.j2
+    dest: /etc/systemd/system/forgejo-runner-cleanup.timer
+    owner: root
+    group: root
+    mode: "0644"
+  register: forgejo_runner_cleanup_timer
+
+- name: Enable the Forgejo runner cleanup schedule
+  ansible.builtin.systemd_service:
+    name: forgejo-runner-cleanup.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ forgejo_runner_cleanup_timer.changed }}"
+  when: not ansible_check_mode
+
+- name: Check whether this runner is already registered
+  ansible.builtin.stat:
+    path: "{{ podhaus_forgejo_runner_dir }}/data/.runner"
+  register: forgejo_runner_registration
+
+- name: Fetch a repository-scoped runner registration token
+  ansible.builtin.uri:
+    url: >-
+      https://git.pod.haus/api/v1/repos/{{ podhaus_forgejo_runner_repository }}/actions/runners/registration-token
+    method: GET
+    headers:
+      Authorization: >-
+        token {{ lookup('community.general.onepassword', 'Forgejo Terraform',
+                        field='credential', vault='Homelab') }}
+    return_content: true
+    status_code: 200
+  delegate_to: localhost
+  become: false
+  no_log: true
+  register: forgejo_runner_token
+  when: not forgejo_runner_registration.stat.exists
+
+- name: Register the runner at repository scope
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - forgejo-runner
+      - --file
+      - "{{ podhaus_forgejo_runner_dir }}/compose.yaml"
+      - run
+      - --rm
+      - runner
+      - forgejo-runner
+      - register
+      - --config
+      - /data/config.yml
+      - --no-interactive
+      - --instance
+      - https://git.pod.haus
+      - --token
+      - "{{ forgejo_runner_token.json.token }}"
+      - --name
+      - "{{ podhaus_forgejo_runner_name }}"
+      - --labels
+      - podhaus-ci-x64:docker://docker.io/library/node:22-bookworm,podhaus-browser-x64:docker://mcr.microsoft.com/playwright:v1.61.1-noble
+  no_log: true
+  when: not forgejo_runner_registration.stat.exists
+
+- name: Bring the persistent Forgejo runner up
+  community.docker.docker_compose_v2:
+    project_src: "{{ podhaus_forgejo_runner_dir }}"
+    project_name: forgejo-runner
+    state: present
+  when: not ansible_check_mode
+
+- name: Flush runner restart handlers before checking registration
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the runner to report idle or active
+  ansible.builtin.uri:
+    url: >-
+      https://git.pod.haus/api/v1/repos/{{ podhaus_forgejo_runner_repository }}/actions/runners
+    method: GET
+    headers:
+      Authorization: >-
+        token {{ lookup('community.general.onepassword', 'Forgejo Terraform',
+                        field='credential', vault='Homelab') }}
+    return_content: true
+    status_code: 200
+  delegate_to: localhost
+  become: false
+  no_log: true
+  register: forgejo_runners
+  until: >-
+    forgejo_runners.json
+    | selectattr('name', 'equalto', podhaus_forgejo_runner_name)
+    | selectattr('status', 'in', ['idle', 'active'])
+    | list | length == 1
+  retries: 30
+  delay: 2
+  when: not ansible_check_mode

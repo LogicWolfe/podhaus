@@ -100,6 +100,7 @@ ansible/
     wsl/                   /etc/wsl.conf, hostname
     docker/                engine (where managed), daemon.json, host networks
     devbox/                the root-requiring half of a developer machine
+    forgejo_runner/        Fractal's container-isolated Forgejo Actions runner
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
     nfs_binds/             QNAP NFS-bind hardening (bilby)

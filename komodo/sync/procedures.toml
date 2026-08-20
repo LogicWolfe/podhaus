@@ -171,16 +171,16 @@ executions = [
 # fenwick repo (the bot + the credential-redactor service; both
 # linked_repo + run_build, Komodo builds the images on bilby).
 #
-# Bound to its own GitHub webhook
-# (komodo.pod.haus/listener/github/procedure/fenwick-push-deploy/main,
-# branch-filtered to main; see ../../terraform/github.tf). Also
-# triggered manually from the fenwick checkout via `deno task deploy`.
+# Bound to the Forgejo `deploy` branch webhook. Green CI is the only writer of
+# that promotion pointer; pushes to main do not call Komodo directly.
 # Stage shape:
-#   - Stage 0 reconciles the fenwick sync into Komodo (without it,
+#   - Stage 0 explicitly pulls the Komodo-owned clone to deploy. Nothing reads
+#     bilby's ordinary checkout, and pull failure aborts before sync/build.
+#   - Stage 1 reconciles the fenwick sync into Komodo (without it,
 #     a push that adds a new [[variable]] reaches the deploy via the
 #     on-disk file but the deploy uses the stored pre-change resource
 #     def — same trap that bit fenwick on 2026-05-17).
-#   - Stage 1 BatchDeployStack "fenwick*" (matches both the bare
+#   - Stage 2 BatchDeployStack "fenwick*" (matches both the bare
 #     "fenwick" stack and "fenwick-*") force-deploys every fenwick
 #     stack. Force, not IfChanged: the stale-clone deadlock means
 #     BatchDeployStackIfChanged would no-op forever for linked_repo
@@ -199,6 +199,13 @@ description = "Push-to-deploy for stacks sourced from the fenwick repo (the bot 
 tags = ["fenwick", "podhaus"]
 config.webhook_enabled = true
 config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Pull green Fenwick release"
+enabled = true
+executions = [
+  { execution.type = "PullRepo", execution.params = { repo = "fenwick" }, enabled = true }
+]
 
 [[procedure.config.stage]]
 name = "Reconcile fenwick stack definitions (sync TOML -> Komodo)"

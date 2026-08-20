@@ -55,6 +55,12 @@ podhaus_wsl_encrypted_home: true
 # is present.
 podhaus_repos_dir: /home/nathan/repos
 
+# Direct Forgejo origin for the Actions protocol. The public address traverses
+# Pomerium and correctly redirects unauthenticated browser-shaped traffic;
+# runner registration keeps git.pod.haus as TLS SNI but resolves it to Bilby's
+# internal Caddy. This address is Terraform-owned in UniFi.
+podhaus_forgejo_internal_address: 10.0.0.119
+
 # Komodo Periphery ------------------------------------------------------
 # Outbound v2: Periphery dials Core, so nothing listens publicly. Same
 # contract numbat uses.

@@ -1,0 +1,39 @@
+log:
+  level: info
+  job_level: info
+
+runner:
+  file: /data/.runner
+  # A finite value is required by the runner. Sixteen is deliberately above
+  # the expected job fan-out; Fractal is allowed to use its available host
+  # capacity rather than serialising CI.
+  capacity: 16
+  timeout: {{ podhaus_forgejo_runner_timeout }}
+  shutdown_timeout: 5m
+  insecure: false
+  fetch_timeout: 30s
+  fetch_interval: 2s
+  report_interval: 1s
+  labels:
+    - podhaus-ci-x64:docker://docker.io/library/node:22-bookworm
+    - podhaus-browser-x64:docker://mcr.microsoft.com/playwright:v1.61.1-noble
+
+cache:
+  enabled: true
+  dir: /data/cache
+
+container:
+  network: ""
+  privileged: false
+  valid_volumes: []
+  # The daemon uses the mounted socket to create job containers; jobs never
+  # receive the socket themselves.
+  docker_host: "-"
+  force_pull: false
+  force_rebuild: false
+
+host:
+  workdir_parent: ""
+
+server:
+  connections: {}

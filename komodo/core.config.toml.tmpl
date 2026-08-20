@@ -34,3 +34,13 @@ https = true
 [[git_providers.accounts]]
 username = "LogicWolfe"
 token = "__GITHUB_PAT__"
+
+# Authenticated HTTP Git is reserved for Komodo Linked Repos; people clone
+# Forgejo over SSH. Until the vault automation identity can create items,
+# Komodo reuses the existing Forgejo automation credential from 1Password.
+[[git_providers]]
+domain = "git.pod.haus"
+https = true
+[[git_providers.accounts]]
+username = "LogicWolfe"
+token = "__FORGEJO_TOKEN__"

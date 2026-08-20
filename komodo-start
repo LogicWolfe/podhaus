@@ -24,10 +24,13 @@ export COMPOSE_KOMODO_REPO_PATH="$PWD"
 # komodo/core.config.toml.tmpl for the rendering note.
 mkdir -p komodo/.runtime
 GITHUB_PAT="$(op read 'op://Homelab/Homelab GitHub Personal Access Token/token')"
-sed "s|__GITHUB_PAT__|${GITHUB_PAT}|" komodo/core.config.toml.tmpl \
+FORGEJO_TOKEN="$(op read 'op://Homelab/Forgejo Terraform/credential')"
+sed -e "s|__GITHUB_PAT__|${GITHUB_PAT}|" \
+    -e "s|__FORGEJO_TOKEN__|${FORGEJO_TOKEN}|" \
+    komodo/core.config.toml.tmpl \
   > komodo/.runtime/core.config.toml
 chmod 0600 komodo/.runtime/core.config.toml
-unset GITHUB_PAT
+unset GITHUB_PAT FORGEJO_TOKEN
 
 op run --env-file komodo/compose.env -- \
   docker compose -p komodo -f komodo/ferretdb.compose.yaml --env-file komodo/compose.env up -d

@@ -1,0 +1,16 @@
+services:
+  runner:
+    image: {{ podhaus_forgejo_runner_image }}
+    command: ["forgejo-runner", "daemon", "--config", "/data/config.yml"]
+    restart: unless-stopped
+    group_add:
+      - "{{ forgejo_runner_docker_socket.stat.gid }}"
+    # Actions uses a long-lived protocol that must bypass Pomerium's browser
+    # login route. Keep the public hostname for TLS while resolving it directly
+    # to Bilby's internal Caddy from this one container.
+    extra_hosts:
+      - "git.pod.haus:{{ podhaus_forgejo_runner_instance_address }}"
+    volumes:
+      - {{ podhaus_forgejo_runner_dir }}/data:/data
+      - {{ podhaus_forgejo_runner_dir }}/config.yml:/data/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock

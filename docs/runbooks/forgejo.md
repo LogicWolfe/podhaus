@@ -71,6 +71,37 @@ Terraform resource. The `forgejo-auth-init` one-shot converges that single
 object using Forgejo's supported `admin auth {add,update}-oauth` CLI. User and
 key reconciliation does not happen in a custom script.
 
+## Actions and application delivery
+
+Forgejo Actions is the CI control plane. Runners are outbound clients on
+separate hosts; Forgejo and Bilby's production Docker daemon never execute CI
+jobs. The initial capability is a repository-scoped runner on Fractal,
+provisioned by `ansible/roles/forgejo_runner`:
+
+- `podhaus-ci-x64` runs ordinary Node/Deno container jobs;
+- `podhaus-browser-x64` uses the pinned Playwright image;
+- the daemon waits persistently while each job container and network is
+  disposable;
+- jobs have a one-hour timeout and may otherwise consume Fractal's available
+  host capacity;
+- no Bilby runner exists. A future ARM64 job must justify adding one explicitly.
+
+If Fractal is unavailable, work queues until it returns; there is no transparent
+Voltaire fallback. The runner's repository registration is durable under
+`/opt/forgejo-runner/data`, while Ansible fetches a short-lived registration
+token only for first registration. Job containers do not receive Fractal's
+Docker socket. The runner removes disposable job resources on completion and
+its cache lives under `/opt/forgejo-runner/data/cache`.
+
+Fenwick is the reference release shape. Pull requests and `main` run the same
+three checks. A dependent promotion job advances the repository's `deploy`
+branch with a normal, non-force push only after every check succeeds. A Forgejo
+webhook filters that branch and invokes Komodo. Komodo explicitly pulls its
+managed clone before sync/build, so Bilby's ordinary checkout is not an input.
+Actions validates source; Komodo performs the native ARM64 image build on Bilby.
+Packages remain disabled until a real durable or multi-host artifact need
+justifies a registry.
+
 `Forgejo Secrets` owns the application cryptographic secrets. Terraform creates
 the `Forgejo OIDC` login item in 1Password from the Pocket client; komodo-op
 exports its standard login fields as

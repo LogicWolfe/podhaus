@@ -1,0 +1,9 @@
+---
+podhaus_forgejo_runner_dir: /opt/forgejo-runner
+podhaus_forgejo_runner_repository: LogicWolfe/fenwick
+podhaus_forgejo_runner_name: "{{ inventory_hostname }}"
+podhaus_forgejo_runner_instance_address: "{{ podhaus_forgejo_internal_address }}"
+podhaus_forgejo_runner_image: >-
+  code.forgejo.org/forgejo/runner@sha256:7fb853bfe73c229be6349398359c0a7bd01fadfd17c106607b2221150b799ed2
+podhaus_forgejo_runner_timeout: 1h
+podhaus_forgejo_runner_cache_retention_days: 30

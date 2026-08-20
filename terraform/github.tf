@@ -57,27 +57,8 @@ resource "github_repository_webhook" "komodo_deploy" {
   }
 }
 
-# Sibling webhook for the fenwick repo. Same global secret, same
-# Pomerium machine exception (the path-scoped /listener/github route covers
-# both). Fires the fenwick-push-deploy procedure
-# (komodo/sync/procedures.toml): RunSync(fenwick) then a force
-# BatchDeployStack "fenwick*" — both fenwick stacks are linked_repo +
-# run_build, so Komodo builds the images on bilby; the Docker layer
-# cache makes an unchanged push a container-level no-op. The /main
-# segment is the Komodo branch filter — feature branches are
-# ignored.
-resource "github_repository_webhook" "fenwick_deploy" {
-  repository = "fenwick"
-  events     = ["push"]
-  active     = true
-
-  configuration {
-    url          = "https://komodo.pod.haus/listener/github/procedure/fenwick-push-deploy/main"
-    content_type = "json"
-    insecure_ssl = false
-    secret       = var.komodo_webhook_secret
-  }
-}
+# Fenwick lives on Forgejo. Its green workflow advances the `deploy` branch;
+# forgejo_repository_webhook.fenwick_deploy owns the sole deploy trigger.
 
 # The nathanbaxter repo's webhook is NOT here: that repo migrated to
 # Forgejo (git.pod.haus) and its push webhook is

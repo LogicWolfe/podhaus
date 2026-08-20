@@ -1,0 +1,6 @@
+---
+- name: Restart forgejo runner
+  community.docker.docker_compose_v2:
+    project_src: "{{ podhaus_forgejo_runner_dir }}"
+    project_name: forgejo-runner
+    state: restarted

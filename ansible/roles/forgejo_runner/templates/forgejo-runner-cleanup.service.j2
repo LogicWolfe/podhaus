@@ -1,0 +1,10 @@
+[Unit]
+Description=Remove expired Forgejo runner cache files
+
+[Service]
+Type=oneshot
+# Scope cleanup to runner-owned cache data. The runner itself removes job
+# containers and networks; broad Docker pruning could delete developer state.
+ExecCondition=/usr/bin/test -d {{ podhaus_forgejo_runner_dir }}/data/cache
+ExecStart=/usr/bin/find {{ podhaus_forgejo_runner_dir }}/data/cache -type f -mtime +{{ podhaus_forgejo_runner_cache_retention_days }} -delete
+ExecStart=/usr/bin/find {{ podhaus_forgejo_runner_dir }}/data/cache -depth -type d -empty -delete

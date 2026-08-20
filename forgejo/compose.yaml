@@ -50,9 +50,15 @@ x-forgejo-environment: &forgejo-environment
   FORGEJO__repository__ROOT: /data/jump/repositories
   FORGEJO__repository__FORCE_PRIVATE: "true"
   FORGEJO__repository__DEFAULT_PRIVATE: private
-  FORGEJO__repository__DISABLE_HTTP_GIT: "true"
+  # Komodo Linked Repos support HTTPS, not SSH. Human clones still use SSH;
+  # this authenticated HTTP Git path exists for the Forgejo automation
+  # credential rendered into Core's git-provider config.
+  FORGEJO__repository__DISABLE_HTTP_GIT: "false"
   FORGEJO__repository__USE_COMPAT_SSH_URI: "false"
-  FORGEJO__repository__DISABLED_REPO_UNITS: repo.actions
+  # Actions is the CI control plane for Forgejo-hosted applications. Jobs run
+  # on separately provisioned remote runners (Fractal initially), never in the
+  # Forgejo container or on Bilby's production Docker daemon.
+  FORGEJO__repository__DISABLED_REPO_UNITS: ""
   FORGEJO__attachment__STORAGE_TYPE: local
   FORGEJO__attachment__PATH: /data/jump/attachments
   FORGEJO__lfs__STORAGE_TYPE: local
@@ -60,7 +66,11 @@ x-forgejo-environment: &forgejo-environment
   FORGEJO__storage.repo-archive__STORAGE_TYPE: local
   FORGEJO__storage.repo-archive__PATH: /data/jump/repo-archives
   FORGEJO__packages__ENABLED: "false"
-  FORGEJO__actions__ENABLED: "false"
+  FORGEJO__actions__ENABLED: "true"
+  FORGEJO__actions__DEFAULT_ACTIONS_URL: https://data.forgejo.org
+  FORGEJO__actions__LOG_RETENTION_DAYS: "30"
+  FORGEJO__actions__ARTIFACT_RETENTION_DAYS: "7"
+  FORGEJO__actions__ENDLESS_TASK_TIMEOUT: 1h
   FORGEJO__other__SHOW_FOOTER_POWERED_BY: "false"
   FORGEJO__other__SHOW_FOOTER_VERSION: "false"
   FORGEJO__other__SHOW_FOOTER_TEMPLATE_LOAD_TIME: "false"
