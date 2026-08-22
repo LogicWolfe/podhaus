@@ -283,7 +283,7 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
    whatever the deploy tree currently holds, whether that's a fresh
    pull from a push or (via `./komodo-sync`) an overlay of the working
    checkout. Bilby's own working checkout (`~/repos/podhaus`) is never
-   read by either pipeline path. Four stages inside `podhaus-deploy`:
+   read by either pipeline path. Three stages inside `podhaus-deploy`:
    **Stage 0** `RunSync "podhaus"` reconciles stack defs + TOML-declared
    variables from disk into Komodo's stored resource state (so a push
    that adds/changes an `environment` line or a `[[variable]]` block
@@ -295,7 +295,7 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
    config differs from deployed, no-ops on podhaus stacks. RunSync is
    reconcile-only; Stages 1 and 2 own deployment. Without this, a single linked-repo
    Periphery timeout inside `Sync Deploy` would fail Stage 0 and abort
-   Stages 1–3 entirely; bit kookaburra-relay/kookaburra-tailscale on
+   Stages 1–2 entirely; bit kookaburra-relay/kookaburra-tailscale on
    2026-05-25 (~24 h stale until investigation). **Stage 1**
    `RunAction "podhaus-inject-content-hashes"` walks every stack
    visible at Komodo Core's `/syncs/podhaus` mount and appends two
@@ -500,7 +500,7 @@ These have failure modes that you must not introduce:
   is the opt-in. That sub-stage (a) duplicates Stage 2's
   `BatchDeployStackIfChanged` work and (b) runs serially with no
   per-stack failure tolerance, so a transient kookaburra-Periphery
-  timeout fails the whole RunSync and aborts Stages 1–3. With `deploy`
+  timeout fails the whole RunSync and aborts Stages 1–2. With `deploy`
   omitted (defaults to `false`, per Komodo source
   `client/core/rs/src/entities/toml.rs`), the Sync Deploy sub-stage
   no-ops on the stack. First-deploys still work via Stage 2's
