@@ -122,16 +122,17 @@
         <p>Four layered defences keep boot races visible, recoverable, and incapable of
         silently writing container data to local disk:</p>
         <ul>
-          <li><strong>Pre-dockerd reachability gate:</strong>
-            <code>wait-for-qnap-nfs.service</code> (from <code>ansible/roles/nfs_binds/</code>) is a oneshot ordered
-            <code>After=network-online.target</code> and before <code>docker.service</code>.
-            It polls TCP/2049 on the QNAP for up to 180 s before declaring success. The
-            matching <code>docker.service.d/</code> drop-in <code>Wants=</code>+<code>After=</code>
-            this unit, so dockerd's container fanout — which is what tripped the boot-time
-            automount burst on 2026-05-30 — only starts once the QNAP is actually reachable.
-            Best-effort: if the QNAP stays unreachable past the timeout, the gate exits 0
-            and dockerd starts anyway (individual NFS-bind containers fail loudly via the
-            sentinel healthcheck below).</li>
+          <li><strong>Recurring stopped-container recovery:</strong>
+            <code>podhaus-nfs-container-recovery.timer</code> runs after Docker starts and
+            again one minute after each invocation finishes. It has no storage-readiness
+            deadline, so a share that returns hours after boot or disappears while Bilby
+            remains running follows the same path. The command starts only a
+            <code>created</code> or <code>exited</code> container that has
+            <code>autoheal=true</code>, an <code>always</code> or
+            <code>unless-stopped</code> restart policy, a Jump/Pouch bind named by its retained
+            OCI mount error, and an exact healthy NFS export with its sentinel readable.
+            An operator-stopped container has no matching infrastructure error and is left
+            alone. Autoheal remains the owner of running unhealthy containers.</li>
           <li><strong>Rate-limit removed on the automount units:</strong>
             <code>StartLimitIntervalSec=0</code> + <code>StartLimitBurst=0</code> drop-ins
             on both <code>mnt-pouch.automount</code> and <code>mnt-jump.automount</code>
@@ -151,11 +152,16 @@
             <a href="/stack-conventions.html#nfs-bind-healthcheck">stack conventions →
             NFS-bind healthcheck pattern</a>.</li>
         </ul>
-        <p>Install / reinstall these defences idempotently with
+        <p>Inspect the recurring recovery path with
+        <code>systemctl status podhaus-nfs-container-recovery.timer</code> and
+        <code>journalctl -u podhaus-nfs-container-recovery.service</code>. Install or
+        reinstall these defences idempotently with
         <code>ansible-playbook playbooks/bilby.yml --tags nfs</code> (the
         <code>nfs_binds</code> role, run from <code>ansible/</code>). Full incident records:
+        <a href="/postmortems/2026-08-22-delayed-nfs-container-recovery.md">2026-08-22 postmortem</a>
+        (recurring stopped-container recovery),
         <a href="/postmortems/2026-05-30-power-outage-nfs-recovery.md">2026-05-30 postmortem</a>
-        (the pre-dockerd gate + rate-limit removal),
+        (automount rate-limit removal),
         <a href="/postmortems/2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>
         (the automount + sentinel + chattr +i defences).</p>
       </blockquote>

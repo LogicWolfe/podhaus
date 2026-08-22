@@ -22,7 +22,7 @@
 # podhaus-deploy — deploys whatever the deploy tree currently holds.
 # Source-agnostic: it doesn't care whether the tree just got pulled to
 # origin/main or overlaid with local state, only that it reflects one or
-# the other. Four stages:
+# the other. Three stages:
 #
 # Stage 0 — reconcile stack defs from disk (sync TOML → Komodo). Komodo
 # separates the *stack resource definition* (what the env block, server,
@@ -40,7 +40,7 @@
 # differs from deployed. Two problems: (a) it duplicates Stage 2's work,
 # (b) it runs serially across stacks with no per-stack failure tolerance,
 # so a transient linked-repo Periphery timeout fails the entire RunSync
-# and aborts Stages 1–3 (bit kookaburra-relay/kookaburra-tailscale on
+# and aborts Stages 1–2 (bit kookaburra-relay/kookaburra-tailscale on
 # 2026-05-25). Every podhaus stack.toml omits `deploy = true` (defaults
 # to false — see Komodo source `client/core/rs/src/entities/toml.rs`),
 # which makes Sync Deploy no-op at `deploy.rs:489` (`if !stack.deploy`)
@@ -70,21 +70,6 @@
 # stacks. Stage 1 deliberately leaves those alone, so the stages do not
 # recreate the same stack twice. Unchanged stacks no-op.
 #
-# Stage 3 — restart ofelia so it picks up label changes on whichever
-# containers Stage 2 just recreated. ofelia v0.3.22
-# (mcuadros/ofelia:latest, built from the 0.3.x branch) reads labels
-# ONCE at startup and has no live refresh: the dynamic-labels polling
-# (upstream PR #319) and the event-listen replacement (PR #368) are
-# both master-only and unreleased. Without this stage, a push that
-# changes an ofelia.* schedule/command label on any stack silently
-# wouldn't take effect until ofelia next restarts for unrelated
-# reasons (image bump, host reboot, manual). RestartStack on ofelia
-# is ~0.5s, ofelia has no persistent state to lose, and the cost is
-# paid on every push regardless of whether anything ofelia-relevant
-# changed — cheaper than tracking "did this push touch any ofelia
-# labels?". Drop this stage when an ofelia release lands that includes
-# #319 or #368.
-#
 # Wildcard `*` means new stacks are covered automatically — no repo
 # edit, no list, no 20-cap, ever.
 #
@@ -103,7 +88,7 @@
 
 [[procedure]]
 name = "podhaus-deploy"
-description = "Deploys whatever the deploy tree currently holds: reconcile stack defs from disk, inject per-stack content hashes, deploy-if-changed all stacks, restart ofelia. Invoked by podhaus-push-deploy after pulling the deploy tree to origin/main, and by ./komodo-sync after overlaying the local checkout."
+description = "Deploys whatever the deploy tree currently holds: reconcile stack defs from disk, inject per-stack content hashes, then deploy-if-changed all stacks. Invoked by podhaus-push-deploy after pulling the deploy tree to origin/main, and by ./komodo-sync after overlaying the local checkout."
 tags = ["podhaus"]
 config.webhook_enabled = false
 config.schedule_enabled = false
@@ -128,14 +113,6 @@ enabled = true
 executions = [
   { execution.type = "BatchDeployStackIfChanged", execution.params = { pattern = "*" }, enabled = true }
 ]
-
-[[procedure.config.stage]]
-name = "Restart ofelia so it re-reads container labels"
-enabled = true
-executions = [
-  { execution.type = "RestartStack", execution.params = { stack = "ofelia" }, enabled = true }
-]
-
 
 # podhaus-push-deploy — the GitHub webhook entrypoint. Forces the deploy
 # tree to origin/main, then deploys whatever the deploy tree holds. Kept

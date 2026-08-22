@@ -387,12 +387,9 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <code>BatchDeployStackIfChanged&nbsp;"*"</code>: deploy
         compose-text changes and brand-new stacks. Stage 1 skips those
         cases, so the two paths do not recreate the same stack twice;
-        unchanged stacks no-op.
-        <strong>Stage 3</strong>
-        <code>RestartStack&nbsp;"ofelia"</code> — re-read container
-        labels so cron schedule / command edits propagate (the released
-        ofelia image reads labels only at startup; see
-        <a href="/scheduling.html">Scheduling</a>).
+        unchanged stacks no-op. Ofelia follows the Docker events emitted by
+        those deployments and reloads job labels itself; see
+        <a href="/scheduling.html">Scheduling</a>.
         The <code>"*"</code> pattern means
         <strong>new stacks auto-deploy on the next push with no
         <code>github.tf</code> edit and no per-stack registration</strong>.

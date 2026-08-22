@@ -199,14 +199,16 @@ break service-name resolution, so DNS forwarding is a daemon-wide
 setting where a host needs it.
 
 **`nfs_binds`** carries bilby's postmortem-hardened NFS defences: the
-pre-dockerd QNAP reachability gate, the automount `StartLimit*=0`
-drop-ins, the `chattr +i` tripwire on the bare mountpoints (a `script:`
+recurring mount-aware recovery timer for eligible `created`/`exited`
+containers, the automount `StartLimit*=0` drop-ins, the `chattr +i`
+tripwire on the bare mountpoints (a `script:`
 task — the non-recursive `mount --bind /` trick has no Ansible
 primitive — with an honest `changed_when` on its output), the
 `.podhaus-share-mounted` sentinels (touched with
 `modification_time: preserve` so re-runs stay `changed=0`), and the
-Forgejo directory ownership. The role header carries the incident
-history; the postmortems are the full record.
+Forgejo directory ownership. It also owns `/boot/efi`'s fstab pass number so
+systemd runs the ordinary pre-mount FAT check. The role header carries the
+incident history; the postmortems are the full record.
 
 **`firewalld`** stages the declarative zone + service XML from role
 files — services before the zone, so the zone never references an

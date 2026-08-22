@@ -6,51 +6,62 @@
 # defence, keeping a QNAP outage visible, recoverable, and incapable of
 # silently writing container data to local disk:
 #
-#   1. wait-for-qnap-nfs.service holds docker.service start until TCP/2049
-#      on the QNAP responds (or 180 s timeout — then docker starts anyway
-#      and individual NFS-bind containers fail loudly via their sentinel
-#      healthchecks). dockerd's boot-time container fanout is what fired
-#      the automount burst after the 2026-05-30 power outage.
-#   2. The docker.service.d drop-in wires that wait into docker's startup.
-#   3. StartLimit*=0 drop-ins on mnt-{pouch,jump}.automount: systemd's
+#   1. A recurring oneshot reconciles only always-on Autoheal containers
+#      parked by an OCI bind failure, after every required share proves its
+#      exact NFS source and sentinel. Docker itself never waits for QNAP.
+#   2. StartLimit*=0 drop-ins on mnt-{pouch,jump}.automount: systemd's
 #      default start-rate limit put mnt-jump.automount into
 #      permanently-failed state (never auto-retried) for ~14 h on
 #      2026-05-30.
-#   4. chattr +i on the BARE mountpoints: with NFS unmounted, Docker's
+#   3. chattr +i on the BARE mountpoints: with NFS unmounted, Docker's
 #      auto-create of bind-source subdirs fails loudly at container start
 #      instead of silently writing real data to local disk (the 2026-05-23
 #      near-miss: backrest was about to write its next scheduled backup to
 #      a local stub).
-#   5. .podhaus-share-mounted sentinels on the real shares, so container
+#   4. .podhaus-share-mounted sentinels on the real shares, so container
 #      healthchecks can prove they bound the share and not a stub.
+#   5. /boot/efi has an fstab pass number, so systemd checks the FAT volume
+#      before mounting it after an unclean shutdown.
 #
 # Postmortems: docs/postmortems/2026-05-23-pouch-jump-mount-failure.md,
 # 2026-05-30-power-outage-nfs-recovery.md, 2026-06-16-firmware-reboot-
-# recovery.md (which codified 4 + 5 after a share rebuild wiped them).
+# recovery.md (which codified 3 + 4 after a share rebuild wiped them), and
+# 2026-08-22-delayed-nfs-container-recovery.md (which added 1 + 5).
 ---
-- name: Install the QNAP reachability gate unit
+- name: Install the stopped-container recovery command
   ansible.builtin.copy:
-    src: wait-for-qnap-nfs.service
-    dest: /etc/systemd/system/wait-for-qnap-nfs.service
+    src: recover-nfs-containers
+    dest: /usr/local/sbin/recover-nfs-containers
+    mode: "0755"
+
+- name: Install the stopped-container recovery units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
     mode: "0644"
+  loop:
+    - podhaus-nfs-container-recovery.service
+    - podhaus-nfs-container-recovery.timer
   notify: Reload systemd units
 
-- name: Create the systemd drop-in directories
+- name: Remove the finite QNAP gate
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/multi-user.target.wants/wait-for-qnap-nfs.service
+    - /etc/systemd/system/wait-for-qnap-nfs.service
+    - /etc/systemd/system/docker.service.d/10-wait-for-qnap.conf
+  notify: Reload systemd units
+
+- name: Create the automount drop-in directories
   ansible.builtin.file:
     path: "/etc/systemd/system/{{ item }}"
     state: directory
     mode: "0755"
   loop:
-    - docker.service.d
     - mnt-pouch.automount.d
     - mnt-jump.automount.d
-
-- name: Order docker.service after the reachability gate
-  ansible.builtin.copy:
-    src: 10-wait-for-qnap.conf
-    dest: /etc/systemd/system/docker.service.d/10-wait-for-qnap.conf
-    mode: "0644"
-  notify: Reload systemd units
 
 - name: Disable the start-rate limit on both automount units
   # One source file, two drop-in dirs: the units must stay identical, so
@@ -64,15 +75,23 @@
     - mnt-jump.automount.d
   notify: Reload systemd units
 
+- name: Enable filesystem checking for the EFI system partition
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^UUID=7470-3838\s+/boot/efi\s+'
+    line: 'UUID=7470-3838 /boot/efi vfat defaults,umask=0077,shortname=winnt 0 2'
+    validate: 'findmnt --verify --tab-file %s'
+  notify: Reload systemd units
+
 - name: Flush handlers so systemd knows the units before they are enabled
   ansible.builtin.meta: flush_handlers
 
-- name: Enable the reachability gate
-  # Enabled, not started: it is a boot-time gate; starting it now would
-  # just poll a QNAP that is already up.
+- name: Enable and start recurring stopped-container recovery
   ansible.builtin.systemd_service:
-    name: wait-for-qnap-nfs.service
+    name: podhaus-nfs-container-recovery.timer
     enabled: true
+    state: started
+  when: not ansible_check_mode
 
 - name: Set the immutable-bit tripwire on the bare mountpoints
   # The +i bit lives on the underlying btrfs inode, which NFS shadows when

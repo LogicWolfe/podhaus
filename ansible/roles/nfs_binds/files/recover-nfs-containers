@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+from dataclasses import dataclass
+import json
+from pathlib import PurePosixPath
+import subprocess
+import sys
+from typing import Any
+
+
+COMMAND_TIMEOUT_SECONDS = 30
+MOUNT_PROBE_SECONDS = 10
+INFRASTRUCTURE_ERROR_MARKERS = (
+    "oci runtime",
+    "error mounting",
+    "mount source path",
+    "no such device",
+    "host is down",
+)
+
+
+@dataclass(frozen=True)
+class StorageMount:
+    root: PurePosixPath
+    expected_source: str
+
+    @property
+    def sentinel(self) -> str:
+        return str(self.root / ".podhaus-share-mounted")
+
+
+STORAGE_MOUNTS = (
+    StorageMount(PurePosixPath("/mnt/jump"), "10.0.0.25:/Jump"),
+    StorageMount(PurePosixPath("/mnt/pouch"), "10.0.0.25:/Pouch"),
+)
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+class CommandRunner:
+    def run(self, args: list[str]) -> CommandResult:
+        try:
+            result = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                timeout=COMMAND_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f"command timed out: {' '.join(args)}") from error
+        return CommandResult(result.returncode, result.stdout, result.stderr)
+
+    def require(self, args: list[str]) -> str:
+        result = self.run(args)
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise RuntimeError(f"command failed: {' '.join(args)}: {detail}")
+        return result.stdout
+
+
+class DockerClient:
+    def __init__(self, commands: CommandRunner) -> None:
+        self.commands = commands
+
+    def inspect_autoheal_containers(self) -> list[dict[str, Any]]:
+        output = self.commands.require(
+            ["docker", "ps", "-aq", "--filter", "label=autoheal=true"]
+        )
+        container_ids = output.split()
+        if not container_ids:
+            return []
+        inspected = self.commands.require(["docker", "inspect", *container_ids])
+        documents = json.loads(inspected)
+        if not isinstance(documents, list):
+            raise RuntimeError("docker inspect did not return a JSON array")
+        return documents
+
+    def start(self, container_id: str) -> None:
+        self.commands.require(["docker", "start", container_id])
+
+
+class MountReadiness:
+    def __init__(self, commands: CommandRunner) -> None:
+        self.commands = commands
+        self.results: dict[StorageMount, bool] = {}
+
+    def is_ready(self, storage: StorageMount) -> bool:
+        if storage not in self.results:
+            self.results[storage] = self._probe(storage)
+        return self.results[storage]
+
+    def _probe(self, storage: StorageMount) -> bool:
+        sentinel = self.commands.run(
+            ["timeout", str(MOUNT_PROBE_SECONDS), "test", "-r", storage.sentinel]
+        )
+        if sentinel.returncode != 0:
+            print(f"storage unavailable: sentinel unreadable at {storage.sentinel}")
+            return False
+        return self._mounted_as_expected(storage)
+
+    def _mounted_as_expected(self, storage: StorageMount) -> bool:
+        result = self.commands.run(
+            [
+                "findmnt",
+                "--json",
+                "--target",
+                str(storage.root),
+                "--output",
+                "TARGET,SOURCE,FSTYPE,OPTIONS",
+            ]
+        )
+        if result.returncode != 0:
+            print(f"storage unavailable: findmnt failed for {storage.root}")
+            return False
+        return self._valid_findmnt_document(storage, json.loads(result.stdout))
+
+    @staticmethod
+    def _valid_findmnt_document(storage: StorageMount, document: Any) -> bool:
+        filesystems = document["filesystems"]
+        matches = [
+            filesystem
+            for filesystem in filesystems
+            if filesystem["target"] == str(storage.root)
+            and filesystem["source"] == storage.expected_source
+            and filesystem["fstype"] in ("nfs", "nfs4")
+            and "rw" in filesystem["options"].split(",")
+        ]
+        if len(matches) > 1:
+            raise RuntimeError(f"findmnt returned duplicate NFS mounts for {storage.root}")
+        if not matches:
+            print(f"storage unavailable: unexpected mount at {storage.root}")
+            return False
+        return True
+
+
+@dataclass(frozen=True)
+class RecoveryCandidate:
+    container_id: str
+    name: str
+    storage: tuple[StorageMount, ...]
+
+    @classmethod
+    def from_inspection(cls, document: dict[str, Any]) -> "RecoveryCandidate | None":
+        if document["State"]["Status"] not in ("created", "exited"):
+            return None
+        error = document["State"]["Error"]
+        if not error or document["HostConfig"]["RestartPolicy"]["Name"] not in (
+            "always",
+            "unless-stopped",
+        ):
+            return None
+        sources = cls._bind_sources(document["Mounts"])
+        storage = tuple(item for item in STORAGE_MOUNTS if cls._uses(sources, item))
+        if not storage or not cls._is_mount_failure(error, sources, storage):
+            return None
+        return cls(document["Id"], document["Name"].removeprefix("/"), storage)
+
+    @staticmethod
+    def _bind_sources(mounts: list[dict[str, Any]]) -> tuple[PurePosixPath, ...]:
+        return tuple(
+            PurePosixPath(mount["Source"])
+            for mount in mounts
+            if mount["Type"] == "bind"
+        )
+
+    @staticmethod
+    def _uses(sources: tuple[PurePosixPath, ...], storage: StorageMount) -> bool:
+        return any(source == storage.root or storage.root in source.parents for source in sources)
+
+    @classmethod
+    def _is_mount_failure(
+        cls,
+        error: str,
+        sources: tuple[PurePosixPath, ...],
+        storage: tuple[StorageMount, ...],
+    ) -> bool:
+        lower_error = error.lower()
+        relevant_sources = (
+            source for source in sources if any(cls._uses((source,), item) for item in storage)
+        )
+        identifies_source = any(str(source) in error for source in relevant_sources)
+        return identifies_source and any(marker in lower_error for marker in INFRASTRUCTURE_ERROR_MARKERS)
+
+
+class RecoveryReconciler:
+    def __init__(self, docker: DockerClient, mounts: MountReadiness) -> None:
+        self.docker = docker
+        self.mounts = mounts
+
+    def run(self) -> None:
+        for document in self.docker.inspect_autoheal_containers():
+            candidate = RecoveryCandidate.from_inspection(document)
+            if candidate is None:
+                continue
+            unavailable = [item for item in candidate.storage if not self.mounts.is_ready(item)]
+            if unavailable:
+                required = ", ".join(str(item.root) for item in unavailable)
+                print(f"container preserved: {candidate.name}; storage unavailable: {required}")
+                continue
+            self.docker.start(candidate.container_id)
+            print(f"container started: {candidate.name}")
+
+
+def main() -> int:
+    commands = CommandRunner()
+    reconciler = RecoveryReconciler(DockerClient(commands), MountReadiness(commands))
+    try:
+        reconciler.run()
+    except (json.JSONDecodeError, KeyError, RuntimeError, TypeError) as error:
+        print(f"recovery failed: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -142,6 +142,7 @@ services:
       # this label, an init-tools change rebuilds the init image but
       # backrest keeps using whatever config it had when it last started.
       podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}
+      ofelia.enabled: "true"
       ofelia.job-exec.forgejo-backup-recover.schedule: "0 */5 * * * *"
       ofelia.job-exec.forgejo-backup-recover.command: "/hooks/forgejo-backup-control recover"
 volumes:

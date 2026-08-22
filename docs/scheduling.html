@@ -9,9 +9,10 @@
 
       <h2 id="model">How ofelia works here</h2>
       <p>
-        The <code>ofelia/</code> stack runs <code>mcuadros/ofelia:latest</code> in daemon mode
-        with <code>--docker</code>. On startup it reads labels from every running container and
-        builds its job schedule. Two label flavors in use:
+        The <code>ofelia/</code> stack runs pinned
+        <code>mcuadros/ofelia:0.4.0-beta.5</code> in daemon mode with
+        <code>--docker</code>. It reads labels from running containers at startup and listens
+        for Docker events to keep the schedule current. Two label flavors are in use:
       </p>
       <ul>
         <li><strong><code>job-exec</code></strong> — runs a command inside the target container
@@ -51,33 +52,25 @@
         </tbody>
       </table>
 
-      <h2 id="self-restart">Why the push procedure restarts Ofelia</h2>
+      <h2 id="event-reload">Event-driven schedule reload</h2>
       <blockquote>
-        <p><strong>Workaround for upstream label-reload bug</strong></p>
-        ofelia 0.3.x in label-discovery mode reads container labels at startup and only
-        partially tracks changes after that. In practice, label-value changes on existing
-        containers (typical when redeploying a stack with an updated schedule) silently fail to
-        take effect.
+        <p><strong>No deployment-boundary scheduler restart</strong></p>
+        The pinned Ofelia <code>0.4.0-beta.5</code> listens for Docker events and applies
+        added, replaced, and removed job labels while it is running.
       </blockquote>
       <p>
-        The workaround lives in Stage 3 of <code>podhaus-push-deploy</code>. After changed stacks
-        deploy, Komodo runs <code>RestartStack "ofelia"</code>. The fresh process re-reads every
-        target container's labels, including schedule and command changes from that push.
-      </p>
-      <p>
-        <code>./komodo-sync</code> invokes the same procedure, so local iteration gets the same
-        refresh. Drop Stage 3 when
-        <a href="https://github.com/mcuadros/ofelia/pull/368">upstream PR #368</a> ships true
-        Docker-event-driven hot reload of label changes.
+        <code>podhaus-deploy</code> does not restart Ofelia. Target-stack deployments produce
+        the events that refresh its schedule, including command and schedule-value changes.
       </p>
 
       <h2 id="ofelia-quirk">Other ofelia quirk</h2>
       <blockquote>
         <p><strong>ofelia exits if it starts with zero jobs</strong></p>
         If ofelia comes up before any target container has its labels, the scheduler has zero
-        jobs and ofelia exits fatally (rather than idling). After a fresh bilby boot, ofelia
-        sometimes needs to be restarted once the labeled containers are up. Documented during
-        the plex-stats-cleanup bring-up.
+        jobs and exits fatally rather than idling. Its
+        <code>restart: unless-stopped</code> policy keeps retrying; once the first labeled target
+        exists, the next start registers it. A fresh boot therefore needs no manual scheduler
+        restart even when Ofelia wins the boot race.
       </blockquote>
 
       <h2 id="adding-job">Adding an ofelia job</h2>
@@ -91,8 +84,8 @@
   ofelia.job-exec.&lt;name&gt;.schedule: "0 4 * * *"
   ofelia.job-exec.&lt;name&gt;.command: "/path/to/script.sh"</code></pre>
         </li>
-        <li>Push the target stack or run <code>./komodo-sync</code>. Stage 3 restarts Ofelia after
-          deployment so it reads the new labels.</li>
+        <li>Push the target stack or run <code>./komodo-sync</code>. Ofelia reads the recreated
+          target's labels from the Docker event.</li>
         <li>If the job is critical, add a Gatus push heartbeat — the script should POST
           success/failure to a bearer-token-protected push endpoint, and Gatus's
           dead-man's-switch interval (25h is the convention) catches missed pings. Pattern in

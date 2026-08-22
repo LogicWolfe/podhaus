@@ -34,8 +34,8 @@
       <p>
         Scheduling is the shared host-wide ofelia instance reading the container's
         <code>ofelia.job-exec.streamfab-publish</code> labels (schedule
-        <code>0 * * * * *</code>). The push procedure's Stage 3
-        <code>RestartStack ofelia</code> makes ofelia re-read the labels on deploy.
+        <code>0 * * * * *</code>). Ofelia follows Docker events and reads the labels when
+        the target is deployed or recreated.
         Each successful tick pushes the shared Ofelia heartbeat to Gatus. Five minutes
         without a tick alerts through Fenwick.
       </p>
@@ -118,8 +118,8 @@
       <h2 id="deploy">Deploy &amp; observe</h2>
       <p>
         Push to <code>main</code> → the <code>podhaus-push-deploy</code> procedure
-        first-deploys the stack (Stage 2 <code>FullDeploy</code> for a new stack) and
-        restarts ofelia (Stage 3). Confirm via the job's stdout in ofelia's container
+        first-deploys the stack (Stage 2 <code>FullDeploy</code> for a new stack), and
+        Ofelia registers its labels from the Docker event. Confirm via the job's stdout in Ofelia's container
         logs (<code>moved … -&gt; /data/Kids/TV/…</code>) and by the files appearing in
         the Plex Kids library. The <em>Plex / StreamFab Publish</em> Gatus heartbeat
         confirms the scheduler continues to run it.

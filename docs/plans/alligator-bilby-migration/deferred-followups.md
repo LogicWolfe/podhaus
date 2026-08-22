@@ -4,18 +4,6 @@ These are the remaining non-blocking platform improvements discovered during
 the Alligator to Bilby migration. Remove each section when the work lands and
 delete this file when it is empty.
 
-## Remove the Ofelia restart workaround after an upstream release
-
-The released Ofelia image reads labels at startup and doesn't reliably apply
-label-value changes after a target container is recreated. The push procedure
-therefore restarts the `ofelia` stack in Stage 3 after every deployment run.
-
-Upstream PRs add event-driven or polling-based refresh. Before removing Stage
-3, verify the behaviour against a released image by changing a live schedule,
-deploying the target stack, and confirming Ofelia adopts the new value without
-a restart. Then remove Stage 3 from `komodo/sync/procedures.toml` and update
-`docs/scheduling.html` and `AGENTS.md`.
-
 ## Automate the first Komodo API key on a fresh database
 
 `komodo-start` reads the `Komodo API OnePassword Sync` item before it can call

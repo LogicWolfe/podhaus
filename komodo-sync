@@ -36,7 +36,7 @@
 #   2. RunProcedure(podhaus-deploy) — its Stage 0 RunSync now sees no
 #      diffs (pre-sync did them) so the in-procedure update::<Procedure>
 #      is never invoked. Remaining stages handle the hash-inject
-#      reconcile + surgical stack deploy + ofelia restart. Deliberately
+#      reconcile + surgical stack deploy. Deliberately
 #      NOT podhaus-push-deploy: that procedure's own Stage 0 is
 #      PullRepo(podhaus-deploy), which would force the deploy tree back
 #      to origin/main and clobber the local overlay step 0 just wrote.

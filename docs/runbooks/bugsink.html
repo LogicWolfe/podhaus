@@ -108,7 +108,7 @@
         <code>RunSync</code> reconciles stack defs + TOML-declared
         variables from disk (config reconcile only); Stage 1 handles
         config-only and build-context hash drift; Stage 2 handles compose
-        changes and new stacks; Stage 3 restarts Ofelia. The wildcard covers
+        changes and new stacks; Ofelia follows the target container's Docker events. The wildcard covers
         Bugsink automatically, so adding or removing the stack needs no
         <code>terraform/github.tf</code> edit. See
         <a href="/komodo.html#operating-models">Komodo → auto-deploy</a>.

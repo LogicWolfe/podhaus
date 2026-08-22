@@ -1,11 +1,10 @@
 services:
   ofelia:
     container_name: ofelia
-    image: mcuadros/ofelia:latest
+    image: mcuadros/ofelia:0.4.0-beta.5
     restart: unless-stopped
-    # daemon mode + --docker enables Docker label discovery: ofelia polls
-    # the docker socket for container events and reads `ofelia.*` labels
-    # to build its job schedule. No central config file needed.
+    # daemon mode + --docker enables Docker-event label discovery and
+    # live schedule reloads. No central config file needed.
     command: daemon --docker
     environment:
       # Cron schedules in labels are interpreted in the container's local

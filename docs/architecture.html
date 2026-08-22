@@ -152,8 +152,8 @@
         <li>Commit and push. The GitHub webhook starts <code>podhaus-push-deploy</code>.</li>
         <li>Stage 0 reconciles definitions and TOML variables. Stage 1 stamps content hashes and
           recreates running stacks whose committed content is stale.</li>
-        <li>Stage 2 deploys compose-text changes and new stacks. Stage 3 restarts Ofelia so it
-          re-reads job labels.</li>
+        <li>Stage 2 deploys compose-text changes and new stacks. Ofelia follows the resulting
+          Docker events and reloads job labels itself.</li>
       </ol>
       <p>
         For local iteration without a push, run <code>./komodo-sync</code>. It performs an
