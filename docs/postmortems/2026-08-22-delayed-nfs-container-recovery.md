@@ -84,6 +84,8 @@ Times are AWST on 2026-08-22.
 | 11:25 | The `nfs_binds` Ansible role removes the finite Docker startup gate, installs and starts the recurring recovery timer, and changes `/boot/efi`'s fstab pass number to `2`. |
 | 11:29 | A disposable real-Docker bind failure confirms that fresh OCI start failures remain in `created`, that failed recovery is visible in the unit journal, and that the timer starts the same container after its bind source becomes valid. The probe container and files are removed. |
 | 11:34 | The timer continues completing cleanly with no candidates. Unit tests cover both NFS exports, autofs-plus-NFS `findmnt` output, `created` and `exited` states, operator stops, invalid mounts, and visible start failure. |
+| 11:44 | An out-of-procedure ResourceSync applies the procedure edit, then the new three-stage `podhaus-deploy` completes successfully. Komodo's stored procedure has exactly the sync, content-hash, and deploy-if-changed stages. |
+| 11:45 | Ofelia registers all 11 enabled jobs on beta5. Forgejo Backup Recover, Plex Label Sync, StreamFab Publish, Flood Publish, Pine Lake Stignore, Sky Cache Invalidate, and Search Index all complete without failure after the deployment. |
 
 ## Root cause
 
@@ -246,6 +248,9 @@ omission, not a beta regression or a result of the outage.
 - **SSH remote-forward warning:** a direct Fractal check reported that remote
   port 18339 was already in use. The SSH command and runner checks succeeded; an
   existing tunnel already owned the port.
+- **Pine Lake migration:** its in-progress Komodo server resource is not
+  connected and has a separate unresolved critical alert. Recovery did not
+  modify or resolve migration state.
 
 ## Related
 
