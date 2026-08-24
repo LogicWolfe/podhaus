@@ -184,13 +184,17 @@ class LegacySessionMigration:
         info = self._dictionary(metainfo[b"info"], torrent_path)
         name = self._text(info[b"name"], torrent_path)
         old_directory = PurePosixPath(self._text(state[b"directory"], state_path))
-        old_base = old_directory if b"files" in info else old_directory / name
+        multi_file = b"files" in info
+        old_base = old_directory if multi_file else old_directory / name
         publish_directory = old_base if b"files" in info else old_directory
         new_base = WORKING_ROOT / name
+        new_directory = new_base if multi_file else WORKING_ROOT
         self._validate_paths(old_base, new_base, publish_directory)
         files = self._file_identities(self._host_path(old_base))
         missing = self._missing_members(info, self._host_path(old_base))
-        migrated = self._migrated_state(state, info_hash, new_base, publish_directory)
+        migrated = self._migrated_state(
+            state, info_hash, new_directory, publish_directory
+        )
         return TorrentMove(
             info_hash, name, str(old_base), str(new_base), str(publish_directory),
             sha256(state_path), hashlib.sha256(migrated).hexdigest(),
@@ -268,7 +272,7 @@ class LegacySessionMigration:
             raise MigrationError(f"session state drifted: {state_path}")
         state = self._dictionary(Bencode.decode(state_path.read_bytes()), state_path)
         content = self._migrated_state(
-            state, torrent.info_hash, PurePosixPath(torrent.new_base),
+            state, torrent.info_hash, self._new_directory(torrent),
             PurePosixPath(torrent.publish_directory),
         )
         atomic_write(state_path, content)
@@ -303,11 +307,9 @@ class LegacySessionMigration:
     def rollback(self, manifest: MigrationManifest, legacy_root: Path) -> None:
         for torrent in reversed(manifest.torrents):
             self._rollback_content(torrent)
-            self._restore_state(torrent, legacy_root)
+            self._restore_session_files(torrent, legacy_root)
         for torrent in manifest.torrents:
-            state_path = self.session_root / f"{torrent.info_hash}.torrent.rtorrent"
-            if sha256(state_path) != torrent.original_state_sha256:
-                raise MigrationError(f"restored session state mismatch: {state_path}")
+            self._verify_original_session_files(torrent)
 
     def _rollback_content(self, torrent: TorrentMove) -> None:
         old_base = self._host_path(PurePosixPath(torrent.old_base))
@@ -329,12 +331,34 @@ class LegacySessionMigration:
         old_base.parent.mkdir(parents=True, exist_ok=True)
         new_base.rename(old_base)
 
-    def _restore_state(self, torrent: TorrentMove, legacy_root: Path) -> None:
-        source = legacy_root / f"{torrent.info_hash}.torrent.rtorrent"
-        if sha256(source) != torrent.original_state_sha256:
-            raise MigrationError(f"legacy session backup drifted: {source}")
-        target = self.session_root / source.name
-        atomic_write(target, source.read_bytes())
+    def _restore_session_files(self, torrent: TorrentMove, legacy_root: Path) -> None:
+        expected = {
+            ".torrent": torrent.torrent_sha256,
+            ".torrent.libtorrent_resume": torrent.resume_sha256,
+            ".torrent.rtorrent": torrent.original_state_sha256,
+        }
+        for suffix, digest in expected.items():
+            source = legacy_root / f"{torrent.info_hash}{suffix}"
+            if sha256(source) != digest:
+                raise MigrationError(f"legacy session backup drifted: {source}")
+            atomic_write(self.session_root / source.name, source.read_bytes())
+
+    def _verify_original_session_files(self, torrent: TorrentMove) -> None:
+        expected = {
+            ".torrent": torrent.torrent_sha256,
+            ".torrent.libtorrent_resume": torrent.resume_sha256,
+            ".torrent.rtorrent": torrent.original_state_sha256,
+        }
+        for suffix, digest in expected.items():
+            path = self.session_root / f"{torrent.info_hash}{suffix}"
+            if sha256(path) != digest:
+                raise MigrationError(f"restored session file mismatch: {path}")
+
+    @staticmethod
+    def _new_directory(torrent: TorrentMove) -> PurePosixPath:
+        new_base = PurePosixPath(torrent.new_base)
+        single_file = len(torrent.files) == 1 and torrent.files[0].relative_path == ""
+        return new_base.parent if single_file else new_base
 
     @staticmethod
     def _remove_empty_tree(path: Path) -> None:
@@ -360,14 +384,14 @@ class LegacySessionMigration:
     @staticmethod
     def _migrated_state(
         state: dict[bytes, object], info_hash: str,
-        new_base: PurePosixPath, publish_directory: PurePosixPath,
+        new_directory: PurePosixPath, publish_directory: PurePosixPath,
     ) -> bytes:
         migrated = dict(state)
         custom = dict(migrated.get(b"custom", {}))
         custom[b"publishdir"] = str(publish_directory).encode()
         custom[b"pubdone"] = b"1"
         migrated[b"custom"] = custom
-        migrated[b"directory"] = str(new_base).encode()
+        migrated[b"directory"] = str(new_directory).encode()
         migrated[b"loaded_file"] = f"/flood-db/{info_hash}.torrent".encode()
         return Bencode.encode(migrated)
 

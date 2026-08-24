@@ -111,6 +111,24 @@ class LegacySessionMigrationTests(unittest.TestCase):
             incomplete,
         )
         self.assertTrue((self.media / "Movies/Incomplete").exists())
+        complete_state = MODULE.Bencode.decode(
+            (self.sessions / f"{'A' * 40}.torrent.rtorrent").read_bytes()
+        )
+        self.assertEqual(complete_state[b"directory"], b"/data/torrents")
+
+    def test_rollback_restores_runtime_mutated_resume_file(self) -> None:
+        self.write_session("A" * 40, "Release", "/data/Movies", None)
+        (self.media / "Movies").mkdir()
+        (self.media / "Movies/Release").write_bytes(b"film")
+        migration = MODULE.LegacySessionMigration(self.sessions, self.media)
+        manifest = migration.plan(1)
+        migration.apply(manifest)
+
+        resume = self.sessions / f"{'A' * 40}.torrent.libtorrent_resume"
+        resume.write_bytes(b"runtime mutation")
+        migration.rollback(manifest, self.legacy)
+
+        self.assertEqual(resume.read_bytes(), b"resume")
 
     def test_existing_working_target_refuses_planning(self) -> None:
         self.write_session("A" * 40, "Release", "/data/Movies", None)

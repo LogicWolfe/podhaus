@@ -40,6 +40,15 @@ esac
 
 
 class PlexPredeployGateTest(unittest.TestCase):
+    def test_session_gate_mount_uses_orbstack_visible_repo_path(self) -> None:
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertNotIn("source=/usr/local/libexec/podhaus", script)
+        self.assertIn(
+            "/Users/Shared/Podhaus/periphery/etc-komodo/repos/"
+            "podhaus-pinelake/ansible/roles/pinelake_macos/files",
+            script,
+        )
+
     def run_gate(self, **values: str) -> tuple[subprocess.CompletedProcess[str], int]:
         with tempfile.TemporaryDirectory() as temporary:
             fake_bin = Path(temporary)

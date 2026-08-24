@@ -4,6 +4,7 @@ set -eu
 
 config=/Users/Shared/Podhaus/plex
 preferences='/config/Library/Application Support/Plex Media Server/Preferences.xml'
+tools=/Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/ansible/roles/pinelake_macos/files
 
 docker run --rm --pull=never \
     --mount type=bind,source="$config",target=/config,readonly \
@@ -11,7 +12,7 @@ docker run --rm --pull=never \
     "test -f '$preferences' && test -f /config/.container-cutover-ready"
 
 docker run --rm --pull=never \
-    --mount type=bind,source=/usr/local/libexec/podhaus,target=/tools,readonly \
+    --mount type=bind,source="$tools",target=/tools,readonly \
     --mount type=bind,source="$config",target=/config,readonly \
     python:alpine /tools/plex-session-gate \
     --preferences-xml "$preferences" --validate-only
@@ -27,7 +28,7 @@ fi
 
 session_gate() {
     docker run --rm --pull=never --network host \
-        --mount type=bind,source=/usr/local/libexec/podhaus,target=/tools,readonly \
+        --mount type=bind,source="$tools",target=/tools,readonly \
         --mount type=bind,source="$config",target=/config,readonly \
         python:alpine /tools/plex-session-gate \
         --preferences-xml "$preferences"
