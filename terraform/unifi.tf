@@ -88,8 +88,13 @@ resource "unifi_client" "fractal_windows" {
 # nb-macbook-air.pod.haus record and the Ansible connection in
 # ansible/inventory/host_vars/nb-macbook-air.yml both name this address; a
 # DHCP drift would strand the only management path. This client already
-# exists in the controller as a DHCP lease, so import before the first apply:
-#   terraform import unifi_client.nb_macbook_air c0:c7:db:b1:db:f8
+# exists in the controller as a DHCP lease; the import block below adopts it
+# on the first apply (delete both once applied, like pocket_id.tf's).
+import {
+  to = unifi_client.nb_macbook_air
+  id = "c0:c7:db:b1:db:f8"
+}
+
 resource "unifi_client" "nb_macbook_air" {
   mac      = "c0:c7:db:b1:db:f8"
   name     = "Nathans MacBook Air"
