@@ -6,7 +6,7 @@ services:
     user: "0:0"
     volumes:
       - /Users/Shared/Podhaus/flood:/flood-db
-      - ../../flood/conf:/conf:ro
+      - /Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/flood/conf:/conf:ro
     command:
       - /bin/sh
       - -ec
@@ -47,6 +47,7 @@ services:
       GATUS_LABEL_SYNC_ENDPOINT_ID: torrents_pinelake-plex-label-sync
       GATUS_RAR_ENDPOINT_ID: torrents_pinelake-rar-extraction
       PINELAKE_STIGNORE_SOURCE: "false"
+      PLEX_MEDIA_ROOT: /Volumes/TerraMaster/Torrents
       PLEX_URL: http://127.0.0.1:32400
       PLEX_TOKEN: ${PLEX_ONLINE_TOKEN}
       TZ: ${TZ}
@@ -63,7 +64,7 @@ services:
         read_only: true
         bind:
           create_host_path: false
-      - ../../flood/scripts:/scripts:ro
+      - /Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/flood/scripts:/scripts:ro
     labels:
       autoheal: "true"
       ofelia.enabled: "true"

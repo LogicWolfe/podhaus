@@ -818,7 +818,7 @@ external-endpoints:
       interval: 25h
     alerts:
       - type: custom
-        description: "Pinelake's nightly Backrest pipeline stopped checking in. Inspect pinelake-backup through Komodo and verify the TerraMaster restic repository and OneDrive mirror."
+        description: "Pinelake's nightly Backrest pipeline stopped checking in. Inspect pinelake-backup through Komodo and verify the local TerraMaster restic repository."
         failure-threshold: 3
         success-threshold: 2
         send-on-resolved: true

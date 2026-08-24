@@ -15,6 +15,21 @@ COMPOSE_FILES = (
 
 
 class TerraMasterMountTests(unittest.TestCase):
+    def test_registered_pinelake_stacks_have_no_relative_host_binds(self) -> None:
+        for compose_file in COMPOSE_FILES:
+            document = yaml.safe_load(compose_file.read_text())
+            for service_name, service in document["services"].items():
+                for volume in service.get("volumes", []):
+                    source = (
+                        volume.get("source", "")
+                        if isinstance(volume, dict)
+                        else volume.split(":", 1)[0]
+                    )
+                    with self.subTest(
+                        file=compose_file, service=service_name, source=source
+                    ):
+                        self.assertFalse(source.startswith("."))
+
     def test_external_volume_mounts_use_structured_bind_syntax(self) -> None:
         found = 0
         for compose_file in COMPOSE_FILES:
@@ -49,6 +64,26 @@ class TerraMasterMountTests(unittest.TestCase):
                 "/Volumes/TerraMaster/Torrents",
             }.issubset(sources)
         )
+
+    def test_flood_labels_resolve_against_pinelake_plex_paths(self) -> None:
+        document = yaml.safe_load(
+            (ROOT / "pinelake/flood/compose.yaml").read_text()
+        )
+        environment = document["services"]["pinelake-flood"]["environment"]
+        self.assertEqual(
+            environment["PLEX_MEDIA_ROOT"],
+            "/Volumes/TerraMaster/Torrents",
+        )
+
+    def test_pinelake_backup_has_no_onedrive_layer(self) -> None:
+        backup_files = (
+            ROOT / "backup/pinelake/compose.yaml",
+            ROOT / "backup/pinelake/config.json.tmpl",
+            ROOT / "backup/pinelake/stack.toml",
+        )
+        text = "\n".join(path.read_text().lower() for path in backup_files)
+        self.assertNotIn("onedrive", text)
+        self.assertNotIn("rclone", text)
 
 
 if __name__ == "__main__":

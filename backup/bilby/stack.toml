@@ -13,7 +13,7 @@ run_directory = "/etc/komodo/repo/backup/bilby"
 # check for Jump-NFS-shadow defence) actually take effect. Other
 # overlay fields (build:, volumes:) merge or append regardless of
 # order, so this is safe for them too.
-file_paths = ["../compose.shared.yaml", "compose.yaml"]
+file_paths = ["../compose.shared.yaml", "../compose.onedrive.yaml", "compose.yaml"]
 # init-tools image is built inline by the backrest-init service via the
 # `build:` directive. run_build = true tells Komodo to run `docker compose
 # build` before `up`.
@@ -21,7 +21,7 @@ run_build = true
 # `backrest-init` is a one-shot init container — it renders config.json
 # (and rclone.conf if absent) then exits 0. Without this exclusion Komodo
 # would count its exited state and mark the whole stack Unhealthy.
-ignore_services = ["backrest-init"]
+ignore_services = ["backrest-init", "backrest-onedrive-init"]
 
 # Per-host environment block. Each variable here is exposed to the
 # compose project's `.env` file at deploy time. The CONTRACT — variable

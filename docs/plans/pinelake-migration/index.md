@@ -122,21 +122,27 @@ at every migration boundary.
   were deleted. Terraform published Pinelake's rathole tokens and logging
   client certificate into the existing Homelab items without changing DNS,
   ingress, or a running service.
+- ✅ All 28 cleanly stopped legacy torrent sessions were refreshed from their
+  final state and moved behind the shared Flood working-tree contract without
+  a recheck. The 676.1 GB source trees retain their original inodes under
+  `Torrents/torrents`; 136 video files are hardlinked back to their unchanged
+  Plex paths, while 22 `.nfo` files remain working-tree-only. Every staged
+  session now has the matching `publishdir` and `pubdone` state. The untouched
+  legacy session tree remains an exact rollback source.
+- ✅ Native Plex was stopped only after two zero-session checks and restarted
+  through the proven-dead recovery gate. Its database integrity is `ok`, all
+  136 torrent-backed paths still resolve to their original metadata items,
+  in-progress and rated counts remain 48 and 8, and all four identity values
+  still match. Watched advanced from 3,587 to 3,588 through normal use before
+  the gate; the migration did not alter view state or run the label job.
+- ✅ A dedicated `pinelake-plex` Homelab item now contains the existing live
+  server token. Its concealed value was checksum-matched without exposing or
+  rotating the token.
 
 ## Remaining dependency chain
 
-### 1. Finish native-state normalization
+### 1. Publish fleet configuration
 
-- Backfill all 28 legacy torrent sessions through the shared publish and Plex
-  label logic. Leave incomplete torrents untouched.
-- Recheck artwork, sharing, labels, identity, and the target-path accounting
-  after the torrent backfill. Keep the empty old roots as the future Syncthing
-  ingestion locations in each Plex library.
-
-### 2. Publish fleet configuration
-
-- Create the dedicated Pinelake Plex token item and independent Pinelake
-  OneDrive OAuth snapshot in the Homelab vault.
 - Commit and push the reviewed Podhaus change as an explicit deployment
   boundary. ResourceSync must register Pinelake and its linked repo before any
   application stack is deployed.
@@ -144,7 +150,7 @@ at every migration boundary.
   logging, monitoring, backup, Autoheal, and Ofelia. Plex remains outside
   generic Autoheal.
 
-### 3. Cut over Syncthing and Flood
+### 2. Cut over Syncthing and Flood
 
 - Deploy Pinelake Syncthing, configure the four receive-only folders against
   the existing fresh identity, and confirm all four global/local/needed counts
@@ -152,14 +158,14 @@ at every migration boundary.
 - Prove one controlled selection in each folder family. Only the corresponding
   normal source `.stignore` may change; permanent junk remains absent while
   media, artwork, and subtitles arrive. Pouch must remain unchanged.
-- Import the 28 stopped Flood sessions into the shared Bilby implementation
-  without a forced recheck. Verify hashes, names, completion, tags, paths, and
-  resume state.
+- Start the 28 staged Flood sessions under the Pinelake stack that mirrors
+  Bilby's shared implementation, without a forced recheck. Verify hashes,
+  names, completion, tags, paths, and resume state.
 - Exercise one new controlled download through redirect, extraction,
   hardlink publication, Plex labeling, backlog monitoring, and native
   remove-and-delete behavior. Require zero extraction and publish backlog.
 
-### 4. Cut over Plex last
+### 3. Cut over Plex last
 - Capture the final baseline, pass the session gate twice, stop native Plex,
   and prove its process, listener, and port are absent.
 - Capture a final immutable native archive and fresh container-state clone.
@@ -169,7 +175,7 @@ at every migration boundary.
   networking and verify LAN, remote access, discovery, playback, and software
   transcoding. Keep the native application, plist, and state untouched.
 
-### 5. Prove unattended operation
+### 4. Prove unattended operation
 
 - Move `sync.pinelake.haus` and `torrent.pinelake.haus` to the proven Numbat
   route. Stop but retain cloudflared; keep `home.pinelake.haus` for rollback

@@ -3,7 +3,7 @@
 # Structural fields (type, drive_id, drive_type) are committed here for
 # review and history. Only the OAuth token JSON blob is secret. Each host
 # stores its OWN OAuth token in 1P (separate refresh-token chains so the
-# two hosts don't race-invalidate each other on token rotation):
+# hosts don't race-invalidate each other on token rotation):
 #   - bilby:    op://Homelab/rclone-onedrive-token-bilby/notes-b64
 #   - kangaroo: op://Homelab/rclone-onedrive-token-kangaroo/notes-b64
 #

@@ -232,7 +232,7 @@ op-vault dev -- ansible-playbook playbooks/numbat-bootstrap.yml</code></pre>
           bilby and kangaroo and update the base64 snapshots in
           <code>rclone-onedrive-token-bilby</code> and
           <code>rclone-onedrive-token-kangaroo</code>.</li>
-        <li>Pull both repos:
+        <li>Pull the repos:
           <pre><code>rclone sync onedrive:Backups/podhaus-restic           ./recovery/podhaus
 rclone sync onedrive:Backups/podhaus-kangaroo-restic  ./recovery/kangaroo</code></pre>
         </li>

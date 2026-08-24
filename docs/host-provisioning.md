@@ -86,8 +86,11 @@ temporary transport with the normal outbound Numbat contract after admission.
 
 **kangaroo is not an Ansible target and never will be** — QTS ships no
 Python interpreter, so `kangaroo_bootstrap` is its permanent supported
-path. Nathan's MacBook is not in the inventory either: it is a personal
-device with chezmoi only, not infrastructure.
+path. Nathan's MacBook is present only in the `mac_clients` group and has a
+dedicated `playbooks/nb-macbook-air.yml` entry point. It receives the narrow
+root-owned SSH policy in `mac_ssh`; it is not in `provisioned`, `docker_hosts`,
+`komodo_periphery_hosts`, or `homelab_targets`. Chezmoi remains the owner of
+its user-level development configuration.
 
 ## Layout
 
@@ -106,6 +109,7 @@ ansible/
     numbat.yml             single-host entry point (steady state)
     numbat-bootstrap.yml   fresh-VM bring-up, sequencing preserved as play order
     pinelake.yml           macOS appliance and OrbStack entry point
+    nb-macbook-air.yml     macOS development-client SSH policy entry point
   roles/
     base/                  timezone, baseline packages, dirs
     wsl/                   /etc/wsl.conf, hostname
@@ -118,6 +122,7 @@ ansible/
     firewalld/             declarative zone + service XML (bilby)
     komodo_core_host/      Komodo Core's host directories (bilby)
     numbat_edge/           numbat's nftables ruleset, relay-IP dispatcher, loopback sshd
+    mac_ssh/               MacBook FileVault gate, key-only sshd policy and mesh keys
     pinelake_macos/        macOS power, OrbStack and Plex safety gates
 ```
 
@@ -137,6 +142,9 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
   `kangaroo_bootstrap` is permanent, not interim. It is listed here
   rather than omitted so the inventory shows the whole fleet, with
   `ansible_host: unreachable.invalid` so a stray `--limit` can't dial it.
+- `mac_clients` — managed development clients outside the runtime fleet. The
+  dedicated MacBook playbook targets this group; the role asserts that members
+  have not also joined a runtime group.
 - `linux_hosts` and `macos_appliance_hosts` separate operating-system role
   families. Linux-only base, account, and sshd roles never run on Darwin.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes`, `edge_hosts`,

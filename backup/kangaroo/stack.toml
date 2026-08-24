@@ -10,12 +10,12 @@ linked_repo = "podhaus"
 # and build-context hashes in Stage 1, then handles compose-text changes
 # and new stacks through Stage 2's wildcard IfChanged pass.
 run_directory = "backup/kangaroo"
-file_paths = ["compose.yaml", "../compose.shared.yaml"]
+file_paths = ["../compose.shared.yaml", "../compose.onedrive.yaml", "compose.yaml"]
 # init-tools image built inline by the backrest-init service via `build:`.
 # See backup/bilby/stack.toml for the same pattern on bilby.
 run_build = true
 # `backrest-init` is a one-shot init container — see backup/bilby/stack.toml.
-ignore_services = ["backrest-init"]
+ignore_services = ["backrest-init", "backrest-onedrive-init"]
 
 # Per-host environment block. Variable NAMES match bilby's stack.toml
 # (the contract shared with backup/compose.shared.yaml). VALUES differ:

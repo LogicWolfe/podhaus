@@ -21,12 +21,10 @@
 
 services:
   backrest-init:
-    # Build context: ../../init-tools resolves to <clone-root>/init-tools
-    # since this file is FIRST in file_paths (compose.yaml before
-    # compose.shared.yaml in stack.toml), making the project directory
-    # backup/kangaroo/.
+    # All Compose paths resolve from backup/, the directory containing
+    # the first file listed in stack.toml.
     build:
-      context: ../../init-tools
+      context: ../init-tools
       dockerfile: Dockerfile
       args:
         STACK_CONTENT_HASH: ${BUILD_HASH_BACKREST_INIT:-unset}
@@ -34,8 +32,8 @@ services:
       # Absolute host paths — Periphery's container-side relative-path
       # resolution doesn't match the QNAP host's view of the cloned repo,
       # and ${PODHAUS_REPO} doesn't exist on kangaroo (no komodo-start).
-      - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro
-      - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/kangaroo/config.json.tmpl:/tmpl/config.json.tmpl:ro
+      - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup:/tmpl/shared:ro
+      - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/backup/kangaroo:/tmpl/host:ro
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

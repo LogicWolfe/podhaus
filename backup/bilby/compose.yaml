@@ -23,8 +23,8 @@ services:
       args:
         STACK_CONTENT_HASH: ${BUILD_HASH_BACKREST_INIT:-unset}
     volumes:
-      - ${PODHAUS_REPO}/backup/rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro,z
-      - ${PODHAUS_REPO}/backup/bilby/config.json.tmpl:/tmpl/config.json.tmpl:ro,z
+      - ${PODHAUS_REPO}/backup:/tmpl/shared:ro,z
+      - ${PODHAUS_REPO}/backup/bilby:/tmpl/host:ro,z
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

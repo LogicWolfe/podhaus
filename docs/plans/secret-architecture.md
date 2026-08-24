@@ -41,7 +41,7 @@ replacement for it.
 
 | Host | Class | Secret path | Rests on |
 |---|---|---|---|
-| MacBook Air | macOS personal development client | per-machine Dev service accounts, pending local implementation | planned device-bound Data Protection Keychain rows protected by Secure Enclave + FileVault |
+| MacBook Air | macOS personal development client | per-machine personal and Switch Dev service accounts through `op-vault` | mode `0600` token files inside its FileVault-protected home |
 | bilby | Asahi (Apple Silicon), YubiKey PIV SSH identity | per-machine Dev and Homelab service account through `op-vault` | mode `0600` token file on an unencrypted disk *(accepted gap)* |
 | kangaroo | QNAP QTS appliance | Komodo variable interpolation | network auth only |
 | numbat | BinaryLane Rocky Linux VM | Komodo interpolation + Terraform-managed 1P handoffs | provider disk + rendered stack env *(gap)* |
@@ -117,13 +117,11 @@ the stolen key.
 
 ### Service account token on disk
 
-The Linux migration is implemented and its MacBook work is tracked in
-[Unified development identity and limited MacBook management](hardware-sealed-op-tokens.md).
-The nine repo-root-token consumers now cross one explicit `op-vault` boundary.
+All development-secret consumers cross one explicit `op-vault` boundary.
 Voltaire uses TPM NV; bilby uses the accepted mode `0600` file on its
-unencrypted disk; fractal uses mode `0600` files inside its encrypted home.
-Automatic Personal-vault fallbacks have been removed. The MacBook's Keychain
-backend and limited management boundary are the remaining implementation.
+unencrypted disk; fractal uses mode `0600` files inside its encrypted home;
+the MacBook uses two mode `0600` files inside its FileVault-protected home.
+Automatic Personal-vault fallbacks have been removed.
 
 The `OP_SERVICE_ACCOUNT_TOKEN` passed to the `onepassword` stack is a different
 Komodo variable carrying the 1Password Connect token. It is outside that

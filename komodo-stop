@@ -1,3 +1,4 @@
 #!/bin/bash
 set -euo pipefail
+[ "$#" -eq 0 ] || { echo "usage: ./komodo-stop" >&2; exit 2; }
 docker compose -p komodo down

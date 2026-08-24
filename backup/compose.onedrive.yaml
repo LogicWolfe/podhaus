@@ -1,0 +1,44 @@
+# Bilby and kangaroo add this layer to the shared Backrest service. It
+# renders the host's independent rclone OAuth state and mounts it into
+# Backrest. Pinelake does not include this file.
+
+services:
+  backrest-onedrive-init:
+    container_name: backrest-onedrive-init
+    image: init-tools:local
+    pull_policy: never
+    user: "0:0"
+    environment:
+      RCLONE_ONEDRIVE_TOKEN_B64: ${RCLONE_ONEDRIVE_TOKEN_B64}
+    volumes:
+      - backrest-rclone:/rclone
+      - ./rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        if [ ! -s /rclone/rclone.conf ]; then
+          RCLONE_ONEDRIVE_TOKEN="$$(echo "$$RCLONE_ONEDRIVE_TOKEN_B64" | base64 -d)" \
+            envsubst '$$RCLONE_ONEDRIVE_TOKEN' < /tmpl/rclone.conf.tmpl > /rclone/rclone.conf
+          chmod 600 /rclone/rclone.conf
+          echo "rendered /rclone/rclone.conf from 1P bootstrap snapshot"
+        else
+          echo "/rclone/rclone.conf exists, preserving (rclone manages refresh in-place)"
+        fi
+    restart: "no"
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  backrest:
+    depends_on:
+      backrest-onedrive-init:
+        condition: service_completed_successfully
+    environment:
+      RCLONE_CONFIG: /rclone/rclone.conf
+      RCLONE_CONFIG_DIR: /tmp/rclone
+    volumes:
+      - backrest-rclone:/rclone
+
+volumes:
+  backrest-rclone:

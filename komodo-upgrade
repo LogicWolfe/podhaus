@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
+[ "$#" -eq 0 ] || { echo "usage: ./komodo-upgrade" >&2; exit 2; }
 : "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./komodo-upgrade}"
+export COMPOSE_KOMODO_REPO_PATH="$PWD"
 op run --env-file komodo/compose.env -- \
   docker compose -p komodo -f komodo/ferretdb.compose.yaml --env-file komodo/compose.env pull
 op run --env-file komodo/compose.env -- \
