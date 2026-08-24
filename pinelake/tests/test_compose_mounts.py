@@ -1,5 +1,6 @@
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ET
 
 import yaml
 
@@ -84,6 +85,36 @@ class TerraMasterMountTests(unittest.TestCase):
         text = "\n".join(path.read_text().lower() for path in backup_files)
         self.assertNotIn("onedrive", text)
         self.assertNotIn("rclone", text)
+
+    def test_plex_preferences_preserve_identity_and_advertise_relay(self) -> None:
+        preferences = ET.parse(
+            ROOT / "pinelake/plex/Preferences.xml.tmpl"
+        ).getroot().attrib
+        self.assertEqual(
+            preferences["ProcessedMachineIdentifier"],
+            "92311858cdd55fb33583fda2e6fc037e3655da85",
+        )
+        self.assertEqual(
+            preferences["customConnections"],
+            "https://66-226-146-158.5801df40ceea4deaaefd8bd027fc22ff.plex.direct:32400",
+        )
+
+    def test_pinelake_plex_relay_is_wired_end_to_end(self) -> None:
+        files = (
+            ROOT / "relay/numbat/server.toml.tmpl",
+            ROOT / "relay/pinelake/client.toml.tmpl",
+            ROOT / "relay/numbat/compose.yaml",
+            ROOT / "relay/pinelake/compose.yaml",
+            ROOT / "relay/numbat/stack.toml",
+            ROOT / "relay/pinelake/stack.toml",
+        )
+        for path in files:
+            with self.subTest(path=path):
+                self.assertIn("PINELAKE_PLEX", path.read_text())
+        firewall = (
+            ROOT / "ansible/roles/numbat_edge/templates/podhaus.nft.j2"
+        ).read_text()
+        self.assertIn("443, 2333, 32400", firewall)
 
 
 if __name__ == "__main__":

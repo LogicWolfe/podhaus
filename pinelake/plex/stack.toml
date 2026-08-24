@@ -7,8 +7,11 @@ tags = ["pinelake", "podhaus"]
 server = "pinelake"
 linked_repo = "podhaus-pinelake"
 run_directory = "pinelake/plex"
+run_build = true
+ignore_services = ["pinelake-plex-preferences-init"]
 environment = """
 TZ=[[TZ]]
+PLEX_ONLINE_TOKEN=[[OP__KOMODO__PINELAKE_PLEX__TOKEN]]
 """
 
 [stack.config.pre_deploy]

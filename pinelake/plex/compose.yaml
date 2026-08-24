@@ -1,10 +1,39 @@
 services:
+  pinelake-plex-preferences-init:
+    container_name: pinelake-plex-preferences-init
+    build:
+      context: ../../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_PINELAKE_PLEX_PREFERENCES_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
+    user: "0:0"
+    environment:
+      PLEX_ONLINE_TOKEN: ${PLEX_ONLINE_TOKEN}
+    volumes:
+      - /Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/pinelake/plex/Preferences.xml.tmpl:/tmpl/Preferences.xml.tmpl:ro
+      - /Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/plex/plex-preferences.py:/script/plex-preferences.py:ro
+      - /Users/Shared/Podhaus/plex:/config
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        envsubst < /tmpl/Preferences.xml.tmpl > /tmp/rendered.xml
+        python3 /script/plex-preferences.py /tmp/rendered.xml '/config/Library/Application Support/Plex Media Server/Preferences.xml'
+        chown 501:20 '/config/Library/Application Support/Plex Media Server/Preferences.xml'
+    restart: "no"
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
   pinelake-plex:
     container_name: pinelake-plex
     hostname: PineLake
     image: plexinc/pms-docker:latest
     restart: unless-stopped
     network_mode: host
+    depends_on:
+      pinelake-plex-preferences-init:
+        condition: service_completed_successfully
     environment:
       TZ: ${TZ}
       PLEX_UID: "501"
@@ -51,6 +80,7 @@ services:
           create_host_path: false
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      podhaus.depends-on-pinelake-plex-preferences-init: ${BUILD_HASH_PINELAKE_PLEX_PREFERENCES_INIT:-unset}
     healthcheck:
       test:
         - CMD-SHELL
