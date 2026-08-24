@@ -4,3 +4,24 @@
     project_src: "{{ podhaus_periphery_dir }}"
     project_name: komodo-periphery
     state: restarted
+  become: "{{ podhaus_docker_become }}"
+  when:
+    - not ansible_check_mode
+    - podhaus_docker_home is none
+
+- name: Restart user-owned Periphery
+  ansible.builtin.command:
+    argv:
+      - "{{ podhaus_docker_cli }}"
+      - compose
+      - --project-name
+      - komodo-periphery
+      - restart
+    chdir: "{{ podhaus_periphery_dir }}"
+  environment:
+    HOME: "{{ podhaus_docker_home }}"
+  become: false
+  when:
+    - not ansible_check_mode
+    - podhaus_docker_home is not none
+  listen: Restart periphery

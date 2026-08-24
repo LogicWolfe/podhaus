@@ -26,6 +26,8 @@ resource "random_password" "numbat_rathole_tokens" {
     "fractal_http",
     "fractal_ssh",
     "kangaroo_ssh",
+    "pinelake_http",
+    "pinelake_ssh",
     "protected_http",
     "public_tls",
     "voltaire_http",
@@ -233,6 +235,34 @@ resource "tls_locally_signed_cert" "voltaire_log_client" {
   ]
 }
 
+resource "tls_private_key" "pinelake_log_client" {
+  algorithm = "RSA"
+  rsa_bits  = 3072
+}
+
+resource "tls_cert_request" "pinelake_log_client" {
+  private_key_pem = tls_private_key.pinelake_log_client.private_key_pem
+  dns_names       = ["pinelake.pod.haus"]
+
+  subject {
+    common_name  = "pinelake.pod.haus"
+    organization = "podhaus"
+  }
+}
+
+resource "tls_locally_signed_cert" "pinelake_log_client" {
+  cert_request_pem   = tls_cert_request.pinelake_log_client.cert_request_pem
+  ca_private_key_pem = tls_private_key.log_ingest_ca.private_key_pem
+  ca_cert_pem        = tls_self_signed_cert.log_ingest_ca.cert_pem
+
+  validity_period_hours = 43800
+  allowed_uses = [
+    "client_auth",
+    "digital_signature",
+    "key_encipherment",
+  ]
+}
+
 resource "onepassword_item" "numbat_rathole" {
   vault    = data.onepassword_vault.homelab.uuid
   title    = "Numbat Rathole"
@@ -368,6 +398,14 @@ resource "onepassword_item" "log_ingest_pki" {
         voltaire_key_b64 = {
           type  = "CONCEALED"
           value = base64encode(tls_private_key.voltaire_log_client.private_key_pem)
+        }
+        pinelake_cert_b64 = {
+          type  = "CONCEALED"
+          value = base64encode(tls_locally_signed_cert.pinelake_log_client.cert_pem)
+        }
+        pinelake_key_b64 = {
+          type  = "CONCEALED"
+          value = base64encode(tls_private_key.pinelake_log_client.private_key_pem)
         }
       }
     }

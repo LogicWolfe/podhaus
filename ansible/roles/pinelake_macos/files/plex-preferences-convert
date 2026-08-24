@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Convert a validated macOS Plex plist into container Preferences.xml."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import plistlib
+import sys
+import tempfile
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+
+IDENTITY_KEYS = (
+    "MachineIdentifier",
+    "ProcessedMachineIdentifier",
+    "AnonymousMachineIdentifier",
+    "CertificateUUID",
+)
+
+
+def fail(message: str) -> "NoReturn":
+    print(f"Plex preference conversion refused: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def plex_string(value: object) -> str | None:
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    return None
+
+
+def load_source(path: Path) -> dict[str, object]:
+    try:
+        with path.open("rb") as stream:
+            value = plistlib.load(stream)
+    except (OSError, plistlib.InvalidFileException, ValueError) as exc:
+        fail(f"source plist is unreadable ({type(exc).__name__})")
+    if not isinstance(value, dict):
+        fail("source plist is not a dictionary")
+    return value
+
+
+def load_expected(path: Path) -> dict[str, str]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"identity manifest is unreadable ({type(exc).__name__})")
+    if not isinstance(value, dict):
+        fail("identity manifest is not an object")
+    expected: dict[str, str] = {}
+    for key in IDENTITY_KEYS:
+        item = value.get(key)
+        if not isinstance(item, str) or not item:
+            fail(f"identity manifest has no valid {key}")
+        expected[key] = item
+    return expected
+
+
+def validate_source(source: dict[str, object], expected: dict[str, str]) -> None:
+    for key, required in expected.items():
+        actual = source.get(key)
+        if actual != required:
+            fail(f"{key} is {actual!r}, expected {required!r}")
+    token = source.get("PlexOnlineToken")
+    if not isinstance(token, str) or not token:
+        fail("source plist has no PlexOnlineToken")
+
+
+def existing_attributes(target: Path) -> dict[str, str]:
+    if not target.exists():
+        return {}
+    try:
+        root = ET.parse(target).getroot()
+    except (ET.ParseError, OSError) as exc:
+        fail(f"existing Preferences.xml is unreadable ({type(exc).__name__})")
+    if root.tag != "Preferences":
+        fail("existing Preferences.xml has an unexpected root element")
+    return dict(root.attrib)
+
+
+def write_atomic(attributes: dict[str, str], target: Path) -> None:
+    root = ET.Element("Preferences")
+    for key, value in sorted(attributes.items()):
+        root.set(key, value)
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".Preferences.xml.",
+        dir=target.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            tree.write(stream, encoding="utf-8", xml_declaration=True)
+            stream.write(b"\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(0o600)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source-plist", type=Path, required=True)
+    parser.add_argument("--server-dir", type=Path, required=True)
+    parser.add_argument("--expected-identity", type=Path, required=True)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    database = (
+        args.server_dir
+        / "Plug-in Support"
+        / "Databases"
+        / "com.plexapp.plugins.library.db"
+    )
+    if not database.is_file():
+        fail("restored Plex library database is missing")
+
+    source = load_source(args.source_plist)
+    expected = load_expected(args.expected_identity)
+    validate_source(source, expected)
+
+    target = args.server_dir / "Preferences.xml"
+    attributes = existing_attributes(target)
+    skipped: list[str] = []
+    for key, value in source.items():
+        converted = plex_string(value)
+        if converted is None:
+            skipped.append(key)
+            continue
+        attributes[key] = converted
+
+    for key, required in expected.items():
+        if attributes.get(key) != required:
+            fail(f"rendered {key} does not match the identity manifest")
+
+    write_atomic(attributes, target)
+    print(
+        f"Converted {len(attributes)} Plex preferences"
+        f" ({len(skipped)} non-scalar source values skipped)"
+    )
+
+
+if __name__ == "__main__":
+    main()

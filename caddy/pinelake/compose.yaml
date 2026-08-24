@@ -1,0 +1,60 @@
+services:
+  pinelake-caddy-secrets-init:
+    build:
+      context: ../../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_PINELAKE_CADDY_SECRETS_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
+    restart: "no"
+    environment:
+      POMERIUM_ORIGIN_CA_CERT_B64: ${POMERIUM_ORIGIN_CA_CERT_B64}
+      POMERIUM_ORIGIN_SERVER_CERT_B64: ${POMERIUM_ORIGIN_SERVER_CERT_B64}
+      POMERIUM_ORIGIN_SERVER_KEY_B64: ${POMERIUM_ORIGIN_SERVER_KEY_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf '%s' "$${POMERIUM_ORIGIN_CA_CERT_B64}" | base64 -d > /secrets/pomerium-origin-ca.pem
+        printf '%s' "$${POMERIUM_ORIGIN_SERVER_CERT_B64}" | base64 -d > /secrets/pomerium-origin-server-cert.pem
+        printf '%s' "$${POMERIUM_ORIGIN_SERVER_KEY_B64}" | base64 -d > /secrets/pomerium-origin-server-key.pem
+    volumes:
+      - pinelake-caddy-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  pinelake-caddy:
+    container_name: pinelake-caddy
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      pinelake-caddy-secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - /Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/caddy/pinelake:/etc/caddy:ro
+      - pinelake-caddy-secrets:/run/podhaus-secrets:ro
+      - pinelake-caddy-data:/data
+      - pinelake-caddy-config:/config
+    environment:
+      TZ: ${TZ}
+    networks: [dockernet]
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      podhaus.depends-on-pinelake-caddy-secrets-init: ${BUILD_HASH_PINELAKE_CADDY_SECRETS_INIT:-unset}
+    healthcheck:
+      test: [CMD, caddy, validate, --config, /etc/caddy/Caddyfile]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  pinelake-caddy-secrets:
+  pinelake-caddy-data:
+  pinelake-caddy-config:
+
+networks:
+  dockernet:
+    external: true

@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Gate Plex deployment on two zero-session checks or proven-dead recovery."""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+
+TOOLS = Path("/usr/local/libexec/podhaus")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    preferences = parser.add_mutually_exclusive_group(required=True)
+    preferences.add_argument("--preferences-plist", type=Path)
+    preferences.add_argument("--preferences-xml", type=Path)
+    parser.add_argument("--tools-dir", type=Path, default=TOOLS)
+    return parser.parse_args()
+
+
+class DeployGate:
+    def __init__(self, tools_dir: Path, preference_argument: list[str]) -> None:
+        self.session_command = [
+            str(tools_dir / "plex-session-gate"), *preference_argument
+        ]
+        self.identity_command = [*self.session_command, "--validate-only"]
+        self.recovery_command = [str(tools_dir / "plex-recovery-gate")]
+
+    @staticmethod
+    def run(command: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(command, text=True, capture_output=True, check=False)
+
+    def verify(self) -> None:
+        identity = self.run(self.identity_command)
+        if identity.returncode != 0:
+            self.refuse(identity)
+        first = self.run(self.session_command)
+        if first.returncode == 0:
+            second = self.run(self.session_command)
+            if second.returncode == 0:
+                print(first.stdout.strip())
+                print(second.stdout.strip())
+                return
+            self.refuse(second)
+        dead = self.run(self.recovery_command)
+        if dead.returncode == 0:
+            print(dead.stdout.strip())
+            return
+        self.refuse(first, dead)
+
+    @staticmethod
+    def refuse(*results: subprocess.CompletedProcess[str]) -> None:
+        details = "\n".join(
+            output.strip()
+            for result in results
+            for output in (result.stdout, result.stderr)
+            if output.strip()
+        )
+        raise RuntimeError(details or "Plex state could not be established")
+
+
+def main() -> int:
+    args = parse_args()
+    preference_argument = (
+        ["--preferences-plist", str(args.preferences_plist)]
+        if args.preferences_plist is not None
+        else ["--preferences-xml", str(args.preferences_xml)]
+    )
+    try:
+        DeployGate(args.tools_dir, preference_argument).verify()
+    except RuntimeError as exc:
+        print(f"Plex deployment refused: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

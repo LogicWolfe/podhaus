@@ -80,26 +80,6 @@ loki.process "containers" {
   stage.decolorize {}
 }
 
-// rtorrent-cleanup.sh (event.download.erased hook + ad-hoc invocations)
-// writes to /flood-db/rtorrent-cleanup.log. Bind-mounted into alloy at
-// /var/log/flood/. Tailing the file is necessary because the script is
-// forked by rtorrent — its stdout never reaches the flood container's
-// docker log stream. Distinct `service` label keeps cleanup events
-// queryable separately from flood's web JSON logs.
-local.file_match "rtorrent_cleanup" {
-  path_targets = [{
-    __path__  = "/var/log/flood/rtorrent-cleanup.log",
-    container = "flood",
-    service   = "rtorrent-cleanup",
-    host      = "bilby",
-  }]
-}
-
-loki.source.file "rtorrent_cleanup" {
-  targets    = local.file_match.rtorrent_cleanup.targets
-  forward_to = [otelcol.receiver.loki.clickstack.receiver]
-}
-
 // ---- ClickStack OTLP sink (replaces loki.write to Victoria Logs) ----
 // Alloy is itself an OTel Collector distro: bridge the Loki-shaped
 // entries to OTLP, batch, and ship to ClickStack's bundled collector

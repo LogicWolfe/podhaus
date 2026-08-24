@@ -1,0 +1,121 @@
+# Pre-cutover image and bind-mount probes only. This directory intentionally
+# has no stack.toml: registering a new Komodo stack would deploy it. Every
+# service is network-isolated, non-restarting, read-only, and exits after a
+# bounded smoke test without starting the packaged application.
+services:
+  plex-smoke:
+    # Match Bilby's update model: use the current upstream Plex image and let
+    # Komodo pull it normally when the eventual stack is deployed.
+    image: plexinc/pms-docker:latest
+    network_mode: none
+    restart: "no"
+    read_only: true
+    user: "0:0"
+    entrypoint: [/bin/sh, -eu, -c]
+    command:
+      - >-
+        test "$$(cat /media/.podhaus-terramaster)" =
+        "EAED18A9-74C7-4163-ACB4-406B2226FDC6";
+        test -d /media/Movies;
+        test -d /media/TV;
+        test -d /media/Kids/TV;
+        test -d /media/Sports;
+        test -d /media/Torrents;
+        test -x '/usr/lib/plexmediaserver/Plex Media Server'
+    volumes:
+      - type: bind
+        source: /Volumes/TerraMaster/.podhaus-terramaster
+        target: /media/.podhaus-terramaster
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Movies
+        target: /media/Movies
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/TV
+        target: /media/TV
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Kids
+        target: /media/Kids
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Sports
+        target: /media/Sports
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Torrents
+        target: /media/Torrents
+        read_only: true
+        bind:
+          create_host_path: false
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-staging}
+
+  syncthing-smoke:
+    image: syncthing/syncthing:latest
+    network_mode: none
+    restart: "no"
+    read_only: true
+    user: "0:0"
+    entrypoint: [/bin/sh, -eu, -c]
+    command:
+      - >-
+        test "$$(cat /media/.podhaus-terramaster)" =
+        "EAED18A9-74C7-4163-ACB4-406B2226FDC6";
+        test -d /media/Torrents;
+        syncthing --version
+    volumes:
+      - type: bind
+        source: /Volumes/TerraMaster/.podhaus-terramaster
+        target: /media/.podhaus-terramaster
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Torrents
+        target: /media/Torrents
+        read_only: true
+        bind:
+          create_host_path: false
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-staging}
+
+  flood-smoke:
+    image: jesec/rtorrent-flood:latest
+    network_mode: none
+    restart: "no"
+    read_only: true
+    user: "0:0"
+    entrypoint: [/bin/sh, -eu, -c]
+    command:
+      - >-
+        test "$$(cat /data-root/.podhaus-terramaster)" =
+        "EAED18A9-74C7-4163-ACB4-406B2226FDC6";
+        test -d /data-root/Torrents;
+        test -x /usr/bin/rtorrent || command -v rtorrent >/dev/null
+    volumes:
+      - type: bind
+        source: /Volumes/TerraMaster/.podhaus-terramaster
+        target: /data-root/.podhaus-terramaster
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Torrents
+        target: /data-root/Torrents
+        read_only: true
+        bind:
+          create_host_path: false
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-staging}

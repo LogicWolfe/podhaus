@@ -1,0 +1,16 @@
+[[stack]]
+name = "pinelake-syncthing"
+description = "Fresh receive-only Syncthing identity and four media folders on Pinelake"
+tags = ["pinelake", "podhaus"]
+
+[stack.config]
+server = "pinelake"
+linked_repo = "podhaus-pinelake"
+run_directory = "pinelake/syncthing"
+environment = """
+TZ=[[TZ]]
+"""
+
+[stack.config.pre_deploy]
+path = "/"
+command = "/etc/komodo/repos/podhaus-pinelake/pinelake/periphery/predeploy-mount-gate Movies TV Kids Sports"

@@ -77,9 +77,17 @@ services:
       PLEX_TOKEN: ${PLEX_ONLINE_TOKEN}
       # Shared Gatus heartbeat push token for this container's ofelia jobs:
       # /scripts/rar-backlog.sh (torrents_rar-extraction) and
-      # /scripts/pinelake-stignore.sh (torrents_pinelake-stignore).
+      # /scripts/pinelake-stignore.py (torrents_pinelake-stignore).
       # Shared-secret bearer token; Gatus rejects pushes with any other value.
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
+      GATUS_BASE_URL: http://gatus:8080
+      GATUS_LABEL_SYNC_ENDPOINT_ID: torrents_plex-label-sync
+      GATUS_RAR_ENDPOINT_ID: torrents_rar-extraction
+      GATUS_STIGNORE_ENDPOINT_ID: torrents_pinelake-stignore
+      # This is the one source-side Flood instance allowed to mutate the four
+      # normal .stignore files. Pinelake uses the same image/config with this
+      # explicitly false.
+      PINELAKE_STIGNORE_SOURCE: "true"
     volumes:
       # rtorrent session (~16 MB: .torrent + .libtorrent_resume + .rtorrent
       # files). Local NVMe per the post-phase-6 sizing rule. The .rtorrent.rc
@@ -93,10 +101,9 @@ services:
       # Contents:
       #   - rtorrent-extract.sh   (event.download.finished hook; real-time
       #                            in-place RAR extraction)
-      #   - rtorrent-cleanup.sh   (event.download.erased hook; deletes
-      #                            rar pieces after seed-out)
       #   - rar-backlog.sh        (daily ofelia health-check + safety-net)
-      #   - pinelake-stignore.sh  (event hook + 5min ofelia tick)
+      #   - pinelake-stignore.py  (event hook + 5min ofelia tick)
+      #   - flood-publish.py      (hardlink publisher + gap audit)
       - ${PODHAUS_REPO}/flood/scripts:/scripts:ro,z
     labels:
       autoheal: "true"
@@ -112,7 +119,7 @@ services:
       # hook in rtorrent.rc can't cover. Script is idempotent (insert-only,
       # grep -Fxq dedupe), so collisions with the event hook are harmless.
       ofelia.job-exec.pinelake-stignore.schedule: "0 */5 * * * *"
-      ofelia.job-exec.pinelake-stignore.command: "/scripts/pinelake-stignore.sh"
+      ofelia.job-exec.pinelake-stignore.command: "python3 /scripts/pinelake-stignore.py"
       # Hardlink-publish completed media from /data/torrents into the Plex
       # library, file by file (every minute, at :00). Steady-state driver
       # for file-at-a-time delivery; the event.download.finished hook gives

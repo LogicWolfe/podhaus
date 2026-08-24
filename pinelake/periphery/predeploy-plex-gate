@@ -1,0 +1,61 @@
+#!/bin/sh
+# Refuse a Plex replacement unless it is idle or conclusively stopped.
+set -eu
+
+config=/Users/Shared/Podhaus/plex
+preferences='/config/Library/Application Support/Plex Media Server/Preferences.xml'
+
+docker run --rm --pull=never \
+    --mount type=bind,source="$config",target=/config,readonly \
+    alpine:latest sh -eu -c \
+    "test -f '$preferences' && test -f /config/.container-cutover-ready"
+
+docker run --rm --pull=never \
+    --mount type=bind,source=/usr/local/libexec/podhaus,target=/tools,readonly \
+    --mount type=bind,source="$config",target=/config,readonly \
+    python:alpine /tools/plex-session-gate \
+    --preferences-xml "$preferences" --validate-only
+
+if state=$(docker container inspect --format '{{.State.Running}}' pinelake-plex 2>/dev/null); then
+    :
+elif docker container ls --all --format '{{.Names}}' | grep -Fxq pinelake-plex; then
+    echo "Plex deploy gate could not inspect the existing container" >&2
+    exit 1
+else
+    state=absent
+fi
+
+session_gate() {
+    docker run --rm --pull=never --network host \
+        --mount type=bind,source=/usr/local/libexec/podhaus,target=/tools,readonly \
+        --mount type=bind,source="$config",target=/config,readonly \
+        python:alpine /tools/plex-session-gate \
+        --preferences-xml "$preferences"
+}
+
+if [ "$state" = true ]; then
+    session_gate
+    session_gate
+    exit 0
+fi
+
+if [ "$state" != false ] && [ "$state" != absent ]; then
+    echo "Plex deploy gate received an invalid container state: $state" >&2
+    exit 1
+fi
+
+docker run --rm --pull=never --network host python:alpine python3 -c '
+import socket
+import sys
+
+probe = socket.socket()
+probe.settimeout(5)
+listening = probe.connect_ex(("127.0.0.1", 32400)) == 0
+probe.close()
+sys.exit(1 if listening else 0)
+' || {
+    echo "Plex deploy gate found port 32400 listening while the container is stopped" >&2
+    exit 1
+}
+
+echo "Plex is proven stopped: no running container and no port 32400 listener"

@@ -55,3 +55,13 @@ token = "${RATHOLE_FRACTAL_HTTP_TOKEN}"
 type = "tcp"
 bind_addr = "127.0.0.1:8445"
 token = "${RATHOLE_VOLTAIRE_HTTP_TOKEN}"
+
+[server.services.pinelake_ssh]
+type = "tcp"
+bind_addr = "127.0.0.1:2205"
+token = "${RATHOLE_PINELAKE_SSH_TOKEN}"
+
+[server.services.pinelake_http]
+type = "tcp"
+bind_addr = "127.0.0.1:8446"
+token = "${RATHOLE_PINELAKE_HTTP_TOKEN}"

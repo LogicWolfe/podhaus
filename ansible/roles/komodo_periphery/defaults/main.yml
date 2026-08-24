@@ -5,6 +5,15 @@
 podhaus_keys_dir: /opt/komodo/keys
 
 podhaus_periphery_dir: /opt/komodo-periphery
+podhaus_periphery_owner: root
+podhaus_periphery_group: root
+
+# Linux hosts use the engine's default socket as root. A user-owned macOS
+# engine instead sets HOME so the ordinary unqualified Docker CLI reads that
+# user's globally selected context.
+podhaus_docker_home: null
+podhaus_docker_cli: docker
+podhaus_docker_become: true
 
 # Core's API, reached from the control node. Loopback because the control
 # node today is bilby; a remote control node would point this at

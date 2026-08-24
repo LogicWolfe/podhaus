@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Fail closed unless the expected TerraMaster is safe for container use."""
+
+from __future__ import annotations
+
+import argparse
+import plistlib
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def fail(message: str) -> "NoReturn":
+    print(f"TerraMaster guard failed: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def beneath(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def disk_info(mount_point: Path) -> dict[str, object]:
+    diskutil = shutil.which("diskutil")
+    if diskutil is None:
+        fail("diskutil is unavailable")
+    result = subprocess.run(
+        [diskutil, "info", "-plist", str(mount_point)],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        fail("diskutil could not identify the mounted volume")
+    try:
+        info = plistlib.loads(result.stdout)
+    except (plistlib.InvalidFileException, ValueError):
+        fail("diskutil returned an invalid property list")
+    if not isinstance(info, dict):
+        fail("diskutil returned an unexpected property list")
+    return info
+
+
+def verify_host(
+    mount_point: Path,
+    expected_uuid: str,
+    sentinel_relative: Path,
+    required: list[Path],
+    initialize_sentinel: bool,
+) -> bool:
+    info = disk_info(mount_point)
+    actual_mount = info.get("MountPoint")
+    if actual_mount != str(mount_point):
+        fail(f"mount point is {actual_mount!r}, expected {str(mount_point)!r}")
+
+    actual_uuid = str(info.get("VolumeUUID", "")).upper()
+    if actual_uuid != expected_uuid.upper():
+        fail(f"volume UUID is {actual_uuid!r}, expected {expected_uuid!r}")
+
+    filesystem = str(info.get("FilesystemType", "")).lower()
+    if filesystem != "apfs":
+        fail(f"filesystem is {filesystem!r}, expected 'apfs'")
+
+    writable = info.get("Writable")
+    read_only = info.get("ReadOnlyVolume")
+    if writable is not True or read_only is True:
+        fail("volume is not writable")
+
+    resolved_mount = mount_point.resolve(strict=True)
+    for relative in required:
+        candidate = (mount_point / relative).resolve(strict=False)
+        if not beneath(candidate, resolved_mount):
+            fail(f"required path {relative} escapes the mounted volume")
+        if not candidate.is_dir():
+            fail(f"required directory {relative} is missing")
+
+    sentinel = (mount_point / sentinel_relative).resolve(strict=False)
+    if not beneath(sentinel, resolved_mount):
+        fail("sentinel path escapes the mounted volume")
+    initialized = False
+    if not sentinel.exists() and initialize_sentinel:
+        try:
+            with sentinel.open("x", encoding="utf-8") as stream:
+                stream.write(f"{expected_uuid.upper()}\n")
+                stream.flush()
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            fail(f"sentinel could not be initialized ({type(exc).__name__})")
+        else:
+            initialized = True
+    if not sentinel.is_file():
+        fail("sentinel is missing")
+    if sentinel.read_text(encoding="utf-8").strip().upper() != expected_uuid.upper():
+        fail("sentinel does not belong to the expected volume")
+    return initialized
+
+
+def verify_container(
+    mount_point: Path,
+    sentinel_relative: Path,
+    image: str,
+) -> None:
+    docker = shutil.which("docker")
+    if docker is None:
+        fail("docker is unavailable for the container-side check")
+    sentinel = mount_point / sentinel_relative
+    try:
+        command = [
+            docker,
+            "run",
+            "--rm",
+            "--pull=never",
+            "--network=none",
+            "--mount",
+            f"type=bind,src={sentinel},dst=/sentinel,readonly",
+            image,
+            "test",
+            "-r",
+            "/sentinel",
+        ]
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        fail("container-side TerraMaster check timed out")
+    if result.returncode != 0:
+        fail("container cannot read the TerraMaster sentinel")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mount-point", type=Path, required=True)
+    parser.add_argument("--volume-uuid", required=True)
+    parser.add_argument("--sentinel", type=Path, required=True)
+    parser.add_argument("--require", action="append", default=[], type=Path)
+    parser.add_argument("--container-check", action="store_true")
+    parser.add_argument("--container-image", default="alpine:latest")
+    parser.add_argument("--initialize-sentinel", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    if args.sentinel.is_absolute() or ".." in args.sentinel.parts:
+        fail("sentinel must be a relative path within the volume")
+    for required in args.require:
+        if required.is_absolute() or ".." in required.parts:
+            fail(f"required path {required} must be relative")
+
+    initialized = verify_host(
+        args.mount_point,
+        args.volume_uuid,
+        args.sentinel,
+        args.require,
+        args.initialize_sentinel,
+    )
+    if args.container_check:
+        verify_container(
+            args.mount_point,
+            args.sentinel,
+            args.container_image,
+        )
+    suffix = "; sentinel initialized" if initialized else ""
+    print(f"TerraMaster guard passed{suffix}")
+
+
+if __name__ == "__main__":
+    main()

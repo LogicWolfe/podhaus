@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""Atomically evacuate Pinelake's old Syncthing media into Flood roots."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+import tempfile
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+
+class RelocationError(RuntimeError):
+    pass
+
+
+class PlexSessionGate:
+    def __init__(self, executable: Path, preferences: Path) -> None:
+        self.command = [
+            str(executable), "--preferences-plist", str(preferences)
+        ]
+
+    def verify(self) -> None:
+        for attempt in (1, 2):
+            result = subprocess.run(
+                self.command, text=True, capture_output=True, check=False
+            )
+            if result.returncode != 0:
+                details = (result.stdout + result.stderr).strip()
+                raise RelocationError(
+                    f"Plex session check {attempt} refused: {details}"
+                )
+
+
+@dataclass(frozen=True)
+class Mapping:
+    source: str
+    target: str
+
+
+@dataclass(frozen=True)
+class Operation:
+    source: str
+    target: str
+    size: int
+    device: int
+    inode: int
+    action: str
+    digest: str | None = None
+
+
+MAPPINGS = (
+    Mapping("Movies", "Torrents/Movies"),
+    Mapping("TV", "Torrents/TV"),
+    Mapping("Kids/TV", "Torrents/TV"),
+    Mapping("Sports", "Torrents/Sports"),
+)
+
+
+def digest(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+            value.update(chunk)
+    return value.hexdigest()
+
+
+def write_json_atomic(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+class RelocationPlan:
+    def __init__(self, root: Path, operations: list[Operation]) -> None:
+        self.root = root
+        self.operations = operations
+
+    @classmethod
+    def build(cls, root: Path) -> "RelocationPlan":
+        root = root.resolve(strict=True)
+        operations: list[Operation] = []
+        targets: set[Path] = set()
+        for mapping in MAPPINGS:
+            operations.extend(cls._mapping_operations(root, mapping, targets))
+        return cls(root, operations)
+
+    @staticmethod
+    def _mapping_operations(
+        root: Path, mapping: Mapping, targets: set[Path]
+    ) -> list[Operation]:
+        source_root = RelocationPlan._directory(root, mapping.source)
+        target_root = RelocationPlan._directory(root, mapping.target)
+        if source_root.stat().st_dev != target_root.stat().st_dev:
+            raise RelocationError(f"mapping crosses filesystems: {mapping}")
+        operations = []
+        for source in RelocationPlan._files(source_root):
+            target = target_root / source.relative_to(source_root)
+            if target in targets:
+                raise RelocationError(f"multiple sources map to {target}")
+            targets.add(target)
+            operations.append(RelocationPlan._operation(source, target))
+        return operations
+
+    @staticmethod
+    def _directory(root: Path, relative: str) -> Path:
+        path = root / relative
+        resolved = path.resolve(strict=True)
+        if root not in resolved.parents or not resolved.is_dir():
+            raise RelocationError(f"invalid directory beneath volume: {relative}")
+        return resolved
+
+    @staticmethod
+    def _files(root: Path) -> list[Path]:
+        files = []
+        for directory, dirs, names in os.walk(root, followlinks=False):
+            parent = Path(directory)
+            for name in [*dirs, *names]:
+                if (parent / name).is_symlink():
+                    raise RelocationError(f"symlink encountered: {parent / name}")
+            files.extend(parent / name for name in names)
+        return sorted(files)
+
+    @staticmethod
+    def _operation(source: Path, target: Path) -> Operation:
+        metadata = source.stat()
+        if not source.is_file():
+            raise RelocationError(f"source is not a regular file: {source}")
+        if not target.exists():
+            action, value = "move", None
+        else:
+            if not target.is_file() or target.stat().st_size != metadata.st_size:
+                raise RelocationError(f"destination collision differs: {target}")
+            value = digest(source)
+            if digest(target) != value:
+                raise RelocationError(f"destination collision differs: {target}")
+            action = "deduplicate"
+        return Operation(
+            str(source), str(target), metadata.st_size,
+            metadata.st_dev, metadata.st_ino, action, value,
+        )
+
+    def save(self, path: Path) -> None:
+        if path.exists():
+            raise RelocationError(f"manifest already exists: {path}")
+        write_json_atomic(
+            path,
+            {"version": 1, "root": str(self.root),
+             "operations": [asdict(item) for item in self.operations]},
+        )
+
+    @classmethod
+    def load(cls, path: Path) -> "RelocationPlan":
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            if value["version"] != 1:
+                raise RelocationError("unsupported manifest version")
+            operations = [Operation(**item) for item in value["operations"]]
+            return cls(Path(value["root"]).resolve(strict=True), operations)
+        except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise RelocationError(f"invalid manifest: {exc}") from exc
+
+    def state(self, operation: Operation) -> str:
+        source, target = Path(operation.source), Path(operation.target)
+        if operation.action == "move":
+            return self._move_state(operation, source, target)
+        if operation.action == "deduplicate":
+            return self._deduplicate_state(operation, source, target)
+        raise RelocationError(f"unknown action: {operation.action}")
+
+    @staticmethod
+    def _matches_inode(path: Path, operation: Operation) -> bool:
+        metadata = path.stat()
+        return (
+            metadata.st_size == operation.size
+            and metadata.st_dev == operation.device
+            and metadata.st_ino == operation.inode
+        )
+
+    def _move_state(self, operation: Operation, source: Path, target: Path) -> str:
+        if source.is_file() and not target.exists():
+            return "pending" if self._matches_inode(source, operation) else "invalid"
+        if not source.exists() and target.is_file():
+            return "applied" if self._matches_inode(target, operation) else "invalid"
+        if source.is_file() and target.is_file():
+            return (
+                "linked"
+                if self._matches_inode(source, operation)
+                and self._matches_inode(target, operation)
+                and source.samefile(target)
+                else "invalid"
+            )
+        return "invalid"
+
+    @staticmethod
+    def _deduplicate_state(
+        operation: Operation, source: Path, target: Path
+    ) -> str:
+        if not target.is_file() or digest(target) != operation.digest:
+            return "invalid"
+        if source.is_file() and digest(source) == operation.digest:
+            return "pending"
+        if not source.exists():
+            return "applied"
+        return "invalid"
+
+    def states(self) -> list[str]:
+        states = [self.state(operation) for operation in self.operations]
+        if "invalid" in states:
+            index = states.index("invalid")
+            raise RelocationError(f"operation state is invalid: {self.operations[index]}")
+        return states
+
+    def apply(self, plex_gate: PlexSessionGate) -> list[str]:
+        states = self.states()
+        plex_gate.verify()
+        for operation, state in zip(self.operations, states, strict=True):
+            if state == "applied":
+                continue
+            source, target = Path(operation.source), Path(operation.target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if operation.action == "move":
+                if state == "pending":
+                    os.link(source, target)
+                source.unlink()
+            else:
+                source.unlink()
+        final_states = self.states()
+        if any(state != "applied" for state in final_states):
+            raise RelocationError("relocation did not reach the applied state")
+        return final_states
+
+    def rollback(self, plex_gate: PlexSessionGate) -> list[str]:
+        states = self.states()
+        plex_gate.verify()
+        for operation, state in reversed(list(zip(self.operations, states, strict=True))):
+            if state == "pending":
+                continue
+            source, target = Path(operation.source), Path(operation.target)
+            source.parent.mkdir(parents=True, exist_ok=True)
+            if operation.action == "move":
+                if state == "applied":
+                    os.link(target, source)
+                target.unlink()
+            else:
+                os.link(target, source)
+        final_states = self.states()
+        if any(state != "pending" for state in final_states):
+            raise RelocationError("rollback did not reach the pending state")
+        return final_states
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("action", choices=("plan", "apply", "verify", "rollback"))
+    parser.add_argument("--root", type=Path)
+    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--plex-preferences-plist", type=Path)
+    parser.add_argument(
+        "--session-gate",
+        type=Path,
+        default=Path(__file__).with_name("plex-session-gate"),
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        if args.action == "plan":
+            if args.root is None:
+                raise RelocationError("plan requires --root")
+            plan = RelocationPlan.build(args.root)
+            plan.save(args.manifest)
+        else:
+            plan = RelocationPlan.load(args.manifest)
+            if args.action == "apply":
+                if args.plex_preferences_plist is None:
+                    raise RelocationError(
+                        "apply requires --plex-preferences-plist"
+                    )
+                states = plan.apply(PlexSessionGate(
+                    args.session_gate, args.plex_preferences_plist
+                ))
+            elif args.action == "rollback":
+                if args.plex_preferences_plist is None:
+                    raise RelocationError(
+                        "rollback requires --plex-preferences-plist"
+                    )
+                states = plan.rollback(PlexSessionGate(
+                    args.session_gate, args.plex_preferences_plist
+                ))
+            else:
+                states = plan.states()
+        if args.action == "plan":
+            states = plan.states()
+        print(
+            f"operations={len(states)} pending={states.count('pending')} "
+            f"applied={states.count('applied')}"
+        )
+    except RelocationError as exc:
+        print(f"Media relocation refused: {exc}", file=os.sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

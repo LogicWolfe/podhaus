@@ -1,0 +1,125 @@
+tracing {
+  sampling_fraction = 0.1
+  write_to          = [otelcol.processor.batch.clickstack.input]
+}
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "30s"
+}
+
+discovery.relabel "container_logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.container_logs.output
+  forward_to    = [loki.process.containers.receiver]
+  relabel_rules = discovery.relabel.container_logs.rules
+  labels        = {"host" = "pinelake"}
+}
+
+loki.process "containers" {
+  forward_to = [otelcol.receiver.loki.clickstack.receiver]
+  stage.decolorize {}
+}
+
+otelcol.receiver.loki "clickstack" {
+  output {
+    logs = [otelcol.processor.transform.enrich.input]
+  }
+}
+
+otelcol.processor.transform "enrich" {
+  error_mode = "ignore"
+  log_statements {
+    context = "log"
+    statements = [
+      `set(resource.attributes["service.name"], attributes["container"]) where attributes["container"] != nil`,
+      `set(severity_text, "TRACE") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
+      `set(severity_number, 1) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
+      `set(severity_text, "DEBUG") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
+      `set(severity_number, 5) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
+      `set(severity_text, "INFO") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
+      `set(severity_number, 9) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
+      `set(severity_text, "WARN") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
+      `set(severity_number, 13) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
+      `set(severity_text, "ERROR") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
+      `set(severity_number, 17) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
+      `set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+      `set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
+    ]
+  }
+  output {
+    logs = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy_self" {
+  targets         = prometheus.exporter.self.alloy.targets
+  scrape_interval = "60s"
+  forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
+}
+
+otelcol.receiver.prometheus "alloy_self" {
+  output {
+    metrics = [otelcol.processor.transform.svc_alloy.input]
+  }
+}
+
+otelcol.processor.transform "svc_alloy" {
+  error_mode = "ignore"
+  metric_statements {
+    context = "metric"
+    statements = [
+      `set(resource.attributes["service.name"], "alloy")`,
+      `set(resource.attributes["host"], "pinelake")`,
+    ]
+  }
+  output {
+    metrics = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
+otelcol.processor.batch "clickstack" {
+  output {
+    logs    = [otelcol.exporter.otlphttp.clickstack.input]
+    metrics = [otelcol.exporter.otlphttp.clickstack.input]
+    traces  = [otelcol.exporter.otlphttp.clickstack.input]
+  }
+}
+
+otelcol.exporter.otlphttp "clickstack" {
+  client {
+    endpoint = "https://logs-ingest.pod.haus"
+    headers  = {"authorization" = sys.env("CLICKSTACK_INGESTION_KEY")}
+    tls {
+      cert_file = "/run/podhaus-secrets/pinelake-cert.pem"
+      key_file  = "/run/podhaus-secrets/pinelake-key.pem"
+    }
+    disable_keep_alives = true
+  }
+  retry_on_failure {
+    max_elapsed_time = "30m"
+  }
+  sending_queue {
+    queue_size = 100000
+  }
+}

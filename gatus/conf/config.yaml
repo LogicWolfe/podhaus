@@ -351,6 +351,69 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
 
+  - name: Pinelake Periphery (via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Komodo
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"GetServerState","params":{"server":"pinelake"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == Ok"
+
+  - name: Pinelake Plex (via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Plex
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"pinelake","container":"pinelake-plex"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
+  - name: Pinelake Syncthing (via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Syncthing
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"pinelake","container":"pinelake-syncthing"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
+  - name: Pinelake Flood (via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Torrents
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"pinelake","container":"pinelake-flood"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
   # Komodo alert pipeline → Gatus. Komodo emits an alert for a range of
   # conditions: a stack deploy/build/procedure/action failure, a server
   # going unreachable, a host CPU/mem threshold breach, or an unexpected
@@ -456,6 +519,25 @@ endpoints:
         success-threshold: 2
         send-on-resolved: true
 
+  - name: Pinelake Telemetry Pipeline (heartbeat)
+    url: http://clickstack-clickhouse:8123/
+    method: POST
+    group: Observability
+    interval: 5m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='pinelake'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: custom
+        description: "No Pinelake Alloy metrics reached ClickHouse in 15+ minutes. Check pinelake-logging, outbound HTTPS, the mTLS client certificate, and the ClickStack ingestion key."
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
   - name: Pipeline Log Ingest (bilby / total)
     url: http://clickstack-clickhouse:8123/
     method: POST
@@ -511,6 +593,22 @@ endpoints:
     conditions:
       - "[STATUS] == 200"
       - "[BODY].State.Status == running"
+
+  - name: Backrest (pinelake, via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Backup
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"pinelake","container":"backrest"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
 
   # --- Fenwick health (the alert pipeline's own backstop) ---
   # Since every other check now alerts THROUGH Fenwick, these watch the
@@ -684,6 +782,18 @@ external-endpoints:
         success-threshold: 1
         send-on-resolved: true
 
+  - name: Pinelake RAR Extraction
+    group: Torrents
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
+    heartbeat:
+      interval: 25h
+    alerts:
+      - type: custom
+        description: "Pinelake's RAR extraction and publish-backlog job stopped checking in or reported an error. Inspect pinelake-flood and pinelake-ofelia through Komodo; corrupt or incomplete archives are disposable, but completed media must publish before torrent working data is removed."
+        failure-threshold: 1
+        success-threshold: 1
+        send-on-resolved: true
+
   # Kangaroo's Backrest. Separate from bilby's because it's a separate
   # restic repo on a separate host. Hooks fire success/failure POSTs to
   # this endpoint via http://10.0.0.119:8080 (gatus published on bilby's
@@ -697,6 +807,18 @@ external-endpoints:
     alerts:
       - type: custom
         description: "Kangaroo's nightly Backrest pipeline didn't check in. Either no snapshots ran on kangaroo (check `docker logs backrest` filtered by host=kangaroo in HyperDX (watch.pod.haus)), or the success-hook on the backrest-state plan failed. Manually trigger a snapshot of any kangaroo plan from gatus.pod.haus to test."
+        failure-threshold: 3
+        success-threshold: 2
+        send-on-resolved: true
+
+  - name: Backrest Pinelake Nightly
+    group: Backup
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
+    heartbeat:
+      interval: 25h
+    alerts:
+      - type: custom
+        description: "Pinelake's nightly Backrest pipeline stopped checking in. Inspect pinelake-backup through Komodo and verify the TerraMaster restic repository and OneDrive mirror."
         failure-threshold: 3
         success-threshold: 2
         send-on-resolved: true
@@ -750,7 +872,7 @@ external-endpoints:
       interval: 30m
     alerts:
       - type: custom
-        description: "The pinelake .stignore reconciler hasn't ticked in 30 min — newly-completed pinelake-tagged torrents won't be allowlisted for replication until it resumes. Check ofelia + `docker exec flood /scripts/pinelake-stignore.sh`."
+        description: "The pinelake .stignore reconciler hasn't ticked in 30 min — newly-completed pinelake-tagged torrents won't be allowlisted for replication until it resumes. Check ofelia + `docker exec flood python3 /scripts/pinelake-stignore.py`."
         failure-threshold: 2
         success-threshold: 1
         send-on-resolved: true
@@ -766,6 +888,18 @@ external-endpoints:
     alerts:
       - type: custom
         description: "The Plex label sync hasn't ticked in 30 min — newly-tagged torrents won't have their kid-access labels applied in Plex until it resumes. Check ofelia + `docker exec flood python3 /scripts/plex-label-sync.py` (then `/flood-db/plex-label-sync.log`). A FATAL there usually means Plex is unreachable at 172.18.0.1:32400 or the token is stale."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Pinelake Plex Label Sync
+    group: Torrents
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
+    heartbeat:
+      interval: 30m
+    alerts:
+      - type: custom
+        description: "Pinelake's Flood-to-Plex label sync stopped checking in. Inspect pinelake-flood and pinelake-ofelia through Komodo and confirm the preserved Pinelake Plex token still reaches localhost:32400."
         failure-threshold: 2
         success-threshold: 1
         send-on-resolved: true

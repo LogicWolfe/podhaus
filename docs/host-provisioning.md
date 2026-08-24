@@ -16,6 +16,12 @@ crisp: anything needing `sudo` is Ansible's, anything that doesn't is
 chezmoi's. The practical consequence is that **chezmoi never prompts for
 a password**.
 
+Pinelake has one platform-forced exception: OrbStack stores its engine state in
+`baxter`'s home directory and runs as that user. The `pinelake_macos` role owns
+its CLI configuration plus the root-owned LaunchDaemon that starts it as
+`baxter`. Chezmoi still does not participate. Ownership follows the
+infrastructure function where macOS offers no system-wide container runtime.
+
 A host can take both. fractal does — it is a podhaus host *and* Nathan's
 development machine, so Ansible gives it Docker and Periphery while
 chezmoi gives it fish and dotfiles. Neither layer knows about the other,
@@ -64,7 +70,7 @@ The resulting ledger:
 
 ## Which hosts Ansible manages
 
-**fractal**, **bilby**, **numbat**, and **voltaire** — the `provisioned`
+**fractal**, **bilby**, **numbat**, **voltaire**, and **pinelake** — the `provisioned`
 group, which is what `site.yml` targets. How each is reached is a
 per-host fact in `host_vars/`: bilby is the control node and runs
 against itself (`ansible_connection: local`); fractal is direct on the
@@ -72,7 +78,11 @@ home LAN (`10.0.0.70`, the Windows host's `:22` forward); numbat and
 voltaire have no inbound path of their own and route through Pomerium,
 carrying `nathan@numbat` / `nathan@voltaire` as `ansible_user` — that is
 a Pomerium *route selector*, not an OS account, which is why
-OS-account work uses the separate `podhaus_operator` var.
+OS-account work uses the separate `podhaus_operator` var. Pinelake is a
+dedicated macOS appliance temporarily reached through Bilby's userspace
+Tailscale recovery client; `home.pinelake.haus` remains its pinned SSH host-key
+alias. Its `pinelake_macos` role is separate from every Linux role. Replace the
+temporary transport with the normal outbound Numbat contract after admission.
 
 **kangaroo is not an Ansible target and never will be** — QTS ships no
 Python interpreter, so `kangaroo_bootstrap` is its permanent supported
@@ -95,6 +105,7 @@ ansible/
     bilby.yml              single-host entry point (+ Komodo host dirs)
     numbat.yml             single-host entry point (steady state)
     numbat-bootstrap.yml   fresh-VM bring-up, sequencing preserved as play order
+    pinelake.yml           macOS appliance and OrbStack entry point
   roles/
     base/                  timezone, baseline packages, dirs
     wsl/                   /etc/wsl.conf, hostname
@@ -107,6 +118,7 @@ ansible/
     firewalld/             declarative zone + service XML (bilby)
     komodo_core_host/      Komodo Core's host directories (bilby)
     numbat_edge/           numbat's nftables ruleset, relay-IP dispatcher, loopback sshd
+    pinelake_macos/        macOS power, OrbStack and Plex safety gates
 ```
 
 ### Inventory groups
@@ -114,8 +126,8 @@ ansible/
 Hosts are grouped twice: by **whether Ansible manages them**, and by
 **role**.
 
-- `provisioned` — the Ansible-owned hosts: fractal, bilby, numbat, and
-  voltaire. `site.yml` targets this group and nothing else, gating each
+- `provisioned` — every Ansible-owned host. `site.yml` targets this group and
+  nothing else, gating each
   role (including single-host ones like `nfs_binds`, `firewalld`, and
   `numbat_edge`) on the matching role group rather than on hostname, so a
   new host inherits the right roles from group membership alone.
@@ -125,6 +137,8 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
   `kangaroo_bootstrap` is permanent, not interim. It is listed here
   rather than omitted so the inventory shows the whole fleet, with
   `ansible_host: unreachable.invalid` so a stray `--limit` can't dial it.
+- `linux_hosts` and `macos_appliance_hosts` separate operating-system role
+  families. Linux-only base, account, and sshd roles never run on Darwin.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes`, `edge_hosts`,
   `komodo_core_hosts`, `nfs_binds_hosts`, `firewalld_hosts` — role
   groups. `site.yml` gates each role on membership.
@@ -224,10 +238,44 @@ container being healthy proves only that it started, not that Core
 trusts its key or can reach it. The playbook fails if the handshake
 doesn't complete.
 
+The role's `podhaus_docker_home`, `podhaus_docker_cli`, and
+`podhaus_docker_become` inputs preserve the same lifecycle on Pinelake: Compose
+runs as `baxter` against the globally selected OrbStack engine, while Linux
+hosts use their default root-owned engine. Runtime-specific Docker contexts do
+not appear in deployed commands.
+
 Periphery is deliberately *not* Komodo-managed on any outbound host —
 Core reaches the host only through the connection Periphery makes, so a
 Komodo-driven redeploy of it would sever the path it runs on. Ansible
 owns it instead of a bootstrap script.
+
+**`pinelake_macos`** configures no-sleep and restart-after-power-loss policy
+while allowing the display to sleep after ten minutes. It installs current
+OrbStack through Homebrew without a version pin, configures the supported
+headless settings, creates `dockernet`, and installs a system LaunchDaemon that
+runs `orb start` as `baxter`. OrbStack selects the host's global Docker context;
+deployed Compose calls do not name it. The role never starts a media service.
+
+The role disables OrbStack's admin setup prompts and unused direct container-IP
+bridge, leaves LAN publication enabled, disables Kubernetes and GUI login
+startup, and gives the Docker VM 8 CPUs and 8 GiB. macOS requires one
+interactive removable-volume grant for OrbStack's signed application identity;
+there is no supported Ansible or command-line grant without device management.
+After that one provisioning consent, cold starts reuse the persisted grant.
+The mount probe times out and fails the play if the grant is absent rather than
+leaving a false-green runtime. Runtime updates are ordinary current-release
+Homebrew maintenance, gated by the same two Plex session checks as every
+operation that can restart its container.
+
+Before any container can see the TerraMaster, `pinelake-mount-guard` verifies
+its APFS volume identifier, exact mount point, writable state, sentinel,
+required directories, and a read-only container bind of the sentinel. Stack
+pre-deploy gates bind and verify each required directory individually; services
+never expose the whole media volume to the OrbStack file-sharing layer. The
+Plex helpers independently fail closed on an unavailable session endpoint,
+validate all four server identity fields during preference conversion, and
+allow automatic recovery only when both the native process and port 32400 are
+absent.
 
 **`sshd_pomerium_ca`** writes a drop-in under `sshd_config.d/` rather
 than editing `sshd_config`, validates the file with `sshd -t -f %s`,

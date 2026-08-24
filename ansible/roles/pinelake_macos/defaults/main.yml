@@ -1,0 +1,33 @@
+---
+# Pinelake is a dedicated macOS appliance. OrbStack is the sole target runtime;
+# Colima exists only as the pre-cutover rollback implementation.
+podhaus_operator: baxter
+podhaus_timezone: America/Edmonton
+podhaus_orbstack_cpu: 8
+podhaus_orbstack_memory_mib: 8192
+podhaus_orbstack_path: >-
+  /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+podhaus_display_sleep_minutes: 10
+
+podhaus_terramaster_mount: /Volumes/TerraMaster
+podhaus_terramaster_uuid: EAED18A9-74C7-4163-ACB4-406B2226FDC6
+podhaus_terramaster_sentinel: .podhaus-terramaster
+podhaus_terramaster_required_paths:
+  - Movies
+  - TV
+  - Kids
+  - Kids/TV
+  - Sports
+  - Torrents
+podhaus_pinelake_backup_repo: /Volumes/TerraMaster/.podhaus-backups/pinelake-restic
+
+podhaus_pinelake_libexec_dir: /usr/local/libexec/podhaus
+podhaus_pinelake_state_dirs:
+  - /Users/Shared/Podhaus/plex
+  - /Users/Shared/Podhaus/flood
+  - /Users/Shared/Podhaus/syncthing
+  - /Users/Shared/Podhaus/transcode
+podhaus_pinelake_launch_daemon: /Library/LaunchDaemons/haus.podhaus.orbstack.plist
+podhaus_plex_session_preferences_kind: plist
+podhaus_plex_session_preferences: >-
+  /Users/baxter/Library/Preferences/com.plexapp.plexmediaserver.plist

@@ -57,9 +57,9 @@ Audit date: 2026-08-17.
 | Machine | Current identity and token state | Required change |
 |---|---|---|
 | **voltaire** | Live verified. TPM NV `0x01800052` holds the `my/Dev` token and `0x01800051` holds the `switchtechnologies/Dev` token. The TPM machine SSH key is loaded. Nathan intentionally keeps each token's recovery note in its Dev vault. | Linux implementation complete. |
-| **bilby** | Live verified. The YubiKey PIV machine SSH key is active. `bilby-dev` uses the accepted mode `0600` file backend and sees exactly Dev and Homelab. `switch` is unsupported. The old shared token file is absent. | Linux implementation complete. Full-disk encryption remains separate security debt. |
-| **fractal** | Live verified. Its software machine SSH key is active and its home is LUKS-backed. Its mode `0600` file backends see exactly Dev and Homelab for `dev`, and Dev for `switch`. The old shared token file is absent. | Linux implementation complete. |
-| **MacBook Air** | Darwin currently has `machine-key-mode=none`, uses the 1Password desktop SSH agent for Git and SSH, and has no fleet or Ansible entry. It is intentionally unreachable inbound. | Audit and implement locally after Linux closeout. Add only the limited client surface described below. |
+| **bilby** | Live verified. The YubiKey PIV machine SSH key is active. `bilby-dev` uses the accepted mode `0600` file backend, reads Dev, and reads/writes Homelab. `switch` is unsupported. The old shared token file and service account are absent. | Linux implementation complete. Full-disk encryption remains separate security debt. |
+| **fractal** | Live verified. Its software machine SSH key is active and its home is LUKS-backed. Its mode `0600` file backends read Dev and read/write Homelab for `dev`, and read Dev for `switch`. The old shared token file and service account are absent. | Linux implementation complete. |
+| **MacBook Air** | Live verified. FileVault is on. `nb-macbook-air-dev` reads only `my/Dev`; `nb-macbook-air-switch` reads only `switchtechnologies/Dev`. Their tokens are mode `0600` files inside the FileVault-protected home. Darwin still has `machine-key-mode=none`, uses the 1Password desktop SSH agent for Git and SSH, and has no fleet or Ansible entry. | Development identities complete. Add only the remaining limited client-management surface described below. |
 
 The original warning on voltaire was a lookup bug, not a missing TPM token.
 The deleted `op-homelab` command checked only
@@ -122,8 +122,8 @@ The directly deletable dotfiles paths total 708 lines today:
 | `podhaus-tf.fish` | 113 |
 | `op-homelab-ready` | 49 |
 
-That is the initial budget for the common runner, tests, the final Swift
-adapter, and the small Mac SSH role. Further reductions should come from the
+That is the initial budget for the common runner, tests, the Mac file backend,
+and the small Mac SSH role. Further reductions should come from the
 chezmoi role/template cleanup and removing token boilerplate from Podhaus.
 
 ## Target authorization model
@@ -134,10 +134,10 @@ for its machine. Losing one machine revokes only that machine.
 
 | Machine | `my` account grants | `switchtechnologies` grants | Podhaus operator | Runtime host |
 |---|---|---|---|---|
-| bilby | Dev, Homelab | none | yes | existing |
-| fractal | Dev, Homelab | Dev | yes | existing |
-| voltaire | Dev | Dev | no | existing |
-| MacBook Air | Dev | Dev | no | no |
+| bilby | Dev read; Homelab read/write | none | yes | existing |
+| fractal | Dev read; Homelab read/write | Dev read | yes | existing |
+| voltaire | Dev read | Dev read | no | existing |
+| MacBook Air | Dev read | Dev read | no | no |
 
 `my/Dev` is the routine personal-development vault. `my/Homelab` is added to
 the same machine account only where Podhaus administration requires it.
@@ -214,7 +214,7 @@ extension system.
 | voltaire | Existing TPM NV indices `0x01800052` for `dev` and `0x01800051` for `switch` | Existing TPM key |
 | bilby | One mode `0600` file for `dev`; no `switch` backend | Existing YubiKey PIV key |
 | fractal | Two mode `0600` files inside the LUKS-backed home | Existing software Ed25519 key inside the encrypted home |
-| MacBook Air | Two device-bound Data Protection Keychain items, implemented last | New mode `0600` software Ed25519 machine key inside FileVault |
+| MacBook Air | Two mode `0600` files inside the FileVault-protected home | New mode `0600` software Ed25519 machine key inside FileVault |
 
 This deliberately allows more than one storage mechanism but keeps one public
 interface. The host security boundary chooses the backend. Consumers never do.
@@ -251,30 +251,20 @@ The live bilby audit is therefore a required decision point:
 The existing YubiKey machine SSH key remains in every option. Token storage
 does not need a second YubiKey abstraction merely because SSH already uses it.
 
-### Mac Data Protection Keychain adapter
+### Mac FileVault-backed files
 
-The final Mac-only component is a small native Swift command under
-`libexec/op-vault/`. It uses `SecItemAdd`, `SecItemCopyMatching`, and
-`SecItemUpdate` for two `kSecClassGenericPassword` items with:
+The Mac uses the shared mode `0600` file backend inside its FileVault-protected
+home. This has the required unattended boundary: the files are unavailable
+before FileVault unlock and require no GUI approval after login.
 
-- `kSecUseDataProtectionKeychain = true`;
-- `kSecAttrSynchronizable = false`;
-- `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`.
-
-This makes tokens available after Nathan's first unlock following a restart,
-keeps them usable while the screen is locked, and makes them unavailable again
-after restart until the first unlock. `ThisDeviceOnly` prevents migration to a
-replacement Mac. Any process running as Nathan after first unlock can invoke
-`op-vault`; that is the intended unattended-agent boundary.
-
-Apple's [Keychain data protection](https://support.apple.com/guide/security/keychain-data-protection-secb0694df1a/web)
-documentation says the secret value has a per-row encryption key whose use
-always requires a Secure Enclave round trip. This is the Mac parallel to the
-TPM boundary without making the token depend on the 1Password desktop app.
-
-The Swift program owns only Keychain read/write. The common shell runner still
-owns identity selection, environment cleanup, and child execution. There is no
-Mac daemon, vault application, plugin protocol, or patched upstream dependency.
+The planned Data Protection Keychain command was rejected by a live prototype.
+Apple's [Mac keychain technote](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains)
+requires a command-line tool using that keychain to carry restricted
+entitlements authorized by a provisioning profile in an app-like wrapper. The
+Mac has no Apple Developer signing identity or provisioning profile. The legacy
+login keychain also rejected SSH writes with `errSecInteractionNotAllowed`.
+Adding an app bundle and Apple Developer identity would increase operational
+machinery without improving the FileVault boundary needed here.
 
 ## Machine roles and ownership
 
@@ -389,7 +379,7 @@ Changes:
   absent.
 - Implement only the selected backend. Prefer reusing fractal's encrypted-file
   adapter if the encryption work lands.
-- Create `bilby-dev` in `my` with Dev and Homelab. Nathan performs token
+- Create `bilby-dev` in `my` with read-only Dev and read/write Homelab. Nathan performs token
   creation and the one-time local paste. Do not create a Bilby account in
   `switchtechnologies`.
 - Verify machine SSH use independently of any personal agent.
@@ -412,8 +402,9 @@ Changes:
 - Reach fractal from bilby and inspect the live machine key, LUKS mount,
   current token, home permissions, shell, and grants.
 - Add the mode `0600` file adapter inside the encrypted home.
-- Create `fractal-dev` in `my` with Dev and Homelab and `fractal-switch` in
-  `switchtechnologies` with Dev. Nathan performs token creation and paste.
+- Create `fractal-dev` in `my` with read-only Dev and read/write Homelab and
+  `fractal-switch` in `switchtechnologies` with read-only Dev. Nathan performs
+  token creation and paste.
 - Verify the software machine SSH key remains the only automatic SSH identity.
 
 Exit check:
@@ -570,12 +561,12 @@ matrix, tests, and these Mac-only tasks:
    system. Register the public key with GitHub, Forgejo, Pomerium, and the three
    Linux hosts. Make it the default for Git authentication, signing, and
    outbound Podhaus SSH.
-4. Write the failing Keychain attribute, lock-state, and non-disclosure tests,
-   then implement the narrow Swift adapter and run the common backend contract
-   tests locally.
-5. Create `macbook-dev` in `my` with Dev and `macbook-switch` in
-   `switchtechnologies` with Dev. Nathan creates the accounts and pastes each
-   token through `op-vault mint` locally.
+4. ✅ The Mac uses the shared encrypted-home file backend. The common contract
+   test covers both Mac identities, permission-mode rejection, and
+   non-disclosure diagnostics; it passes on Linux and macOS.
+5. ✅ `nb-macbook-air-dev` in `my` and `nb-macbook-air-switch` in
+   `switchtechnologies` each read only their account's Dev vault. Both tokens
+   were enrolled through `op-vault mint`; live writes are denied by 1Password.
 6. Add a separate Ansible inventory group and dedicated MacBook playbook. It
    may own only root-level SSH maintenance policy, the automatic-close
    mechanism, and assertions such as FileVault. It must not join `provisioned`,

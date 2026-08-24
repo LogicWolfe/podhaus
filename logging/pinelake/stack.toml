@@ -1,0 +1,17 @@
+[[stack]]
+name = "pinelake-logging"
+description = "Alloy on Pinelake shipping container telemetry through per-host mTLS"
+tags = ["pinelake", "podhaus"]
+
+[stack.config]
+server = "pinelake"
+linked_repo = "podhaus-pinelake"
+run_directory = "logging/pinelake"
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
+ignore_services = ["pinelake-alloy-secrets-init"]
+run_build = true
+environment = """
+CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
+PINELAKE_CERT_B64=[[OP__KOMODO__LOG_INGEST_PKI__PINELAKE_CERT_B64]]
+PINELAKE_KEY_B64=[[OP__KOMODO__LOG_INGEST_PKI__PINELAKE_KEY_B64]]
+"""

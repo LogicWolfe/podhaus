@@ -16,7 +16,7 @@
 # named volume, we preserve it (rclone rotates the refresh token in-
 # place; a re-render from the bootstrap snapshot would clobber it).
 #
-# Both hosts use this container-side render path.
+# Every backed-up host uses this container-side render path.
 
 services:
   backrest-init:

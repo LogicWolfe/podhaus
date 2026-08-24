@@ -53,8 +53,6 @@ routes:
                 is: scroeser@gmail.com
 
   - <<: *family_route
-    from: https://gatus.pod.haus
-  - <<: *family_route
     from: https://bugs.pod.haus
   - <<: *family_route
     from: https://backup.pod.haus
@@ -76,6 +74,15 @@ routes:
     tls_client_cert_file: /run/pomerium-secrets/origin-client-cert.pem
     tls_client_key_file: /run/pomerium-secrets/origin-client-key.pem
     allow_public_unauthenticated_access: true
+  # Gatus authenticates external-endpoint writes with its own bearer token.
+  # This narrow machine route lets remote appliance jobs report without a
+  # browser session while leaving the status UI Nathan/family protected.
+  - <<: *public_route
+    from: https://gatus.pod.haus
+    prefix: null
+    regex: '^/api/v1/endpoints/[^/]+/external$'
+  - <<: *family_route
+    from: https://gatus.pod.haus
   - <<: *family_route
     from: https://komodo.pod.haus
   - <<: *family_route
@@ -146,6 +153,12 @@ routes:
   - <<: *nathan_route
     from: https://voltaire.docs.pod.haus
     to: https://127.0.0.1:8445
+  - <<: *nathan_route
+    from: https://torrent.pinelake.haus
+    to: https://127.0.0.1:8446
+  - <<: *nathan_route
+    from: https://sync.pinelake.haus
+    to: https://127.0.0.1:8446
 
   # Pocket ID is the gate; the key you hold decides how much that identity
   # buys. Two allow rules, OR'd: a registered key may assume any principal
@@ -198,6 +211,20 @@ routes:
   - from: ssh://fractal
     to: ssh://127.0.0.1:2204
     policy: *nathan_ssh_policy
+  - from: ssh://pinelake
+    to: ssh://127.0.0.1:2205
+    policy:
+      - allow:
+          and:
+            - email:
+                is: nathan@nathanbaxter.com
+            - ssh_publickey: *registered_ssh_keys
+      - allow:
+          and:
+            - email:
+                is: nathan@nathanbaxter.com
+            - ssh_username:
+                is: baxter
   # QTS names its UID 0 account `admin` and has no root passwd entry, so
   # that — not `nathan` — is kangaroo's unregistered-key fallback.
   - from: ssh://kangaroo

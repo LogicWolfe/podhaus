@@ -165,7 +165,7 @@ def collect_sample_dirs(folder: Path) -> list[Path]:
 
 def collect_sample_videos(folder: Path) -> list[Path]:
     result: list[Path] = []
-    # "top 2 levels" matches rtorrent-cleanup.sh -maxdepth 2
+    # Sample releases are conventionally at the release root or one level down.
     for depth_prefix in ("*", "*/*"):
         for cand in folder.glob(depth_prefix):
             if not cand.is_file():

@@ -89,26 +89,6 @@ loki.process "containers" {
   }
 }
 
-// rtorrent-cleanup.sh (event.download.erased hook + ad-hoc invocations)
-// writes to /flood-db/rtorrent-cleanup.log. Bind-mounted into alloy at
-// /var/log/flood/. Tailing the file is necessary because the script is
-// forked by rtorrent — its stdout never reaches the flood container's
-// docker log stream. Distinct `service` label keeps cleanup events
-// queryable separately from flood's web JSON logs.
-local.file_match "rtorrent_cleanup" {
-  path_targets = [{
-    __path__  = "/var/log/flood/rtorrent-cleanup.log",
-    container = "flood",
-    service   = "rtorrent-cleanup",
-    host      = "bilby",
-  }]
-}
-
-loki.source.file "rtorrent_cleanup" {
-  targets    = local.file_match.rtorrent_cleanup.targets
-  forward_to = [loki.write.local.receiver]
-}
-
 loki.write "local" {
   endpoint {
     url = "http://victoria-logs:9428/insert/loki/api/v1/push"

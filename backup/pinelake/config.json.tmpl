@@ -1,0 +1,96 @@
+{
+  "version": 4,
+  "instance": "${BACKREST_INSTANCE}",
+  "auth": {"disabled": true},
+  "repos": [
+    {
+      "id": "podhaus-pinelake",
+      "uri": "/repos/podhaus-pinelake",
+      "password": "${RESTIC_REPO_PASSWORD}",
+      "flags": [],
+      "env": [],
+      "prunePolicy": {
+        "schedule": {"cron": "30 5 * * 0", "clock": "CLOCK_LOCAL"},
+        "maxUnusedPercent": 10
+      },
+      "checkPolicy": {
+        "schedule": {"cron": "45 5 * * 0", "clock": "CLOCK_LOCAL"},
+        "readDataSubsetPercent": 10
+      },
+      "hooks": [
+        {
+          "conditions": ["CONDITION_ANY_ERROR"],
+          "onError": "ON_ERROR_IGNORE",
+          "actionCommand": {
+            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_ENDPOINT_ID}/external?success=false&error=backrest+{{ .Task }}+failed+for+{{ .Plan.Id }}'"
+          }
+        }
+      ],
+      "autoUnlock": true,
+      "autoInitialize": true
+    }
+  ],
+  "plans": [
+    {
+      "id": "plex",
+      "repo": "podhaus-pinelake",
+      "paths": ["/userdata/plex"],
+      "schedule": {"cron": "0 4 * * *", "clock": "CLOCK_LOCAL"},
+      "retention": {"policyTimeBucketed": {"daily": 14, "weekly": 4, "monthly": 6}},
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "flood",
+      "repo": "podhaus-pinelake",
+      "paths": ["/userdata/flood"],
+      "schedule": {"cron": "10 4 * * *", "clock": "CLOCK_LOCAL"},
+      "retention": {"policyTimeBucketed": {"daily": 14, "weekly": 4, "monthly": 6}},
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "syncthing",
+      "repo": "podhaus-pinelake",
+      "paths": ["/userdata/syncthing"],
+      "schedule": {"cron": "20 4 * * *", "clock": "CLOCK_LOCAL"},
+      "retention": {"policyTimeBucketed": {"daily": 14, "weekly": 4, "monthly": 6}},
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "komodo-periphery",
+      "repo": "podhaus-pinelake",
+      "paths": ["/userdata/komodo-periphery"],
+      "excludes": ["/userdata/komodo-periphery/etc-komodo/repos"],
+      "schedule": {"cron": "30 4 * * *", "clock": "CLOCK_LOCAL"},
+      "retention": {"policyTimeBucketed": {"daily": 14, "weekly": 4, "monthly": 6}},
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "backrest-state",
+      "repo": "podhaus-pinelake",
+      "paths": ["/userdata/backrest-state"],
+      "schedule": {"cron": "40 4 * * *", "clock": "CLOCK_LOCAL"},
+      "retention": {"policyTimeBucketed": {"daily": 14, "weekly": 4, "monthly": 6}},
+      "hooks": [
+        {
+          "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
+          "onError": "ON_ERROR_FATAL",
+          "actionCommand": {
+            "command": "rclone sync --config /rclone/rclone.conf /repos/podhaus-pinelake onedrive:Backups/podhaus-pinelake-restic"
+          }
+        },
+        {
+          "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
+          "onError": "ON_ERROR_IGNORE",
+          "actionCommand": {
+            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_ENDPOINT_ID}/external?success=true'"
+          }
+        }
+      ],
+      "skipIfUnchanged": true
+    }
+  ]
+}

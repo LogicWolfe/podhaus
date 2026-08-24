@@ -1,0 +1,23 @@
+---
+- name: Restart OrbStack
+  ansible.builtin.shell: |
+    set -eu
+    {{ podhaus_pinelake_libexec_dir | quote }}/plex-deploy-gate \
+      --preferences-{{ podhaus_plex_session_preferences_kind | quote }} \
+      {{ podhaus_plex_session_preferences | quote }}
+    /opt/homebrew/bin/orb stop
+    /opt/homebrew/bin/orb start
+  environment:
+    HOME: "/Users/{{ podhaus_operator }}"
+    PATH: "{{ podhaus_orbstack_path }}"
+  become: false
+
+- name: Reload the OrbStack launch daemon
+  ansible.builtin.shell: |
+    set -eu
+    label="haus.podhaus.orbstack"
+    if /bin/launchctl print "system/$label" >/dev/null 2>&1; then
+      /bin/launchctl bootout "system/$label"
+    fi
+    /bin/launchctl bootstrap system {{ podhaus_pinelake_launch_daemon | quote }}
+  listen: Reload OrbStack launch daemon

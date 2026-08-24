@@ -83,3 +83,18 @@ enabled = true
 send_cpu_alerts = false
 disk_warning = 85.0
 disk_critical = 95.0
+
+[[server]]
+name = "pinelake"
+description = "M1 Mac mini media appliance at Pine Lake. v2 outbound Periphery through OrbStack."
+tags = ["pinelake", "podhaus"]
+
+[server.config]
+# Outbound mode: the appliance dials Core and accepts no management ingress.
+address = ""
+enabled = true
+# Media indexing, downloads, and software transcodes legitimately saturate the
+# host. Reachability, stack state, disk, and native mount signals remain useful.
+send_cpu_alerts = false
+disk_warning = 85.0
+disk_critical = 95.0

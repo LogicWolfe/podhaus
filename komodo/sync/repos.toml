@@ -140,6 +140,18 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"
 branch = "main"
 
+[[repo]]
+name = "podhaus-pinelake"
+description = "Komodo-managed podhaus clone on Pinelake"
+tags = ["podhaus", "pinelake"]
+
+[repo.config]
+server = "pinelake"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/podhaus"
+branch = "main"
+
 # Bilby's deploy tree — the single tree every podhaus deploy decision
 # reads (Komodo Core's /syncs/podhaus bind, bilby Periphery's
 # /etc/komodo/repo bind, and every files_on_host stack's

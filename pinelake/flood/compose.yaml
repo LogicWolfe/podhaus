@@ -1,0 +1,89 @@
+services:
+  pinelake-flood-init:
+    container_name: pinelake-flood-init
+    image: alpine:latest
+    restart: "no"
+    user: "0:0"
+    volumes:
+      - /Users/Shared/Podhaus/flood:/flood-db
+      - ../../flood/conf:/conf:ro
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        install -o 501 -g 20 -m 0644 /conf/rtorrent.rc /flood-db/.rtorrent.rc
+        touch /flood-db/flood-publish.log /flood-db/flood-publish.lock \
+              /flood-db/plex-label-sync.log /flood-db/plex-label-sync.lock \
+              /flood-db/pinelake-stignore.log /flood-db/pinelake-stignore.lock
+        chown 501:20 /flood-db/flood-publish.log /flood-db/flood-publish.lock \
+              /flood-db/plex-label-sync.log /flood-db/plex-label-sync.lock \
+              /flood-db/pinelake-stignore.log /flood-db/pinelake-stignore.lock
+        chmod 0664 /flood-db/flood-publish.log /flood-db/flood-publish.lock \
+              /flood-db/plex-label-sync.log /flood-db/plex-label-sync.lock \
+              /flood-db/pinelake-stignore.log /flood-db/pinelake-stignore.lock
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  pinelake-flood:
+    container_name: pinelake-flood
+    build:
+      context: ../../flood
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_PINELAKE_FLOOD:-unset}
+    image: pinelake-flood:local
+    pull_policy: build
+    restart: unless-stopped
+    depends_on:
+      pinelake-flood-init:
+        condition: service_completed_successfully
+    command: --auth=none --rtsocket=/tmp/rtorrent.sock
+    user: "501:20"
+    network_mode: host
+    environment:
+      HOME: /flood-db
+      FLOOD_SECRET: ${FLOOD_SECRET}
+      GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
+      GATUS_BASE_URL: https://gatus.pod.haus
+      GATUS_LABEL_SYNC_ENDPOINT_ID: torrents_pinelake-plex-label-sync
+      GATUS_RAR_ENDPOINT_ID: torrents_pinelake-rar-extraction
+      PINELAKE_STIGNORE_SOURCE: "false"
+      PLEX_URL: http://127.0.0.1:32400
+      PLEX_TOKEN: ${PLEX_ONLINE_TOKEN}
+      TZ: ${TZ}
+    volumes:
+      - /Users/Shared/Podhaus/flood:/flood-db
+      - type: bind
+        source: /Volumes/TerraMaster/Torrents
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/.podhaus-terramaster
+        target: /Volumes/TerraMaster/.podhaus-terramaster
+        read_only: true
+        bind:
+          create_host_path: false
+      - ../../flood/scripts:/scripts:ro
+    labels:
+      autoheal: "true"
+      ofelia.enabled: "true"
+      ofelia.job-exec.rar-backlog.schedule: "0 50 4 * * *"
+      ofelia.job-exec.rar-backlog.command: "/scripts/rar-backlog.sh"
+      ofelia.job-exec.flood-publish.schedule: "0 * * * * *"
+      ofelia.job-exec.flood-publish.command: "python3 /scripts/flood-publish.py"
+      ofelia.job-exec.flood-publish.user: "501:20"
+      ofelia.job-exec.plex-label-sync.schedule: "0 */5 * * * *"
+      ofelia.job-exec.plex-label-sync.command: "python3 /scripts/plex-label-sync.py"
+      ofelia.job-exec.plex-label-sync.user: "501:20"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- http://127.0.0.1:3000/ >/dev/null &&
+          test "$$(cat /Volumes/TerraMaster/.podhaus-terramaster)" =
+          "EAED18A9-74C7-4163-ACB4-406B2226FDC6"
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 60s

@@ -1,0 +1,16 @@
+[[stack]]
+name = "pinelake-relay"
+description = "Outbound Pinelake SSH and mTLS HTTP origins through Numbat"
+tags = ["pinelake", "podhaus"]
+
+[stack.config]
+server = "pinelake"
+linked_repo = "podhaus-pinelake"
+run_directory = "relay/pinelake"
+run_build = true
+auto_pull = false
+environment = """
+RATHOLE_NOISE_REMOTE_PUBLIC_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PUBLIC_KEY]]
+RATHOLE_PINELAKE_SSH_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__PINELAKE_SSH]]
+RATHOLE_PINELAKE_HTTP_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__PINELAKE_HTTP]]
+"""

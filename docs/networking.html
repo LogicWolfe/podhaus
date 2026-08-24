@@ -224,7 +224,10 @@ networks:
         or exposes an internal management listener. Separately, Bilby, Numbat, and Kangaroo
         run host-native Tailscale in userspace mode as an SSH-only recovery plane. The
         <code>tag:recovery</code> ACL permits member devices to TCP 22 and no reverse reach;
-        containers receive no socket, route, state, or network capability.
+        containers receive no socket, route, state, or network capability. While Pine Lake
+        is being admitted to the fleet, one explicitly addressed temporary exception permits
+        Bilby's recovery node to reach Pine Lake's Tailscale address on TCP 22 only; it is
+        removed after Pine Lake's outbound Numbat SSH route passes off-LAN and reboot validation.
       </p>
 
       <h2 id="dns">DNS</h2>

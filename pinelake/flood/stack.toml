@@ -1,0 +1,21 @@
+[[stack]]
+name = "pinelake-flood"
+description = "Flood and rTorrent with extraction, publishing, labeling, and cleanup on Pinelake"
+tags = ["pinelake", "podhaus"]
+
+[stack.config]
+server = "pinelake"
+linked_repo = "podhaus-pinelake"
+run_directory = "pinelake/flood"
+ignore_services = ["pinelake-flood-init"]
+run_build = true
+environment = """
+FLOOD_SECRET=[[OP__KOMODO__FLOOD_SECRET__PASSWORD]]
+GATUS_OFELIA_PUSH_TOKEN=[[OP__KOMODO__GATUS_OFELIA_PUSH_TOKEN__TOKEN]]
+PLEX_ONLINE_TOKEN=[[OP__KOMODO__PINELAKE_PLEX__TOKEN]]
+TZ=[[TZ]]
+"""
+
+[stack.config.pre_deploy]
+path = "/"
+command = "/etc/komodo/repos/podhaus-pinelake/pinelake/periphery/predeploy-mount-gate Torrents"

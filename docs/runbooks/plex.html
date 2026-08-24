@@ -5,19 +5,24 @@
         Runs on bilby with <code>network_mode: host</code>. Library DB lives on local NVMe
         while media and BIFs live on Pouch. Identity is templated from
         Preferences.xml in the repo + a Plex Online Token from 1P, so a host wipe doesn't lose
-        the <code>MachineIdentifier</code>.
+        either identity identifier.
       </p>
 
       <h2 id="critical-state">Critical identity state</h2>
       <p>
-        Clients (apps, smart TVs, plex.tv) identify the server by its
-        <code>MachineIdentifier</code>. If it changes, every client treats it as a new server
-        — shared libraries break, watch state is orphaned, every device must re-pair.
+        The preferences contain both <code>MachineIdentifier</code> (the raw serial) and
+        <code>ProcessedMachineIdentifier</code> (the client identifier exposed by the local
+        API and plex.tv). The official Plex container derives the latter from the former when
+        it is absent, then sends the processed value as <code>X-Plex-Client-Identifier</code>.
+        Preserve and verify both. Losing or replacing the externally registered processed ID
+        makes clients see a different server; preserving only a plausible-looking raw value is
+        not an identity proof.
       </p>
       <table>
         <thead><tr><th>Field</th><th>Source of truth</th></tr></thead>
         <tbody>
           <tr><td><code>MachineIdentifier</code></td><td><code>plex/Preferences.xml</code> in repo (template)</td></tr>
+          <tr><td><code>ProcessedMachineIdentifier</code></td><td><code>plex/Preferences.xml</code> in repo (template); verify against local <code>/identity</code> and the owned plex.tv resource</td></tr>
           <tr><td><code>CertificateUUID</code></td><td><code>plex/Preferences.xml</code> in repo (template)</td></tr>
           <tr><td><code>AnonymousMachineIdentifier</code></td><td><code>plex/Preferences.xml</code> in repo (template)</td></tr>
           <tr><td><code>PlexOnlineUsername</code></td><td><code>plex/Preferences.xml</code> in repo (template)</td></tr>
@@ -31,6 +36,14 @@
         deploy. Plex's own runtime can mutate other prefs in that file freely; the next deploy
         re-enforces the identity attrs.
       </p>
+      <blockquote>
+        <p><strong>A template is not sufficient evidence</strong></p>
+        Before an identity-sensitive migration, capture the raw ID, processed ID, anonymous
+        ID, certificate UUID, token fingerprint, local API identity, and plex.tv resource.
+        Verify the same set after startup. Pine Lake proved why this matters: its raw ID is a
+        UUID while its externally visible processed ID is a different 40-character digest.
+        Never copy Bilby's values to another server or replace one field with the other.
+      </blockquote>
 
       <h2 id="storage">Storage layout</h2>
       <table>

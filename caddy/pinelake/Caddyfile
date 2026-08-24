@@ -1,0 +1,22 @@
+{
+	servers :4443 {
+		strict_sni_host insecure_off
+	}
+}
+
+:4443 {
+	tls /run/podhaus-secrets/pomerium-origin-server-cert.pem /run/podhaus-secrets/pomerium-origin-server-key.pem {
+		client_auth {
+			trust_pool file /run/podhaus-secrets/pomerium-origin-ca.pem
+		}
+	}
+
+	@torrent host torrent.pinelake.haus
+	@sync host sync.pinelake.haus
+
+	route {
+		reverse_proxy @torrent host.docker.internal:3000
+		reverse_proxy @sync host.docker.internal:8384
+		respond 404
+	}
+}

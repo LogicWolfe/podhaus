@@ -1,0 +1,64 @@
+services:
+  pinelake-plex:
+    container_name: pinelake-plex
+    hostname: PineLake
+    image: plexinc/pms-docker:latest
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TZ: ${TZ}
+      PLEX_UID: "501"
+      PLEX_GID: "20"
+      CHANGE_CONFIG_DIR_OWNERSHIP: "false"
+    volumes:
+      - /Users/Shared/Podhaus/plex:/config
+      - /Users/Shared/Podhaus/transcode:/transcode
+      - type: bind
+        source: /Volumes/TerraMaster/.podhaus-terramaster
+        target: /Volumes/TerraMaster/.podhaus-terramaster
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Movies
+        target: /Volumes/TerraMaster/Movies
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/TV
+        target: /Volumes/TerraMaster/TV
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Kids
+        target: /Volumes/TerraMaster/Kids
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Sports
+        target: /Volumes/TerraMaster/Sports
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Torrents
+        target: /Volumes/TerraMaster/Torrents
+        read_only: true
+        bind:
+          create_host_path: false
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS --max-time 10 http://127.0.0.1:32400/identity >/dev/null &&
+          test "$$(cat /Volumes/TerraMaster/.podhaus-terramaster)" =
+          "EAED18A9-74C7-4163-ACB4-406B2226FDC6"
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 180s

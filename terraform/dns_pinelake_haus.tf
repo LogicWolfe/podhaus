@@ -2,7 +2,7 @@
 # so this root does not create split-horizon UniFi records for it.
 
 resource "cloudflare_dns_record" "pinelake_haus_tunnel" {
-  for_each = toset(["home", "sync", "torrent"])
+  for_each = toset(["home"])
   zone_id  = local.zones["pinelake.haus"]
   name     = "${each.key}.pinelake.haus"
   type     = "CNAME"
@@ -14,4 +14,14 @@ resource "cloudflare_dns_record" "pinelake_haus_tunnel" {
     ipv4_only     = false
     ipv6_only     = false
   }
+}
+
+resource "cloudflare_dns_record" "pinelake_haus_pomerium" {
+  for_each = toset(["sync", "torrent"])
+  zone_id  = local.zones["pinelake.haus"]
+  name     = "${each.key}.pinelake.haus"
+  type     = "A"
+  content  = local.numbat_application_ipv4
+  proxied  = false
+  ttl      = 300
 }

@@ -1,128 +1,90 @@
 <main>
 
-      <h1>Syncthing</h1>
-      <p class="lead text-lg text-text-muted">
-        Runs on kangaroo. Host network provides LAN device discovery via
-        UDP/21027 multicast. The UI at <code>sync.pod.haus</code> is Nathan-only through
-        Numbat Pomerium, private-origin Caddy, and <code>10.0.0.25:8384</code>. GUI auth is
-        disabled; Pomerium is the external gate.
-      </p>
+  <h1>Syncthing</h1>
+  <p class="lead text-lg text-text-muted">
+    Kangaroo is the authoritative source for Pinelake's one-way media mirror.
+    Four narrowly rooted folders expose only Movies, TV, Kids, and Sports;
+    Kangaroo is send-only and Pinelake is receive-only. Other Kangaroo folders
+    and peers are independent of this relationship.
+  </p>
 
-      <h2 id="why-kangaroo">Why it lives on kangaroo</h2>
-      <p>
-        Syncthing's main shared folder is Pouch (the QNAP HDD array). Running Syncthing on
-        kangaroo keeps file scanning, hashing, and sync on local storage instead of NFS.
-      </p>
+  <h2 id="topology">Topology</h2>
+  <table>
+    <thead><tr><th>Folder</th><th>Kangaroo source</th><th>Pinelake destination</th><th>Direction</th></tr></thead>
+    <tbody>
+      <tr><td>Movies</td><td><code>/share/CACHEDEV1_DATA/Pouch/Movies</code></td><td><code>/Volumes/TerraMaster/Movies</code></td><td>send-only → receive-only</td></tr>
+      <tr><td>TV</td><td><code>/share/CACHEDEV1_DATA/Pouch/TV</code></td><td><code>/Volumes/TerraMaster/TV</code></td><td>send-only → receive-only</td></tr>
+      <tr><td>Kids</td><td><code>/share/CACHEDEV1_DATA/Pouch/Kids</code></td><td><code>/Volumes/TerraMaster/Kids</code></td><td>send-only → receive-only</td></tr>
+      <tr><td>Sports</td><td><code>/share/CACHEDEV1_DATA/Pouch/Sports</code></td><td><code>/Volumes/TerraMaster/Sports</code></td><td>send-only → receive-only</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Pinelake never sends moves, deletions, conflicts, or newly discovered files
+    back to Pouch. Its fresh identity and database live at
+    <code>/Users/Shared/Podhaus/syncthing</code>. Kangaroo keeps its established
+    identity and database at
+    <code>/share/CACHEDEV2_DATA/Container/syncthing-config</code> because that
+    state also owns unrelated folders and peers.
+  </p>
 
-      <h2 id="device-id">Kangaroo's device ID</h2>
-      <p>
-        Kangaroo's Syncthing came up with a fresh device ID during the relocation:
-      </p>
-      <pre><code>J7Z7LNA-U65UY7V-C7BTJXK-XBOON5E-5UAZBXM-KOXNWRP-DBOIFEL-DCXTEQD</code></pre>
-      <p>
-        Peer devices (phone, laptop, etc.) must be paired with this ID — the old bilby-side
-        device ID is dead. ~2 minutes per peer in the Syncthing UI. After re-pairing, folder
-        shares need to be accepted in each peer's UI as well; the existing <code>.stignore</code>
-        patterns at the root of each shared folder are picked up automatically.
-      </p>
+  <h2 id="stignore">Source selection</h2>
+  <p>
+    Each Kangaroo source root contains its own ordinary <code>.stignore</code>.
+    There is no include helper and no ignore file on Pinelake. Syncthing does
+    not transfer its special ignore file; the receiver gets only the paths the
+    source advertises.
+  </p>
+  <p>
+    Each file has three ordered slices: permanent junk exclusions, exact
+    rooted negated paths for selected media, and a final <code>**</code> that denies all
+    other content. First-match precedence ensures release metadata, archives,
+    partial downloads, and operating-system metadata remain excluded even
+    inside an allowed directory. Artwork and subtitle files are not blanket
+    excluded because Plex can use them.
+  </p>
+  <p>
+    Edit the normal file through the folder's <strong>Edit Ignores</strong>
+    control in Syncthing. Flood's Bilby instance also runs
+    <code>flood/scripts/pinelake-stignore.py</code>: a completed torrent carrying
+    the <code>pinelake</code> tag contributes its exact published path to the
+    matching source file. The reconciler validates all four files before an
+    atomic, insert-only write. Removing a tag does not remove media or its
+    allow-list entry.
+  </p>
 
-      <h2 id="stignore">The Pouch .stignore (mixed-source)</h2>
-      <p>
-        Pouch's <code>.stignore</code> is structured as an allow-list: top-level dirs are
-        ignored by default, then specific <code>!TV/&lt;Show&gt;</code>,
-        <code>!Movies/&lt;Title&gt;</code>, <code>!Kids/...</code> entries opt items back in
-        (the trailing <code>**</code> at the end of the file ignores everything else not
-        matched). Inside each <code>!&lt;TopLevel&gt;/</code> block, entries are sorted
-        case-insensitively.
-      </p>
-      <p>
-        Entries come from two sources:
-      </p>
-      <ul>
-        <li><strong>Hand-curated</strong> — the bulk of the file. Edited directly on
-          <code>/share/CACHEDEV1_DATA/Pouch/.stignore</code> (or any peer's view via the
-          syncthing folder root).</li>
-        <li><strong>Auto-injected by flood</strong> — torrents tagged <code>pinelake</code> in
-          Flood get a <code>!${base_path#/data/}</code> line written here on completion. Driven
-          by <code>flood/scripts/pinelake-stignore.sh</code> (see the
-          <a href="/runbooks/flood.html#pinelake-stignore">flood runbook</a>). The script writes
-          across NFS from bilby into Pouch — kangaroo's syncthing reads the change locally and
-          rescans.</li>
-      </ul>
-      <p>
-        The two sources share the file without sentinels: the reconciler is insert-only and
-        idempotent, so a hand-curated entry that happens to match a tagged-torrent entry is
-        harmless. Removals are always manual.
-      </p>
+  <h2 id="containers">Containers and networking</h2>
+  <p>
+    Both containers use host networking so Syncthing's Transmission Control
+    Protocol listener and User Datagram Protocol discovery work normally.
+    Kangaroo's stack is <code>syncthing/</code>; Pinelake's is
+    <code>pinelake/syncthing/</code>. The Pinelake pre-deploy gate proves the
+    exact TerraMaster volume and all four destination roots before Komodo can
+    replace the container.
+  </p>
+  <p>
+    The administration interfaces bind to port 8384 without Syncthing-local
+    credentials. Pomerium is the external authentication boundary and the
+    trusted local networks retain direct access. Set
+    <code>gui.insecureAdminAccess=true</code> through Syncthing's configuration
+    application programming interface to suppress its open-interface warning;
+    that setting changes the warning, not access control.
+  </p>
 
-      <h2 id="storage">Storage layout</h2>
-      <table>
-        <thead><tr><th>Mount</th><th>Path on kangaroo</th><th>Purpose</th></tr></thead>
-        <tbody>
-          <tr><td>Config + identity</td><td><code>/share/CACHEDEV2_DATA/Container/syncthing-config</code></td><td>SQLite DB, cert/key, config.xml. Backed up nightly by kangaroo Backrest.</td></tr>
-          <tr><td>Shared folder root</td><td><code>/share/CACHEDEV1_DATA/Pouch</code></td><td>The Pouch data with all existing <code>.stfolder</code> + <code>.stignore</code> markers.</td></tr>
-        </tbody>
-      </table>
+  <h2 id="verification">Safe changes</h2>
+  <ul>
+    <li>Keep Kangaroo send-only and Pinelake receive-only for all four folders.</li>
+    <li>Never reuse Pinelake's retired identity or database in the managed container.</li>
+    <li>Before enabling a new selection, confirm only its exact negated path was added and the other three files are unchanged.</li>
+    <li>Verify permanent junk remains absent while media, artwork, and subtitles arrive.</li>
+    <li>Treat an unexpected Pinelake local addition as receive-only override state; do not use it to update Pouch.</li>
+  </ul>
 
-      <blockquote>
-        <p><strong>GUI auth is intentionally off — silence the warning the right way</strong></p>
-        We run the GUI open (no user/password): externally gated by Pomerium,
-        LAN trusted. Syncthing then shows a red <em>"remote access without a password"</em>
-        banner. That banner is <strong>not</strong> a dismissible notification — it's a
-        live <code>openNoAuth</code> check recomputed every page load, so clicking the
-        × or acking <code>authenticationUserAndPassword</code> does nothing. The only
-        lever is <code>gui.insecureAdminAccess=true</code> (per the source comment, "the
-        magic setting to silence the warning"). It changes <em>no</em> access behaviour —
-        the GUI is already open without it; it only flips the banner off and adds one
-        startup log line. Set it without restoring a fresh-rebuild config via:
-        <pre><code>curl -s -X PATCH -H "X-API-Key: $(grep -oP '(?&lt;=&lt;apikey&gt;)[^&lt;]+' config.xml)" \
-  -d '{"insecureAdminAccess":true}' http://10.0.0.25:8384/rest/config/gui</code></pre>
-        It persists in <code>config.xml</code> (backed up), but a fresh-identity rebuild
-        resets it — re-apply the one PATCH. There is no Syncthing env var for it, so it
-        can't be baked into compose.
-      </blockquote>
+  <h2 id="backup">Recovery state</h2>
+  <p>
+    Backrest captures both endpoints' configuration and identity state. Restore
+    a configuration directory only as a complete unit: certificate, key,
+    configuration, and index database must remain consistent. Pouch media is
+    valuable bulk storage and is not reconstructed from Pinelake.
+  </p>
 
-      <h2 id="permissions">Permissions</h2>
-      <p>
-        Container runs as <code>1000:100</code> (PodHaus:everyone) to match existing file
-        ownership on the Pouch share. The <code>.stignore</code> file is owned 1000:100 so
-        reads and writes are permission-clean.
-      </p>
-      <blockquote>
-        <p><strong>First-run chown</strong></p>
-        On first deploy the config dir gets auto-created by Docker as
-        <code>admin:administrators</code> when the bind source doesn't exist. Syncthing (running
-        as 1000:100) can't write its autogenerated cert/key in that dir. Fix:
-        <pre><code>sudo chown -R 1000:100 /share/CACHEDEV2_DATA/Container/syncthing-config</code></pre>
-        once, then restart the container. Won't recur after the first boot.
-      </blockquote>
-
-      <h2 id="performance">Performance notes</h2>
-      <p>
-        Initial-hash performance measured at <strong>~42 MB/s</strong> on the GX-420MC at
-        startup. First scan of the 30 TB Pouch share is a long run (~40h+ on cold hashes) but
-        steady-state delta-sync is fast.
-      </p>
-
-      <h2 id="ingress">Ingress</h2>
-      <p>
-        Pomerium and Caddy route:
-      </p>
-      <pre><code>sync.pod.haus → Numbat Pomerium → private Caddy → http://${local.kangaroo_active_ip}:8384
-local.kangaroo_active_ip = 10.0.0.25</code></pre>
-      <p>
-        Caddy routes over the LAN to kangaroo's published port. The active
-        NIC is a single Terraform knob in <code>terraform/services_pod_haus.tf</code>;
-        <code>10.0.0.232</code> remains the spare 1GbE path.
-      </p>
-
-      <h2 id="see-also">See also</h2>
-      <ul>
-        <li><a href="/backup-and-recovery.html#kangaroo-plans">Backup &amp; recovery →
-          kangaroo plans</a> — the <code>syncthing</code> plan captures the config + identity
-          dir nightly.</li>
-        <li><a href="/plans/kangaroo-pouch-recovery.md">Kangaroo recovery plan</a>: the
-          remaining controlled Syncthing flip and reboot checks.</li>
-      </ul>
-
-    </main>
+</main>

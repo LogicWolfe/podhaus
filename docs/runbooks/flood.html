@@ -127,10 +127,8 @@
 
       <h2 id="cleanup">Cleanup: native delete + refcount</h2>
       <p>
-        There is no <code>event.download.erased</code> cleanup hook — the old
-        selective <code>rtorrent-cleanup.sh</code> (strip RAR pieces, preserve the
-        extracted video) existed only for the download-in-library model and is deleted.
-        In the hardlink model the <code>/data/torrents/&lt;name&gt;</code> tree is
+        There is no <code>event.download.erased</code> cleanup hook. In the hardlink
+        model the <code>/data/torrents/&lt;name&gt;</code> tree is
         disposable working state, so cleanup is just Flood's <strong>Remove and delete
         data</strong>: rtorrent deletes the whole tree (RAR pieces + the working copy of
         the media), and the library hardlink survives because the inode's link count
@@ -195,7 +193,7 @@
           <code>flood-publish.py</code> (per-file hardlink publisher + <code>--gaps</code>
           reporter), <code>rtorrent-extract.sh</code> (finished-hook RAR extraction),
           <code>rar-backlog.sh</code> (daily safety-net + Gatus heartbeat), and
-          <code>pinelake-stignore.sh</code>.</li>
+          <code>pinelake-stignore.py</code>.</li>
       </ul>
       <blockquote>
         <p><strong>Directory bind, not file bind, for the scripts dir</strong></p>
@@ -249,31 +247,33 @@
       <h2 id="pinelake-stignore">Pinelake .stignore auto-sync</h2>
       <p>
         Tagging a torrent <code>pinelake</code> in Flood marks it as "I want this on the
-        pinelake household Mac." On completion its <strong>publish target</strong> (the
-        library path) is inserted as a <code>!&lt;rel&gt;</code> allow-list line into
-        Pouch's <code>.stignore</code> (alphabetically into the matching
-        <code>!&lt;TopLevel&gt;/</code> block, case-insensitive sort). Receive-only peers
-        like pinelake's syncthing then pick the file up on the next folder rescan.
+        Pinelake household Mac." On completion its <strong>publish target</strong> is
+        routed to one of Pouch's four source folders: Movies, TV, Kids, or Sports.
+        The root-relative path is inserted as an exact rooted negation in that folder's normal
+        <code>.stignore</code>, between permanent junk exclusions and the final
+        <code>**</code> deny. Pinelake's receive-only Syncthing folder then receives the
+        selected media on its next scan.
       </p>
       <p>
-        Source of truth is rtorrent's own session state — the reconciler bencode-walks the
-        <code>.torrent.rtorrent</code> files under <code>/flood-db</code>; no XMLRPC, no
-        Flood API dependency. It emits the <code>publishdir</code> named custom (the
-        library path) rather than the <code>base_path</code> (which now points at the
-        <code>/data/torrents</code> working tree, not what syncthing serves), falling back
-        to <code>directory</code> for grandfathered torrents added before the redirect
-        model, and skips the working tree itself.
+        Source of truth is rtorrent's live session state. The reconciler queries it over
+        the container-local SCGI/XML-RPC socket and has no Flood API dependency. It emits
+        the <code>publishdir</code> named custom (the library path) rather than the
+        <code>base_path</code> (which points at the <code>/data/torrents</code> working
+        tree), falls back to <code>directory</code> for grandfathered torrents, and skips
+        the working tree itself.
       </p>
       <ul>
-        <li><strong><code>flood/scripts/pinelake-stignore.sh</code></strong> — filters
-          <code>complete=1 &amp;&amp; "pinelake" ∈ split(custom1, ",")</code>, idempotent
-          insert with <code>grep -Fxq</code> dedupe and <code>flock</code> single-flight.</li>
+        <li><strong><code>flood/scripts/pinelake-stignore.py</code></strong> — filters
+          <code>complete=1 &amp;&amp; "pinelake" ∈ split(custom1, ",")</code>, validates
+          all four ignore-file contracts before writing, and reconciles insert-only
+          entries under a single-flight lock.</li>
         <li><strong>Triggers</strong> — the rtorrent
           <code>event.download.finished</code> hook (zero-latency) and an ofelia
           <code>*/5min</code> tick (catches tag-applied-after-completion).</li>
-        <li><strong>Writes</strong> — to <code>/data/.stignore</code>
-          (= <code>/mnt/pouch/.stignore</code>), tempfile-then-atomic-rename in the same
-          dir; <code>/mnt/pouch</code>'s setgid bit preserves group ownership.</li>
+        <li><strong>Writes</strong> — atomically to
+          <code>/data/{Movies,TV,Kids,Sports}/.stignore</code>, which are Bilby's views
+          of the normal files under <code>/mnt/pouch</code>. The Pinelake Flood overlay
+          sets <code>PINELAKE_STIGNORE_SOURCE=false</code> and never writes them.</li>
         <li><strong>Insert-only by design</strong> — untagging/deleting a torrent does
           <em>not</em> remove its line; manual removal is the user's call (see
           <a href="/runbooks/syncthing.html#stignore">syncthing runbook</a>).</li>
@@ -351,7 +351,7 @@
       <ul>
         <li><a href="/scheduling.html">Scheduling</a> — the ofelia labels that schedule
           the publish tick, <code>rar-backlog.sh</code>, and
-          <code>pinelake-stignore.sh</code>.</li>
+          <code>pinelake-stignore.py</code>.</li>
         <li><a href="/monitoring.html">Monitoring</a> — the Gatus push endpoint that receives
           the heartbeat.</li>
         <li><a href="/runbooks/syncthing.html#stignore">Syncthing → .stignore</a> — the file

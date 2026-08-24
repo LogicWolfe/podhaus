@@ -1,0 +1,12 @@
+[[stack]]
+name = "pinelake-ofelia"
+description = "Label-based scheduler for Pinelake appliance jobs"
+tags = ["pinelake", "podhaus"]
+
+[stack.config]
+server = "pinelake"
+linked_repo = "podhaus-pinelake"
+run_directory = "pinelake/ofelia"
+environment = """
+TZ=[[TZ]]
+"""

@@ -1,0 +1,27 @@
+services:
+  backrest-init:
+    build:
+      context: ../../init-tools
+      dockerfile: Dockerfile
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_BACKREST_INIT:-unset}
+    volumes:
+      - ../../backup/rclone.conf.tmpl:/tmpl/rclone.conf.tmpl:ro
+      - ../../backup/pinelake/config.json.tmpl:/tmpl/config.json.tmpl:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  backrest:
+    volumes:
+      - type: bind
+        source: /Volumes/TerraMaster/.podhaus-backups/pinelake-restic
+        target: /repos/podhaus-pinelake
+        bind:
+          create_host_path: false
+      - /Users/Shared/Podhaus/plex:/userdata/plex:ro
+      - /Users/Shared/Podhaus/flood:/userdata/flood:ro
+      - /Users/Shared/Podhaus/syncthing:/userdata/syncthing:ro
+      - /Users/Shared/Podhaus/periphery:/userdata/komodo-periphery:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}

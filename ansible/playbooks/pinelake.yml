@@ -1,0 +1,21 @@
+# Provision Pinelake's host/runtime substrate without cutting over services.
+#
+# Run from a development machine with its machine-key agent active:
+#   cd ansible
+#   ansible-playbook playbooks/pinelake.yml --check --diff   # read first
+#   ansible-playbook playbooks/pinelake.yml
+#
+# The role provisions OrbStack as the appliance runtime. Apply it only at the
+# runtime cutover: it does not migrate or start Plex, Syncthing, or Flood.
+---
+- name: Provision Pinelake pre-cutover substrate
+  hosts: pinelake
+  gather_facts: true
+
+  roles:
+    - role: pinelake_macos
+      tags: [macos, pinelake]
+    - role: sshd_pomerium_ca
+      tags: [ssh]
+    - role: komodo_periphery
+      tags: [periphery]

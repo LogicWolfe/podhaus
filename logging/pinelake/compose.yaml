@@ -1,0 +1,37 @@
+services:
+  pinelake-alloy-secrets-init:
+    build:
+      context: ../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_PINELAKE_ALLOY_SECRETS_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
+    restart: "no"
+    environment:
+      PINELAKE_CERT_B64: ${PINELAKE_CERT_B64}
+      PINELAKE_KEY_B64: ${PINELAKE_KEY_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf '%s' "$${PINELAKE_CERT_B64}" | base64 -d > /secrets/pinelake-cert.pem
+        printf '%s' "$${PINELAKE_KEY_B64}" | base64 -d > /secrets/pinelake-key.pem
+    volumes:
+      - pinelake-alloy-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  alloy:
+    depends_on:
+      pinelake-alloy-secrets-init:
+        condition: service_completed_successfully
+    volumes:
+      - /Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/logging/pinelake/alloy-conf:/etc/alloy:ro
+      - pinelake-alloy-secrets:/run/podhaus-secrets:ro
+    labels:
+      podhaus.depends-on-pinelake-alloy-secrets-init: ${BUILD_HASH_PINELAKE_ALLOY_SECRETS_INIT:-unset}
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+volumes:
+  pinelake-alloy-secrets:

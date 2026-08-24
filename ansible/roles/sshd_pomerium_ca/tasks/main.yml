@@ -19,7 +19,7 @@
                 field='ssh_user_ca_pub', section='Secrets', vault='Homelab') }}
     dest: /etc/ssh/pomerium-user-ca.pub
     owner: root
-    group: root
+    group: "{{ sshd_pomerium_ca_group }}"
     mode: "0644"
     validate: ssh-keygen -l -f %s
   notify: Reload sshd
@@ -30,7 +30,7 @@
   ansible.builtin.copy:
     dest: /etc/ssh/sshd_config.d/00-podhaus-pomerium-ca.conf
     owner: root
-    group: root
+    group: "{{ sshd_pomerium_ca_group }}"
     mode: "0644"
     content: |
       # Managed by ansible/roles/sshd_pomerium_ca. Do not edit on the host.

@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Allow a Plex-affecting operation only after proving zero active sessions."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import plistlib
+import sys
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+
+IDENTITY_KEYS = (
+    "MachineIdentifier",
+    "ProcessedMachineIdentifier",
+    "AnonymousMachineIdentifier",
+    "CertificateUUID",
+)
+
+
+def fail_closed(message: str) -> "NoReturn":
+    print(f"Plex session gate could not prove zero sessions: {message}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def read_plist_preferences(path: Path) -> dict[str, object]:
+    try:
+        with path.open("rb") as stream:
+            preferences = plistlib.load(stream)
+    except (OSError, plistlib.InvalidFileException, ValueError) as exc:
+        fail_closed(f"preferences plist is unreadable ({type(exc).__name__})")
+    if not isinstance(preferences, dict):
+        fail_closed("preferences plist is not a dictionary")
+    return preferences
+
+
+def read_xml_preferences(path: Path) -> dict[str, object]:
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError) as exc:
+        fail_closed(f"preferences XML is unreadable ({type(exc).__name__})")
+    if root.tag != "Preferences":
+        fail_closed("preferences XML has an unexpected root element")
+    return dict(root.attrib)
+
+
+def load_expected_identity(path: Path) -> dict[str, str]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail_closed(f"identity manifest is unreadable ({type(exc).__name__})")
+    if not isinstance(value, dict):
+        fail_closed("identity manifest is not an object")
+    expected: dict[str, str] = {}
+    for key in IDENTITY_KEYS:
+        item = value.get(key)
+        if not isinstance(item, str) or not item:
+            fail_closed(f"identity manifest has no valid {key}")
+        expected[key] = item
+    return expected
+
+
+def validate_preferences(
+    preferences: dict[str, object], expected: dict[str, str]
+) -> str:
+    for key, required in expected.items():
+        if preferences.get(key) != required:
+            fail_closed(f"{key} does not match the Pinelake identity manifest")
+    token = preferences.get("PlexOnlineToken")
+    if not isinstance(token, str) or not token:
+        fail_closed("preferences have no PlexOnlineToken")
+    return token
+
+
+def session_count(url: str, token: str, timeout: float) -> int:
+    request = urllib.request.Request(url, headers={"X-Plex-Token": token})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read()
+    except Exception as exc:
+        fail_closed(f"session endpoint is unavailable ({type(exc).__name__})")
+
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        fail_closed("session endpoint returned malformed XML")
+    if root.tag != "MediaContainer":
+        fail_closed("session endpoint returned an unexpected document")
+    try:
+        count = int(root.attrib["size"])
+    except (KeyError, TypeError, ValueError):
+        fail_closed("session endpoint returned no valid size")
+    if count < 0:
+        fail_closed("session endpoint returned a negative size")
+    return count
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--url",
+        default="http://127.0.0.1:32400/status/sessions",
+    )
+    preferences = parser.add_mutually_exclusive_group(required=True)
+    preferences.add_argument("--preferences-plist", type=Path)
+    preferences.add_argument("--preferences-xml", type=Path)
+    parser.add_argument(
+        "--expected-identity",
+        type=Path,
+        default=Path(__file__).with_name("plex-identity.json"),
+    )
+    parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--timeout", type=float, default=5.0)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    preferences = (
+        read_plist_preferences(args.preferences_plist)
+        if args.preferences_plist is not None
+        else read_xml_preferences(args.preferences_xml)
+    )
+    token = validate_preferences(
+        preferences, load_expected_identity(args.expected_identity)
+    )
+    if args.validate_only:
+        print("Plex identity: verified")
+        return
+    count = session_count(args.url, token, args.timeout)
+    print(f"Plex sessions: {count}")
+    raise SystemExit(0 if count == 0 else 1)
+
+
+if __name__ == "__main__":
+    main()

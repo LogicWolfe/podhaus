@@ -24,13 +24,15 @@
 set -u
 
 AGE_MINUTES=120  # 2 hours — RARs younger than this may still be extracting
-GATUS_URL="http://gatus:8080/api/v1/endpoints/torrents_rar-extraction/external"
 TOKEN="${GATUS_OFELIA_PUSH_TOKEN:-}"
 
 if [ -z "$TOKEN" ]; then
     echo "[rar-backlog] ERROR: GATUS_OFELIA_PUSH_TOKEN not set in env" >&2
     exit 1
 fi
+: "${GATUS_BASE_URL:?GATUS_BASE_URL is required}"
+: "${GATUS_RAR_ENDPOINT_ID:?GATUS_RAR_ENDPOINT_ID is required}"
+GATUS_URL="${GATUS_BASE_URL%/}/api/v1/endpoints/${GATUS_RAR_ENDPOINT_ID}/external"
 
 unhealthy_list=/tmp/rar-backlog-unhealthy.$$
 dir_list=/tmp/rar-backlog-dirs.$$
@@ -51,7 +53,7 @@ find /data/torrents \
     | sort -u > "$dir_list"
 
 while IFS= read -r dir; do
-    # Same extraction-presence test as rtorrent-cleanup.sh.
+    # A keeper beside the archive proves extraction produced usable output.
     keep_count=$(find "$dir" -maxdepth 1 -type f \
         ! -iname '*.rar' \
         ! -iname '*.r[0-9][0-9]' \

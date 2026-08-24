@@ -23,6 +23,8 @@
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: directory
+    owner: "{{ podhaus_periphery_owner }}"
+    group: "{{ podhaus_periphery_group }}"
     mode: "{{ item.mode }}"
   loop:
     - {path: "{{ podhaus_periphery_dir }}", mode: "0755"}
@@ -33,6 +35,8 @@
   ansible.builtin.copy:
     src: "{{ podhaus_keys_dir }}/{{ inventory_hostname }}-periphery.key"
     dest: "{{ podhaus_periphery_dir }}/keys/periphery.key"
+    owner: "{{ podhaus_periphery_owner }}"
+    group: "{{ podhaus_periphery_group }}"
     mode: "0600"
   no_log: true
   notify: Restart periphery
@@ -41,6 +45,8 @@
   ansible.builtin.copy:
     src: "{{ podhaus_keys_dir }}/core.pub"
     dest: "{{ podhaus_periphery_dir }}/keys/core.pub"
+    owner: "{{ podhaus_periphery_owner }}"
+    group: "{{ podhaus_periphery_group }}"
     mode: "0644"
   notify: Restart periphery
 
@@ -50,6 +56,8 @@
   # time so the credential never lands in the repo.
   ansible.builtin.copy:
     dest: "{{ podhaus_periphery_dir }}/etc-komodo/periphery.config.toml"
+    owner: "{{ podhaus_periphery_owner }}"
+    group: "{{ podhaus_periphery_group }}"
     mode: "0600"
     content: |
       # Rendered by ansible/roles/komodo_periphery. Do not edit on the host.
@@ -67,6 +75,8 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../{{ inventory_hostname }}/periphery/compose.yaml"
     dest: "{{ podhaus_periphery_dir }}/compose.yaml"
+    owner: "{{ podhaus_periphery_owner }}"
+    group: "{{ podhaus_periphery_group }}"
     mode: "0644"
   notify: Restart periphery
 
@@ -74,20 +84,51 @@
   # TZ only — outbound auth is the X25519 keypair, not a shared secret.
   ansible.builtin.copy:
     dest: "{{ podhaus_periphery_dir }}/.env"
+    owner: "{{ podhaus_periphery_owner }}"
+    group: "{{ podhaus_periphery_group }}"
     mode: "0600"
     content: |
       TZ={{ podhaus_timezone }}
   notify: Restart periphery
 
-- name: Bring Periphery up
+- name: Bring Periphery up through system Docker
   community.docker.docker_compose_v2:
     project_src: "{{ podhaus_periphery_dir }}"
     project_name: komodo-periphery
     state: present
+  become: "{{ podhaus_docker_become }}"
   register: periphery_up
+  when:
+    - not ansible_check_mode
+    - podhaus_docker_home is none
+
+- name: Bring Periphery up through the globally selected user Docker engine
+  ansible.builtin.command:
+    argv:
+      - "{{ podhaus_docker_cli }}"
+      - compose
+      - --project-name
+      - komodo-periphery
+      - up
+      - --detach
+      - --remove-orphans
+    chdir: "{{ podhaus_periphery_dir }}"
+  environment:
+    HOME: "{{ podhaus_docker_home }}"
+  become: false
+  register: periphery_user_up
+  changed_when: >-
+    'Created' in (periphery_user_up.stdout + periphery_user_up.stderr)
+    or 'Recreated' in (periphery_user_up.stdout + periphery_user_up.stderr)
+    or 'Started' in (periphery_user_up.stdout + periphery_user_up.stderr)
+    or 'Removed' in (periphery_user_up.stdout + periphery_user_up.stderr)
+  when:
+    - not ansible_check_mode
+    - podhaus_docker_home is not none
 
 - name: Flush handlers so a config change is live before the readiness check
   ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode
 
 - name: Wait for Core to report this server as Ok
   # The only honest health signal in outbound mode: there is no inbound
@@ -115,3 +156,4 @@
     | first | default('') == 'Ok'
   retries: 30
   delay: 4
+  when: not ansible_check_mode

@@ -1,0 +1,41 @@
+services:
+  pinelake-syncthing:
+    container_name: pinelake-syncthing
+    image: syncthing/syncthing:latest
+    restart: unless-stopped
+    network_mode: host
+    user: "501:20"
+    environment:
+      STGUIADDRESS: "0.0.0.0:8384"
+      TZ: ${TZ}
+    volumes:
+      - /Users/Shared/Podhaus/syncthing:/var/syncthing/config
+      - type: bind
+        source: /Volumes/TerraMaster/Movies
+        target: /Volumes/TerraMaster/Movies
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/TV
+        target: /Volumes/TerraMaster/TV
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Kids
+        target: /Volumes/TerraMaster/Kids
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Volumes/TerraMaster/Sports
+        target: /Volumes/TerraMaster/Sports
+        bind:
+          create_host_path: false
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:8384/rest/noauth/health >/dev/null"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

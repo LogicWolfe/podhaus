@@ -13,7 +13,11 @@
     - role: wsl
       when: podhaus_is_wsl | default(false)
       tags: [wsl]
+    - role: pinelake_macos
+      when: inventory_hostname in groups['macos_appliance_hosts']
+      tags: [macos, pinelake]
     - role: base
+      when: inventory_hostname in groups['linux_hosts']
       tags: [base]
     - role: docker
       when: inventory_hostname in groups['docker_hosts']
@@ -25,6 +29,7 @@
       when: inventory_hostname in groups['edge_hosts']
       tags: [edge]
     - role: authorized_keys
+      when: inventory_hostname in groups['linux_hosts']
       tags: [ssh]
     - role: sshd_pomerium_ca
       tags: [ssh]

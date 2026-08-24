@@ -2,32 +2,35 @@
 
       <h1>Backup &amp; recovery</h1>
       <p class="lead text-lg text-text-muted">
-        Backrest manages restic snapshots of operational state from bilby and kangaroo. Each
-        stateful host has its own repository on Jump and mirrors that repository to OneDrive
-        through its own rclone hook and OAuth token chain.
+        Backrest manages restic snapshots of operational state from bilby, kangaroo, and
+        Pinelake. Each stateful host has its own repository and mirrors that repository to
+        OneDrive through its own rclone hook and OAuth token chain.
       </p>
 
       <h2 id="topology">Backup topology</h2>
-      <pre><code>bilby state                kangaroo state
-    │                          │
-    ↓                          ↓
-bilby Backrest             kangaroo Backrest
-    │                          │
-    ↓                          ↓
-restic repo                restic repo
-/mnt/jump/backups/         /share/CACHEDEV2_DATA/Jump/backups-kangaroo/
-    │                          │
-    ↓                          ↓
-bilby rclone hook          kangaroo rclone hook
-    │                          │
-    ↓                          ↓
-OneDrive                   OneDrive
-Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
+      <pre><code>bilby state                kangaroo state                 pinelake state
+    │                          │                               │
+    ↓                          ↓                               ↓
+bilby Backrest             kangaroo Backrest              pinelake Backrest
+    │                          │                               │
+    ↓                          ↓                               ↓
+restic repo                restic repo                     restic repo
+/mnt/jump/backups/         /share/CACHEDEV2_DATA/Jump/     TerraMaster/
+                           backups-kangaroo/               .podhaus-backups/
+                                                          pinelake-restic/
+    │                          │                               │
+    ↓                          ↓                               ↓
+bilby rclone hook          kangaroo rclone hook            pinelake rclone hook
+    │                          │                               │
+    ↓                          ↓                               ↓
+OneDrive                   OneDrive                        OneDrive
+Backups/                   Backups/                        Backups/
+podhaus-restic/            podhaus-kangaroo-restic/        podhaus-pinelake-restic/</code></pre>
       <p>
-        Two restic clients on one repo is supported (per-operation locking) but kangaroo gets
-        its own repo to avoid lock coordination across the LAN, and to keep its plan schedule
-        independent of bilby's. Each Backrest instance owns its own rclone config and refresh
-        token so concurrent uploads cannot invalidate one another.
+        Each host owns a separate restic repository, plan schedule, rclone config, and refresh
+        token chain. Pinelake's local repository protects operational state rather than its
+        multi-terabyte media; the OneDrive mirror is the independent copy if the TerraMaster is
+        lost.
       </p>
 
       <h2 id="bilby-plans">Bilby plans</h2>
@@ -93,6 +96,16 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
         volume directly, so there is no NFS roundtrip from inside the container.
       </p>
 
+      <h2 id="pinelake-plans">Pinelake plans</h2>
+      <p>
+        Pinelake backs up Plex, Flood, Syncthing, Periphery, and Backrest state to
+        <code>/Volumes/TerraMaster/.podhaus-backups/pinelake-restic</code>. It does not back up
+        the media library: that data is recoverable but too large for this backup tier. The
+        final Backrest-state snapshot mirrors the repository to
+        <code>OneDrive/Backups/podhaus-pinelake-restic/</code>. As on every host, its rclone
+        configuration has a dedicated OAuth token chain.
+      </p>
+
       <h2 id="sky-backups">Sky backups on Pouch</h2>
       <p>
         Sky's client writes an encrypted restic repository to the private
@@ -101,7 +114,7 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
         <code>/share/CACHEDEV1_DATA/Pouch/minio</code>.
       </p>
       <p>
-        This repository is deliberately outside both Backrest plans and the OneDrive rclone
+        This repository is deliberately outside the fleet Backrest plans and OneDrive rclone
         hooks. It is already an additional backup copy, and the placement requirement is that
         none of it lands on Jump. Pouch loss therefore loses this repository; Sky's source data
         is the rebuild source. See the <a href="/runbooks/pouch-minio">Pouch MinIO runbook</a>.
@@ -156,9 +169,10 @@ Backups/podhaus-restic/    Backups/podhaus-kangaroo-restic/</code></pre>
       <ul>
         <li><code>onedrive:Backups/podhaus-restic/</code> — bilby's repo.</li>
         <li><code>onedrive:Backups/podhaus-kangaroo-restic/</code>: kangaroo's repo.</li>
+        <li><code>onedrive:Backups/podhaus-pinelake-restic/</code>: Pinelake's repo.</li>
       </ul>
       <p>
-        Bilby and kangaroo use separate OAuth snapshots in 1Password. The init container
+        Bilby, kangaroo, and Pinelake use separate OAuth snapshots in 1Password. The init container
         decodes the host's snapshot and renders <code>rclone.conf</code> only when its named
         volume is empty. After that, rclone owns the live file and persists refresh-token
         rotation in place; an ordinary redeploy deliberately preserves it. Back up the live

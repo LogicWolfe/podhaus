@@ -30,6 +30,13 @@ resource "tailscale_acl" "podhaus" {
         dst = ["tag:recovery"]
         ip  = ["tcp:22"]
       },
+      {
+        # Temporary Pine Lake bootstrap path. Remove after its outbound
+        # Numbat SSH route has passed off-LAN and reboot validation.
+        src = ["100.107.146.32"] # bilby-recovery
+        dst = ["100.64.93.47"]   # baxters-mac-mini
+        ip  = ["tcp:22"]
+      },
     ]
     ssh = [{
       action = "check"
@@ -50,6 +57,11 @@ resource "tailscale_acl" "podhaus" {
       {
         src  = "tag:podnet"
         deny = ["tag:recovery:22"]
+      },
+      {
+        src    = "100.107.146.32"
+        accept = ["100.64.93.47:22"]
+        deny   = ["100.64.93.47:80"]
       },
     ]
   })

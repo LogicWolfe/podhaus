@@ -1,0 +1,29 @@
+#!/bin/sh
+# Prove Pinelake's removable media through the same engine that will deploy it.
+set -eu
+
+if [ "$#" -eq 0 ]; then
+    echo "Pinelake mount gate requires at least one directory" >&2
+    exit 1
+fi
+
+actual=$(docker run --rm --pull=never \
+    --mount type=bind,source=/Volumes/TerraMaster/.podhaus-terramaster,target=/sentinel,readonly \
+    alpine:latest cat /sentinel)
+expected="EAED18A9-74C7-4163-ACB4-406B2226FDC6"
+if [ "$actual" != "$expected" ]; then
+    echo "Pinelake mount gate found the wrong TerraMaster sentinel" >&2
+    exit 1
+fi
+
+for required do
+    case "$required" in
+        *[!A-Za-z0-9._/-]*|/*|*../*|../*|*/..|..)
+            echo "Pinelake mount gate received an invalid path: $required" >&2
+            exit 1
+            ;;
+    esac
+    docker run --rm --pull=never \
+        --mount "type=bind,source=/Volumes/TerraMaster/$required,target=/required,readonly" \
+        alpine:latest test -d /required
+done

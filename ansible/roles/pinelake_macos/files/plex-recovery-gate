@@ -1,0 +1,27 @@
+#!/bin/sh
+# Permit an automatic Plex restart only when Plex is conclusively dead.
+set -u
+
+if pgrep -f 'Plex Media Server.app/Contents/MacOS/Plex Media Server' >/dev/null 2>&1; then
+    echo "Plex automatic recovery refused: a Plex process is still alive" >&2
+    exit 1
+else
+    status=$?
+    if [ "$status" -ne 1 ]; then
+        echo "Plex automatic recovery could not inspect the process table" >&2
+        exit 2
+    fi
+fi
+
+if lsof -nP -iTCP:32400 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "Plex automatic recovery refused: port 32400 still has a listener" >&2
+    exit 1
+else
+    status=$?
+    if [ "$status" -ne 1 ]; then
+        echo "Plex automatic recovery could not inspect port 32400" >&2
+        exit 2
+    fi
+fi
+
+echo "Plex is proven dead: no process and no port 32400 listener"

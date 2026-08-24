@@ -35,8 +35,8 @@ schedule = insufficient_disk_space,1,30,close_low_diskspace=500M
 # every complete + pinelake-tagged torrent into .stignore (alphabetically
 # into the matching !<TopLevel>/ block). The hook is the zero-latency
 # trigger; an ofelia label runs the same script every 5 min to catch the
-# tag-applied-after-completion case. See flood/scripts/pinelake-stignore.sh.
-method.set_key=event.download.finished,pinelake_stignore,"execute.nothrow.bg={/scripts/pinelake-stignore.sh}"
+# tag-applied-after-completion case. See flood/scripts/pinelake-stignore.py.
+method.set_key=event.download.finished,pinelake_stignore,"execute.nothrow.bg={python3,/scripts/pinelake-stignore.py}"
 
 # Real-time in-place RAR extraction. Replaces the previous unpackerr
 # stack: rtorrent passes $d.base_path= (the exact directory the torrent

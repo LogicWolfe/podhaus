@@ -1,0 +1,18 @@
+[client]
+remote_addr = "relay.numbat.pod.haus:2333"
+
+[client.transport]
+type = "noise"
+
+[client.transport.noise]
+remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
+
+[client.services.pinelake_ssh]
+type = "tcp"
+local_addr = "host.docker.internal:22"
+token = "${RATHOLE_PINELAKE_SSH_TOKEN}"
+
+[client.services.pinelake_http]
+type = "tcp"
+local_addr = "pinelake-caddy:4443"
+token = "${RATHOLE_PINELAKE_HTTP_TOKEN}"

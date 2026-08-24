@@ -1,43 +1,70 @@
 # Flic buttons, bridged by flicd on the Pi Zero (iot/pizero/).
 #
-# The Pi owns the BLE link and nothing else: flicd holds hci0 exclusively via
-# HCI_CHANNEL_USER and serves its own protocol on TCP 5551, which this
-# integration dials. No custom code sits between the two.
+# Flic --BLE--> flicd --localhost--> flic-pusher --HTTP POST--> this webhook
 #
-# The address is a UniFi reservation (terraform/unifi.tf) rather than
-# pizero.local, because HA's container has no mDNS resolver and the name
-# would simply never resolve.
+# The Pi owns the BLE link. flicd holds hci0 exclusively via HCI_CHANNEL_USER
+# and serves its own protocol on TCP 5551; iot/pizero/flic-pusher dials that
+# on localhost and POSTs each press here.
 #
-# The integration names entities after the address -- binary_sensor.flic_
-# 80e4da73d6bd -- and there is no per-button config block to name them in.
-# Automations should trigger on the flic_click event and match
-# button_address, so this table is the only place the colours are recorded:
+# Home Assistant used to dial flicd itself, with the built-in `flic` platform.
+# That direction could not survive a reboot in either order. The platform is
+# set up exactly once: it catches only ConnectionRefusedError, never raises
+# PlatformNotReady, and runs handle_events on a bare thread that returns
+# silently when the socket drops. So flicd not being up yet, or restarting
+# later, left Home Assistant permanently deaf with nothing in the log until
+# someone restarted the whole of Home Assistant. That is what happened after
+# the power outage on 2026-08-22, and it went unnoticed for two days.
+#
+# Pushing removes the cross-host connection rather than teaching it to
+# reconnect. Nothing here holds state between the two hosts, so either can
+# reboot whenever it likes, in any order, and the bridge works again the
+# moment both are up. There is nothing to restart and nothing to supervise.
+#
+# The cost is that there are no binary_sensor.flic_* entities any more. They
+# were never load-bearing: every Flic automation triggers on the flic_click
+# event, because the old integration initialised each binary_sensor to `on` at
+# startup and a state trigger would therefore have fired on every restart.
+#
+# The event this fires is byte-for-byte what the integration fired, so the
+# automations in automations.yaml are unchanged and need no knowledge of any
+# of the above:
 #
 #   Blue    80:e4:da:73:d6:bd   Nanoleaf lamp: toggle / palette
 #   Green   80:e4:da:73:e3:2b   bookshelf lamp: toggle / colour
 #   Black   80:e4:da:73:e3:32   LED strip toggle / crazy mode
 #
-# Pairing is an explicit act, done once per button with the scan wizard on
-# the Pi -- see docs/runbooks/pizero.md. discovery is therefore off: leaving
-# it on makes HA scan continuously, which costs radio time on a single-core
-# ARMv6 board that is already holding connections to every paired button.
-# Turn it on temporarily if you would rather pair by holding a button for
-# seven seconds than by SSHing in.
-binary_sensor:
-  - platform: flic
-    host: 10.0.0.77
-    port: 5551
-    discovery: false
-    # Discard a press rather than replaying it late. Flic buttons queue
-    # presses locally while out of range, so without a bound a button that
-    # spent an hour disconnected would dump an hour of history into HA the
-    # moment it reconnects -- firing every automation attached to it.
-    timeout: 3
-    # Not cosmetic filtering: this selects which fliclib callback the
-    # integration registers. Ignoring double switches it to
-    # on_button_click_or_hold, so a single press fires the moment the button
-    # is released. With double enabled it would instead have to wait out the
-    # disambiguation window on every press, which is very noticeable on a
-    # button that switches a light.
-    ignored_click_types:
-      - double
+# Pairing is unchanged and still an explicit act on the Pi with the scan
+# wizard -- see docs/runbooks/pizero.md. flic-pusher picks up a newly verified
+# button without a restart.
+automation:
+  - id: flic_webhook_bridge
+    alias: 'Flic: bridge button presses onto the event bus'
+    description: >-
+      Turns a POST from iot/pizero/flic-pusher into the flic_click event that
+      every Flic automation triggers on.
+
+      The webhook id is the only thing authenticating this, which is why it
+      lives in /config/secrets.yaml on the host rather than in the checkout.
+      That is a deliberately modest boundary: flicd's own port 5551 is already
+      unauthenticated and open to the LAN, so anyone on the network can watch
+      presses regardless. local_only keeps it off the internet, which is the
+      part that actually matters.
+
+      mode is parallel because the failure this whole bridge exists to prevent
+      is a press doing nothing. Queueing would serialise a burst from a child
+      hammering all three buttons; there is no shared state here to protect.
+    triggers:
+      - trigger: webhook
+        webhook_id: !secret flic_webhook_id
+        local_only: true
+        allowed_methods:
+          - POST
+    actions:
+      - event: flic_click
+        event_data:
+          button_name: '{{ trigger.json.button_name }}'
+          button_address: '{{ trigger.json.button_address }}'
+          click_type: '{{ trigger.json.click_type }}'
+          queued_time: '{{ trigger.json.queued_time }}'
+    mode: parallel
+    max: 25

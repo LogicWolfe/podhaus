@@ -1,0 +1,10 @@
+[[stack]]
+name = "pinelake-autoheal"
+description = "Restart unhealthy non-Plex containers on Pinelake"
+tags = ["pinelake", "podhaus"]
+
+[stack.config]
+server = "pinelake"
+linked_repo = "podhaus-pinelake"
+run_directory = "autoheal/pinelake"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]

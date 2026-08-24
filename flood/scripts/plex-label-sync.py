@@ -49,7 +49,6 @@ DOWNLOAD_ROOT = "/data/torrents"
 # the path Plex indexes (Media.Part.file).
 FLOOD_MEDIA_ROOT = os.environ.get("FLOOD_MEDIA_ROOT", "/data")
 PLEX_MEDIA_ROOT = os.environ.get("PLEX_MEDIA_ROOT", "/Users/Shared/Pouch")
-GATUS_ENDPOINT = "http://gatus:8080/api/v1/endpoints/torrents_plex-label-sync/external"
 
 
 def log(msg):
@@ -255,8 +254,11 @@ def heartbeat():
     token = os.environ.get("GATUS_OFELIA_PUSH_TOKEN")
     if not token:
         return
+    base_url = os.environ["GATUS_BASE_URL"].rstrip("/")
+    endpoint_id = os.environ["GATUS_LABEL_SYNC_ENDPOINT_ID"]
     req = urllib.request.Request(
-        GATUS_ENDPOINT + "?success=true", data=b"", method="POST",
+        f"{base_url}/api/v1/endpoints/{endpoint_id}/external?success=true",
+        data=b"", method="POST",
         headers={"Authorization": "Bearer " + token},
     )
     try:

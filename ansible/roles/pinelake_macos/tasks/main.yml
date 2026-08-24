@@ -1,0 +1,205 @@
+---
+- name: Converge unattended appliance power policy
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/pmset
+      - -a
+      - autorestart
+      - "1"
+      - sleep
+      - "0"
+      - displaysleep
+      - "{{ podhaus_display_sleep_minutes }}"
+      - disksleep
+      - "0"
+      - womp
+      - "1"
+  changed_when: false
+
+- name: Install OrbStack
+  community.general.homebrew_cask:
+    name: orbstack
+    state: present
+  become: false
+
+- name: Create the Pinelake tools directory
+  ansible.builtin.file:
+    path: "{{ podhaus_pinelake_libexec_dir }}"
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0755"
+
+- name: Install Pinelake operational tools
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ podhaus_pinelake_libexec_dir }}/{{ item }}"
+    owner: root
+    group: wheel
+    mode: "0755"
+  loop:
+    - pinelake-mount-guard
+    - pinelake-media-relocate
+    - plex-deploy-gate
+    - plex-session-gate
+    - plex-preferences-convert
+    - plex-recovery-gate
+
+- name: Install the Plex identity manifest
+  ansible.builtin.copy:
+    src: plex-identity.json
+    dest: "{{ podhaus_pinelake_libexec_dir }}/plex-identity.json"
+    owner: root
+    group: wheel
+    mode: "0644"
+
+- name: Create Pinelake service-state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ podhaus_operator }}"
+    group: staff
+    mode: "0755"
+  loop: "{{ podhaus_pinelake_state_dirs }}"
+
+- name: Prove the TerraMaster host mount
+  ansible.builtin.command:
+    argv: "{{
+        [podhaus_pinelake_libexec_dir + '/pinelake-mount-guard',
+         '--mount-point', podhaus_terramaster_mount,
+         '--volume-uuid', podhaus_terramaster_uuid,
+         '--sentinel', podhaus_terramaster_sentinel,
+         '--initialize-sentinel']
+        + (podhaus_terramaster_required_paths
+           | map('regex_replace', '^(.*)$', '--require=\\1') | list)
+      }}"
+  register: pinelake_host_mount_guard
+  changed_when: "'sentinel initialized' in pinelake_host_mount_guard.stdout"
+
+- name: Create the Pinelake restic repository directory
+  ansible.builtin.file:
+    path: "{{ podhaus_pinelake_backup_repo }}"
+    state: directory
+    mode: "0700"
+
+- name: Start OrbStack
+  ansible.builtin.command:
+    argv: [/opt/homebrew/bin/orb, start]
+  environment:
+    HOME: "/Users/{{ podhaus_operator }}"
+    PATH: "{{ podhaus_orbstack_path }}"
+  become: false
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Configure OrbStack
+  when: not ansible_check_mode
+  block:
+    - name: Read OrbStack settings
+      ansible.builtin.command:
+        argv: [/opt/homebrew/bin/orb, config, get, "{{ item.key }}"]
+      environment:
+        HOME: "/Users/{{ podhaus_operator }}"
+        PATH: "{{ podhaus_orbstack_path }}"
+      become: false
+      changed_when: false
+      loop:
+        - {key: app.start_at_login, value: "false"}
+        - {key: setup.use_admin, value: "false"}
+        - {key: docker.set_context, value: "true"}
+        - {key: docker.expose_ports_to_lan, value: "true"}
+        - {key: k8s.enable, value: "false"}
+        - {key: network_bridge, value: "false"}
+        - {key: cpu, value: "{{ podhaus_orbstack_cpu }}"}
+        - {key: memory_mib, value: "{{ podhaus_orbstack_memory_mib }}"}
+      register: pinelake_orbstack_settings
+
+    - name: Apply OrbStack settings
+      ansible.builtin.command:
+        argv:
+          - /opt/homebrew/bin/orb
+          - config
+          - set
+          - "{{ item.item.key }}"
+          - "{{ item.item.value }}"
+      environment:
+        HOME: "/Users/{{ podhaus_operator }}"
+        PATH: "{{ podhaus_orbstack_path }}"
+      become: false
+      loop: "{{ pinelake_orbstack_settings.results }}"
+      when: item.stdout != (item.item.value | string)
+      notify: Restart OrbStack
+
+- name: Apply OrbStack configuration before creating networks
+  ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode
+
+- name: Create the shared Docker network
+  when: not ansible_check_mode
+  block:
+    - name: Inspect dockernet in OrbStack
+      ansible.builtin.command:
+        argv: [docker, network, inspect, "{{ podhaus_dockernet_name }}"]
+      environment:
+        HOME: "/Users/{{ podhaus_operator }}"
+        PATH: "{{ podhaus_orbstack_path }}"
+      become: false
+      changed_when: false
+      failed_when: false
+      register: pinelake_dockernet
+
+    - name: Create dockernet in OrbStack
+      ansible.builtin.command:
+        argv:
+          - docker
+          - network
+          - create
+          - --driver
+          - bridge
+          - --subnet
+          - "{{ podhaus_dockernet_subnet }}"
+          - --gateway
+          - "{{ podhaus_dockernet_gateway }}"
+          - "{{ podhaus_dockernet_name }}"
+      environment:
+        HOME: "/Users/{{ podhaus_operator }}"
+        PATH: "{{ podhaus_orbstack_path }}"
+      become: false
+      when: pinelake_dockernet.rc != 0
+
+- name: Pull current pre-deploy gate images
+  ansible.builtin.command:
+    argv: [docker, pull, "{{ item }}"]
+  environment:
+    HOME: "/Users/{{ podhaus_operator }}"
+    PATH: "{{ podhaus_orbstack_path }}"
+  become: false
+  changed_when: false
+  loop:
+    - alpine:latest
+    - python:alpine
+  when: not ansible_check_mode
+
+- name: Prove the TerraMaster through the global container runtime
+  ansible.builtin.command:
+    argv: "{{
+        [podhaus_pinelake_libexec_dir + '/pinelake-mount-guard',
+         '--mount-point', podhaus_terramaster_mount,
+         '--volume-uuid', podhaus_terramaster_uuid,
+         '--sentinel', podhaus_terramaster_sentinel,
+         '--container-check']
+        + (podhaus_terramaster_required_paths
+           | map('regex_replace', '^(.*)$', '--require=\\1') | list)
+      }}"
+  become: false
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Install the OrbStack launch daemon
+  ansible.builtin.template:
+    src: haus.podhaus.orbstack.plist.j2
+    dest: "{{ podhaus_pinelake_launch_daemon }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: Reload OrbStack launch daemon

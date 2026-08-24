@@ -1,0 +1,27 @@
+services:
+  pinelake-rathole-client:
+    container_name: pinelake-rathole-client
+    build:
+      context: ..
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_PINELAKE_RATHOLE_CLIENT:-unset}
+    image: pinelake-rathole:local
+    pull_policy: never
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      RATHOLE_CONFIG_TEMPLATE: /etc/rathole/client.toml.tmpl
+      RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}
+      RATHOLE_PINELAKE_SSH_TOKEN: ${RATHOLE_PINELAKE_SSH_TOKEN}
+      RATHOLE_PINELAKE_HTTP_TOKEN: ${RATHOLE_PINELAKE_HTTP_TOKEN}
+    volumes:
+      - /Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/relay/pinelake:/etc/rathole:ro
+    networks: [dockernet]
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+networks:
+  dockernet:
+    external: true

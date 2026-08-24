@@ -1,7 +1,6 @@
 # Bilby's logging overlay. Adds bilby-specific alloy bits on top of
 # compose.shared.yaml: SELinux opt, ${PODHAUS_REPO}-rooted alloy-conf
-# bind, and the /var/lib/flood-db tail for rtorrent-cleanup events that
-# don't reach docker stdout.
+# bind.
 #
 # Bilby's Alloy ships OTLP to ClickStack. The backend and HyperDX UI
 # live in the clickstack stack, not this logging stack. See
@@ -22,11 +21,5 @@ services:
       # The bound dir contains config.alloy + parsers/ (per-service
       # config-as-code modules imported via import.file).
       - ${PODHAUS_REPO}/logging/bilby/alloy-conf:/etc/alloy:ro
-      # rtorrent-cleanup.sh writes to /flood-db/rtorrent-cleanup.log
-      # inside the flood container — that's /var/lib/flood-db on host.
-      # The script is forked by rtorrent (not by tini), so its output
-      # never reaches docker stdout. Tailing the file directly is the
-      # only way to get cleanup-hook events into ClickStack.
-      - /var/lib/flood-db:/var/log/flood:ro
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
