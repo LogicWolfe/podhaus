@@ -1,19 +1,14 @@
-# pinelake.haus tunnel-routed CNAMEs. Pinelake is not on the home LAN,
-# so this root does not create split-horizon UniFi records for it.
+# Pinelake is off-LAN and reaches the fleet by dialing out to Numbat. Its
+# public names therefore use the same DNS-only BinaryLane application address
+# as the protected pod.haus estate.
 
-resource "cloudflare_dns_record" "pinelake_haus_tunnel" {
-  for_each = toset(["home"])
-  zone_id  = local.zones["pinelake.haus"]
-  name     = "${each.key}.pinelake.haus"
-  type     = "CNAME"
-  content  = local.tunnels.pinelake
-  proxied  = true
-  ttl      = 1
-  settings = {
-    flatten_cname = false
-    ipv4_only     = false
-    ipv6_only     = false
-  }
+resource "cloudflare_dns_record" "pinelake_haus_home" {
+  zone_id = local.zones["pinelake.haus"]
+  name    = "home.pinelake.haus"
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
 }
 
 resource "cloudflare_dns_record" "pinelake_haus_pomerium" {

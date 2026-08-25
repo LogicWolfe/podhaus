@@ -96,7 +96,9 @@ and raw endpoints use Numbat's second address and Caddy. Cloudflare stays
 authoritative DNS and CDN for public websites. The old Podhaus Cloudflare
 Tunnel, Access estate, DigitalOcean relay, and routed Tailscale management
 plane have been removed. Pinelake uses the same outbound Numbat contract;
-its old `home.pinelake.haus` Cloudflare route remains only for manual recovery.
+`home.pinelake.haus` is its canonical SSH name, while `torrent.pinelake.haus`
+and `sync.pinelake.haus` are protected browser routes. All three use Numbat;
+hosted JetKVM is Pinelake's independent recovery path.
 
 ---
 
@@ -186,9 +188,8 @@ its old `home.pinelake.haus` Cloudflare route remains only for manual recovery.
   there is no identity boundary to leak. Tailscale keeps separate
   `*-recovery` names for explicit break-glass use.
 - Public and raw endpoints use Numbat's relay IP and Caddy `:4444`.
-  Cloudflare proxies only public CDN sites. Pine Lake retains the explicitly
-  scoped `home.pinelake.haus` tunnel as a manual recovery path; its managed
-  service and SSH traffic use the outbound Numbat contract.
+  Cloudflare proxies only public CDN sites. Pine Lake's SSH and service names
+  use the same outbound Numbat contract as the rest of the fleet.
 - **Do not set per-container `dns: [...]` in compose.** It replaces Docker's
   embedded resolver (`127.0.0.11`) and breaks service-name resolution such as
   `ferretdb` and `caddy`. Bilby's daemon configuration has no DNS override;
@@ -229,7 +230,7 @@ its old `home.pinelake.haus` Cloudflare route remains only for manual recovery.
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
 | `ansible/playbooks/numbat-bootstrap.yml` + `ansible/playbooks/numbat.yml` | Numbat's two plays. The bootstrap play (fresh VM only, run from bilby) pins Terraform's 1P-published host key for first contact, connects on first-boot port 2222, stages the `numbat_edge` firewall without activating it, starts rathole before outbound Periphery, enrolls the userspace SSH recovery daemon, then loads the final ruleset and closes 2222 last. The steady-state play (base, docker, numbat_edge, sshd_pomerium_ca, komodo_periphery) reaches the host through Pomerium and is what check-mode equivalence proves. Numbat application stacks are Komodo-managed. |
 | `tailscale-recovery-bootstrap` | Host-native, userspace-mode Tailscale recovery bootstrap for bilby, numbat, and kangaroo. It publishes only loopback OpenSSH through Tailscale Serve on TCP 22; no host route, DNS override, TUN, or container socket/state exposure. |
-| `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS/CDN/AOP, Pine Lake's current Cloudflare edge, UniFi DNS, GitHub deploy webhooks, the SSH-only Tailscale recovery plane, MinIO IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in MinIO via public `https://storage.pod.haus`; run stock `terraform` directly. |
+| `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS/CDN/AOP, UniFi DNS, GitHub deploy webhooks, the SSH-only Tailscale recovery plane, MinIO IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in MinIO via public `https://storage.pod.haus`; run stock `terraform` directly. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (per-site static hosting) via `storage.pod.haus`. |
 | `caddy/` | Bilby's split origin: private mTLS `:4443` for Pomerium, public-only `:4444` for Numbat raw/CDN endpoints, and `:443` for LAN routes. |
 | `relay/` | Outbound rathole clients on internal hosts and the Numbat server. Services are individually tokened and use Noise transport. |
@@ -517,7 +518,7 @@ These have failure modes that you must not introduce:
   at commit time. (`vpn-diagnostics` is the only stack that
   intentionally carries `deploy = false`; for podhaus stacks just
   omit the field.)
-- **Linked Repo hosts (kangaroo, numbat, fractal, voltaire, future pinelake) use the
+- **Linked Repo hosts (kangaroo, numbat, fractal, voltaire, pinelake) use the
   same four-stage procedure as bilby.** Komodo v2 semantics:
   `DeployStack` `git pull`s the linked clone before composing;
   `RestartStack` does not pull (it only `docker compose restart`s).

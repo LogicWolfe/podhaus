@@ -1,7 +1,7 @@
 # UniFi-side LAN DNS: split-horizon overrides for pod.haus hostnames
 # that resolve to internal IPs when the requester is on the home
-# network. The public CNAMEs (managed in services_pod_haus.tf via the
-# Cloudflare tunnel) take precedence over these for off-LAN requests;
+# network. The public A records (managed in services_pod_haus.tf and pointing
+# to Numbat) take precedence over these for off-LAN requests;
 # UniFi's resolver is the one that hands these out to LAN clients.
 #
 # Reference docs:

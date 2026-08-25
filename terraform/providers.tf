@@ -5,6 +5,10 @@
 # machine service account grants Homelab access only on Podhaus operators; the
 # AWS credentials are limited to the terraform-state bucket.
 
+data "onepassword_vault" "homelab" {
+  name = "Homelab"
+}
+
 provider "cloudflare" {
   # api_token from CLOUDFLARE_API_TOKEN env var (explicit op run boundary).
 }

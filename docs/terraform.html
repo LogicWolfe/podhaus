@@ -24,10 +24,9 @@
         <tbody>
           <tr>
             <td><a href="https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs"><code>cloudflare/cloudflare</code></a> v5</td>
-            <td>Public DNS (11 zones), public-site CDN and Authenticated Origin Pulls,
-              Voltaire's tunnel, and Pine Lake's current Tunnel and Access estate</td>
-            <td><code>terraform/dns_*.tf</code>, <code>terraform/access.tf</code>,
-              <code>terraform/services_pod_haus.tf</code>, <code>terraform/tunnel.tf</code></td>
+            <td>Public DNS (11 zones), public-site CDN and Authenticated Origin Pulls</td>
+            <td><code>terraform/dns_*.tf</code> and
+              <code>terraform/services_pod_haus.tf</code></td>
           </tr>
           <tr>
             <td><a href="https://registry.terraform.io/providers/ubiquiti-community/unifi/latest/docs"><code>ubiquiti-community/unifi</code></a> ~> 0.41</td>
@@ -196,10 +195,10 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
           surprising at first glance (default-value normalisation, deprecated-attribute
           flips, etc.).</li>
         <li><code>terraform apply</code> when you're happy.</li>
-        <li>For service exposure changes, smoke-test from the host with
-          <code>curl -sI https://&lt;hostname&gt;.pod.haus</code>. A 302 redirect to
-          <code>podhaus.cloudflareaccess.com</code> means the new Access app is gating;
-          a 2xx response with the Homelab service-token headers means the bypass works.</li>
+        <li>For protected service exposure changes, smoke-test from the host with
+          <code>curl -sI https://&lt;hostname&gt;.pod.haus</code>. An unauthenticated request
+          should redirect to <code>authenticate.pod.haus</code>; verify the backend through
+          its internal Gatus check rather than treating the redirect as application health.</li>
       </ol>
 
       <h2 id="dr">Disaster recovery</h2>

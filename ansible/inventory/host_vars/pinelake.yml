@@ -1,6 +1,6 @@
 # pinelake — M1 Mac mini at Nathan's dad's home.
 ---
-ansible_host: pinelake.pod.haus
+ansible_host: home.pinelake.haus
 ansible_user: baxter@pinelake
 ansible_python_interpreter: /usr/bin/python3
 
@@ -15,5 +15,6 @@ podhaus_periphery_owner: baxter
 podhaus_periphery_group: staff
 sshd_pomerium_ca_group: wheel
 
-# The Pomerium route selector rides the SSH username (user@route), matching
-# numbat and voltaire. OS-account work uses podhaus_operator.
+# The public hostname is canonical while the Pomerium route selector rides the
+# SSH username (user@route), matching numbat and voltaire. OS-account work uses
+# podhaus_operator.

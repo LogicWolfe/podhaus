@@ -36,8 +36,4 @@ locals {
     "skycroeser.net"       = "316431314842e094467c590a5322d4bb"
     "evecroeser.net"       = "7f427d2a5bfd19e4c37b9db82ea754eb"
   }
-
-  tunnels = {
-    pinelake = "fec5ca76-b634-4185-bdb2-f85c38b1b570.cfargotunnel.com"
-  }
 }

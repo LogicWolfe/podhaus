@@ -1,9 +1,9 @@
-# UDM Pro SE WAN port-forwards. Default fleet ingress is the
-# Cloudflare Tunnel (no exposed ports), so these resources exist only
-# for services that genuinely cannot ride the Tunnel.
+# UDM Pro SE WAN port-forwards. Default fleet ingress is the outbound Numbat
+# contract, so these resources exist only for services that genuinely need a
+# direct household port.
 #
-# Today that's Mumble: non-HTTP, UDP-load-bearing for voice quality
-# (Tunnel can't carry arbitrary UDP). 64738 isn't bound by the UDM's
+# Today that's Mumble: non-HTTP, UDP-load-bearing for voice quality.
+# Port 64738 isn't bound by the UDM's
 # own services, so the WAN:443 shadow trap that killed the old
 # storage.pod.haus forward (UDM web UI binds WAN:443 itself) does not
 # apply here. See docs/runbooks/mumble.md.

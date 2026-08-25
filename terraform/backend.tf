@@ -9,8 +9,8 @@ terraform {
 
   required_providers {
     cloudflare = {
-      # DNS, Access apps + policies, Tunnel config, GitHub webhook
-      # bypass, the whole pod.haus wildcard.
+      # Authoritative DNS, public-site CDN/AOP policy, and the GitHub webhook
+      # bypass across the managed zones.
       source  = "cloudflare/cloudflare"
       version = "~> 5.0"
     }

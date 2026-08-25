@@ -17,9 +17,6 @@ SQLite, single local volume.
   CLI.
 - **Ingress** `id.pod.haus` → Numbat public TLS rathole → Caddy `:4444` →
   `pocket-id:1411`.
-- **IdP registration** `cloudflare_zero_trust_access_identity_provider.pocket_id`
-  (generic OIDC, PKCE) in `terraform/access.tf` remains for Pinelake's current
-  Access applications. Podhaus services authenticate through Pomerium instead.
 - **Tailscale login** uses the client and `tailscale-users` group in
   `terraform/pocket_id.tf`. Caddy serves the required WebFinger response at
   `nathanbaxter.com/.well-known/webfinger`; the IdP selection itself is set in
@@ -61,26 +58,16 @@ secret is stored in git or a shell env.
 | Item | Shape | Consumed as | By |
 |---|---|---|---|
 | `Pocket ID Encryption Key` | API Credential, `credential` | `OP__KOMODO__POCKET_ID_ENCRYPTION_KEY__CREDENTIAL` (komodo-op) → `ENCRYPTION_KEY` | the container, via `stack.toml` |
-| `Pocket ID OIDC` | section `OIDC`: `client id` + `client secret` | `data "onepassword_item"` at plan time (`access.tf`) | Terraform, directly |
 | `Pocket ID API Key` | API Credential, `credential` | `data.onepassword_item.pocket_id_api_key` → Pocket ID Terraform provider | users, groups, OIDC clients |
 | `Forgejo OIDC` | Login, username + password | Terraform-managed output from `pocketid_client.forgejo` | `forgejo-auth-init` through komodo-op |
 | `Pomerium OIDC` | Login, username + password | Terraform-managed output from `pocketid_client.pomerium` | `numbat-pomerium` through komodo-op |
 | `Tailscale OIDC` | Login, username + password | Terraform-managed output from `pocketid_client.tailscale` | Tailscale's console-managed IdP registration |
 
-The OIDC client id/secret are read **directly by Terraform** via the
-`onepassword` provider data source (`section_map["OIDC"].field_map[…].value`), not
-a `TF_VAR`. This is the first data-source consumer of that provider; it needs
-`onepassword ~> 3.1` for `section_map`. The admin API key is created in the UI
-(Settings → Admin → API Keys); UI keys require an expiry (no never-expire, no
-enforced maximum — pick a far-future date) and inherit the creating user's
-privileges.
+The admin API key is created in the UI (Settings → Admin → API Keys); UI keys
+require an expiry (no never-expire, no enforced maximum — pick a far-future
+date) and inherit the creating user's privileges.
 
 ## OIDC clients
-
-**Cloudflare Zero Trust** is confidential, uses PKCE, and has callback
-`https://podhaus.cloudflareaccess.com/cdn-cgi/access/callback`. Its credentials
-live in `Pocket ID OIDC`. It remains configured only for Pinelake's current
-Access applications.
 
 **Pomerium** is confidential, uses PKCE, is restricted to `pomerium-users`, and
 has callback `https://authenticate.pod.haus/oauth2/callback`. Terraform writes
@@ -122,9 +109,9 @@ creates the local profile and synchronizes those keys during OIDC login.
 ## Failure modes
 
 - `Failed to verify oidc token with fresh keys` — a relying party cannot fetch
-  Pocket ID's public JWKS. Check the Numbat relay, Caddy route, DNS, and any
-  Cloudflare WAF rule affecting Pinelake Access. Never put `id.pod.haus` behind
-  Pomerium; OIDC clients must reach its discovery, token, and key endpoints.
+  Pocket ID's public JWKS. Check the Numbat relay, Caddy route, and DNS. Never
+  put `id.pod.haus` behind Pomerium; OIDC clients must reach its discovery,
+  token, and key endpoints.
 - **Authenticated, then denied** — the Pocket ID user's email doesn't match the
   applicable Pomerium route policy. Fix the email in Pocket ID; the match is
   case-insensitive but otherwise exact.
