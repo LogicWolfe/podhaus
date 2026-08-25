@@ -267,8 +267,11 @@ global `default` Docker context; deployed Compose calls do not name a runtime
 context. The role never starts a media service and never restarts OrbStack
 in-band, because Periphery and the SSH route it carries run inside that engine.
 
-The role enables OrbStack's privileged helper for the conventional
-`/var/run/docker.sock`, disables its runtime-specific Docker context and unused
+The role installs OrbStack's current, bundled, signed privileged helper and its
+embedded launchd contract for the conventional `/var/run/docker.sock`; this is
+the same helper the GUI's authorization flow installs, but remains current
+through Homebrew plus Ansible without a recurring GUI boundary. It disables
+OrbStack's runtime-specific Docker context and unused
 direct container-IP bridge, leaves LAN publication enabled, disables Kubernetes
 and OrbStack's own GUI login startup, and gives the Docker VM 8 CPUs and 8 GiB.
 It also disables automatic full macOS upgrades so an unattended reboot cannot

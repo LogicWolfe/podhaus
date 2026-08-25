@@ -85,7 +85,10 @@ services:
       test:
         - CMD-SHELL
         - >-
-          curl -fsS --max-time 10 http://127.0.0.1:32400/identity >/dev/null &&
+          expected="$$(dpkg-query -W -f='$${Version}' plexmediaserver)" &&
+          actual="$$(curl -fsS --max-time 10 http://127.0.0.1:32400/identity |
+          sed -n '/<MediaContainer /s/.*version="\([^"]*\)".*/\1/p')" &&
+          test -n "$$actual" && test "$$actual" = "$$expected" &&
           test "$$(cat /Volumes/TerraMaster/.podhaus-terramaster)" =
           "EAED18A9-74C7-4163-ACB4-406B2226FDC6"
       interval: 60s

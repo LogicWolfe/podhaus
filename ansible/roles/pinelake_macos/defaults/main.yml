@@ -8,6 +8,12 @@ podhaus_orbstack_memory_mib: 8192
 podhaus_orbstack_path: >-
   /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 podhaus_display_sleep_minutes: 10
+podhaus_orbstack_privileged_helper_source: >-
+  /Applications/OrbStack.app/Contents/Library/LaunchServices/dev.orbstack.OrbStack.privhelper
+podhaus_orbstack_privileged_helper: >-
+  /Library/PrivilegedHelperTools/dev.orbstack.OrbStack.privhelper
+podhaus_orbstack_privileged_helper_daemon: >-
+  /Library/LaunchDaemons/dev.orbstack.OrbStack.privhelper.plist
 
 podhaus_terramaster_mount: /Volumes/TerraMaster
 podhaus_terramaster_uuid: EAED18A9-74C7-4163-ACB4-406B2226FDC6

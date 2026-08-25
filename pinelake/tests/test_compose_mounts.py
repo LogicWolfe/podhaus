@@ -99,6 +99,18 @@ class TerraMasterMountTests(unittest.TestCase):
             "https://66-226-146-158.5801df40ceea4deaaefd8bd027fc22ff.plex.direct:32400",
         )
 
+    def test_plex_health_rejects_the_native_server_on_the_shared_port(self) -> None:
+        document = yaml.safe_load(
+            (ROOT / "pinelake/plex/compose.yaml").read_text()
+        )
+        health_command = document["services"]["pinelake-plex"]["healthcheck"][
+            "test"
+        ][-1]
+        self.assertIn("dpkg-query", health_command)
+        self.assertIn("/identity", health_command)
+        self.assertIn("/<MediaContainer /", health_command)
+        self.assertIn('test "$$actual" = "$$expected"', health_command)
+
     def test_pinelake_plex_relay_is_wired_end_to_end(self) -> None:
         files = (
             ROOT / "relay/numbat/server.toml.tmpl",

@@ -40,6 +40,19 @@ class HostSafetyTest(unittest.TestCase):
         self.assertIn("Remove the OrbStack-specific Docker context", task_names)
         self.assertIn("Prove default is the sole Docker context", task_names)
 
+    def test_role_installs_orbstacks_signed_privileged_helper(self) -> None:
+        task_names = {task["name"] for task in self.tasks}
+        self.assertIn("Install the OrbStack privileged helper", task_names)
+        self.assertIn("Install the OrbStack privileged helper daemon", task_names)
+        template = (
+            ROLE_DIR / "templates/dev.orbstack.OrbStack.privhelper.plist"
+        ).read_bytes()
+        plist = plistlib.loads(template)
+        self.assertEqual(plist["Label"], "dev.orbstack.OrbStack.privhelper")
+        self.assertTrue(
+            plist["MachServices"]["dev.orbstack.OrbStack.privhelper"]
+        )
+
     def test_ansible_never_restarts_orbstack_in_band(self) -> None:
         role_text = "\n".join(
             path.read_text()

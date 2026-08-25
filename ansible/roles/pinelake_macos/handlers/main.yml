@@ -1,4 +1,13 @@
 ---
+- name: Reload the OrbStack privileged helper
+  ansible.builtin.shell: |
+    set -eu
+    label="dev.orbstack.OrbStack.privhelper"
+    if /bin/launchctl print "system/$label" >/dev/null 2>&1; then
+      /bin/launchctl bootout "system/$label"
+    fi
+    /bin/launchctl bootstrap system {{ podhaus_orbstack_privileged_helper_daemon | quote }}
+
 - name: Reload the OrbStack launch agent
   ansible.builtin.shell: |
     set -eu

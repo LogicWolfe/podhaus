@@ -30,6 +30,28 @@
     state: present
   become: false
 
+- name: Install the OrbStack privileged helper
+  ansible.builtin.copy:
+    src: "{{ podhaus_orbstack_privileged_helper_source }}"
+    dest: "{{ podhaus_orbstack_privileged_helper }}"
+    remote_src: true
+    owner: root
+    group: wheel
+    mode: "0755"
+  notify: Reload the OrbStack privileged helper
+
+- name: Install the OrbStack privileged helper daemon
+  ansible.builtin.template:
+    src: dev.orbstack.OrbStack.privhelper.plist
+    dest: "{{ podhaus_orbstack_privileged_helper_daemon }}"
+    owner: root
+    group: wheel
+    mode: "0644"
+  notify: Reload the OrbStack privileged helper
+
+- name: Activate the OrbStack privileged helper
+  ansible.builtin.meta: flush_handlers
+
 - name: Create the Pinelake tools directory
   ansible.builtin.file:
     path: "{{ podhaus_pinelake_libexec_dir }}"
