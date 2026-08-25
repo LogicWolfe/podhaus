@@ -48,6 +48,13 @@ class HostSafetyTest(unittest.TestCase):
         self.assertNotIn("orb stop", role_text)
         self.assertNotIn("Restart OrbStack", role_text)
 
+    def test_safe_start_path_lands_before_runtime_socket_proof(self) -> None:
+        task_names = [task["name"] for task in self.tasks]
+        self.assertLess(
+            task_names.index("Activate the mount-gated startup path"),
+            task_names.index("Prove the default Docker socket"),
+        )
+
     def test_login_agent_runs_mount_gated_start_in_aqua_session(self) -> None:
         template = (ROLE_DIR / "templates/haus.podhaus.orbstack.plist.j2").read_text()
         rendered = (

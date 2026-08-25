@@ -91,6 +91,81 @@
   register: pinelake_host_mount_guard
   changed_when: "'sentinel initialized' in pinelake_host_mount_guard.stdout"
 
+- name: Disable legacy user launch jobs
+  ansible.builtin.command:
+    argv:
+      - /bin/launchctl
+      - disable
+      - "gui/{{ podhaus_operator_uid }}/{{ item }}"
+  changed_when: false
+  loop: "{{ podhaus_pinelake_legacy_user_jobs }}"
+
+- name: Stop legacy user launch jobs
+  ansible.builtin.command:
+    argv:
+      - /bin/launchctl
+      - bootout
+      - "gui/{{ podhaus_operator_uid }}/{{ item }}"
+  failed_when: false
+  changed_when: false
+  loop: "{{ podhaus_pinelake_legacy_user_jobs }}"
+
+- name: Disable legacy system launch jobs
+  ansible.builtin.command:
+    argv:
+      - /bin/launchctl
+      - disable
+      - "system/{{ item }}"
+  changed_when: false
+  loop: "{{ podhaus_pinelake_legacy_system_jobs }}"
+
+- name: Stop legacy system launch jobs
+  ansible.builtin.command:
+    argv:
+      - /bin/launchctl
+      - bootout
+      - "system/{{ item }}"
+  failed_when: false
+  changed_when: false
+  loop: "{{ podhaus_pinelake_legacy_system_jobs }}"
+
+- name: Inspect the retired system OrbStack daemon
+  ansible.builtin.command:
+    argv: [/bin/launchctl, print, system/haus.podhaus.orbstack]
+  register: pinelake_retired_orbstack_daemon
+  failed_when: false
+  changed_when: false
+
+- name: Stop the retired system OrbStack daemon
+  ansible.builtin.command:
+    argv: [/bin/launchctl, bootout, system/haus.podhaus.orbstack]
+  when: pinelake_retired_orbstack_daemon.rc == 0
+
+- name: Remove the retired system OrbStack daemon
+  ansible.builtin.file:
+    path: "{{ podhaus_pinelake_retired_launch_daemon }}"
+    state: absent
+
+- name: Create the operator LaunchAgents directory
+  ansible.builtin.file:
+    path: "/Users/{{ podhaus_operator }}/Library/LaunchAgents"
+    state: directory
+    owner: "{{ podhaus_operator }}"
+    group: staff
+    mode: "0755"
+
+- name: Install the OrbStack launch agent
+  ansible.builtin.template:
+    src: haus.podhaus.orbstack.plist.j2
+    dest: "{{ podhaus_pinelake_launch_agent }}"
+    owner: "{{ podhaus_operator }}"
+    group: staff
+    mode: "0644"
+  notify: Reload OrbStack launch agent
+
+- name: Activate the mount-gated startup path
+  ansible.builtin.meta: flush_handlers
+
 - name: Create the Pinelake restic repository directory
   ansible.builtin.file:
     path: "{{ podhaus_pinelake_backup_repo }}"
@@ -277,75 +352,3 @@
   become: false
   changed_when: false
   when: not ansible_check_mode
-
-- name: Disable legacy user launch jobs
-  ansible.builtin.command:
-    argv:
-      - /bin/launchctl
-      - disable
-      - "gui/{{ podhaus_operator_uid }}/{{ item }}"
-  changed_when: false
-  loop: "{{ podhaus_pinelake_legacy_user_jobs }}"
-
-- name: Stop legacy user launch jobs
-  ansible.builtin.command:
-    argv:
-      - /bin/launchctl
-      - bootout
-      - "gui/{{ podhaus_operator_uid }}/{{ item }}"
-  failed_when: false
-  changed_when: false
-  loop: "{{ podhaus_pinelake_legacy_user_jobs }}"
-
-- name: Disable legacy system launch jobs
-  ansible.builtin.command:
-    argv:
-      - /bin/launchctl
-      - disable
-      - "system/{{ item }}"
-  changed_when: false
-  loop: "{{ podhaus_pinelake_legacy_system_jobs }}"
-
-- name: Stop legacy system launch jobs
-  ansible.builtin.command:
-    argv:
-      - /bin/launchctl
-      - bootout
-      - "system/{{ item }}"
-  failed_when: false
-  changed_when: false
-  loop: "{{ podhaus_pinelake_legacy_system_jobs }}"
-
-- name: Inspect the retired system OrbStack daemon
-  ansible.builtin.command:
-    argv: [/bin/launchctl, print, system/haus.podhaus.orbstack]
-  register: pinelake_retired_orbstack_daemon
-  failed_when: false
-  changed_when: false
-
-- name: Stop the retired system OrbStack daemon
-  ansible.builtin.command:
-    argv: [/bin/launchctl, bootout, system/haus.podhaus.orbstack]
-  when: pinelake_retired_orbstack_daemon.rc == 0
-
-- name: Remove the retired system OrbStack daemon
-  ansible.builtin.file:
-    path: "{{ podhaus_pinelake_retired_launch_daemon }}"
-    state: absent
-
-- name: Create the operator LaunchAgents directory
-  ansible.builtin.file:
-    path: "/Users/{{ podhaus_operator }}/Library/LaunchAgents"
-    state: directory
-    owner: "{{ podhaus_operator }}"
-    group: staff
-    mode: "0755"
-
-- name: Install the OrbStack launch agent
-  ansible.builtin.template:
-    src: haus.podhaus.orbstack.plist.j2
-    dest: "{{ podhaus_pinelake_launch_agent }}"
-    owner: "{{ podhaus_operator }}"
-    group: staff
-    mode: "0644"
-  notify: Reload OrbStack launch agent
