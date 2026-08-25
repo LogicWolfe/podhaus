@@ -259,7 +259,10 @@ owns it instead of a bootstrap script.
 while allowing the display to sleep after ten minutes. It installs current
 OrbStack through Homebrew without a version pin, configures the supported
 headless settings, creates `dockernet`, and installs a recurring Aqua-session
-LaunchAgent that runs a mount-gated `orb start` as `baxter`. Automatic login
+LaunchAgent that runs a mount-gated background open of OrbStack as `baxter`.
+This matches OrbStack's own login-item mechanism and exits promptly so launchd
+can retry; the long-running `orb start` command cannot supervise recovery.
+Automatic login
 creates that user session after boot. A system LaunchDaemon is deliberately
 invalid here: it lacks OrbStack's user-session security context and repeatedly
 fails on its Group Container. OrbStack exposes its engine through the sole

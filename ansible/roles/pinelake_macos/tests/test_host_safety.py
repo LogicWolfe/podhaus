@@ -95,9 +95,13 @@ class HostSafetyTest(unittest.TestCase):
 
     def test_start_wrapper_checks_mount_before_starting_orbstack(self) -> None:
         wrapper = (ROLE_DIR / "templates/pinelake-orbstack-start.j2").read_text()
-        self.assertLess(wrapper.index("pinelake-mount-guard"), wrapper.index("orb start"))
+        self.assertLess(
+            wrapper.index("pinelake-mount-guard"),
+            wrapper.index("/usr/bin/open"),
+        )
         self.assertIn("--volume-uuid", wrapper)
         self.assertNotIn("--initialize-sentinel", wrapper)
+        self.assertNotIn("orb start", wrapper)
 
     def test_mount_contract_uses_four_share_roots(self) -> None:
         self.assertEqual(
