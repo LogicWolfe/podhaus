@@ -2,8 +2,8 @@
 
       <h1>Hosts</h1>
       <p class="lead text-lg text-text-muted">
-        Four active hosts and one planned. Bilby's Komodo Core manages bilby, kangaroo,
-        Numbat, and fractal.
+        Six active hosts. Bilby's Komodo Core manages bilby, kangaroo, Numbat,
+        fractal, voltaire, and pinelake.
       </p>
 
       <h2 id="bilby">bilby</h2>
@@ -322,15 +322,26 @@
         boundary.
       </p>
 
-      <h2 id="pinelake">pinelake (planned)</h2>
+      <h2 id="pinelake">pinelake</h2>
       <p>
-        A second household's primary host, paralleling bilby's role for that environment.
-        Designed to drop into the existing layout: a new entry in
-        <code>komodo/sync/servers.toml</code>, its own row in the multi-host shared services
-        (<code>backup/</code>, <code>autoheal/</code>, <code>logging/</code>), and per-stack
-        deploys through the same Komodo Core. <code>pinelake.haus</code> already has Cloudflare
-        DNS and Access scaffolding in <code>terraform/</code>; no server or stack definitions
-        have landed yet.
+        Apple M1 Mac mini running macOS and current OrbStack. It is a task-specific media
+        appliance for the second household: Plex serves TerraMaster media, Flood downloads
+        and publishes media, and Syncthing receives the selected Movies, TV, Kids, and Sports
+        folders from kangaroo. Backrest protects local service state in a restic repository
+        on TerraMaster.
+      </p>
+      <p>
+        Automatic macOS login creates the user session and OrbStack's supported login item
+        starts the container engine. Compose restart policies and Autoheal own service
+        recovery. Ansible configures power policy and supported OrbStack settings; it does
+        not install a launchd job, start OrbStack, or manage OrbStack's privileged helpers.
+        The global <code>default</code> Docker context is the only installed context.
+      </p>
+      <p>
+        Periphery, rathole, and Alloy connect outbound through Numbat. Pomerium protects the
+        Flood and Syncthing browser routes; Plex has a dedicated raw rathole path for native
+        clients. The old <code>home.pinelake.haus</code> Cloudflare Tunnel route remains only
+        for manual recovery, and hosted JetKVM is the independent console path.
       </p>
 
       <h2 id="adding-host">Adding another host</h2>

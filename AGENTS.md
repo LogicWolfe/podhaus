@@ -57,7 +57,7 @@ machine SSH key.
 
 ## What podhaus is
 
-Docker container infrastructure for **five** active hosts:
+Docker container infrastructure for **six** active hosts:
 - **bilby** (Apple M1 Mac mini, primary; Fedora Asahi Linux) — runs
   Komodo Core, MinIO, Caddy, every primary service.
 - **kangaroo** (QNAP NAS, QTS + Container Station) — secondary LAN
@@ -83,14 +83,20 @@ Docker container infrastructure for **five** active hosts:
   `ssh://voltaire`, Alloy to `logs-ingest.pod.haus`. Provisioned by
   Ansible (`playbooks/voltaire.yml`); its old Cloudflare tunnel and
   systemd rathole origin are gone.
+- **pinelake** (Apple M1 Mac mini, macOS, second household) is a dedicated
+  media appliance. OrbStack is its sole container runtime; Plex, Flood,
+  Syncthing, backup, ingress, logging, scheduling, and Autoheal follow the
+  ordinary Komodo patterns. Periphery, rathole, and Alloy dial out through
+  Numbat. Ansible owns the macOS appliance settings but leaves OrbStack's
+  lifecycle and privileged integration to OrbStack itself.
 
 Managed as Docker Compose stacks under a single Komodo Core; secrets
 flow from 1Password. Protected names resolve to Numbat Pomerium; public
 and raw endpoints use Numbat's second address and Caddy. Cloudflare stays
 authoritative DNS and CDN for public websites. The old Podhaus Cloudflare
 Tunnel, Access estate, DigitalOcean relay, and routed Tailscale management
-plane have been removed. A planned host **pinelake** will use the proven
-outbound Numbat contract; its existing Cloudflare setup remains until then.
+plane have been removed. Pinelake uses the same outbound Numbat contract;
+its old `home.pinelake.haus` Cloudflare route remains only for manual recovery.
 
 ---
 
@@ -180,9 +186,9 @@ outbound Numbat contract; its existing Cloudflare setup remains until then.
   there is no identity boundary to leak. Tailscale keeps separate
   `*-recovery` names for explicit break-glass use.
 - Public and raw endpoints use Numbat's relay IP and Caddy `:4444`.
-  Cloudflare proxies only public CDN sites. Pine Lake retains its
-  explicitly scoped Cloudflare Tunnel resources until it moves to the
-  outbound Numbat contract.
+  Cloudflare proxies only public CDN sites. Pine Lake retains the explicitly
+  scoped `home.pinelake.haus` tunnel as a manual recovery path; its managed
+  service and SSH traffic use the outbound Numbat contract.
 - **Do not set per-container `dns: [...]` in compose.** It replaces Docker's
   embedded resolver (`127.0.0.11`) and breaks service-name resolution such as
   `ferretdb` and `caddy`. Bilby's daemon configuration has no DNS override;

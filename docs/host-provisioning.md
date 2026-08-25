@@ -257,26 +257,17 @@ owns it instead of a bootstrap script.
 
 **`pinelake_macos`** configures no-sleep and restart-after-power-loss policy
 while allowing the display to sleep after ten minutes. It installs current
-OrbStack through Homebrew without a version pin, configures the supported
-headless settings, creates `dockernet`, and installs a recurring Aqua-session
-LaunchAgent that runs a mount-gated background open of OrbStack as `baxter`.
-This matches OrbStack's own login-item mechanism and exits promptly so launchd
-can retry; the long-running `orb start` command cannot supervise recovery.
-Automatic login
-creates that user session after boot. A system LaunchDaemon is deliberately
-invalid here: it lacks OrbStack's user-session security context and repeatedly
-fails on its Group Container. OrbStack exposes its engine through the sole
+OrbStack through Homebrew without a version pin, configures its supported
+settings, and creates `dockernet`. Automatic login creates the `baxter` Aqua
+session and OrbStack's own `app.start_at_login` setting owns runtime startup.
+Ansible does not install a launch agent, start or stop OrbStack, or manage any
+of OrbStack's privileged helpers. OrbStack exposes its engine through the sole
 global `default` Docker context; deployed Compose calls do not name a runtime
-context. The role never starts a media service and never restarts OrbStack
-in-band, because Periphery and the SSH route it carries run inside that engine.
+context.
 
-The role installs OrbStack's current, bundled, signed privileged helper and its
-embedded launchd contract for the conventional `/var/run/docker.sock`; this is
-the same helper the GUI's authorization flow installs, but remains current
-through Homebrew plus Ansible without a recurring GUI boundary. It disables
-OrbStack's runtime-specific Docker context and unused
+The role disables OrbStack's runtime-specific Docker context and unused
 direct container-IP bridge, leaves LAN publication enabled, disables Kubernetes
-and OrbStack's own GUI login startup, and gives the Docker VM 8 CPUs and 8 GiB.
+and gives the Docker VM 8 CPUs and 8 GiB.
 It also disables automatic full macOS upgrades so an unattended reboot cannot
 bypass the Plex session gate, while background security data remains automatic.
 macOS requires one
@@ -288,17 +279,16 @@ leaving a false-green runtime. Runtime updates are ordinary current-release
 Homebrew maintenance, gated by the same two Plex session checks as every
 operation that can restart its container.
 
-Before OrbStack starts after login, `pinelake-mount-guard` verifies the
-TerraMaster and the LaunchAgent retries the same fail-closed start every minute.
-Before any container can see the TerraMaster, the same guard verifies
+Before a deployment can expose the TerraMaster to a container,
+`pinelake-mount-guard` verifies
 its APFS volume identifier, exact mount point, writable state, sentinel,
 required directories, and a read-only container bind of the sentinel. Stack
 pre-deploy gates bind and verify each required directory individually; services
 never expose the whole media volume to the OrbStack file-sharing layer. The
-Plex helpers independently fail closed on an unavailable session endpoint,
-validate all four server identity fields during preference conversion, and
-allow automatic recovery only when both the native process and port 32400 are
-absent.
+Plex pre-deploy gate validates all four server identity fields and fails closed
+on an unavailable session endpoint. Replacing a running server requires two
+successful zero-session checks; Plex has no automatic recovery path that
+bypasses that gate.
 
 **`sshd_pomerium_ca`** writes a drop-in under `sshd_config.d/` rather
 than editing `sshd_config`, validates the file with `sshd -t -f %s`,

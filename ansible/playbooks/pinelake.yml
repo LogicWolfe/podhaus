@@ -5,8 +5,8 @@
 #   ansible-playbook playbooks/pinelake.yml --check --diff   # read first
 #   ansible-playbook playbooks/pinelake.yml
 #
-# The role provisions OrbStack as the appliance runtime. It does not migrate or
-# deploy Plex, Syncthing, or Flood, and it never restarts OrbStack in-band.
+# The role installs and configures OrbStack but leaves runtime lifecycle to
+# OrbStack's supported login item. It does not deploy application stacks.
 ---
 - name: Provision Pinelake appliance substrate
   hosts: pinelake

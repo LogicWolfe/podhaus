@@ -2,7 +2,7 @@
 
       <h1>Architecture</h1>
       <p class="lead text-lg text-text-muted">
-        Four active hosts, one Komodo Core, one git repo. Services run as Docker Compose stacks
+        Six active hosts, one Komodo Core, one git repo. Services run as Docker Compose stacks
         whose configs are committed; secrets are templated in at deploy time from 1Password.
       </p>
 
@@ -30,8 +30,15 @@
         connections through Numbat; it has no general inbound path.
       </p>
       <p>
-        <strong>pinelake</strong> is a planned host for the second household. It will use
-        the same linked-repo and outbound-Periphery model as the existing remote targets.
+        <strong>voltaire</strong> is a Fedora Workstation development machine on a foreign LAN.
+        It has no inbound network path and reaches the fleet through outbound Periphery,
+        rathole, and Alloy connections to Numbat.
+      </p>
+      <p>
+        <strong>pinelake</strong> is an Apple M1 Mac mini media appliance in the second
+        household. OrbStack runs its Komodo-managed Plex, Flood, Syncthing, backup,
+        ingress, logging, scheduling, and Autoheal stacks. It reaches the fleet through
+        outbound Periphery, rathole, and Alloy connections to Numbat.
       </p>
 
       <h2 id="repo-layout">Repo layout</h2>
@@ -59,8 +66,8 @@
       </ul>
       <p>
         The repo is bind-mounted into bilby's Komodo Core (for ResourceSync) and bilby's
-        Periphery (for stack compose files). Kangaroo's, numbat's, and fractal's Peripheries clone
-        the repo themselves via Komodo's Linked Repo resource (different Repo names per
+        Periphery (for stack compose files). Every other deploy target's Periphery clones
+        the repo through Komodo's Linked Repo resource (different Repo names per
         host since each clone is independent state) — see
         <a href="/komodo.html#operating-models">Komodo → operating models</a>.
       </p>
@@ -137,8 +144,8 @@
         and <a href="/caching.md">Public site caching</a> for the origin-directed cache model.
       </p>
       <p>
-        Pine Lake is the one host still on Cloudflare Tunnel, with its own independently
-        scoped resources, until it moves to the outbound Numbat contract.
+        Pine Lake service and SSH traffic follows the outbound Numbat contract. Its old
+        <code>home.pinelake.haus</code> Cloudflare Tunnel route remains only for manual recovery.
       </p>
       <p>See <a href="/networking.html">Networking</a> for dockernet, host-network services, and
         DNS detail.</p>

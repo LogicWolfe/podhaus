@@ -81,7 +81,7 @@ class PlexPredeployGateTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(count, 0)
 
-    def test_absent_container_and_closed_port_allows_initial_cutover(self) -> None:
+    def test_absent_container_and_closed_port_allows_recovery(self) -> None:
         result, count = self.run_gate(FAKE_STATE="absent", FAKE_PORT_RC="0")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(count, 0)
@@ -90,11 +90,10 @@ class PlexPredeployGateTest(unittest.TestCase):
         result, _ = self.run_gate(FAKE_STATE="absent", FAKE_LISTED="true")
         self.assertNotEqual(result.returncode, 0)
 
-    def test_missing_preferences_or_cutover_marker_fails_closed(self) -> None:
-        result, _ = self.run_gate(FAKE_READY_RC="1", FAKE_STATE="true")
-        self.assertNotEqual(result.returncode, 0)
+    def test_no_one_time_cutover_marker_is_required(self) -> None:
+        self.assertNotIn("container-cutover-ready", SCRIPT.read_text(encoding="utf-8"))
 
-    def test_identity_mismatch_blocks_initial_cutover(self) -> None:
+    def test_identity_mismatch_blocks_recovery(self) -> None:
         result, count = self.run_gate(
             FAKE_STATE="absent", FAKE_IDENTITY_RC="2"
         )

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import plistlib
 import unittest
 from pathlib import Path
 
@@ -14,7 +13,6 @@ class HostSafetyTest(unittest.TestCase):
     def setUp(self) -> None:
         self.defaults = yaml.safe_load((ROLE_DIR / "defaults/main.yml").read_text())
         self.tasks = yaml.safe_load((ROLE_DIR / "tasks/main.yml").read_text())
-        self.handlers = yaml.safe_load((ROLE_DIR / "handlers/main.yml").read_text())
 
     def task(self, name: str) -> dict[str, object]:
         pending = list(self.tasks)
@@ -32,6 +30,7 @@ class HostSafetyTest(unittest.TestCase):
             item["key"]: item["value"]
             for item in self.task("Read OrbStack settings")["loop"]
         }
+        self.assertEqual(setting_values["app.start_at_login"], "true")
         self.assertEqual(setting_values["setup.use_admin"], "true")
         self.assertEqual(setting_values["docker.set_context"], "false")
         task_names = {task["name"] for task in self.tasks}
@@ -40,70 +39,28 @@ class HostSafetyTest(unittest.TestCase):
         self.assertIn("Remove the OrbStack-specific Docker context", task_names)
         self.assertIn("Prove default is the sole Docker context", task_names)
 
-    def test_role_installs_orbstacks_signed_privileged_helper(self) -> None:
-        task_names = {task["name"] for task in self.tasks}
-        self.assertIn("Install the OrbStack privileged helper", task_names)
-        self.assertIn("Install the OrbStack privileged helper daemon", task_names)
-        template = (
-            ROLE_DIR / "templates/dev.orbstack.OrbStack.privhelper.plist"
-        ).read_bytes()
-        plist = plistlib.loads(template)
-        self.assertEqual(plist["Label"], "dev.orbstack.OrbStack.privhelper")
-        self.assertEqual(
-            plist["ProgramArguments"],
-            ["/Library/PrivilegedHelperTools/dev.orbstack.OrbStack.privhelper"],
+    def test_orbstack_owns_its_login_and_privileged_integration(self) -> None:
+        role_text = "\n".join(
+            path.read_text()
+            for path in (ROLE_DIR / "tasks/main.yml", ROLE_DIR / "defaults/main.yml")
         )
-        self.assertTrue(
-            plist["MachServices"]["dev.orbstack.OrbStack.privhelper"]
-        )
-        self.assertIn("Remove quarantine from the OrbStack privileged helper", task_names)
+        self.assertNotIn("LaunchAgent", role_text)
+        self.assertNotIn("LaunchDaemon", role_text)
+        self.assertNotIn("PrivilegedHelperTools", role_text)
+        self.assertNotIn("privileged helper", role_text.lower())
+        self.assertNotIn("pinelake-orbstack-start", role_text)
+        self.assertFalse((ROLE_DIR / "handlers/main.yml").exists())
+        self.assertEqual(list((ROLE_DIR / "templates").glob("*")), [])
 
     def test_ansible_never_restarts_orbstack_in_band(self) -> None:
         role_text = "\n".join(
-            path.read_text()
-            for path in (ROLE_DIR / "tasks/main.yml", ROLE_DIR / "handlers/main.yml")
+            path.read_text() for path in (ROLE_DIR / "tasks/main.yml",)
         )
         self.assertNotIn("orb stop", role_text)
+        self.assertNotIn("orb start", role_text)
         self.assertNotIn("Restart OrbStack", role_text)
 
-    def test_safe_start_path_lands_before_runtime_socket_proof(self) -> None:
-        task_names = [task["name"] for task in self.tasks]
-        self.assertLess(
-            task_names.index("Activate the mount-gated startup path"),
-            task_names.index("Prove the default Docker socket"),
-        )
-
-    def test_login_agent_runs_mount_gated_start_in_aqua_session(self) -> None:
-        template = (ROLE_DIR / "templates/haus.podhaus.orbstack.plist.j2").read_text()
-        rendered = (
-            template.replace("{{ podhaus_operator }}", "baxter")
-            .replace("{{ podhaus_orbstack_path }}", "/usr/bin:/bin")
-            .replace("{{ podhaus_pinelake_libexec_dir }}", "/usr/local/libexec/podhaus")
-        )
-        plist = plistlib.loads(rendered.encode())
-        self.assertNotIn("UserName", plist)
-        self.assertEqual(plist["LimitLoadToSessionType"], "Aqua")
-        self.assertEqual(
-            plist["ProgramArguments"],
-            ["/usr/local/libexec/podhaus/pinelake-orbstack-start"],
-        )
-        self.assertTrue(
-            self.defaults["podhaus_pinelake_launch_agent"].endswith(
-                "/Library/LaunchAgents/haus.podhaus.orbstack.plist"
-            )
-        )
-
-    def test_start_wrapper_checks_mount_before_starting_orbstack(self) -> None:
-        wrapper = (ROLE_DIR / "templates/pinelake-orbstack-start.j2").read_text()
-        self.assertLess(
-            wrapper.index("pinelake-mount-guard"),
-            wrapper.index("/usr/bin/open"),
-        )
-        self.assertIn("--volume-uuid", wrapper)
-        self.assertNotIn("--initialize-sentinel", wrapper)
-        self.assertNotIn("orb start", wrapper)
-
-    def test_mount_contract_uses_four_share_roots(self) -> None:
+    def test_mount_contract_uses_required_media_roots(self) -> None:
         self.assertEqual(
             self.defaults["podhaus_terramaster_required_paths"],
             ["Movies", "TV", "Kids", "Sports", "Torrents"],
@@ -116,7 +73,7 @@ class HostSafetyTest(unittest.TestCase):
         )
         self.assertEqual(
             set(self.defaults["podhaus_pinelake_legacy_system_jobs"]),
-            {"haus.podhaus.colima", "io.colima.start"},
+            {"io.colima.start"},
         )
         task_names = {task["name"] for task in self.tasks}
         self.assertIn("Disable legacy user launch jobs", task_names)

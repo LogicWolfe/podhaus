@@ -30,49 +30,6 @@
     state: present
   become: false
 
-- name: Install the OrbStack privileged helper
-  ansible.builtin.copy:
-    src: "{{ podhaus_orbstack_privileged_helper_source }}"
-    dest: "{{ podhaus_orbstack_privileged_helper }}"
-    remote_src: true
-    owner: root
-    group: wheel
-    mode: "0755"
-  notify: Reload the OrbStack privileged helper
-
-- name: Inspect OrbStack privileged helper quarantine
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/xattr
-      - -p
-      - com.apple.quarantine
-      - "{{ podhaus_orbstack_privileged_helper }}"
-  register: pinelake_orbstack_helper_quarantine
-  failed_when: false
-  changed_when: false
-
-- name: Remove quarantine from the OrbStack privileged helper
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/xattr
-      - -d
-      - com.apple.quarantine
-      - "{{ podhaus_orbstack_privileged_helper }}"
-  when: pinelake_orbstack_helper_quarantine.rc == 0
-  notify: Reload the OrbStack privileged helper
-
-- name: Install the OrbStack privileged helper daemon
-  ansible.builtin.template:
-    src: dev.orbstack.OrbStack.privhelper.plist
-    dest: "{{ podhaus_orbstack_privileged_helper_daemon }}"
-    owner: root
-    group: wheel
-    mode: "0644"
-  notify: Reload the OrbStack privileged helper
-
-- name: Activate the OrbStack privileged helper
-  ansible.builtin.meta: flush_handlers
-
 - name: Create the Pinelake tools directory
   ansible.builtin.file:
     path: "{{ podhaus_pinelake_libexec_dir }}"
@@ -90,19 +47,7 @@
     mode: "0755"
   loop:
     - pinelake-mount-guard
-    - pinelake-media-relocate
-    - plex-deploy-gate
     - plex-session-gate
-    - plex-preferences-convert
-    - plex-recovery-gate
-
-- name: Install the mount-gated OrbStack starter
-  ansible.builtin.template:
-    src: pinelake-orbstack-start.j2
-    dest: "{{ podhaus_pinelake_libexec_dir }}/pinelake-orbstack-start"
-    owner: root
-    group: wheel
-    mode: "0755"
 
 - name: Install the Plex identity manifest
   ansible.builtin.copy:
@@ -172,58 +117,11 @@
   changed_when: false
   loop: "{{ podhaus_pinelake_legacy_system_jobs }}"
 
-- name: Inspect the retired system OrbStack daemon
-  ansible.builtin.command:
-    argv: [/bin/launchctl, print, system/haus.podhaus.orbstack]
-  register: pinelake_retired_orbstack_daemon
-  failed_when: false
-  changed_when: false
-
-- name: Stop the retired system OrbStack daemon
-  ansible.builtin.command:
-    argv: [/bin/launchctl, bootout, system/haus.podhaus.orbstack]
-  when: pinelake_retired_orbstack_daemon.rc == 0
-
-- name: Remove the retired system OrbStack daemon
-  ansible.builtin.file:
-    path: "{{ podhaus_pinelake_retired_launch_daemon }}"
-    state: absent
-
-- name: Create the operator LaunchAgents directory
-  ansible.builtin.file:
-    path: "/Users/{{ podhaus_operator }}/Library/LaunchAgents"
-    state: directory
-    owner: "{{ podhaus_operator }}"
-    group: staff
-    mode: "0755"
-
-- name: Install the OrbStack launch agent
-  ansible.builtin.template:
-    src: haus.podhaus.orbstack.plist.j2
-    dest: "{{ podhaus_pinelake_launch_agent }}"
-    owner: "{{ podhaus_operator }}"
-    group: staff
-    mode: "0644"
-  notify: Reload OrbStack launch agent
-
-- name: Activate the mount-gated startup path
-  ansible.builtin.meta: flush_handlers
-
 - name: Create the Pinelake restic repository directory
   ansible.builtin.file:
     path: "{{ podhaus_pinelake_backup_repo }}"
     state: directory
     mode: "0700"
-
-- name: Start OrbStack
-  ansible.builtin.command:
-    argv: [/opt/homebrew/bin/orb, start]
-  environment:
-    HOME: "/Users/{{ podhaus_operator }}"
-    PATH: "{{ podhaus_orbstack_path }}"
-  become: false
-  changed_when: false
-  when: not ansible_check_mode
 
 - name: Configure OrbStack
   when: not ansible_check_mode
@@ -237,7 +135,7 @@
       become: false
       changed_when: false
       loop:
-        - {key: app.start_at_login, value: "false"}
+        - {key: app.start_at_login, value: "true"}
         - {key: setup.use_admin, value: "true"}
         - {key: docker.set_context, value: "false"}
         - {key: docker.expose_ports_to_lan, value: "true"}

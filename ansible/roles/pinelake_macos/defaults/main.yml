@@ -1,6 +1,6 @@
 ---
 # Pinelake is a dedicated macOS appliance. OrbStack is the sole target runtime;
-# Colima exists only as the pre-cutover rollback implementation.
+# legacy Colima state is retained only for manual rollback.
 podhaus_operator: baxter
 podhaus_timezone: America/Edmonton
 podhaus_orbstack_cpu: 8
@@ -8,12 +8,6 @@ podhaus_orbstack_memory_mib: 8192
 podhaus_orbstack_path: >-
   /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 podhaus_display_sleep_minutes: 10
-podhaus_orbstack_privileged_helper_source: >-
-  /Applications/OrbStack.app/Contents/Library/LaunchServices/dev.orbstack.OrbStack.privhelper
-podhaus_orbstack_privileged_helper: >-
-  /Library/PrivilegedHelperTools/dev.orbstack.OrbStack.privhelper
-podhaus_orbstack_privileged_helper_daemon: >-
-  /Library/LaunchDaemons/dev.orbstack.OrbStack.privhelper.plist
 
 podhaus_terramaster_mount: /Volumes/TerraMaster
 podhaus_terramaster_uuid: EAED18A9-74C7-4163-ACB4-406B2226FDC6
@@ -32,16 +26,11 @@ podhaus_pinelake_state_dirs:
   - /Users/Shared/Podhaus/flood
   - /Users/Shared/Podhaus/syncthing
   - /Users/Shared/Podhaus/transcode
-podhaus_pinelake_launch_agent: >-
-  /Users/baxter/Library/LaunchAgents/haus.podhaus.orbstack.plist
-podhaus_pinelake_retired_launch_daemon: >-
-  /Library/LaunchDaemons/haus.podhaus.orbstack.plist
 podhaus_pinelake_legacy_user_jobs:
   - homebrew.mxcl.syncthing
   - homebrew.mxcl.colima
   - com.flood.ui
 podhaus_pinelake_legacy_system_jobs:
-  - haus.podhaus.colima
   - io.colima.start
 podhaus_plex_session_preferences_kind: xml
 podhaus_plex_session_preferences: >-

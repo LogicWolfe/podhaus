@@ -7,11 +7,6 @@ preferences='/config/Library/Application Support/Plex Media Server/Preferences.x
 tools=/Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/ansible/roles/pinelake_macos/files
 
 docker run --rm --pull=never \
-    --mount type=bind,source="$config",target=/config,readonly \
-    alpine:latest sh -eu -c \
-    "test -f '$preferences' && test -f /config/.container-cutover-ready"
-
-docker run --rm --pull=never \
     --mount type=bind,source="$tools",target=/tools,readonly \
     --mount type=bind,source="$config",target=/config,readonly \
     python:alpine /tools/plex-session-gate \

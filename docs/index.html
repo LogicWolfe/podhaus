@@ -6,7 +6,9 @@
         Docker infrastructure for <strong class="text-text">bilby</strong> (primary),
         <strong class="text-text">kangaroo</strong> (QNAP storage and secondary services), and
         <strong class="text-text">Numbat</strong> (active Perth gateway), and
-        <strong class="text-text">fractal</strong> (outbound-only remote host). One Komodo Core
+        <strong class="text-text">fractal</strong> and <strong class="text-text">voltaire</strong>
+        (outbound-only remote hosts), and <strong class="text-text">pinelake</strong>
+        (second-household media appliance). One Komodo Core
         manages the fleet; secrets come from 1Password and external infrastructure lives in Terraform.
       </p>
 
@@ -17,7 +19,7 @@
       </p>
       <ol>
         <li><a href="/architecture.html">Architecture</a> — the big picture, in one page.</li>
-        <li><a href="/hosts.html">Hosts</a>: what runs on bilby, kangaroo, Numbat, and fractal.</li>
+        <li><a href="/hosts.html">Hosts</a>: what runs on each managed machine.</li>
         <li><a href="/komodo.html">Komodo</a> — how the orchestrator works, two operating models.</li>
         <li><a href="/stack-conventions.html">Stack conventions</a> — how to add or change a service.</li>
       </ol>
@@ -27,7 +29,7 @@
       <h3 id="getting-started">Getting started</h3>
       <ul>
         <li><a href="/architecture.html">Architecture</a>: system overview, host topology, secrets flow.</li>
-        <li><a href="/hosts.html">Hosts</a>: bilby, kangaroo, Numbat, fractal, and planned Pinelake.</li>
+        <li><a href="/hosts.html">Hosts</a>: bilby, kangaroo, Numbat, fractal, voltaire, and pinelake.</li>
         <li><a href="/storage.html">Storage</a> — three-tier rule: local NVMe, Jump SSD, Pouch HDD.</li>
         <li><a href="/networking.html">Networking</a>: dockernet, Pomerium, rathole, Caddy, DNS, and Cloudflare CDN.</li>
       </ul>

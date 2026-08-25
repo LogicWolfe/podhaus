@@ -209,9 +209,9 @@ networks:
         services and raw protocols are DNS-only.
         The origin-directed cache contract and per-site invalidation paths are in
         <a href="/caching.md">Public site caching</a>.
-        Podhaus no longer uses Cloudflare Tunnel or Access. Voltaire retains its independent
-        tunnel, and Pine Lake retains its existing Tunnel and Access estate until that host
-        migrates to the Numbat pattern.
+        Podhaus service traffic no longer uses Cloudflare Tunnel or Access. Pine Lake retains
+        only its independently scoped <code>home.pinelake.haus</code> tunnel route for manual
+        recovery; its service and SSH traffic uses the Numbat pattern.
       </p>
 
       <h2 id="management">Management and logs</h2>
@@ -224,10 +224,9 @@ networks:
         or exposes an internal management listener. Separately, Bilby, Numbat, and Kangaroo
         run host-native Tailscale in userspace mode as an SSH-only recovery plane. The
         <code>tag:recovery</code> ACL permits member devices to TCP 22 and no reverse reach;
-        containers receive no socket, route, state, or network capability. While Pine Lake
-        is being admitted to the fleet, one explicitly addressed temporary exception permits
-        Bilby's recovery node to reach Pine Lake's Tailscale address on TCP 22 only; it is
-        removed after Pine Lake's outbound Numbat SSH route passes off-LAN and reboot validation.
+        containers receive no socket, route, state, or network capability. Pine Lake uses
+        hosted JetKVM and its retained <code>home.pinelake.haus</code> route for recovery;
+        it is not part of the Tailscale recovery plane.
       </p>
 
       <h2 id="dns">DNS</h2>
@@ -238,8 +237,8 @@ networks:
       <ul>
         <li><strong>Cloudflare</strong> public zones: DNS-only A records to Numbat for
           protected and raw services; proxied A records to Numbat's relay address for
-          the public CDN sites. Pine Lake retains its explicit tunnel records until it
-          moves to the outbound Numbat contract.</li>
+          the public CDN sites. Pine Lake's service records point to Numbat; only
+          <code>home.pinelake.haus</code> remains on its recovery tunnel.</li>
         <li><strong>UniFi</strong> LAN-side split-horizon. <code>unifi.pod.haus</code> and
           <code>bilby.pod.haus</code> resolve to Bilby at <code>10.0.0.119</code>.
           Kangaroo stays on public DNS so its browser path remains behind Pomerium.</li>

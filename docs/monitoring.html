@@ -271,10 +271,11 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
 
       <h3 id="alloy">Alloy log collection</h3>
       <p>
-        Alloy runs on all four active hosts as the multi-host
+        Alloy runs on all six active hosts as the multi-host
         <code>logging</code> service: <code>logging</code> on bilby,
         <code>kangaroo-logging</code> on kangaroo, <code>numbat-logging</code> on Numbat,
-        and <code>fractal-logging</code> on fractal. They share
+        <code>fractal-logging</code> on fractal, <code>voltaire-logging</code> on voltaire,
+        and <code>pinelake-logging</code> on pinelake. They share
         <code>logging/compose.shared.yaml</code>. Alloy scrapes each host's
         Docker socket, bridges Loki-format input to
         OTLP (<code>otelcol.receiver.loki</code> → batch → <code>otelcol.exporter.otlphttp</code>)
@@ -288,6 +289,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         <li><strong>Numbat</strong>: HTTPS to <code>logs-ingest.pod.haus</code> through
           rathole and Caddy, with a dedicated client certificate.</li>
         <li><strong>fractal</strong>: the same HTTPS ingress with its own client certificate.</li>
+        <li><strong>voltaire</strong>: the same HTTPS ingress with its own client certificate.</li>
+        <li><strong>pinelake</strong>: the same HTTPS ingress with its own client certificate.</li>
       </ul>
       <p>
         Every request carries a HyperDX <strong>ingestion API key</strong> in the

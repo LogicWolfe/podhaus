@@ -1,6 +1,6 @@
 # podhaus
 
-Docker infrastructure for four managed hosts. Compose stacks live in this
+Docker infrastructure for six managed hosts. Compose stacks live in this
 repo, Komodo deploys them, 1Password supplies secrets, and Terraform owns the
 external infrastructure.
 
@@ -12,8 +12,10 @@ external infrastructure.
   rathole gateway.
 - **fractal:** Fedora under WSL2. It is an outbound-only remote development and
   podhaus service host.
-
-**pinelake** is a planned host for the second household.
+- **voltaire:** Fedora Workstation. It is an outbound-only remote development
+  and podhaus service host.
+- **pinelake:** Apple M1 Mac mini running macOS and OrbStack. It is the
+  task-specific media appliance for the second household.
 
 ## Documentation
 

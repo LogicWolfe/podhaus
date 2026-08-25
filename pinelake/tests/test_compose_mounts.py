@@ -10,7 +10,6 @@ COMPOSE_FILES = (
     ROOT / "backup/pinelake/compose.yaml",
     ROOT / "pinelake/flood/compose.yaml",
     ROOT / "pinelake/plex/compose.yaml",
-    ROOT / "pinelake/staging/compose.yaml",
     ROOT / "pinelake/syncthing/compose.yaml",
 )
 
@@ -45,7 +44,7 @@ class TerraMasterMountTests(unittest.TestCase):
                         self.assertIsInstance(volume, dict)
                         self.assertEqual(volume["type"], "bind")
                         self.assertFalse(volume["bind"]["create_host_path"])
-        self.assertEqual(found, 23)
+        self.assertEqual(found, 13)
 
     def test_plex_can_see_both_media_ingress_paths(self) -> None:
         document = yaml.safe_load(

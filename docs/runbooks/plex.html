@@ -45,6 +45,27 @@
         Never copy Bilby's values to another server or replace one field with the other.
       </blockquote>
 
+      <h3 id="pinelake-identity">Pinelake identity and rollback</h3>
+      <p>
+        Pinelake runs <code>pinelake-plex</code> under OrbStack. Its state lives at
+        <code>/Users/Shared/Podhaus/plex</code>, and its required identity is committed in
+        <code>ansible/roles/pinelake_macos/files/plex-identity.json</code>. The stack's
+        preference initializer enforces all four identity fields and injects the existing
+        Plex token from the <code>pinelake-plex</code> Homelab item.
+      </p>
+      <p>
+        Every deployment first validates the TerraMaster mounts and the identity manifest.
+        Replacing a running server requires two successful zero-session checks; recovery is
+        allowed only when no Plex process or port 32400 listener exists. Plex is deliberately
+        excluded from generic Autoheal so an automated restart cannot bypass that gate.
+      </p>
+      <p>
+        The native application, plist, and state tree remain the manual rollback source.
+        Stop container Plex after the same two session checks, then start the native
+        application against its untouched state. Never copy the container database back into
+        the native tree because the current container release may have upgraded its schema.
+      </p>
+
       <h2 id="storage">Storage layout</h2>
       <table>
         <thead><tr><th>Mount</th><th>Path on bilby</th><th>Backing</th></tr></thead>
