@@ -40,6 +40,27 @@
     mode: "0755"
   notify: Reload the OrbStack privileged helper
 
+- name: Inspect OrbStack privileged helper quarantine
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/xattr
+      - -p
+      - com.apple.quarantine
+      - "{{ podhaus_orbstack_privileged_helper }}"
+  register: pinelake_orbstack_helper_quarantine
+  failed_when: false
+  changed_when: false
+
+- name: Remove quarantine from the OrbStack privileged helper
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/xattr
+      - -d
+      - com.apple.quarantine
+      - "{{ podhaus_orbstack_privileged_helper }}"
+  when: pinelake_orbstack_helper_quarantine.rc == 0
+  notify: Reload the OrbStack privileged helper
+
 - name: Install the OrbStack privileged helper daemon
   ansible.builtin.template:
     src: dev.orbstack.OrbStack.privhelper.plist

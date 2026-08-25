@@ -49,9 +49,14 @@ class HostSafetyTest(unittest.TestCase):
         ).read_bytes()
         plist = plistlib.loads(template)
         self.assertEqual(plist["Label"], "dev.orbstack.OrbStack.privhelper")
+        self.assertEqual(
+            plist["ProgramArguments"],
+            ["/Library/PrivilegedHelperTools/dev.orbstack.OrbStack.privhelper"],
+        )
         self.assertTrue(
             plist["MachServices"]["dev.orbstack.OrbStack.privhelper"]
         )
+        self.assertIn("Remove quarantine from the OrbStack privileged helper", task_names)
 
     def test_ansible_never_restarts_orbstack_in_band(self) -> None:
         role_text = "\n".join(

@@ -4,6 +4,10 @@
 <dict>
 	<key>Label</key>
 	<string>dev.orbstack.OrbStack.privhelper</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Library/PrivilegedHelperTools/dev.orbstack.OrbStack.privhelper</string>
+	</array>
 	<key>MachServices</key>
 	<dict>
 		<key>dev.orbstack.OrbStack.privhelper</key>
