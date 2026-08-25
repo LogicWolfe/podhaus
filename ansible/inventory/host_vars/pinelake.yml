@@ -1,10 +1,11 @@
 # pinelake — M1 Mac mini at Nathan's dad's home.
 ---
-ansible_host: 100.64.93.47
-ansible_user: baxter
+ansible_host: pinelake.pod.haus
+ansible_user: baxter@pinelake
 ansible_python_interpreter: /usr/bin/python3
 
 podhaus_operator: baxter
+podhaus_operator_uid: 501
 podhaus_timezone: America/Edmonton
 podhaus_docker_become: false
 podhaus_docker_home: /Users/baxter
@@ -14,14 +15,5 @@ podhaus_periphery_owner: baxter
 podhaus_periphery_group: staff
 sshd_pomerium_ca_group: wheel
 
-# Temporary fleet-admission path. Bilby's recovery Tailscale daemon runs in
-# userspace mode by design, so the host has no 100.64.0.0/10 route. SSH must
-# enter through `tailscale nc` on that daemon's private control socket. The
-# already-pinned Cloudflare hostname is the HostKeyAlias for the same Mac.
-# Return to the normal outbound Numbat SSH contract after its cutover passes.
-ansible_ssh_common_args: >-
-  -o IdentityAgent={{ lookup('env', 'SSH_AUTH_SOCK') }}
-  -o ConnectTimeout=15
-  -o HostKeyAlias=home.pinelake.haus
-  -o ProxyCommand="sudo /usr/local/libexec/podhaus-tailscale-recovery/tailscale
-  --socket=/run/podhaus-tailscale-recovery/tailscaled.sock nc %h %p"
+# The Pomerium route selector rides the SSH username (user@route), matching
+# numbat and voltaire. OS-account work uses podhaus_operator.

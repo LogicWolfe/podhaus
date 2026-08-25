@@ -18,8 +18,8 @@ a password**.
 
 Pinelake has one platform-forced exception: OrbStack stores its engine state in
 `baxter`'s home directory and runs as that user. The `pinelake_macos` role owns
-its CLI configuration plus the root-owned LaunchDaemon that starts it as
-`baxter`. Chezmoi still does not participate. Ownership follows the
+its CLI configuration plus the `baxter` Aqua-session LaunchAgent that starts
+it after proving the TerraMaster mount. Chezmoi still does not participate. Ownership follows the
 infrastructure function where macOS offers no system-wide container runtime.
 
 A host can take both. fractal does — it is a podhaus host *and* Nathan's
@@ -79,10 +79,8 @@ voltaire have no inbound path of their own and route through Pomerium,
 carrying `nathan@numbat` / `nathan@voltaire` as `ansible_user` — that is
 a Pomerium *route selector*, not an OS account, which is why
 OS-account work uses the separate `podhaus_operator` var. Pinelake is a
-dedicated macOS appliance temporarily reached through Bilby's userspace
-Tailscale recovery client; `home.pinelake.haus` remains its pinned SSH host-key
-alias. Its `pinelake_macos` role is separate from every Linux role. Replace the
-temporary transport with the normal outbound Numbat contract after admission.
+dedicated macOS appliance reached through its outbound Numbat/Pomerium SSH
+route. Its `pinelake_macos` role is separate from every Linux role.
 
 **kangaroo is not an Ansible target and never will be** — QTS ships no
 Python interpreter, so `kangaroo_bootstrap` is its permanent supported
@@ -260,13 +258,22 @@ owns it instead of a bootstrap script.
 **`pinelake_macos`** configures no-sleep and restart-after-power-loss policy
 while allowing the display to sleep after ten minutes. It installs current
 OrbStack through Homebrew without a version pin, configures the supported
-headless settings, creates `dockernet`, and installs a system LaunchDaemon that
-runs `orb start` as `baxter`. OrbStack selects the host's global Docker context;
-deployed Compose calls do not name it. The role never starts a media service.
+headless settings, creates `dockernet`, and installs a recurring Aqua-session
+LaunchAgent that runs a mount-gated `orb start` as `baxter`. Automatic login
+creates that user session after boot. A system LaunchDaemon is deliberately
+invalid here: it lacks OrbStack's user-session security context and repeatedly
+fails on its Group Container. OrbStack exposes its engine through the sole
+global `default` Docker context; deployed Compose calls do not name a runtime
+context. The role never starts a media service and never restarts OrbStack
+in-band, because Periphery and the SSH route it carries run inside that engine.
 
-The role disables OrbStack's admin setup prompts and unused direct container-IP
-bridge, leaves LAN publication enabled, disables Kubernetes and GUI login
-startup, and gives the Docker VM 8 CPUs and 8 GiB. macOS requires one
+The role enables OrbStack's privileged helper for the conventional
+`/var/run/docker.sock`, disables its runtime-specific Docker context and unused
+direct container-IP bridge, leaves LAN publication enabled, disables Kubernetes
+and OrbStack's own GUI login startup, and gives the Docker VM 8 CPUs and 8 GiB.
+It also disables automatic full macOS upgrades so an unattended reboot cannot
+bypass the Plex session gate, while background security data remains automatic.
+macOS requires one
 interactive removable-volume grant for OrbStack's signed application identity;
 there is no supported Ansible or command-line grant without device management.
 After that one provisioning consent, cold starts reuse the persisted grant.
@@ -275,7 +282,9 @@ leaving a false-green runtime. Runtime updates are ordinary current-release
 Homebrew maintenance, gated by the same two Plex session checks as every
 operation that can restart its container.
 
-Before any container can see the TerraMaster, `pinelake-mount-guard` verifies
+Before OrbStack starts after login, `pinelake-mount-guard` verifies the
+TerraMaster and the LaunchAgent retries the same fail-closed start every minute.
+Before any container can see the TerraMaster, the same guard verifies
 its APFS volume identifier, exact mount point, writable state, sentinel,
 required directories, and a read-only container bind of the sentinel. Stack
 pre-deploy gates bind and verify each required directory individually; services

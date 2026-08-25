@@ -16,6 +16,14 @@
       - "1"
   changed_when: false
 
+- name: Disable unattended macOS upgrades
+  community.general.osx_defaults:
+    domain: /Library/Preferences/com.apple.SoftwareUpdate
+    key: AutomaticallyInstallMacOSUpdates
+    type: bool
+    value: false
+    state: present
+
 - name: Install OrbStack
   community.general.homebrew_cask:
     name: orbstack
@@ -45,6 +53,14 @@
     - plex-preferences-convert
     - plex-recovery-gate
 
+- name: Install the mount-gated OrbStack starter
+  ansible.builtin.template:
+    src: pinelake-orbstack-start.j2
+    dest: "{{ podhaus_pinelake_libexec_dir }}/pinelake-orbstack-start"
+    owner: root
+    group: wheel
+    mode: "0755"
+
 - name: Install the Plex identity manifest
   ansible.builtin.copy:
     src: plex-identity.json
@@ -59,7 +75,6 @@
     state: directory
     owner: "{{ podhaus_operator }}"
     group: staff
-    mode: "0755"
   loop: "{{ podhaus_pinelake_state_dirs }}"
 
 - name: Prove the TerraMaster host mount
@@ -105,8 +120,8 @@
       changed_when: false
       loop:
         - {key: app.start_at_login, value: "false"}
-        - {key: setup.use_admin, value: "false"}
-        - {key: docker.set_context, value: "true"}
+        - {key: setup.use_admin, value: "true"}
+        - {key: docker.set_context, value: "false"}
         - {key: docker.expose_ports_to_lan, value: "true"}
         - {key: k8s.enable, value: "false"}
         - {key: network_bridge, value: "false"}
@@ -128,10 +143,78 @@
       become: false
       loop: "{{ pinelake_orbstack_settings.results }}"
       when: item.stdout != (item.item.value | string)
-      notify: Restart OrbStack
 
-- name: Apply OrbStack configuration before creating networks
-  ansible.builtin.meta: flush_handlers
+- name: Prove the default Docker socket
+  ansible.builtin.command:
+    argv: [docker, --context, default, info]
+  environment:
+    HOME: "/Users/{{ podhaus_operator }}"
+    PATH: "{{ podhaus_orbstack_path }}"
+  become: false
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Read the selected Docker context
+  ansible.builtin.command:
+    argv: [docker, context, show]
+  environment:
+    HOME: "/Users/{{ podhaus_operator }}"
+    PATH: "{{ podhaus_orbstack_path }}"
+  become: false
+  register: pinelake_selected_docker_context
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Select the default Docker context
+  ansible.builtin.command:
+    argv: [docker, context, use, default]
+  environment:
+    HOME: "/Users/{{ podhaus_operator }}"
+    PATH: "{{ podhaus_orbstack_path }}"
+  become: false
+  when:
+    - not ansible_check_mode
+    - pinelake_selected_docker_context.stdout != "default"
+
+- name: Inspect the OrbStack-specific Docker context
+  ansible.builtin.command:
+    argv: [docker, context, inspect, orbstack]
+  environment:
+    HOME: "/Users/{{ podhaus_operator }}"
+    PATH: "{{ podhaus_orbstack_path }}"
+  become: false
+  register: pinelake_orbstack_docker_context
+  failed_when: false
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Remove the OrbStack-specific Docker context
+  ansible.builtin.command:
+    argv: [docker, context, rm, orbstack]
+  environment:
+    HOME: "/Users/{{ podhaus_operator }}"
+    PATH: "{{ podhaus_orbstack_path }}"
+  become: false
+  when:
+    - not ansible_check_mode
+    - pinelake_orbstack_docker_context.rc == 0
+
+- name: Read all Docker contexts
+  ansible.builtin.command:
+    argv: [docker, context, ls, --quiet]
+  environment:
+    HOME: "/Users/{{ podhaus_operator }}"
+    PATH: "{{ podhaus_orbstack_path }}"
+  become: false
+  register: pinelake_docker_contexts
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Prove default is the sole Docker context
+  ansible.builtin.assert:
+    that:
+      - pinelake_docker_contexts.stdout_lines == ["default"]
+    fail_msg: Runtime-specific Docker contexts remain installed
   when: not ansible_check_mode
 
 - name: Create the shared Docker network
@@ -195,11 +278,74 @@
   changed_when: false
   when: not ansible_check_mode
 
-- name: Install the OrbStack launch daemon
+- name: Disable legacy user launch jobs
+  ansible.builtin.command:
+    argv:
+      - /bin/launchctl
+      - disable
+      - "gui/{{ podhaus_operator_uid }}/{{ item }}"
+  changed_when: false
+  loop: "{{ podhaus_pinelake_legacy_user_jobs }}"
+
+- name: Stop legacy user launch jobs
+  ansible.builtin.command:
+    argv:
+      - /bin/launchctl
+      - bootout
+      - "gui/{{ podhaus_operator_uid }}/{{ item }}"
+  failed_when: false
+  changed_when: false
+  loop: "{{ podhaus_pinelake_legacy_user_jobs }}"
+
+- name: Disable legacy system launch jobs
+  ansible.builtin.command:
+    argv:
+      - /bin/launchctl
+      - disable
+      - "system/{{ item }}"
+  changed_when: false
+  loop: "{{ podhaus_pinelake_legacy_system_jobs }}"
+
+- name: Stop legacy system launch jobs
+  ansible.builtin.command:
+    argv:
+      - /bin/launchctl
+      - bootout
+      - "system/{{ item }}"
+  failed_when: false
+  changed_when: false
+  loop: "{{ podhaus_pinelake_legacy_system_jobs }}"
+
+- name: Inspect the retired system OrbStack daemon
+  ansible.builtin.command:
+    argv: [/bin/launchctl, print, system/haus.podhaus.orbstack]
+  register: pinelake_retired_orbstack_daemon
+  failed_when: false
+  changed_when: false
+
+- name: Stop the retired system OrbStack daemon
+  ansible.builtin.command:
+    argv: [/bin/launchctl, bootout, system/haus.podhaus.orbstack]
+  when: pinelake_retired_orbstack_daemon.rc == 0
+
+- name: Remove the retired system OrbStack daemon
+  ansible.builtin.file:
+    path: "{{ podhaus_pinelake_retired_launch_daemon }}"
+    state: absent
+
+- name: Create the operator LaunchAgents directory
+  ansible.builtin.file:
+    path: "/Users/{{ podhaus_operator }}/Library/LaunchAgents"
+    state: directory
+    owner: "{{ podhaus_operator }}"
+    group: staff
+    mode: "0755"
+
+- name: Install the OrbStack launch agent
   ansible.builtin.template:
     src: haus.podhaus.orbstack.plist.j2
-    dest: "{{ podhaus_pinelake_launch_daemon }}"
-    owner: root
-    group: wheel
+    dest: "{{ podhaus_pinelake_launch_agent }}"
+    owner: "{{ podhaus_operator }}"
+    group: staff
     mode: "0644"
-  notify: Reload OrbStack launch daemon
+  notify: Reload OrbStack launch agent

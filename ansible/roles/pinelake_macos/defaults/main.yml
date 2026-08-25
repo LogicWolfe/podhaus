@@ -27,7 +27,17 @@ podhaus_pinelake_state_dirs:
   - /Users/Shared/Podhaus/flood
   - /Users/Shared/Podhaus/syncthing
   - /Users/Shared/Podhaus/transcode
-podhaus_pinelake_launch_daemon: /Library/LaunchDaemons/haus.podhaus.orbstack.plist
-podhaus_plex_session_preferences_kind: plist
+podhaus_pinelake_launch_agent: >-
+  /Users/baxter/Library/LaunchAgents/haus.podhaus.orbstack.plist
+podhaus_pinelake_retired_launch_daemon: >-
+  /Library/LaunchDaemons/haus.podhaus.orbstack.plist
+podhaus_pinelake_legacy_user_jobs:
+  - homebrew.mxcl.syncthing
+  - homebrew.mxcl.colima
+  - com.flood.ui
+podhaus_pinelake_legacy_system_jobs:
+  - haus.podhaus.colima
+  - io.colima.start
+podhaus_plex_session_preferences_kind: xml
 podhaus_plex_session_preferences: >-
-  /Users/baxter/Library/Preferences/com.plexapp.plexmediaserver.plist
+  /Users/Shared/Podhaus/plex/Library/Application Support/Plex Media Server/Preferences.xml

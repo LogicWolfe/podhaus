@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 SCRIPT = Path(__file__).parents[1] / "files" / "plex-deploy-gate"
 
@@ -87,6 +89,17 @@ class PlexDeployGateTest(unittest.TestCase):
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("wrong-identity", result.stderr)
+
+    def test_runtime_restart_gates_against_live_container_preferences(self) -> None:
+        defaults = yaml.safe_load(
+            (Path(__file__).parents[1] / "defaults/main.yml").read_text()
+        )
+        self.assertEqual(defaults["podhaus_plex_session_preferences_kind"], "xml")
+        self.assertEqual(
+            defaults["podhaus_plex_session_preferences"],
+            "/Users/Shared/Podhaus/plex/Library/Application Support/"
+            "Plex Media Server/Preferences.xml",
+        )
 
 
 if __name__ == "__main__":

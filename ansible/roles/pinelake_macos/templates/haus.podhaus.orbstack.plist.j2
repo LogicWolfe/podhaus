@@ -6,11 +6,10 @@
   <string>haus.podhaus.orbstack</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/bin/orb</string>
-    <string>start</string>
+    <string>{{ podhaus_pinelake_libexec_dir }}/pinelake-orbstack-start</string>
   </array>
-  <key>UserName</key>
-  <string>{{ podhaus_operator }}</string>
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>HOME</key>
