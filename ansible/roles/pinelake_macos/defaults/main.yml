@@ -16,7 +16,6 @@ podhaus_terramaster_required_paths:
   - Movies
   - TV
   - Kids
-  - Kids/TV
   - Sports
   - Torrents
 podhaus_pinelake_backup_repo: /Volumes/TerraMaster/.podhaus-backups/pinelake-restic

@@ -18,7 +18,7 @@ services:
         "EAED18A9-74C7-4163-ACB4-406B2226FDC6";
         test -d /media/Movies;
         test -d /media/TV;
-        test -d /media/Kids/TV;
+        test -d /media/Kids;
         test -d /media/Sports;
         test -d /media/Torrents;
         test -x '/usr/lib/plexmediaserver/Plex Media Server'

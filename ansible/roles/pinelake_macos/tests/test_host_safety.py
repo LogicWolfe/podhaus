@@ -74,6 +74,12 @@ class HostSafetyTest(unittest.TestCase):
         self.assertIn("--volume-uuid", wrapper)
         self.assertNotIn("--initialize-sentinel", wrapper)
 
+    def test_mount_contract_uses_four_share_roots(self) -> None:
+        self.assertEqual(
+            self.defaults["podhaus_terramaster_required_paths"],
+            ["Movies", "TV", "Kids", "Sports", "Torrents"],
+        )
+
     def test_legacy_autostarts_are_disabled_but_not_deleted(self) -> None:
         self.assertEqual(
             set(self.defaults["podhaus_pinelake_legacy_user_jobs"]),
