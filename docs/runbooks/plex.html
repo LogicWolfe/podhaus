@@ -45,7 +45,7 @@
         Never copy Bilby's values to another server or replace one field with the other.
       </blockquote>
 
-      <h3 id="pinelake-identity">Pinelake identity and rollback</h3>
+      <h3 id="pinelake-identity">Pinelake identity</h3>
       <p>
         Pinelake runs <code>pinelake-plex</code> under OrbStack. Its state lives at
         <code>/Users/Shared/Podhaus/plex</code>, and its required identity is committed in
@@ -59,13 +59,6 @@
         allowed only when no Plex process or port 32400 listener exists. Plex is deliberately
         excluded from generic Autoheal so an automated restart cannot bypass that gate.
       </p>
-      <p>
-        The native application, plist, and state tree remain the manual rollback source.
-        Stop container Plex after the same two session checks, then start the native
-        application against its untouched state. Never copy the container database back into
-        the native tree because the current container release may have upgraded its schema.
-      </p>
-
       <h2 id="storage">Storage layout</h2>
       <table>
         <thead><tr><th>Mount</th><th>Path on bilby</th><th>Backing</th></tr></thead>
@@ -220,7 +213,7 @@ ffprobe -v error -select_streams v:0 \
       <p>
         Plex's <code>statistics_bandwidth</code> table grows indefinitely with no upstream
         pruning mechanism. Left unchecked it can balloon the DB by tens of GB. An ofelia job
-        runs an online DELETE + VACUUM on the 1st of each month at 04:00 AWST via
+        runs an online DELETE + VACUUM on the 1st of each month at 05:30 AWST via
         <code>plex/scripts/stats-cleanup.sh</code>. See
         <a href="/runbooks/plex-maintenance.html">Plex maintenance log</a> for the historical
         incident that prompted this.

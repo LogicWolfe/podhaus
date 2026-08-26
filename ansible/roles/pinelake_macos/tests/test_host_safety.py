@@ -66,19 +66,6 @@ class HostSafetyTest(unittest.TestCase):
             ["Movies", "TV", "Kids", "Sports", "Torrents"],
         )
 
-    def test_legacy_autostarts_are_disabled_but_not_deleted(self) -> None:
-        self.assertEqual(
-            set(self.defaults["podhaus_pinelake_legacy_user_jobs"]),
-            {"homebrew.mxcl.syncthing", "homebrew.mxcl.colima", "com.flood.ui"},
-        )
-        self.assertEqual(
-            set(self.defaults["podhaus_pinelake_legacy_system_jobs"]),
-            {"io.colima.start"},
-        )
-        task_names = {task["name"] for task in self.tasks}
-        self.assertIn("Disable legacy user launch jobs", task_names)
-        self.assertIn("Disable legacy system launch jobs", task_names)
-
     def test_full_macos_updates_are_not_installed_automatically(self) -> None:
         task = self.task("Disable unattended macOS upgrades")
         self.assertEqual(

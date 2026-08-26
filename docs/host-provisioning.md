@@ -18,9 +18,10 @@ a password**.
 
 Pinelake has one platform-forced exception: OrbStack stores its engine state in
 `baxter`'s home directory and runs as that user. The `pinelake_macos` role owns
-its CLI configuration plus the `baxter` Aqua-session LaunchAgent that starts
-it after proving the TerraMaster mount. Chezmoi still does not participate. Ownership follows the
-infrastructure function where macOS offers no system-wide container runtime.
+its CLI configuration and invokes OrbStack as `baxter`; automatic login creates
+the Aqua session and OrbStack's supported login item starts the engine. Chezmoi
+still does not participate. Ownership follows the infrastructure function where
+macOS offers no system-wide container runtime.
 
 A host can take both. fractal does — it is a podhaus host *and* Nathan's
 development machine, so Ansible gives it Docker and Periphery while

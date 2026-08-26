@@ -19,7 +19,8 @@
 # If the script itself never runs (container dead, ofelia broken), Gatus
 # misses the 25h heartbeat and alerts as a dead-man's switch.
 #
-# Scheduled via ofelia label on the flood container; runs 04:50 AWST.
+# Scheduled via an Ofelia label on each Flood container; runs at 04:50 in the
+# scheduler's local timezone.
 
 set -u
 

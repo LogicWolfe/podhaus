@@ -2,9 +2,10 @@
 
       <h1>Disaster recovery</h1>
       <p class="lead text-lg text-text-muted">
-        Runbooks for rebuilding from nothing. The repo plus 1Password plus a working internet
-        connection should be enough to recover either host. Restic snapshots on Jump plus the
-        OneDrive off-site mirror are the data recovery surface.
+        Runbooks for rebuilding the stateful fleet hosts. The repository, 1Password, and a
+        working internet connection rebuild the managed layers. Bilby and kangaroo recover
+        state from their local restic repositories or OneDrive mirrors. Pinelake recovers
+        service state only while its TerraMaster volume remains available.
       </p>
 
       <h2 id="prerequisites">Prerequisites</h2>
@@ -219,6 +220,56 @@ op-vault dev -- ansible-playbook playbooks/numbat-bootstrap.yml</code></pre>
         normal restarts but replaceable; all long-lived keys and credentials are in
         Terraform state and 1Password.
       </p>
+
+      <h2 id="pinelake-rebuild">Fresh Pinelake from scratch</h2>
+      <p>
+        This path assumes the TerraMaster volume and its
+        <code>.podhaus-backups/pinelake-restic</code> repository remain readable. That
+        repository protects service state when the Mac's internal disk fails. It is on the
+        same volume as the media and has no OneDrive mirror, so loss of TerraMaster is a
+        rebuild without a Pinelake data restore.
+      </p>
+      <ol>
+        <li>Through hosted JetKVM, install current macOS, create the <code>baxter</code>
+          account, set <code>America/Edmonton</code>, enable automatic login and Remote Login,
+          and attach the existing TerraMaster volume without formatting it.</li>
+        <li>Install current Homebrew and OrbStack. Open OrbStack in the Aqua session, keep its
+          supported start-at-login item enabled, and grant its signed application access to
+          removable volumes. Do not add a launch daemon or a second container runtime.</li>
+        <li>Create a temporary control path by enrolling the Mac as a normal Tailscale member
+          device. From a Podhaus control machine, install its machine key for
+          <code>baxter</code>, then run the Pinelake play through the temporary address:
+          <pre><code>cd ansible
+op-vault dev -- ansible-playbook playbooks/pinelake.yml \
+  --check --diff --ask-become-pass \
+  -e ansible_host=&lt;tailscale-address&gt; -e ansible_user=baxter
+op-vault dev -- ansible-playbook playbooks/pinelake.yml \
+  --ask-become-pass \
+  -e ansible_host=&lt;tailscale-address&gt; -e ansible_user=baxter</code></pre>
+          The play configures power policy and OrbStack, proves the exact TerraMaster volume,
+          installs Pomerium Secure Shell trust, and brings outbound Periphery up with its
+          existing keypair from bilby. Pinelake receives no 1Password service account.</li>
+        <li>From Komodo, deploy <code>pinelake-relay</code> and
+          <code>pinelake-backup</code>. The relay restores
+          <code>home.pinelake.haus</code>; Backrest exposes its user interface on port 9898 of
+          the temporary Tailscale address.</li>
+        <li>Before starting Plex, Flood, or Syncthing, restore each complete plan to a scratch
+          target through Backrest, verify the restored tree, then place it at the matching
+          empty host path under <code>/Users/Shared/Podhaus</code> with owner
+          <code>baxter:staff</code>. Restore Plex as one complete tree; never mix individual
+          database or preference files from different snapshots.</li>
+        <li>From bilby, run <code>./komodo-sync</code>. The Pinelake pre-deploy gates prove the
+          mounted media roots before each stateful stack starts. Plex additionally validates
+          all four identity fields from
+          <code>ansible/roles/pinelake_macos/files/plex-identity.json</code>.</li>
+        <li>Verify the Plex raw, processed, anonymous, and certificate identifiers; library
+          roots and watched counts; Kangaroo connectivity and receive-only state for all four
+          Syncthing folders; Flood publishing and extraction; all ten containers; Periphery;
+          log ingestion; <code>home.pinelake.haus</code>; and the protected Flood and Syncthing
+          routes.</li>
+        <li>Remove Tailscale from Pinelake after the canonical Numbat route works. Hosted
+          JetKVM remains the independent console recovery path.</li>
+      </ol>
 
       <h2 id="offsite-restore">Restoring from OneDrive (worst case)</h2>
       <p>

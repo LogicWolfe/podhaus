@@ -8,7 +8,7 @@ server = "pinelake"
 linked_repo = "podhaus-pinelake"
 run_directory = "pinelake/syncthing"
 environment = """
-TZ=[[TZ]]
+TZ=America/Edmonton
 """
 
 [stack.config.pre_deploy]

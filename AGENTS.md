@@ -124,10 +124,11 @@ hosted JetKVM is Pinelake's independent recovery path.
 - Secrets flow: **1Password Homelab vault → `komodo-op` → Komodo
   Variables → `[[VARIABLE]]` interpolation in stack environment**.
 - Non-secret variables live in TOML and apply via the ResourceSync
-  (`include_variables = true` on the `podhaus` sync). Global ones
+  (`include_variables = true` on the `podhaus` sync). Global defaults
   (`TZ`, `MEDIA_DIR`) live in `komodo/sync/variables.toml`;
   stack-private ones (e.g. `FENWICK_*`) live as inline `[[variable]]`
-  blocks in the relevant `<stack>/stack.toml`.
+  blocks in the relevant `<stack>/stack.toml`. Pinelake's stack environments
+  set `TZ=America/Edmonton` explicitly instead of consuming the Perth default.
   - **Exception:** `PODHAUS_CHECKOUT` is host-discovered (`= $PWD` at
     bootstrap time, varies per host), so it can't live in a TOML.
     `komodo-start` seeds it directly via the Komodo API. It's consumed
@@ -206,7 +207,7 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `<name>/compose.yaml` | Docker Compose file for each service stack |
 | `<name>/stack.toml` | Komodo stack metadata (server assignment, environment block) |
 | `komodo/sync/variables.toml` | Global non-secret variable declarations (TZ, MEDIA_DIR, and `PODHAUS_REPO` — the fixed path of bilby's Komodo-managed deploy tree). Authoritative — applied by the podhaus sync (`include_variables = true`). Stack-private vars live as inline `[[variable]]` blocks in `<stack>/stack.toml` instead. |
-| `komodo/sync/servers.toml` | Server definitions (bilby, kangaroo, numbat, fractal) |
+| `komodo/sync/servers.toml` | Server definitions (bilby, kangaroo, numbat, fractal, voltaire, pinelake) |
 | `komodo/sync/repos.toml` | Per-host Linked Repo definitions (including `podhaus-numbat`), plus the `podhaus-deploy` Repo resource — bilby's own Komodo-managed deploy tree, fed by `podhaus-push-deploy`'s pull stage and by `komodo-sync`'s local-tree overlay. |
 | `komodo/sync/procedures.toml` | Two procedures. `podhaus-push-deploy` is the GitHub webhook entrypoint: Stage 0 `PullRepo podhaus-deploy` force-pulls the deploy tree to `origin/main`, Stage 1 `RunProcedure podhaus-deploy` runs the internal procedure below. `podhaus-deploy` (webhook/schedule disabled — invoked only by `podhaus-push-deploy` and by `./komodo-sync`; deploys whatever the deploy tree currently holds) has three stages: Stage 0 RunSync (reconcile defs) → Stage 1 RunAction `podhaus-inject-content-hashes` (stamp content hashes into stored env **and** force-deploy stacks with stale hash labels — the actual config-only/build-context trigger) → Stage 2 BatchDeployStackIfChanged "*" (owns compose-text changes + new stacks; does NOT see hash changes). Ofelia `0.4.0-beta.5` follows Docker events and no longer needs a deployment-boundary restart. |
 | `komodo/sync/actions.toml` | Komodo Actions invoked by procedures and by `komodo-sync`. `podhaus-load-local-tree` is `komodo-sync`'s first step: mirrors bilby's working checkout (tracked + untracked-unignored files, read-only at `/syncs/podhaus-local`) into the deploy tree at `/syncs/podhaus` via `git ls-files` enumeration on both sides, so everything downstream deploys exactly local state. `podhaus-inject-content-hashes` is Stage 1 of the internal `podhaus-deploy` procedure. For every stack visible at `/syncs/podhaus` (the deploy tree), it hashes (a) the stack directory (committed files; `.env` excluded) → `STACK_CONTENT_HASH`, and (b) each service's resolved build context → `BUILD_HASH_<UPPER_SERVICE>`; injects both into stored env. **Then it force-deploys any stack whose running container has stale `podhaus.*` labels or, for a build service, a stale baked `STACK_CONTENT_HASH`, while its compose text is unchanged**. This reconcile is the load-bearing trigger for podhaus's "any in-stack file change → recreate; any build-context change → image rebuild + recreate" property, because Komodo's IfChanged (Stage 2) only diffs compose text and never sees a hash change. `podhaus-purge-stack-cache` reads a deployed stack's `podhaus.cloudflare-cache-*` labels and purges those tags after the stack's deployment stage. See the Stage-1/content-hash notes in "When adding a new service" and [`docs/caching.md`](docs/caching.md). |

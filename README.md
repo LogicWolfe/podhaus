@@ -98,6 +98,6 @@ DNSControl has been retired.
 | `tailscale-recovery-bootstrap` | SSH-only host recovery plane |
 | `backup/`, `autoheal/`, `logging/` | Multi-host shared services |
 | `clickstack/`, `gatus/` | Observability, health checks, and alerting |
-| `bilby/`, `kangaroo/`, `numbat/`, `fractal/` | Host bootstrap and host-level configuration |
+| `bilby/`, `kangaroo/`, `numbat/`, `fractal/`, `voltaire/`, `pinelake/` | Host bootstrap and host-level configuration |
 | `docs/` | Current-state documentation and live plans |
 | `<service>/compose.yaml` | A single-host service stack |

@@ -5,7 +5,6 @@ ansible_user: baxter@pinelake
 ansible_python_interpreter: /usr/bin/python3
 
 podhaus_operator: baxter
-podhaus_operator_uid: 501
 podhaus_timezone: America/Edmonton
 podhaus_docker_become: false
 podhaus_docker_home: /Users/baxter

@@ -151,8 +151,8 @@
       <h2 id="safety-monitoring">Safety net + monitoring</h2>
       <p>
         <strong><code>flood/scripts/rar-backlog.sh</code></strong> — daily ofelia job at
-        04:50 AWST, the cron-driven backstop for the whole pipeline, two checks folded
-        into one Gatus heartbeat (<code>torrents_rar-extraction</code>):
+        04:50 in each host's local timezone, the cron-driven backstop for the whole pipeline.
+        Two checks are folded into the host's RAR-extraction Gatus heartbeat:
       </p>
       <ul>
         <li><strong>Extraction</strong> — scans <code>/data/torrents</code> for folders

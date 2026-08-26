@@ -8,5 +8,5 @@ server = "pinelake"
 linked_repo = "podhaus-pinelake"
 run_directory = "pinelake/ofelia"
 environment = """
-TZ=[[TZ]]
+TZ=America/Edmonton
 """

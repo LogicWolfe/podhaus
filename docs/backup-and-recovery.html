@@ -100,9 +100,21 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
       <p>
         Pinelake backs up Plex, Flood, Syncthing, Periphery, and Backrest state to
         <code>/Volumes/TerraMaster/.podhaus-backups/pinelake-restic</code>. It does not back up
-        the media library: that data is recoverable but too large for this backup tier. Pinelake
-        has no rclone configuration or OneDrive integration.
+        the media library: that data is too large for this backup tier. The repository and media
+        share the TerraMaster failure domain, so this protects service state from loss of the
+        Mac's internal disk but not from loss of TerraMaster. Pinelake has no rclone
+        configuration or OneDrive integration. All schedules below use Edmonton local time.
       </p>
+      <table>
+        <thead><tr><th>Plan</th><th>Source</th><th>Schedule</th></tr></thead>
+        <tbody>
+          <tr><td><code>plex</code></td><td><code>/Users/Shared/Podhaus/plex</code></td><td>04:00</td></tr>
+          <tr><td><code>flood</code></td><td><code>/Users/Shared/Podhaus/flood</code></td><td>04:10</td></tr>
+          <tr><td><code>syncthing</code></td><td><code>/Users/Shared/Podhaus/syncthing</code></td><td>04:20</td></tr>
+          <tr><td><code>komodo-periphery</code></td><td>Periphery state, excluding linked clones</td><td>04:30</td></tr>
+          <tr><td><code>backrest-state</code></td><td>Backrest's own database</td><td>04:40</td></tr>
+        </tbody>
+      </table>
 
       <h2 id="sky-backups">Sky backups on Pouch</h2>
       <p>
@@ -179,7 +191,7 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
 
       <h2 id="restore-drill">Restore drill</h2>
       <p>
-        Quarterly cadence. Two paths to verify:
+        Quarterly cadence. Three paths to verify:
       </p>
       <ol>
         <li><strong>Local restore from bilby's repo:</strong> open Backrest UI, pick a snapshot,
@@ -189,6 +201,9 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
           <code>rclone sync onedrive:Backups/podhaus-restic /tmp/restore-from-cloud/</code>,
           then <code>restic -r /tmp/restore-from-cloud snapshots</code> with the password from
           1P. Restore one file, verify.</li>
+        <li><strong>Pinelake local restore:</strong> through Pinelake Backrest, restore one
+          file from <code>podhaus-pinelake</code> to a scratch path and verify its checksum.
+          This proves the TerraMaster repository; it is not an off-site recovery test.</li>
       </ol>
       <p>
         Document the dates in the runbook. Last drill: 2026-04-16 against

@@ -125,10 +125,11 @@
         that <code>komodo-op</code> itself needs to talk to 1Password)
         plus host-discovered <code>PODHAUS_CHECKOUT</code> (consumed only
         by Home Assistant's live UI-editable config bind). Everything else
-        — global non-secret vars (<code>TZ</code>, <code>MEDIA_DIR</code>)
+        — global-default non-secret vars (<code>TZ</code>, <code>MEDIA_DIR</code>)
         and stack-private ones (<code>FENWICK_*</code>, etc.) — lives
         in TOML and applies via the ResourceSync's
-        <code>include_variables = true</code> config. See
+        <code>include_variables = true</code> config. Pinelake's stack environments set
+        <code>TZ=America/Edmonton</code> explicitly instead of consuming the Perth default. See
         <a href="/secrets.html">Secrets &amp; variables</a> for the full flow.
       </p>
 

@@ -79,44 +79,6 @@
   register: pinelake_host_mount_guard
   changed_when: "'sentinel initialized' in pinelake_host_mount_guard.stdout"
 
-- name: Disable legacy user launch jobs
-  ansible.builtin.command:
-    argv:
-      - /bin/launchctl
-      - disable
-      - "gui/{{ podhaus_operator_uid }}/{{ item }}"
-  changed_when: false
-  loop: "{{ podhaus_pinelake_legacy_user_jobs }}"
-
-- name: Stop legacy user launch jobs
-  ansible.builtin.command:
-    argv:
-      - /bin/launchctl
-      - bootout
-      - "gui/{{ podhaus_operator_uid }}/{{ item }}"
-  failed_when: false
-  changed_when: false
-  loop: "{{ podhaus_pinelake_legacy_user_jobs }}"
-
-- name: Disable legacy system launch jobs
-  ansible.builtin.command:
-    argv:
-      - /bin/launchctl
-      - disable
-      - "system/{{ item }}"
-  changed_when: false
-  loop: "{{ podhaus_pinelake_legacy_system_jobs }}"
-
-- name: Stop legacy system launch jobs
-  ansible.builtin.command:
-    argv:
-      - /bin/launchctl
-      - bootout
-      - "system/{{ item }}"
-  failed_when: false
-  changed_when: false
-  loop: "{{ podhaus_pinelake_legacy_system_jobs }}"
-
 - name: Create the Pinelake restic repository directory
   ansible.builtin.file:
     path: "{{ podhaus_pinelake_backup_repo }}"

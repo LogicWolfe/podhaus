@@ -10,7 +10,7 @@ run_directory = "pinelake/plex"
 run_build = true
 ignore_services = ["pinelake-plex-preferences-init"]
 environment = """
-TZ=[[TZ]]
+TZ=America/Edmonton
 PLEX_ONLINE_TOKEN=[[OP__KOMODO__PINELAKE_PLEX__TOKEN]]
 """
 

@@ -21,14 +21,15 @@
           from a given image.</li>
       </ul>
       <p>
-        Cron schedules are interpreted in the container's local time. The <code>TZ</code> env
-        is set to <code>Australia/Perth</code> so labels like
-        <code>"0 4 * * *"</code> mean 04:00 AWST.
+        Cron schedules are interpreted in the scheduler container's local time. Bilby's
+        scheduler uses <code>Australia/Perth</code>; Pinelake's uses
+        <code>America/Edmonton</code>. A label such as <code>"0 4 * * *"</code> therefore
+        means 04:00 at the host whose Ofelia executes it.
       </p>
 
-      <h2 id="dead-time">04:00 dead-time window</h2>
+      <h2 id="dead-time">04:00 local dead-time window</h2>
       <p>
-        Scheduled work defaults to starting at <strong>04:00 AWST</strong>. If a job is
+        Scheduled work defaults to starting at <strong>04:00 local time</strong>. If a job is
         expected to take more than 2 hours, walk it back from 06:00 instead so the whole
         nightly run finishes before peak hours. This rule applies to Backrest plans (see
         <a href="/backup-and-recovery.html">Backup &amp; recovery</a>) and to ofelia jobs.
@@ -39,10 +40,10 @@
         <thead><tr><th>Job</th><th>Container</th><th>Schedule</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td><code>plex-stats-cleanup</code></td><td>plex</td><td>05:30 on the 1st of each month</td><td>Online DELETE on <code>statistics_bandwidth</code> rows older than 30 days + VACUUM.</td></tr>
-          <tr><td><code>rar-backlog</code></td><td>flood</td><td>04:50 daily</td><td>Scans <code>/data/{Movies,TV,Kids}</code> for folders with RAR pieces ≥2h old and no extracted keepers. Pushes Gatus heartbeat with success or failure context.</td></tr>
+          <tr><td><code>rar-backlog</code></td><td>flood, pinelake-flood</td><td>04:50 local daily</td><td>Scans <code>/data/torrents</code> for folders with RAR pieces ≥2h old and no extracted keepers, then checks for completed torrents with publish gaps. Pushes the host-specific Gatus heartbeat with success or failure context.</td></tr>
           <tr><td><code>pinelake-stignore</code></td><td>flood</td><td>every 5 min</td><td>Reconciles Pouch's <code>.stignore</code> with rtorrent's <code>pinelake</code>-tagged complete torrents. Safety net for the <code>event.download.finished</code> rtorrent hook (which can't catch tags applied post-completion). See <a href="/runbooks/flood.html#pinelake-stignore">flood runbook</a>.</td></tr>
-          <tr><td><code>flood-publish</code></td><td>flood</td><td>every minute</td><td>Publishes completed torrents from Flood into their final media paths.</td></tr>
-          <tr><td><code>plex-label-sync</code></td><td>flood</td><td>every 5 min</td><td>Mirrors each torrent's Flood tags onto its Plex show/movie as Labels (per-managed-user content restrictions). Same dual-trigger pattern as <code>pinelake-stignore</code>; the tick is the workhorse since Plex's library scan lags publish. See <a href="/runbooks/flood.html#plex-label-sync">flood runbook</a>.</td></tr>
+          <tr><td><code>flood-publish</code></td><td>flood, pinelake-flood</td><td>every minute</td><td>Publishes completed torrents into each host's final media paths.</td></tr>
+          <tr><td><code>plex-label-sync</code></td><td>flood, pinelake-flood</td><td>every 5 min</td><td>Mirrors each torrent's Flood tags onto its local Plex show/movie as Labels (per-managed-user content restrictions). Same dual-trigger pattern as <code>pinelake-stignore</code>; the tick is the workhorse since Plex's library scan lags publish. See <a href="/runbooks/flood.html#plex-label-sync">flood runbook</a>.</td></tr>
           <tr><td><code>sky-backups-monitor</code></td><td>sky-backups-monitor</td><td>hourly at :15</td><td>Lists committed Restic snapshot objects in Pouch MinIO and alerts through Gatus when none was written within seven days.</td></tr>
           <tr><td><code>clickstack-mongo-dump</code></td><td>clickstack-mongo</td><td>03:50 daily</td><td>Dumps ClickStack's MongoDB metadata into the backed-up host path.</td></tr>
           <tr><td><code>forgejo-backup-recover</code></td><td>backrest</td><td>every 5 min</td><td>Recovers the Forgejo backup control path if a prior quiesce or hook was interrupted.</td></tr>
