@@ -1,5 +1,35 @@
-# Trust the cloudflared/dockernet gateway so HA sees real client IPs
-# behind the Cloudflare Tunnel.
+# Let Home Assistant see the real client IP instead of the proxy's.
+#
+# Home Assistant runs network_mode: host, and Caddy reaches it across the
+# dockernet bridge gateway (`reverse_proxy @home 172.18.0.1:8123` in
+# caddy/Caddyfile). So every proxied request arrives from Caddy's own dockernet
+# address, and without this block HA would record all of them as coming from
+# 172.18.0.x. The full remote path is:
+#
+#   client -> Numbat Pomerium (Pocket ID) -> rathole -> Caddy :4443 -> HA
+#
+# `trusted_proxies` is the list HA will accept an X-Forwarded-For header from;
+# Caddy sets that header, so HA recovers the true client address. dockernet is
+# 172.18.0.0/16 and container addresses there are dynamic, so the whole subnet
+# is the only expressible form — HA takes CIDRs, not container names, and
+# pinning Caddy to a static dockernet IP would break the "reach containers by
+# name" rule in AGENTS.md.
+#
+# What actually consumes the client IP:
+#   - `local_only: true` on webhook triggers, which the Flic bridge in
+#     packages/flic.yaml relies on to refuse anything off the LAN.
+#   - Failed-login and auth log entries.
+# `ip_ban_enabled` is deliberately not set (HA defaults it off) and the
+# trusted_networks auth provider is not used, so no authentication decision
+# keys off this.
+#
+# The cost of trusting the whole subnet: any container on dockernet could set
+# its own X-Forwarded-For and make HA believe a request came from anywhere,
+# including a LAN address that satisfies `local_only`. That is the flat
+# dockernet trust domain recorded in docs/plans/tech-debt.md, not a
+# Home-Assistant-specific hole, and it is why the Flic webhook's real boundary
+# is its 43-character secret id rather than `local_only` — the IP check is
+# defence in depth.
 use_x_forwarded_for: true
 trusted_proxies:
   - 172.18.0.0/16

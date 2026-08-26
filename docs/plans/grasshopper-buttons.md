@@ -52,8 +52,14 @@ boolean is invisible to them.
   `home-assistant/config/packages/grasshopper_lamp.yaml`. Adopting it into
   HA would cost Apple Home, the Nanoleaf app and its on-bulb effects; that
   trade has been considered and is not being taken.
-- **Flic reliability is already handled.** The integration's missing
-  reconnect path has a plan of its own and is not part of this work.
+- **Flic reliability is handled**, as of 2026-08-24 and not before. This
+  entry previously claimed the integration's missing reconnect path "has a
+  plan of its own". No such plan was ever written, and the gap went on to
+  kill the buttons for two days after the 2026-08-22 power outage — the
+  claim itself is why nobody rechecked. The buttons no longer depend on
+  that integration: the Pi pushes each press to a Home Assistant webhook,
+  so there is no cross-host connection left to go stale. See
+  [`../postmortems/2026-08-22-flic-bridge-boot-order-deafness.md`](../postmortems/2026-08-22-flic-bridge-boot-order-deafness.md).
   Battery wear from heavy pressing is a battery swap, not a design input.
 
 ## State

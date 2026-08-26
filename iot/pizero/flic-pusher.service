@@ -1,0 +1,23 @@
+[Unit]
+Description=Forward Flic button presses to Home Assistant
+Requires=flicd.service
+After=flicd.service
+
+# flic-pusher exits whenever flicd goes away, so a flicd restart produces a
+# burst of exits while the daemon settles. systemd's default rate limit would
+# read that burst as a crash loop and park the unit in permanently-failed,
+# where nothing recovers it -- the same trap that kept mnt-jump.automount down
+# for fourteen hours on 2026-05-30. Restarting forever is the correct
+# behaviour for a bridge whose whole job is to survive reboots.
+StartLimitIntervalSec=0
+
+[Service]
+# Holds HA_WEBHOOK_URL. Off the checkout because the webhook id is the only
+# thing authenticating the POST; see docs/runbooks/pizero.md.
+EnvironmentFile=/etc/flic-pusher.env
+ExecStart=/opt/flicd/flic-pusher
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

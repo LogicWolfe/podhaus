@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Forward Flic button presses to Home Assistant over its webhook.
+
+Home Assistant used to dial flicd itself, and that direction could not
+survive a reboot. Its `flic` platform is set up exactly once: it catches only
+ConnectionRefusedError, never raises PlatformNotReady, and runs handle_events
+on a bare thread that returns silently when the socket drops. So any ordering
+where flicd was not already listening -- a power outage, a pi reboot, a plain
+`systemctl restart flicd` -- left Home Assistant permanently deaf, with no log
+line, until somebody restarted the whole of Home Assistant.
+
+Pushing instead deletes the cross-host connection rather than teaching it to
+reconnect. This process owns a connection to flicd on localhost, where systemd
+supervises it, and every press is an independent HTTP POST. No state spans the
+two hosts, so each one can reboot whenever it likes in any order and the
+bridge is working again the moment both are up.
+
+That is also why there is no retry logic in here. Losing flicd means exiting
+non-zero so systemd starts a fresh process against a fresh flicd, which is
+both shorter and harder to get wrong than reconnecting in-process.
+"""
+
+import json
+import os
+import queue
+import sys
+import threading
+import urllib.request
+
+sys.path.insert(0, "/opt/flicd")
+import fliclib
+
+# Only these two arrive, because the channels below register
+# on_button_click_or_hold rather than one of the callbacks that disambiguates
+# double clicks. A double click would make every single press wait out the
+# disambiguation window first, which is very noticeable on a button that
+# switches a light. Anything else here is a protocol change, and the KeyError
+# it raises is the right outcome -- loud, and restarted by systemd.
+CLICK_TYPES = {
+    fliclib.ClickType.ButtonClick: "single",
+    fliclib.ClickType.ButtonHold: "hold",
+}
+
+# Flic buttons queue presses locally while out of range. Without a bound, a
+# button that spent an hour disconnected would replay an hour of history the
+# instant it reconnects and fire every automation attached to it. Matches the
+# `timeout: 3` the Home Assistant integration was configured with.
+MAX_QUEUED_AGE = 3
+
+# A press is worthless long before 64 of them pile up, so bound the backlog
+# rather than letting a Home Assistant outage grow it without limit.
+POST_QUEUE_MAX = 64
+POST_TIMEOUT = 5
+
+
+def log(message):
+    print(f"flic-pusher: {message}", file=sys.stderr, flush=True)
+
+
+def post_forever(url, posts):
+    """Drain the queue into Home Assistant.
+
+    Separate from the flicd event loop so a slow or unreachable Home Assistant
+    cannot stall button handling. Pressing a button must always do something,
+    even while the other end of this is down.
+    """
+    while True:
+        payload = posts.get()
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            urllib.request.urlopen(request, timeout=POST_TIMEOUT).close()
+        except OSError as exc:
+            # Home Assistant being down is not this process's problem to fix.
+            # The press is gone and the next one takes the same path from
+            # scratch, which is the whole point of pushing rather than holding
+            # a connection open.
+            log(f"POST failed, press dropped: {exc}")
+
+
+def main():
+    url = os.environ.get("HA_WEBHOOK_URL")
+    if not url:
+        sys.exit("flic-pusher: HA_WEBHOOK_URL is not set")
+
+    posts = queue.Queue(maxsize=POST_QUEUE_MAX)
+    threading.Thread(target=post_forever, args=(url, posts), daemon=True).start()
+
+    client = fliclib.FlicClient("localhost")
+
+    def on_click(channel, click_type, was_queued, time_diff):
+        if was_queued and time_diff > MAX_QUEUED_AGE:
+            log(f"stale {click_type.name} dropped: {channel.bd_addr}, {time_diff}s queued")
+            return
+        payload = {
+            "button_name": "flic_" + channel.bd_addr.replace(":", ""),
+            "button_address": channel.bd_addr,
+            "click_type": CLICK_TYPES[click_type],
+            "queued_time": time_diff,
+        }
+        try:
+            posts.put_nowait(payload)
+        except queue.Full:
+            log(f"backlog full, press dropped: {channel.bd_addr}")
+
+    def listen(address):
+        channel = fliclib.ButtonConnectionChannel(address)
+        channel.on_button_click_or_hold = on_click
+        client.add_connection_channel(channel)
+        log(f"listening to {address}")
+
+    def listen_to_verified(items):
+        for address in items["bd_addr_of_verified_buttons"]:
+            listen(address)
+
+    # Newly paired buttons start reporting without a restart, so the scan
+    # wizard remains the whole of the pairing procedure.
+    client.on_new_verified_button = listen
+    client.get_info(listen_to_verified)
+
+    log(f"connected to flicd, posting to {url}")
+    client.handle_events()
+    sys.exit("flic-pusher: lost the flicd connection")
+
+
+if __name__ == "__main__":
+    main()

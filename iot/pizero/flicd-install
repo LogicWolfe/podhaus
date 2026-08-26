@@ -39,6 +39,23 @@ install -m 0755 "$bin" /opt/flicd/flicd
 # Bundled clients, for pairing and for testing flicd without Home Assistant.
 install -m 0755 -t /opt/flicd "$tmp/fliclib-linux-hci-master"/clientlib/python/*.py 2>/dev/null || true
 install -m 0644 "$HERE/flicd.service" /etc/systemd/system/flicd.service
+install -m 0755 "$HERE/flic-pusher" /opt/flicd/flic-pusher
+install -m 0644 "$HERE/flic-pusher.service" /etc/systemd/system/flic-pusher.service
+
+# The webhook id is the only thing authenticating the POST, so it is not in
+# the checkout and this script will not invent one. After a re-flash it has to
+# be put back by hand from the Homelab vault item "Home Assistant flic webhook".
+if [[ ! -f /etc/flic-pusher.env ]]; then
+	cat >&2 <<-'EOF'
+	flicd-install: /etc/flic-pusher.env is missing. Create it with:
+
+	    HA_WEBHOOK_URL=http://bilby.pod.haus:8123/api/webhook/<id>
+
+	taking <id> from the 1Password Homelab item "Home Assistant flic webhook",
+	then re-run this script.
+	EOF
+	exit 1
+fi
 
 # BlueZ holds hci0 through the kernel's normal channel; flicd needs the
 # adapter exclusively via HCI_CHANNEL_USER.
@@ -63,6 +80,21 @@ if journalctl -u flicd --since "-1min" | grep -q "Successfully bound HCI socket"
 else
 	echo "flicd-install: flicd is running but never bound hci0 — it is deaf" >&2
 	journalctl -u flicd --no-pager -n 20
+	exit 1
+fi
+
+echo "==> Starting flic-pusher"
+systemctl restart flic-pusher.service
+systemctl enable flic-pusher.service
+sleep 3
+
+# Same reasoning as the HCI assertion above: the unit being active only means
+# systemd started a process, not that it reached flicd and claimed the buttons.
+if journalctl -u flic-pusher --since "-1min" | grep -q "connected to flicd"; then
+	echo "==> flic-pusher is bridging to Home Assistant"
+else
+	echo "flicd-install: flic-pusher never reached flicd" >&2
+	journalctl -u flic-pusher --no-pager -n 20
 	exit 1
 fi
 
