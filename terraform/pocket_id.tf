@@ -1,7 +1,7 @@
 # Pocket ID desired state. People authenticate with passkeys; Terraform
 # owns their directory attributes, application access and OIDC claims.
-# Existing people are imported below so their user IDs and enrolled
-# passkeys survive adoption into Terraform.
+# Existing people were imported (not created) so their user IDs and
+# enrolled passkeys survived adoption into Terraform.
 
 data "onepassword_item" "pocket_id_api_key" {
   vault = data.onepassword_vault.homelab.uuid
@@ -150,14 +150,4 @@ resource "onepassword_item" "tailscale_oidc" {
   username = pocketid_client.tailscale.client_id
   password = pocketid_client.tailscale.client_secret
   tags     = ["terraform-managed"]
-}
-
-import {
-  to = pocketid_user.nathan
-  id = "2723e667-4325-4bcb-b91b-ed7442641558"
-}
-
-import {
-  to = pocketid_user.sky
-  id = "55845f16-6433-488a-b1eb-99c438fba147"
 }
