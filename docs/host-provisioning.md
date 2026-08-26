@@ -239,8 +239,9 @@ fails fast if firewalld is absent rather than skipping.
 
 **`komodo_periphery`** ships the host's X25519 private key (`no_log`,
 mode 0600) and Core's public key, renders `periphery.config.toml`,
-brings the container up, and then **polls Core's `ListServers` API until
-the Server reports `Ok`**. That last gate is the point: a Periphery
+pulls the current stable image before bringing the container up, and then
+**polls Core's `ListServers` API until the Server reports
+`Ok`**. That last gate is the point: a Periphery
 container being healthy proves only that it started, not that Core
 trusts its key or can reach it. The playbook fails if the handshake
 doesn't complete.

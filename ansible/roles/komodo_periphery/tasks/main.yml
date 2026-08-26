@@ -96,6 +96,7 @@
     project_src: "{{ podhaus_periphery_dir }}"
     project_name: komodo-periphery
     state: present
+    pull: always
   become: "{{ podhaus_docker_become }}"
   register: periphery_up
   when:
@@ -111,6 +112,8 @@
       - komodo-periphery
       - up
       - --detach
+      - --pull
+      - always
       - --remove-orphans
     chdir: "{{ podhaus_periphery_dir }}"
   environment:

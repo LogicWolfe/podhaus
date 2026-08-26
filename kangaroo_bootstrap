@@ -7,7 +7,7 @@
 #   1. Verify SSH + Docker on kangaroo.
 #   2. Create periphery dir layout under /share/CACHEDEV2_DATA/Container.
 #   3. SCP keys (private + Core's pub) and render config (TZ + GitHub PAT).
-#   4. SSH-execute `docker compose up -d`.
+#   4. Pull the current Periphery image and bring it up.
 #   5. Wait for Periphery health (outbound dial settles via Core in <30s).
 #   6. Idempotently install the QNAP boot-DOM autorun hook, plus the
 #      Pomerium SSH CA trust start.sh it invokes at every boot.
@@ -128,8 +128,8 @@ GITHUB_PAT="$(op read 'op://Homelab/Homelab GitHub Personal Access Token/token')
 ok "periphery.config.toml staged"
 
 # --- 4. Bring up Periphery ---
-log "Starting Periphery via docker compose up -d on kangaroo"
-ssh_kangaroo "cd '$KANGAROO_DIR' && $KANGAROO_DOCKER compose up -d"
+log "Pulling current Periphery and bringing it up on kangaroo"
+ssh_kangaroo "cd '$KANGAROO_DIR' && $KANGAROO_DOCKER compose up -d --pull always"
 ok "compose up issued"
 
 # --- 5. Wait for Periphery to dial Core successfully ---

@@ -141,6 +141,11 @@ trees together. Its start hook stops Forgejo first because SQLite and repository
 data span two filesystems. Its end hook always starts Forgejo again, waits for
 health, clears the lock, and reports the result to Gatus.
 
+Forgejo disables Komodo's stack-state notifications because they cannot
+distinguish this expected stop from a fault. Gatus remains the service-health
+authority: its two-minute checks require three consecutive failures before
+alerting, comfortably exceeding the normal backup stop.
+
 An ofelia job runs the recovery hook every five minutes. If Backrest is no
 longer running restic but the lock remains, it restarts Forgejo and raises a
 failed heartbeat. This covers interruption between the stop and end hooks.

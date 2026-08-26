@@ -8,6 +8,10 @@ server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/forgejo"
 ignore_services = ["forgejo-preflight", "forgejo-auth-init"]
+# Backrest deliberately stops Forgejo for about a minute at 03:45 to snapshot
+# SQLite and Jump at one consistency point. Gatus remains the service-health
+# authority and alerts only when the outage exceeds its six-minute threshold.
+send_alerts = false
 
 environment = """
 TZ=[[TZ]]

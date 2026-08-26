@@ -152,6 +152,12 @@ poll_until_complete "$pull_update_id" "podhaus-deploy pull"
 # Check existence first so re-runs of komodo-start are clean idempotent
 # (rather than the older `|| true` swallow which would also hide real
 # errors).
+#
+# Pending-update alerts are disabled only for this sync. The deploy action
+# deliberately enriches every stored stack environment with generated content
+# hashes after each sync, so source and stored state cannot compare equal.
+# Komodo still exposes the pending diff for diagnosis; procedure/action
+# failures and service health retain their own alert paths.
 echo "Ensuring podhaus ResourceSync exists..."
 if komodo_api read '{"type":"GetResourceSync","params":{"sync":"podhaus"}}' > /dev/null 2>&1; then
   echo "  podhaus ResourceSync already exists"
@@ -166,6 +172,7 @@ else
         "resource_path": ["."],
         "include_variables": true,
         "include_resources": true,
+        "pending_alert": false,
         "webhook_enabled": true
       }
     }

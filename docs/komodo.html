@@ -234,6 +234,13 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <code>./komodo-sync</code> on demand).
       </p>
       <p>
+        The <code>podhaus</code> ResourceSync keeps pending-update alerts disabled. Its deploy
+        action deliberately adds generated content and build hashes to each stored stack after
+        synchronization, so the source and stored representations cannot compare equal. The
+        pending diff remains available in Komodo for diagnosis. Other ResourceSyncs retain
+        pending-update alerts because their stored configuration is expected to match source.
+      </p>
+      <p>
         Files in the sync directory today:
       </p>
       <ul>
@@ -419,8 +426,8 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           <tr><td><code>komodo-stop</code></td><td>Stops the Komodo Core stack (everything else stays running, since Komodo's job is just orchestration; the running containers are managed by Docker directly).</td></tr>
           <tr><td><code>komodo-status</code></td><td>Shows the Komodo Core container status.</td></tr>
           <tr><td><code>komodo-sync</code></td><td>Steady-state debug-iterate tool, <strong>and</strong> the recovery path for <code>komodo/sync/procedures.toml</code> edits. Step 0 calls <code>RunAction(podhaus-load-local-tree)</code> to overlay the deploy tree with bilby's working checkout's current state. Step 1 calls <code>RunSync(podhaus)</code> directly via the API (out-of-procedure, so Komodo's <code>resource::update::&lt;Procedure&gt;</code> busy guard doesn't fire — procedure-stage changes land here cleanly, surgically), now reading the overlaid tree. Step 2 invokes <code>podhaus-deploy</code> directly (deliberately not <code>podhaus-push-deploy</code>, whose pull stage would clobber the overlay); further steps invoke <code>fenwick-push-deploy</code>, <code>pets-push-deploy</code>, <code>docs-push-deploy</code>. Use when iterating locally without pushing, or after a push that touches procedures.toml (whose in-procedure RunSync can't update its own running procedure).</td></tr>
-          <tr><td><code>komodo-upgrade</code></td><td>Pulls latest Komodo images, restarts the Core stack.</td></tr>
-          <tr><td><code>kangaroo_bootstrap</code></td><td>Idempotent kangaroo bring-up. Renders Periphery config from 1Password, ships compose + keys to the QNAP, starts outbound-mode Periphery, installs the native QNAP boot-DOM autorun hook, and verifies the committed kangaroo Server definition.</td></tr>
+          <tr><td><code>komodo-upgrade</code></td><td>Pulls current Komodo images and restarts the Core + bilby Periphery stack. Converge Ansible-managed remote Peripheries with <code>ansible-playbook playbooks/site.yml --tags periphery</code>; the role pulls before Compose-up and verifies each connection through Core. Re-run <code>kangaroo_bootstrap</code> for QTS, which applies the same pull-before-up policy.</td></tr>
+          <tr><td><code>kangaroo_bootstrap</code></td><td>Idempotent kangaroo bring-up. Renders Periphery config from 1Password, ships compose + keys to the QNAP, pulls and starts the current outbound-mode Periphery, installs the native QNAP boot-DOM autorun hook, and verifies the committed kangaroo Server definition.</td></tr>
         </tbody>
       </table>
 
