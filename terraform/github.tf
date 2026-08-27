@@ -83,13 +83,6 @@ resource "github_repository_webhook" "pets_deploy" {
   }
 }
 
-# Sibling webhook for the docs-server repo (the central docs.pod.haus
-# service). Same global secret + Pomerium machine exception (path-scoped
-# /listener/github app in access.tf). Fires docs-push-deploy
-# (komodo/sync/procedures.toml): RunSync(docs) then a force
-# BatchDeployStack "docs" — linked_repo + run_build, so Komodo builds
-# the image on bilby; the layer cache makes an unchanged push a
-# container-level no-op. /main is the branch filter.
 # nb-macbook-air's machine key, read from the same file that feeds the
 # Forgejo ssh_keys claim in pocket_id.tf. Requires the admin:public_key
 # scope on the Homelab GitHub PAT.
@@ -98,6 +91,12 @@ resource "github_repository_webhook" "pets_deploy" {
 # the comment stripped, and the provider's DiffSuppressFunc only trims
 # whitespace — a comment-bearing value would diff forever and, with
 # ForceNew on `key`, delete and recreate the key on every apply.
+#
+# This registers authentication only. The Verified badge needs the same key
+# registered as an SSH *signing* key, and the provider has no resource for
+# those (only /user/keys, not /user/ssh_signing_keys) — every fleet machine
+# key is added there out-of-band (github.com/settings/keys or the API with
+# the admin:ssh_signing_key scope).
 #
 # Reference doc (integrations/github v6):
 #   https://registry.terraform.io/providers/integrations/github/latest/docs/resources/user_ssh_key
@@ -109,6 +108,13 @@ resource "github_user_ssh_key" "nb_macbook_air_machine" {
   ))
 }
 
+# Sibling webhook for the docs-server repo (the central docs.pod.haus
+# service). Same global secret + Pomerium machine exception (path-scoped
+# /listener/github app in access.tf). Fires docs-push-deploy
+# (komodo/sync/procedures.toml): RunSync(docs) then a force
+# BatchDeployStack "docs" — linked_repo + run_build, so Komodo builds
+# the image on bilby; the layer cache makes an unchanged push a
+# container-level no-op. /main is the branch filter.
 resource "github_repository_webhook" "docs_deploy" {
   repository = "docs-server"
   events     = ["push"]
