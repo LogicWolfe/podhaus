@@ -262,8 +262,9 @@ while allowing the display to sleep after ten minutes. It installs current
 OrbStack through Homebrew without a version pin, configures its supported
 settings, and creates `dockernet`. Automatic login creates the `baxter` Aqua
 session and OrbStack's own `app.start_at_login` setting owns runtime startup.
-Ansible does not install a launch agent, start or stop OrbStack, or manage any
-of OrbStack's privileged helpers. OrbStack exposes its engine through the sole
+Ansible does not start or stop OrbStack or manage any of its privileged
+helpers. The one launch daemon the role installs, `plex-advertise`, reconciles
+Plex's advertised LAN address and touches nothing about the runtime. OrbStack exposes its engine through the sole
 global `default` Docker context; deployed Compose calls do not name a runtime
 context.
 

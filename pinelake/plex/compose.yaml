@@ -30,7 +30,18 @@ services:
     hostname: PineLake
     image: plexinc/pms-docker:latest
     restart: unless-stopped
-    network_mode: host
+    # Bilby's Plex uses host networking so Plex discovers the real LAN
+    # interface. Under OrbStack host mode means the virtual machine's namespace
+    # instead, so Plex would enumerate every stack's bridge and publish a dozen
+    # unreachable addresses that clients try in turn — a list that grows with
+    # each new Pinelake stack. One bridge keeps that list to a single entry.
+    # GDM and DLNA ports are deliberately absent: both are broadcast-based and
+    # cannot cross the virtual machine boundary, and DLNA is disabled outright.
+    ports:
+      - "32400:32400/tcp"
+      - "3005:3005/tcp"
+      - "8324:8324/tcp"
+    networks: [dockernet]
     depends_on:
       pinelake-plex-preferences-init:
         condition: service_completed_successfully
@@ -39,11 +50,6 @@ services:
       PLEX_UID: "501"
       PLEX_GID: "20"
       CHANGE_CONFIG_DIR_OWNERSHIP: "false"
-      # OrbStack host networking does not expose the macOS LAN interface to
-      # Plex discovery. Use Plex's documented raw-IP form so plex.tv marks
-      # this endpoint local, while retaining the public endpoint for remote
-      # native clients.
-      ADVERTISE_IP: "http://192.168.1.128:32400/,https://66-226-146-158.5801df40ceea4deaaefd8bd027fc22ff.plex.direct:32400"
     volumes:
       - /Users/Shared/Podhaus/plex:/config
       - /Users/Shared/Podhaus/transcode:/transcode
@@ -100,3 +106,7 @@ services:
       timeout: 15s
       retries: 3
       start_period: 180s
+
+networks:
+  dockernet:
+    external: true

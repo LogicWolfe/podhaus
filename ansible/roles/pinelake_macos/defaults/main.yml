@@ -28,3 +28,11 @@ podhaus_pinelake_state_dirs:
 podhaus_plex_session_preferences_kind: xml
 podhaus_plex_session_preferences: >-
   /Users/Shared/Podhaus/plex/Library/Application Support/Plex Media Server/Preferences.xml
+
+# OrbStack hides the Mac's LAN interface from Plex, and the address is a DHCP
+# lease, so the advertised connection list is reconciled on a timer instead of
+# written at deploy time. See docs/runbooks/plex.html.
+podhaus_plex_advertise_label: haus.podhaus.plex-advertise
+podhaus_plex_advertise_interface: en0
+podhaus_plex_advertise_interval: 60
+podhaus_plex_advertise_log: /var/log/podhaus-plex-advertise.log

@@ -40,17 +40,28 @@ class HostSafetyTest(unittest.TestCase):
         self.assertIn("Prove default is the sole Docker context", task_names)
 
     def test_orbstack_owns_its_login_and_privileged_integration(self) -> None:
+        """Ansible may schedule its own work; OrbStack's lifecycle is its own.
+
+        The role installs exactly one launch daemon, which reconciles Plex's
+        advertised LAN address. It must not become a foothold for starting or
+        supervising the runtime — automatic login plus OrbStack's own
+        `app.start_at_login` remain the only things that start the engine.
+        """
         role_text = "\n".join(
             path.read_text()
             for path in (ROLE_DIR / "tasks/main.yml", ROLE_DIR / "defaults/main.yml")
         )
         self.assertNotIn("LaunchAgent", role_text)
-        self.assertNotIn("LaunchDaemon", role_text)
         self.assertNotIn("PrivilegedHelperTools", role_text)
         self.assertNotIn("privileged helper", role_text.lower())
         self.assertNotIn("pinelake-orbstack-start", role_text)
         self.assertFalse((ROLE_DIR / "handlers/main.yml").exists())
-        self.assertEqual(list((ROLE_DIR / "templates").glob("*")), [])
+        self.assertEqual(
+            sorted(path.name for path in (ROLE_DIR / "templates").glob("*")),
+            ["plex-advertise.plist.j2"],
+        )
+        daemon = (ROLE_DIR / "templates/plex-advertise.plist.j2").read_text()
+        self.assertNotIn("orb", daemon.lower())
 
     def test_ansible_never_restarts_orbstack_in_band(self) -> None:
         role_text = "\n".join(

@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Publish Pinelake's current LAN address as Plex's custom connection list.
+
+OrbStack gives the container the virtual machine's network namespace, not the
+Mac's, so Plex only ever discovers OrbStack bridge addresses and cannot find
+the address that same-house clients must use. The Mac's address is a DHCP
+lease, so a value written at deploy time goes stale on its own. This reconciles
+the live `customConnections` preference against the interface on every run and
+writes only when the two differ.
+
+Without a correct LAN entry, plex.tv hands same-house clients nothing local and
+they fall back to a remote path, which is why this runs on a timer rather than
+at deploy time.
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+
+class PlexUnavailable(RuntimeError):
+    """Plex did not answer, so the current advertisement is unknown."""
+
+
+def lan_address(interface: str) -> str:
+    """Return the interface's IPv4 address, or fail if it does not have one."""
+    result = subprocess.run(
+        ["/usr/sbin/ipconfig", "getifaddr", interface],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    address = result.stdout.strip()
+    if result.returncode != 0 or not address:
+        raise RuntimeError(f"{interface} has no IPv4 address")
+    return address
+
+
+def bonjour_name() -> str:
+    """Return the Mac's Bonjour host name."""
+    result = subprocess.run(
+        ["/usr/sbin/scutil", "--get", "LocalHostName"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    name = result.stdout.strip()
+    if result.returncode != 0 or not name:
+        raise RuntimeError("the Mac has no LocalHostName")
+    return name
+
+
+def read_token(preferences: Path) -> str:
+    """Read the Plex token from the preferences file Plex itself maintains."""
+    token = ET.parse(preferences).getroot().attrib.get("PlexOnlineToken", "")
+    if not token:
+        raise RuntimeError(f"{preferences} has no PlexOnlineToken")
+    return token
+
+
+class PlexServer:
+    """The local Plex server's preference endpoint."""
+
+    def __init__(self, base_url: str, token: str, timeout: float) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._token = token
+        self._timeout = timeout
+
+    def _open(self, method: str, path: str, query: dict[str, str]) -> bytes:
+        url = f"{self._base_url}{path}?{urllib.parse.urlencode(query)}"
+        request = urllib.request.Request(
+            url, method=method, headers={"X-Plex-Token": self._token}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                return response.read()
+        except (urllib.error.URLError, OSError) as exc:
+            raise PlexUnavailable(f"{method} {path} failed: {exc}") from exc
+
+    def custom_connections(self) -> str:
+        """Return the connection list Plex currently publishes to plex.tv."""
+        body = self._open("GET", "/:/prefs", {})
+        for setting in ET.fromstring(body).iter("Setting"):
+            if setting.get("id") == "customConnections":
+                return setting.get("value", "")
+        raise PlexUnavailable("customConnections is absent from /:/prefs")
+
+    def set_custom_connections(self, value: str) -> None:
+        """Publish a new connection list. Plex re-announces without a restart."""
+        self._open("PUT", "/:/prefs", {"customConnections": value})
+
+
+class Advertisement:
+    """The connection list Pinelake should be publishing right now."""
+
+    def __init__(self, interface: str, port: int) -> None:
+        self._interface = interface
+        self._port = port
+
+    def render(self) -> str:
+        """Build the ordered list clients will try.
+
+        The literal address comes first because every client can use it. The
+        Bonjour name follows as an independent fallback that tracks DHCP on its
+        own, so a stalled reconciler or a lease change between runs still leaves
+        same-house clients a local path.
+        """
+        return ",".join(
+            (
+                f"http://{lan_address(self._interface)}:{self._port}/",
+                f"http://{bonjour_name()}.local:{self._port}/",
+            )
+        )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--interface", default="en0")
+    parser.add_argument("--port", type=int, default=32400)
+    parser.add_argument("--base-url", default="http://127.0.0.1:32400")
+    parser.add_argument(
+        "--preferences",
+        type=Path,
+        default=Path(
+            "/Users/Shared/Podhaus/plex/Library/Application Support"
+            "/Plex Media Server/Preferences.xml"
+        ),
+    )
+    parser.add_argument("--timeout", type=float, default=15.0)
+    arguments = parser.parse_args()
+
+    server = PlexServer(
+        arguments.base_url, read_token(arguments.preferences), arguments.timeout
+    )
+    desired = Advertisement(arguments.interface, arguments.port).render()
+
+    if server.custom_connections() == desired:
+        return 0
+
+    server.set_custom_connections(desired)
+    print(f"published {desired}")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (PlexUnavailable, RuntimeError, ET.ParseError, OSError) as error:
+        print(f"plex-advertise: {error}", file=sys.stderr)
+        sys.exit(1)

@@ -27,7 +27,6 @@ resource "random_password" "numbat_rathole_tokens" {
     "fractal_ssh",
     "kangaroo_ssh",
     "pinelake_http",
-    "pinelake_plex",
     "pinelake_ssh",
     "protected_http",
     "public_tls",

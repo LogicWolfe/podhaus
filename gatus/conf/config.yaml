@@ -382,6 +382,27 @@ endpoints:
       - "[BODY].State.Status == running"
       - "[BODY].State.Health.Status == healthy"
 
+  # A healthy container proves nothing about what clients are told to connect
+  # to. OrbStack hides the Mac's LAN interface from Plex, so the same-house
+  # address is published by the `plex-advertise` launch daemon against a DHCP
+  # lease; if that stalls while the lease moves, local playback silently falls
+  # back to Plex's relay and every stream leaves the house. This reads the
+  # list back from plex.tv and asserts a Pine Lake LAN address is still in it.
+  # The subnet is the coupling here — if that household re-addresses its LAN,
+  # update the pattern.
+  - name: Pinelake Plex LAN advertisement
+    url: https://plex.tv/api/v2/resources?includeHttps=1
+    group: Plex
+    interval: 300s
+    alerts: *alerts
+    headers:
+      X-Plex-Token: ${PINELAKE_PLEX_TOKEN}
+      X-Plex-Client-Identifier: podhaus-gatus
+      Accept: application/json
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] pat *192.168.1.*"
+
   - name: Pinelake Syncthing (via Komodo)
     url: http://komodo-core:9120/read
     method: POST

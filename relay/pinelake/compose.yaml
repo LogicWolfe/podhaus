@@ -15,7 +15,6 @@ services:
       RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}
       RATHOLE_PINELAKE_SSH_TOKEN: ${RATHOLE_PINELAKE_SSH_TOKEN}
       RATHOLE_PINELAKE_HTTP_TOKEN: ${RATHOLE_PINELAKE_HTTP_TOKEN}
-      RATHOLE_PINELAKE_PLEX_TOKEN: ${RATHOLE_PINELAKE_PLEX_TOKEN}
     volumes:
       - /Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/relay/pinelake:/etc/rathole:ro
     networks: [dockernet]

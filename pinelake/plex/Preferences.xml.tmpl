@@ -1,4 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Enforced Plex preferences — only these attributes are managed by the
+  template. All other attributes are preserved from the existing
+  Preferences.xml by plex-preferences.py, which merges rather than replaces.
+
+  This is bilby's enforced set with two deliberate differences:
+
+  customConnections is absent on purpose. OrbStack gives the container the
+  virtual machine's network namespace, so Plex only discovers bridge addresses
+  and never finds the Mac's LAN address that same-house clients need. The
+  `plex-advertise` launch daemon owns that preference and reconciles it against
+  the live interface; because the merge preserves unmanaged attributes, naming
+  it here would fight the daemon on every deploy. Do not add it back.
+
+  ManualPortMappingMode is 0 rather than bilby's 1. Pine Lake is behind
+  Starlink CGNAT with no inbound path over IPv4 or IPv6, so no port mapping can
+  exist and Plex should fall to its own relay for remote clients instead of
+  advertising a port that will never answer.
+
+  PlexOnlineToken is the only secret — sourced from 1P at render time.
+  Identity attrs (MachineIdentifier et al.) are not secret but ARE
+  catastrophic to lose — they're what plex.tv uses to identify this server.
+-->
 <Preferences
   MachineIdentifier="c9d75740-0fd3-4bba-9874-be61f5dc8d38"
   ProcessedMachineIdentifier="92311858cdd55fb33583fda2e6fc037e3655da85"
@@ -6,6 +29,10 @@
   CertificateUUID="5801df40ceea4deaaefd8bd027fc22ff"
   PlexOnlineToken="${PLEX_ONLINE_TOKEN}"
   PublishServerOnPlexOnlineKey="1"
-  LanNetworksBandwidth="192.168.1.0/24"
-  customConnections="http://192.168.1.128:32400/,https://66-226-146-158.5801df40ceea4deaaefd8bd027fc22ff.plex.direct:32400"
+  ManualPortMappingMode="0"
+  AcceptedEULA="1"
+  TranscoderTempDirectory="/transcode"
+  DlnaEnabled="0"
+  LanguageInCloud="1"
+  IPNetworkType="dualstack"
 />

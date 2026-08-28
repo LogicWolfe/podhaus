@@ -47,7 +47,9 @@
     mode: "0755"
   loop:
     - pinelake-mount-guard
+    - plex-advertise
     - plex-session-gate
+  register: pinelake_operational_tools
 
 - name: Install the Plex identity manifest
   ansible.builtin.copy:
@@ -56,6 +58,35 @@
     owner: root
     group: wheel
     mode: "0644"
+
+- name: Install the Plex advertisement launch daemon
+  ansible.builtin.template:
+    src: plex-advertise.plist.j2
+    dest: "/Library/LaunchDaemons/{{ podhaus_plex_advertise_label }}.plist"
+    owner: root
+    group: wheel
+    mode: "0644"
+  register: pinelake_plex_advertise_daemon
+
+# launchctl reads the installed plist, which check mode has not written, so
+# both launchd tasks are real-run only — as elsewhere in this role.
+- name: Enable the Plex advertisement launch daemon
+  community.general.launchd:
+    name: "{{ podhaus_plex_advertise_label }}"
+    state: started
+    enabled: true
+  when: not ansible_check_mode
+
+# launchd keeps serving the definition it loaded, so an edited plist or script
+# only takes effect after an explicit reload.
+- name: Reload the Plex advertisement launch daemon after a change
+  community.general.launchd:
+    name: "{{ podhaus_plex_advertise_label }}"
+    state: reloaded
+  when:
+    - not ansible_check_mode
+    - pinelake_plex_advertise_daemon is changed
+      or pinelake_operational_tools is changed
 
 - name: Create Pinelake service-state directories
   ansible.builtin.file:

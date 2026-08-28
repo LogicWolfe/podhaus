@@ -30,6 +30,9 @@ services:
       # stack.toml env block only populates the compose project .env —
       # the service must still map the var here to receive it.
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      # Reads Pine Lake's published connection list back from plex.tv, to
+      # prove the launch daemon is still advertising a same-house address.
+      PINELAKE_PLEX_TOKEN: ${PINELAKE_PLEX_TOKEN}
     # 8080 published on bilby host so kangaroo's Backrest can POST
     # heartbeat events from across the LAN. The bearer-token check on
     # each external-endpoint is the auth layer; LAN exposure is fine.

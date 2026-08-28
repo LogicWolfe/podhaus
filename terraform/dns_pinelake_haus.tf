@@ -12,7 +12,7 @@ resource "cloudflare_dns_record" "pinelake_haus_home" {
 }
 
 resource "cloudflare_dns_record" "pinelake_haus_pomerium" {
-  for_each = toset(["sync", "torrent"])
+  for_each = toset(["plex", "sync", "torrent"])
   zone_id  = local.zones["pinelake.haus"]
   name     = "${each.key}.pinelake.haus"
   type     = "A"

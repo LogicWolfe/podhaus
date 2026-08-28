@@ -13,10 +13,14 @@
 
 	@torrent host torrent.pinelake.haus
 	@sync host sync.pinelake.haus
+	@plex host plex.pinelake.haus
 
 	route {
 		reverse_proxy @torrent host.docker.internal:3000
 		reverse_proxy @sync host.docker.internal:8384
+		# Flood and Syncthing use host networking, so they are reached through
+		# the Mac. Plex is on dockernet and answers to its container name.
+		reverse_proxy @plex pinelake-plex:32400
 		respond 404
 	}
 }

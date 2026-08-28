@@ -159,6 +159,12 @@ routes:
   - <<: *nathan_route
     from: https://sync.pinelake.haus
     to: https://127.0.0.1:8446
+  # Pine Lake's Plex web UI, for checking the server is up and that playback
+  # starts. Streaming clients never use this route — it is deliberately absent
+  # from Plex's advertised connection list, which carries LAN addresses only.
+  - <<: *nathan_route
+    from: https://plex.pinelake.haus
+    to: https://127.0.0.1:8446
 
   # Pocket ID is the gate; the key you hold decides how much that identity
   # buys. Two allow rules, OR'd: a registered key may assume any principal

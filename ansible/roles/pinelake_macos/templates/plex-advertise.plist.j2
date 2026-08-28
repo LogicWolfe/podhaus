@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ podhaus_plex_advertise_label }}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ podhaus_pinelake_libexec_dir }}/plex-advertise</string>
+    <string>--interface</string>
+    <string>{{ podhaus_plex_advertise_interface }}</string>
+    <string>--preferences</string>
+    <string>{{ podhaus_plex_session_preferences }}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>{{ podhaus_plex_advertise_interval }}</integer>
+  <key>StandardOutPath</key>
+  <string>{{ podhaus_plex_advertise_log }}</string>
+  <key>StandardErrorPath</key>
+  <string>{{ podhaus_plex_advertise_log }}</string>
+</dict>
+</plist>

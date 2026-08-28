@@ -96,8 +96,9 @@ and raw endpoints use Numbat's second address and Caddy. Cloudflare stays
 authoritative DNS and CDN for public websites. The old Podhaus Cloudflare
 Tunnel, Access estate, DigitalOcean relay, and routed Tailscale management
 plane have been removed. Pinelake uses the same outbound Numbat contract;
-`home.pinelake.haus` is its canonical SSH name, while `torrent.pinelake.haus`
-and `sync.pinelake.haus` are protected browser routes. All three use Numbat;
+`home.pinelake.haus` is its canonical SSH name, while `torrent.pinelake.haus`,
+`sync.pinelake.haus` and `plex.pinelake.haus` are protected browser routes —
+Plex streams never traverse Numbat, only its web UI does. All four use Numbat;
 hosted JetKVM is Pinelake's independent recovery path.
 
 ---

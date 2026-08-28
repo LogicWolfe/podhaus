@@ -60,14 +60,32 @@
         excluded from generic Autoheal so an automated restart cannot bypass that gate.
       </p>
       <p>
-        OrbStack's host-network compatibility layer does not expose Pinelake's macOS LAN
-        interface to Plex's interface discovery. The stack therefore sets
-        <code>ADVERTISE_IP</code>, and enforces the same ordered URL list as
-        <code>customConnections</code>, with Plex's documented raw-IP form
-        (<code>http://192.168.1.128:32400/</code>) first and the public endpoint second.
-        <code>LanNetworksBandwidth</code> explicitly defines <code>192.168.1.0/24</code> as
-        local. Without the LAN endpoint, same-house native clients select the WAN connection,
-        apply remote bitrate limits, and can force unnecessary transcoding.
+        Pinelake enforces bilby's preference set with two deliberate differences, both
+        forced by the platform. OrbStack has no bridged networking mode, so a container
+        can only ever see the virtual machine's namespace: Plex enumerates OrbStack bridge
+        addresses and never finds the Mac's LAN address that same-house clients need. The
+        <code>plex-advertise</code> launch daemon closes that gap. It reads
+        <code>en0</code>, compares the result with the live
+        <code>customConnections</code> preference, and writes through
+        <code>PUT /:/prefs</code> only when the two differ — no restart, no redeploy. The
+        address is a DHCP lease, so this runs on a timer rather than at deploy time; a
+        value written once goes stale on its own. It publishes the literal address first
+        and the Mac's Bonjour name second, the latter being an independent fallback that
+        tracks DHCP without the daemon.
+      </p>
+      <p>
+        <code>customConnections</code> is therefore absent from Pinelake's
+        <code>Preferences.xml.tmpl</code>, and must stay absent.
+        <code>plex-preferences.py</code> merges rather than replaces, so naming the
+        attribute there would overwrite the daemon's value on every deploy.
+      </p>
+      <p>
+        The second difference is <code>ManualPortMappingMode="0"</code>. Pine Lake is
+        behind Starlink CGNAT with no inbound path over either IPv4 or IPv6, so no port
+        mapping can exist and Plex falls to its own relay for remote clients. Because
+        every stack shares one runtime, Plex runs on a published port rather than host
+        networking: host mode there would make it advertise every stack's bridge as a
+        reachable address, a list that grows with each new Pinelake stack.
       </p>
       <h2 id="storage">Storage layout</h2>
       <table>
@@ -108,6 +126,14 @@
         <strong>Web-only.</strong> Native Plex clients are <em>not</em> told about this URL via
         <code>customConnections</code> — they continue to use plex.tv discovery (LAN, direct
         WAN, Plex Relay). Avoids duplicate-server confusion in client UI.
+      </p>
+      <p>
+        <code>plex.pinelake.haus</code> is the same arrangement for Pine Lake, reached
+        through the shared <code>pinelake_http</code> rathole service and Pinelake's own
+        Caddy, which resolves <code>pinelake-plex</code> over dockernet. The same web-only
+        rule applies, and matters more there: Pine Lake's advertised list carries LAN
+        addresses only, so no client can be handed a path that leaves the house. Numbat
+        carries Pine Lake's SSH, logs and browser routes — never its video.
       </p>
 
       <h2 id="remote-access">Remote access (the three settings)</h2>

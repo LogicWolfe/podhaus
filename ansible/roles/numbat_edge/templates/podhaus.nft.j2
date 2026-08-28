@@ -16,7 +16,7 @@ table inet podhaus {
     ip daddr { {{ podhaus_numbat_application_ipv4 }}, {{ podhaus_numbat_relay_ipv4 }} } tcp dport 22 counter drop
 
     ip daddr {{ podhaus_numbat_application_ipv4 }} tcp dport { 80, 443 } accept
-    ip daddr {{ podhaus_numbat_relay_ipv4 }} tcp dport { 443, 2333, 32400 } accept
+    ip daddr {{ podhaus_numbat_relay_ipv4 }} tcp dport { 443, 2333 } accept
     ip daddr { {{ podhaus_numbat_application_ipv4 }}, {{ podhaus_numbat_relay_ipv4 }} } drop
   }
 }
