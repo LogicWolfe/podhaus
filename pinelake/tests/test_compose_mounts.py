@@ -85,7 +85,14 @@ class TerraMasterMountTests(unittest.TestCase):
         self.assertNotIn("onedrive", text)
         self.assertNotIn("rclone", text)
 
-    def test_plex_preferences_preserve_identity_and_advertise_relay(self) -> None:
+    def test_plex_preferences_preserve_identity_and_advertise_lan_then_relay(self) -> None:
+        lan_url = (
+            "http://192.168.1.128:32400/"
+        )
+        relay_url = (
+            "https://66-226-146-158.5801df40ceea4deaaefd8bd027fc22ff."
+            "plex.direct:32400"
+        )
         preferences = ET.parse(
             ROOT / "pinelake/plex/Preferences.xml.tmpl"
         ).getroot().attrib
@@ -95,7 +102,15 @@ class TerraMasterMountTests(unittest.TestCase):
         )
         self.assertEqual(
             preferences["customConnections"],
-            "https://66-226-146-158.5801df40ceea4deaaefd8bd027fc22ff.plex.direct:32400",
+            f"{lan_url},{relay_url}",
+        )
+        self.assertEqual(preferences["LanNetworksBandwidth"], "192.168.1.0/24")
+        document = yaml.safe_load(
+            (ROOT / "pinelake/plex/compose.yaml").read_text()
+        )
+        self.assertEqual(
+            document["services"]["pinelake-plex"]["environment"]["ADVERTISE_IP"],
+            preferences["customConnections"],
         )
 
     def test_plex_health_rejects_the_native_server_on_the_shared_port(self) -> None:

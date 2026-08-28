@@ -59,6 +59,16 @@
         allowed only when no Plex process or port 32400 listener exists. Plex is deliberately
         excluded from generic Autoheal so an automated restart cannot bypass that gate.
       </p>
+      <p>
+        OrbStack's host-network compatibility layer does not expose Pinelake's macOS LAN
+        interface to Plex's interface discovery. The stack therefore sets
+        <code>ADVERTISE_IP</code>, and enforces the same ordered URL list as
+        <code>customConnections</code>, with Plex's documented raw-IP form
+        (<code>http://192.168.1.128:32400/</code>) first and the public endpoint second.
+        <code>LanNetworksBandwidth</code> explicitly defines <code>192.168.1.0/24</code> as
+        local. Without the LAN endpoint, same-house native clients select the WAN connection,
+        apply remote bitrate limits, and can force unnecessary transcoding.
+      </p>
       <h2 id="storage">Storage layout</h2>
       <table>
         <thead><tr><th>Mount</th><th>Path on bilby</th><th>Backing</th></tr></thead>

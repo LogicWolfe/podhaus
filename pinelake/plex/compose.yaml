@@ -39,6 +39,11 @@ services:
       PLEX_UID: "501"
       PLEX_GID: "20"
       CHANGE_CONFIG_DIR_OWNERSHIP: "false"
+      # OrbStack host networking does not expose the macOS LAN interface to
+      # Plex discovery. Use Plex's documented raw-IP form so plex.tv marks
+      # this endpoint local, while retaining the public endpoint for remote
+      # native clients.
+      ADVERTISE_IP: "http://192.168.1.128:32400/,https://66-226-146-158.5801df40ceea4deaaefd8bd027fc22ff.plex.direct:32400"
     volumes:
       - /Users/Shared/Podhaus/plex:/config
       - /Users/Shared/Podhaus/transcode:/transcode
