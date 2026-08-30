@@ -24,8 +24,8 @@
       tags: [ssh]
     - role: sshd_pomerium_ca
       tags: [ssh]
-    - role: nfs_binds
-      tags: [nfs]
+    - role: storage_binds
+      tags: [storage]
     - role: firewalld
       tags: [firewall]
     - role: komodo_core_host

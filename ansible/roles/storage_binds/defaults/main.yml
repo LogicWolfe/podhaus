@@ -1,0 +1,24 @@
+# Optional per-host extras for the storage_binds role.
+#
+# storage_binds_mounts deliberately has NO default. A host in
+# storage_binds_hosts that declares no volumes is a provisioning mistake,
+# and an empty default would hide it behind a silently successful run.
+# Declare it in inventory/host_vars/<host>.yml.
+---
+# Extra .podhaus-share-mounted markers below a mount root, for container
+# healthchecks that need to prove a specific subpath. The root of every
+# declared mount always gets one — the reconciler's readiness probe
+# requires it — so those are never listed here.
+storage_binds_extra_sentinels: []
+
+# systemd drop-in dirs that get 10-no-rate-limit.conf. Only hosts whose
+# volumes are fstab automounts need this; a locally-mounted volume has no
+# unit pair to rate-limit.
+storage_binds_rate_limit_dropin_dirs: []
+
+# Directory trees to provision on the mounted volume (path/owner/group/mode).
+storage_binds_managed_dirs: []
+
+# Optional fstab line rewrite, used to give a partition an fsck pass number.
+storage_binds_fstab_line: ""
+storage_binds_fstab_regexp: ""

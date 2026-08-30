@@ -1,0 +1,9 @@
+[Unit]
+Description=Recover storage-dependent Podhaus containers after a volume returns
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/recover-storage-containers /etc/podhaus/storage-mounts.json
+TimeoutStartSec=45

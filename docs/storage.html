@@ -123,7 +123,7 @@
         silently writing container data to local disk:</p>
         <ul>
           <li><strong>Recurring stopped-container recovery:</strong>
-            <code>podhaus-nfs-container-recovery.timer</code> runs after Docker starts and
+            <code>podhaus-storage-container-recovery.timer</code> runs after Docker starts and
             again one minute after each invocation finishes. It has no storage-readiness
             deadline, so a share that returns hours after boot or disappears while Bilby
             remains running follows the same path. The command starts only a
@@ -133,14 +133,19 @@
             OCI mount error, and an exact healthy NFS export with its sentinel readable.
             An operator-stopped container has no matching infrastructure error and is left
             alone. Autoheal remains the owner of running unhealthy containers.</li>
-          <li><strong>Rate-limit removed on the automount units:</strong>
+          <li><strong>Rate-limit removed on the mount <em>and</em> automount units:</strong>
             <code>StartLimitIntervalSec=0</code> + <code>StartLimitBurst=0</code> drop-ins
-            on both <code>mnt-pouch.automount</code> and <code>mnt-jump.automount</code>
-            disable systemd's default 5-attempt-per-10-s cap. Without this, a future burst
-            pattern can put the automount unit in <code>mount-start-limit-hit</code> /
-            <code>failed</code> state, where systemd will never retry it automatically
-            (the 2026-05-30 mode: <code>/mnt/jump</code> stayed failed for ~14 h, manual
-            <code>reset-failed</code> required).</li>
+            on all four of <code>mnt-pouch.mount</code>, <code>mnt-pouch.automount</code>,
+            <code>mnt-jump.mount</code> and <code>mnt-jump.automount</code>
+            disable systemd's default 5-attempt-per-10-s cap. Both halves of each pair are
+            required: systemd applies the cap to the <code>.mount</code> unit, and an
+            automount whose triggered mount trips it fails with
+            <code>mount-start-limit-hit</code> and enters <code>failed</code> state, where
+            the kernel autofs trigger is gone and systemd will never retry it automatically —
+            a manual <code>reset-failed</code> plus <code>systemctl start</code> is the only
+            way out. Hardening only the <code>.automount</code> half leaves the real cap in
+            place, which is why the 2026-05-30 wedge (<code>/mnt/jump</code> failed ~14 h)
+            recurred on both shares on 2026-08-30.</li>
           <li><strong>Tripwire:</strong> the bare <code>/mnt/pouch</code> and
             <code>/mnt/jump</code> dirs have <code>chattr +i</code> set. With NFS unmounted,
             Docker's auto-create of bind-source subdirs fails loudly at container start;
@@ -153,17 +158,33 @@
             NFS-bind healthcheck pattern</a>.</li>
         </ul>
         <p>Inspect the recurring recovery path with
-        <code>systemctl status podhaus-nfs-container-recovery.timer</code> and
-        <code>journalctl -u podhaus-nfs-container-recovery.service</code>. Install or
+        <code>systemctl status podhaus-storage-container-recovery.timer</code> and
+        <code>journalctl -u podhaus-storage-container-recovery.service</code>. Install or
         reinstall these defences idempotently with
-        <code>ansible-playbook playbooks/bilby.yml --tags nfs</code> (the
-        <code>nfs_binds</code> role, run from <code>ansible/</code>). Full incident records:
+        <code>ansible-playbook playbooks/bilby.yml --tags storage</code> (the
+        <code>storage_binds</code> role, run from <code>ansible/</code>; fractal takes the
+        same role via <code>playbooks/fractal.yml --tags storage</code>). Full incident records:
         <a href="/postmortems/2026-08-22-delayed-nfs-container-recovery.md">2026-08-22 postmortem</a>
         (recurring stopped-container recovery),
         <a href="/postmortems/2026-05-30-power-outage-nfs-recovery.md">2026-05-30 postmortem</a>
         (automount rate-limit removal),
         <a href="/postmortems/2026-05-23-pouch-jump-mount-failure.md">2026-05-23 postmortem</a>
         (the automount + sentinel + chattr +i defences).</p>
+
+        <p><strong>The same defences cover fractal's <code>/home</code>.</strong>
+        fractal binds no NAS export at all, but its <code>/home</code> is a LUKS
+        volume mounted by <code>unlock-home</code> — by hand, over SSH, once per
+        WSL instance start. Nothing stores the passphrase, so the guest comes up
+        with Docker running and <code>/home</code> locked, and the gap can be
+        minutes or hours. That is the same shape as a NAS that is late, so it
+        takes the same role: fractal declares
+        <code>{root: /home, source: /dev/mapper/vault, fstypes: [ext4]}</code> and
+        gets the recurring reconciler, the tripwire on the bare mountpoint, and a
+        sentinel on the volume. It has no rate-limit drop-ins, because
+        <code>unlock-home</code> mounts it directly and there is no fstab
+        automount pair to un-cap. On 2026-08-30, before this was in place, the
+        docs container bound an auto-created empty stub on the root filesystem
+        and stayed down until a human noticed.</p>
       </blockquote>
 
       <h2 id="mounts">Mount summary</h2>
@@ -178,6 +199,7 @@
           <tr><td><code>/share/CACHEDEV1_DATA/Pouch</code></td><td>kangaroo</td><td>Direct access to Pouch, including <code>pouch-minio</code> at <code>Pouch/minio</code>.</td></tr>
           <tr><td><code>/share/CACHEDEV2_DATA/Jump</code></td><td>kangaroo</td><td>Direct access to Jump.</td></tr>
           <tr><td><code>/share/CACHEDEV2_DATA/Container/</code></td><td>kangaroo</td><td>Container state on the backed-up SSD volume (Periphery, Syncthing, kangaroo Backrest). Never on CACHEDEV1 — see the placement rule above.</td></tr>
+          <tr><td><code>/home</code></td><td>fractal</td><td>LUKS volume (<code>/dev/mapper/vault</code>) holding Nathan's checkouts and the machine key. Unlocked by hand per WSL instance start, so it can arrive hours after Docker — covered by the same <code>storage_binds</code> defences as the NAS mounts.</td></tr>
         </tbody>
       </table>
 

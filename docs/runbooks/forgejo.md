@@ -38,8 +38,8 @@ in `compose.yaml`, not a template override.
 
 `forgejo-preflight` refuses to start the service unless Jump is mounted, its
 sentinel exists, and every required directory is writable. Host directories
-and the sentinel are owned by the `nfs_binds` Ansible role
-(`ansible/roles/nfs_binds/`).
+and the sentinel are owned by the `storage_binds` Ansible role
+(`ansible/roles/storage_binds/`).
 
 ## Identity and keys
 

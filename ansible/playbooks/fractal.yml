@@ -20,6 +20,8 @@
       tags: [base]
     - role: docker
       tags: [docker]
+    - role: storage_binds
+      tags: [storage]
     - role: devbox
       tags: [devbox]
     - role: authorized_keys

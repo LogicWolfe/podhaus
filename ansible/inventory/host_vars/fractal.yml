@@ -67,3 +67,20 @@ podhaus_forgejo_internal_address: 10.0.0.119
 podhaus_periphery_dir: /opt/komodo-periphery
 podhaus_periphery_connect_as: fractal
 podhaus_periphery_core_address: wss://core-connect.pod.haus
+
+# Storage binds ---------------------------------------------------------
+# /home is the LUKS volume unlocked by hand (podhaus_wsl_encrypted_home
+# above), so it can arrive minutes or hours after the WSL instance starts —
+# Docker is already running by then. Declaring it here gives fractal the
+# same treatment bilby's NAS exports get: containers parked on a bind
+# failure are started only once /home proves it is the real vault, and the
+# bare mountpoint carries the immutable-bit tripwire so a container can
+# never quietly bind a stub on the root filesystem instead. On 2026-08-30,
+# with no tripwire, the docs container did exactly that.
+#
+# There are no rate-limit drop-ins: /home is mounted by unlock-home, not by
+# an fstab automount, so there is no systemd unit pair to un-cap.
+storage_binds_mounts:
+  - root: /home
+    source: /dev/mapper/vault
+    fstypes: [ext4]

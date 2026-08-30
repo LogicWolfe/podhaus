@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically reconcile storage-dependent Podhaus containers
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=podhaus-storage-container-recovery.service
+
+[Install]
+WantedBy=timers.target

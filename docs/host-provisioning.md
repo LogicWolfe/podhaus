@@ -117,7 +117,7 @@ ansible/
     forgejo_runner/        Fractal's container-isolated Forgejo Actions runner
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
-    nfs_binds/             QNAP NFS-bind hardening (bilby)
+    storage_binds/         Late-arriving-volume hardening (bilby, fractal)
     firewalld/             declarative zone + service XML (bilby)
     komodo_core_host/      Komodo Core's host directories (bilby)
     numbat_edge/           numbat's nftables ruleset, relay-IP dispatcher, loopback sshd
@@ -132,7 +132,7 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
 
 - `provisioned` — every Ansible-owned host. `site.yml` targets this group and
   nothing else, gating each
-  role (including single-host ones like `nfs_binds`, `firewalld`, and
+  role (including narrowly-scoped ones like `storage_binds`, `firewalld`, and
   `numbat_edge`) on the matching role group rather than on hostname, so a
   new host inherits the right roles from group membership alone.
 - `excluded` — kangaroo. QTS ships no Python interpreter at all (no
@@ -147,7 +147,7 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
 - `linux_hosts` and `macos_appliance_hosts` separate operating-system role
   families. Linux-only base, account, and sshd roles never run on Darwin.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes`, `edge_hosts`,
-  `komodo_core_hosts`, `nfs_binds_hosts`, `firewalld_hosts` — role
+  `komodo_core_hosts`, `storage_binds_hosts`, `firewalld_hosts` — role
   groups. `site.yml` gates each role on membership.
 
 ## Running it
@@ -219,17 +219,33 @@ per-container DNS overrides replace Docker's embedded resolver and
 break service-name resolution, so DNS forwarding is a daemon-wide
 setting where a host needs it.
 
-**`nfs_binds`** carries bilby's postmortem-hardened NFS defences: the
-recurring mount-aware recovery timer for eligible `created`/`exited`
-containers, the automount `StartLimit*=0` drop-ins, the `chattr +i`
-tripwire on the bare mountpoints (a `script:`
-task — the non-recursive `mount --bind /` trick has no Ansible
-primitive — with an honest `changed_when` on its output), the
-`.podhaus-share-mounted` sentinels (touched with
-`modification_time: preserve` so re-runs stay `changed=0`), and the
-Forgejo directory ownership. It also owns `/boot/efi`'s fstab pass number so
-systemd runs the ordinary pre-mount FAT check. The role header carries the
-incident history; the postmortems are the full record.
+**`storage_binds`** carries the postmortem-hardened defences for any host
+whose containers bind a volume that can arrive late. Each host declares its
+volumes as `storage_binds_mounts` in `host_vars` — root, expected source,
+and expected filesystem types — and everything else follows from that
+declaration. bilby declares the two QNAP NFS exports; fractal declares
+`/home`, the LUKS volume a human unlocks by hand, which is the same problem
+wearing different clothes.
+
+The role installs the recurring mount-aware recovery timer for eligible
+`created`/`exited` containers, the `chattr +i` tripwire on each bare
+mountpoint (a `script:` task — the non-recursive `mount --bind /` trick has
+no Ansible primitive — with an honest `changed_when` on its output; it
+sweeps empty Docker auto-create debris and fails loudly on anything holding
+bytes), and a `.podhaus-share-mounted` sentinel on every volume root
+(touched with `modification_time: preserve` so re-runs stay `changed=0`).
+
+Three pieces are opt-in per host and stay empty where they do not apply: the
+`StartLimit*=0` drop-ins on both the `.mount` and `.automount` half of each
+fstab automount pair (bilby only — a hand-mounted volume has no unit pair to
+un-cap), the managed directory trees (bilby's Forgejo ownership), and an
+fstab pass number (bilby's `/boot/efi`, so systemd runs the ordinary
+pre-mount FAT check).
+
+**The recovery has no deadline, deliberately.** A volume that returns hours
+later — a QNAP outage, or fractal's vault sitting locked until Nathan SSHes
+in — takes exactly the same path as one that returns in seconds. The role
+header carries the incident history; the postmortems are the full record.
 
 **`firewalld`** stages the declarative zone + service XML from role
 files — services before the zone, so the zone never references an

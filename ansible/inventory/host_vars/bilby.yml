@@ -41,3 +41,75 @@ podhaus_extra_networks:
 podhaus_machine_key: >-
   ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM=
   bilby machine key
+
+# Storage binds ---------------------------------------------------------
+# The two QNAP exports bilby's containers bind. Source and fstype are what
+# make the reconciler's readiness check exact: a bare mountpoint on local
+# disk matches the path but never the source.
+storage_binds_mounts:
+  - root: /mnt/jump
+    source: "10.0.0.25:/Jump"
+    fstypes: [nfs, nfs4]
+  - root: /mnt/pouch
+    source: "10.0.0.25:/Pouch"
+    fstypes: [nfs, nfs4]
+
+# Subpath markers for container healthchecks. Both volume roots get one
+# automatically, so only the deeper paths are listed.
+storage_binds_extra_sentinels:
+  - /mnt/jump/backups
+  - /mnt/jump/paperless
+  - /mnt/jump/paperless/documents
+  - /mnt/jump/plex-video-thumbnails
+  - /mnt/jump/forgejo
+
+# Both halves of both fstab automount pairs. systemd caps the .mount unit,
+# and an automount whose mount trips that cap wedges in
+# 'mount-start-limit-hit' and never retries — so the .mount halves are not
+# optional. Covering only the .automount halves is what let the 2026-05-30
+# wedge recur on 2026-08-30.
+storage_binds_rate_limit_dropin_dirs:
+  - mnt-pouch.mount.d
+  - mnt-pouch.automount.d
+  - mnt-jump.mount.d
+  - mnt-jump.automount.d
+
+# Forgejo keeps SQLite/config on local NVMe and repositories on Jump. Both
+# sides are provisioned so a fresh host has the exact ownership the rootless
+# image and QNAP's all_squash mapping expect (uid 1000 / gid 100). config/
+# is 0700, not 0750: Forgejo's runtime tightens the dir holding app.ini's
+# secrets itself, and asserting anything looser would flip-flop against it.
+storage_binds_managed_dirs:
+  - path: /var/lib/forgejo
+    owner: "1000"
+    group: "100"
+  - path: /var/lib/forgejo/data
+    owner: "1000"
+    group: "100"
+  - path: /var/lib/forgejo/data/log
+    owner: "1000"
+    group: "100"
+  - path: /var/lib/forgejo/config
+    owner: "1000"
+    group: "100"
+    mode: "0700"
+  - path: /mnt/jump/forgejo
+    owner: "1000"
+    group: "100"
+  - path: /mnt/jump/forgejo/repositories
+    owner: "1000"
+    group: "100"
+  - path: /mnt/jump/forgejo/lfs
+    owner: "1000"
+    group: "100"
+  - path: /mnt/jump/forgejo/attachments
+    owner: "1000"
+    group: "100"
+  - path: /mnt/jump/forgejo/repo-archives
+    owner: "1000"
+    group: "100"
+
+# /boot/efi had no fstab pass number, so systemd never checked the FAT
+# volume and it came back dirty after an unclean shutdown (2026-08-22).
+storage_binds_fstab_regexp: '^UUID=7470-3838\s+/boot/efi\s+'
+storage_binds_fstab_line: 'UUID=7470-3838 /boot/efi vfat defaults,umask=0077,shortname=winnt 0 2'

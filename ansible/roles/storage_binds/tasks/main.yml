@@ -1,0 +1,194 @@
+# Storage-bind hardening for any host whose containers bind a volume that
+# can arrive late or vanish: bilby's two QNAP NFS exports, fractal's
+# LUKS-backed /home. Absorbed bilby/host-systemd/install.sh (deleted).
+#
+# Every task here exists because an outage proved it necessary. Layered
+# defence, keeping a storage outage visible, recoverable, and incapable of
+# silently writing container data to the host's own disk:
+#
+#   1. A recurring oneshot reconciles only always-on Autoheal containers
+#      parked by a bind failure, after every required volume proves its
+#      exact source and sentinel. Docker itself never waits for storage,
+#      and the reconcile has no deadline — a volume that returns hours
+#      later (a QNAP outage, or Nathan unlocking fractal's vault by hand)
+#      takes exactly the same path as one that returns in seconds.
+#   2. StartLimit*=0 drop-ins on BOTH halves of each automount pair —
+#      mnt-{pouch,jump}.mount and mnt-{pouch,jump}.automount. systemd's
+#      default start-rate limit put mnt-jump.automount into
+#      permanently-failed state (never auto-retried) for ~14 h on
+#      2026-05-30, and again for both shares on 2026-08-30 because the
+#      original drop-in covered only the .automount half. Hosts whose
+#      volumes are not fstab automounts declare no drop-in dirs.
+#   3. chattr +i on the BARE mountpoints: with the volume unmounted,
+#      Docker's auto-create of bind sources fails loudly at container
+#      start instead of silently writing real data to local disk (the
+#      2026-05-23 near-miss: backrest was about to write its next
+#      scheduled backup to a local stub; and on 2026-08-30 fractal, which
+#      had no tripwire, silently grew an empty stub tree under /home).
+#   4. .podhaus-share-mounted sentinels on the real volumes, so container
+#      healthchecks can prove they bound the volume and not a stub.
+#   5. An optional fstab pass number, so systemd checks a FAT volume
+#      before mounting it after an unclean shutdown.
+#
+# Postmortems: docs/postmortems/2026-05-23-pouch-jump-mount-failure.md,
+# 2026-05-30-power-outage-nfs-recovery.md, 2026-06-16-firmware-reboot-
+# recovery.md (which codified 3 + 4 after a share rebuild wiped them), and
+# 2026-08-22-delayed-nfs-container-recovery.md (which added 1 + 5).
+---
+- name: Require the host to declare the volumes it binds
+  # No default for this var, so an undeclared host fails here rather than
+  # installing a reconciler that watches nothing.
+  ansible.builtin.assert:
+    that:
+      - storage_binds_mounts is defined
+      - storage_binds_mounts | length > 0
+    fail_msg: >-
+      {{ inventory_hostname }} is in storage_binds_hosts but declares no
+      storage_binds_mounts; add them to inventory/host_vars/{{ inventory_hostname }}.yml
+
+- name: Create the storage declaration directory
+  ansible.builtin.file:
+    path: /etc/podhaus
+    state: directory
+    mode: "0755"
+
+- name: Declare the volumes the reconciler waits for
+  # The reconciler reads this rather than hard-coding mounts, so one
+  # implementation serves an NFS export and a local LUKS volume alike.
+  ansible.builtin.copy:
+    content: "{{ storage_binds_mounts | to_nice_json }}\n"
+    dest: /etc/podhaus/storage-mounts.json
+    mode: "0644"
+
+- name: Install the stopped-container recovery command
+  ansible.builtin.copy:
+    src: recover-storage-containers
+    dest: /usr/local/sbin/recover-storage-containers
+    mode: "0755"
+
+- name: Install the stopped-container recovery units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - podhaus-storage-container-recovery.service
+    - podhaus-storage-container-recovery.timer
+  notify: Reload systemd units
+
+- name: Stop the superseded recovery timer before its unit file goes
+  # Deleting a unit file leaves the running unit loaded in memory, where it
+  # lingers in `systemctl list-timers` with no file behind it. Stopping it
+  # first is what actually retires it.
+  ansible.builtin.systemd_service:
+    name: podhaus-nfs-container-recovery.timer
+    state: stopped
+    enabled: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Remove superseded recovery units and the finite QNAP gate
+  # The nfs-named units are this role's own previous generation, removed
+  # here so a converged host runs exactly one reconciler.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/timers.target.wants/podhaus-nfs-container-recovery.timer
+    - /etc/systemd/system/podhaus-nfs-container-recovery.timer
+    - /etc/systemd/system/podhaus-nfs-container-recovery.service
+    - /usr/local/sbin/recover-nfs-containers
+    - /etc/systemd/system/multi-user.target.wants/wait-for-qnap-nfs.service
+    - /etc/systemd/system/wait-for-qnap-nfs.service
+    - /etc/systemd/system/docker.service.d/10-wait-for-qnap.conf
+  notify: Reload systemd units
+
+- name: Create the start-rate-limit drop-in directories
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ storage_binds_rate_limit_dropin_dirs }}"
+
+- name: Disable the start-rate limit on every mount and automount unit
+  # Both halves of each pair, because systemd rate-limits the .mount unit,
+  # not the .automount that triggers it. An automount whose triggered mount
+  # trips the cap fails with 'mount-start-limit-hit' and is never retried,
+  # which is precisely the wedge this drop-in exists to prevent — so
+  # covering only the .automount half left the real cap in place.
+  # One source file, every drop-in dir: the units must stay identical, so
+  # they are identical by construction.
+  ansible.builtin.copy:
+    src: 10-no-rate-limit.conf
+    dest: "/etc/systemd/system/{{ item }}/10-no-rate-limit.conf"
+    mode: "0644"
+  loop: "{{ storage_binds_rate_limit_dropin_dirs }}"
+  notify: Reload systemd units
+
+- name: Enable filesystem checking for a partition that needs a pass number
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: "{{ storage_binds_fstab_regexp }}"
+    line: "{{ storage_binds_fstab_line }}"
+    validate: 'findmnt --verify --tab-file %s'
+  when: storage_binds_fstab_line | length > 0
+  notify: Reload systemd units
+
+- name: Flush handlers so systemd knows the units before they are enabled
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start recurring stopped-container recovery
+  ansible.builtin.systemd_service:
+    name: podhaus-storage-container-recovery.timer
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: Set the immutable-bit tripwire on the bare mountpoints
+  # The +i bit lives on the underlying root-filesystem inode, which the real
+  # volume shadows when mounted — reaching it on a live host takes a
+  # non-recursive bind mount of /, a trick no Ansible module provides, so
+  # this stays a script. Its output is the change contract: TRIPWIRE-SET
+  # means a bit was newly set, TRIPWIRE-SWEPT means empty Docker
+  # auto-create debris was cleared, TRIPWIRE-OK means already correct. The
+  # script fails loudly if a bare dir holds files — that is exactly the
+  # local-disk contamination this tripwire exists to catch, and it needs a
+  # human.
+  ansible.builtin.script:
+    cmd: >-
+      chattr-tripwire.sh
+      {{ storage_binds_mounts | map(attribute='root') | join(' ') }}
+  register: storage_tripwire
+  changed_when: "'TRIPWIRE-SET' in storage_tripwire.stdout or 'TRIPWIRE-SWEPT' in storage_tripwire.stdout"
+
+- name: Provision the managed directory trees
+  # Host-declared trees that must exist on the mounted volume with exact
+  # ownership — bilby's Forgejo repositories under Jump, whose rootless
+  # image and QNAP's all_squash mapping both expect uid 1000 / gid 100.
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default(omit) }}"
+    group: "{{ item.group | default(omit) }}"
+    mode: "{{ item.mode | default('0750') }}"
+  loop: "{{ storage_binds_managed_dirs }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Touch the volume sentinels
+  # One .podhaus-share-mounted per volume root (required — the reconciler's
+  # readiness probe reads it) plus any declared subpath markers, written ON
+  # the volume. preserve/preserve keeps re-runs at changed=0. A missing
+  # parent means the volume is unmounted or the subpath was never
+  # provisioned — that fails loudly rather than warn-and-continue. Keep the
+  # extra list in sync with container binds (AGENTS.md: drop a marker when
+  # you add one); a volume rebuild wipes the markers, and re-running this
+  # play is what restores them.
+  ansible.builtin.file:
+    path: "{{ item }}/.podhaus-share-mounted"
+    state: touch
+    modification_time: preserve
+    access_time: preserve
+  loop: >-
+    {{ (storage_binds_mounts | map(attribute='root') | list)
+       + storage_binds_extra_sentinels }}

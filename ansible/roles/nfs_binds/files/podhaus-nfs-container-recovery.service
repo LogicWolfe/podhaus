@@ -1,9 +1,0 @@
-[Unit]
-Description=Recover NFS-dependent Podhaus containers after storage returns
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/recover-nfs-containers
-TimeoutStartSec=45

@@ -21,6 +21,13 @@
 #                                   stack.toml key material that no longer
 #                                   matches the Ansible inventory (the one
 #                                   authoritative home for SSH keys).
+#   - storage_binds role tests:     the reconciler's behaviour plus the
+#                                   inventory contract for it — every
+#                                   storage host declares its volumes, and
+#                                   an automount pair is hardened on BOTH
+#                                   halves. The .mount half being missed is
+#                                   what let the 2026-05-30 mount wedge
+#                                   recur on 2026-08-30.
 set -e
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -39,3 +46,5 @@ mise exec -- pipenv run python "$root/tools/lint-stack-env.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-content-hash.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-toml.py"
 mise exec -- pipenv run python "$root/tools/render-pomerium-keys.py" --verify
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/ansible/roles/storage_binds/tests"

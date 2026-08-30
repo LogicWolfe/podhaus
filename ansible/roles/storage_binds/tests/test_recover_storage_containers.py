@@ -8,7 +8,17 @@ import unittest
 
 
 ROLE = Path(__file__).resolve().parents[1]
-RECOVERY_COMMAND = ROLE / "files" / "recover-nfs-containers"
+RECOVERY_COMMAND = ROLE / "files" / "recover-storage-containers"
+
+NAS_VOLUMES = [
+    {"root": "/mnt/jump", "source": "10.0.0.25:/Jump", "fstypes": ["nfs", "nfs4"]},
+    {"root": "/mnt/pouch", "source": "10.0.0.25:/Pouch", "fstypes": ["nfs", "nfs4"]},
+]
+
+# fractal: one hand-unlocked LUKS volume, no NFS anywhere.
+VAULT_VOLUMES = [
+    {"root": "/home", "source": "/dev/mapper/vault", "fstypes": ["ext4"]},
+]
 
 
 def container(
@@ -61,11 +71,14 @@ class RecoveryCommandTest(unittest.TestCase):
         mounts: dict[str, dict[str, object]],
         *,
         start_failure: str = "",
+        volumes: list[dict[str, object]] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         inspect_file = self.root / "inspect.json"
         mounts_file = self.root / "mounts.json"
+        declaration = self.root / "storage-mounts.json"
         inspect_file.write_text(json.dumps(containers))
         mounts_file.write_text(json.dumps(mounts))
+        declaration.write_text(json.dumps(NAS_VOLUMES if volumes is None else volumes))
         env = os.environ | {
             "PATH": f"{self.bin_dir}:{os.environ['PATH']}",
             "FAKE_INSPECT_FILE": str(inspect_file),
@@ -74,7 +87,7 @@ class RecoveryCommandTest(unittest.TestCase):
             "FAKE_START_FAILURE": start_failure,
         }
         return subprocess.run(
-            [sys.executable, str(RECOVERY_COMMAND)],
+            [sys.executable, str(RECOVERY_COMMAND), str(declaration)],
             capture_output=True,
             env=env,
             text=True,
@@ -166,6 +179,63 @@ class RecoveryCommandTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("daemon refused start", result.stderr)
 
+    def test_local_volume_host_recovers_on_its_own_declaration(self) -> None:
+        # fractal: /home is a LUKS ext4 volume unlocked by hand, possibly
+        # hours after Docker started. Same mechanism, different declaration.
+        docs = container("docs", ["/home/nathan/repos"])
+        locked = {
+            "/home": {
+                "sentinel": False,
+                "source": "/dev/mapper/vault",
+                "fstype": "ext4",
+                "options": "rw,relatime",
+            }
+        }
+        first = self.run_recovery([docs], locked, volumes=VAULT_VOLUMES)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(self.started(), [], "must wait while /home is locked")
+
+        unlocked = {"/home": dict(locked["/home"], sentinel=True)}
+        second = self.run_recovery([docs], unlocked, volumes=VAULT_VOLUMES)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(self.started(), ["id-docs"])
+
+    def test_local_volume_rejects_the_unmounted_root_filesystem(self) -> None:
+        # The bare /home stub on the root disk carries the same path and is
+        # silently writable; only the source tells them apart.
+        docs = container("docs", ["/home/nathan/repos"])
+        stub = {
+            "/home": {
+                "sentinel": True,
+                "source": "/dev/sdd",
+                "fstype": "ext4",
+                "options": "rw,relatime",
+            }
+        }
+        result = self.run_recovery([docs], stub, volumes=VAULT_VOLUMES)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.started(), [])
+
+    def test_missing_declaration_fails_loudly(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(RECOVERY_COMMAND), str(self.root / "absent.json")],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("recovery failed", result.stderr)
+
+    def test_declaration_argument_is_required(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(RECOVERY_COMMAND)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("usage:", result.stderr)
+
     def test_recovery_command_has_no_ofelia_behavior(self) -> None:
         self.assertNotIn("ofelia", RECOVERY_COMMAND.read_text().lower())
 
@@ -212,7 +282,7 @@ elif command == "docker" and sys.argv[1] == "start":
     with Path(os.environ["FAKE_START_LOG"]).open("a") as stream:
         stream.write(sys.argv[2] + "\n")
 elif command == "timeout":
-    root = "/" + sys.argv[-1].split("/", 3)[1] + "/" + sys.argv[-1].split("/", 3)[2]
+    root = os.path.dirname(sys.argv[-1])
     raise SystemExit(0 if mounts[root]["sentinel"] else 1)
 elif command == "findmnt":
     root = sys.argv[sys.argv.index("--target") + 1]
