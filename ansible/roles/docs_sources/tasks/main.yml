@@ -39,14 +39,14 @@
     - podhaus-docs-source-root.service
     - podhaus-docs-source-reconcile.service
     - podhaus-docs-source-reconcile.timer
-  notify: Reload systemd units
+  notify: Reload systemd after docs-source unit changes
 
 - name: Gate Docker on the shared docs-source root
   ansible.builtin.copy:
     src: 20-docs-source-root.conf
     dest: /etc/systemd/system/docker.service.d/20-docs-source-root.conf
     mode: "0644"
-  notify: Reload systemd units
+  notify: Reload systemd after docs-source unit changes
 
 - name: Flush handlers before starting docs-source units
   ansible.builtin.meta: flush_handlers
