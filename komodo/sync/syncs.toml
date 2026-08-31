@@ -42,9 +42,9 @@ include_resources = true
 delete = false
 managed = false
 
-# The docs sync walks the docs-server engine repo for its [[stack]]
-# block + the [[variable]] (DOCS_REPOS_HOST_PATH) in stack.toml at the
-# repo root. Mirrors the fenwick/pets syncs; Stage 0 of
+# The docs sync walks the docs-server repo for the three [[stack]] blocks at
+# its root. Host-specific content locations are Ansible-owned source slots,
+# not Komodo Variables. Mirrors the fenwick/pets syncs; Stage 0 of
 # docs-push-deploy runs it explicitly.
 [[resource_sync]]
 name = "docs"

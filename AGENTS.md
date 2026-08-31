@@ -682,6 +682,8 @@ that get flipped to done in-place as they land, rather than spawning
 follow-up postmortems. Conventions:
 [`docs/postmortems/conventions.md`](docs/postmortems/conventions.md).
 
+- **2026-08-31 — docs-source-mount-coupling** — Voltaire docs could not serve because the aggregate repository tree and canonical chezmoi checkout were mandatory nested container binds; autoheal could not repair the host mount and remote docs had no monitor. Replaced direct checkout binds with independently reconciled read-only source slots, strict aggregate health with partial serving, and Gatus coverage for every docs host. [`docs/postmortems/2026-08-31-docs-source-mount-coupling.md`](docs/postmortems/2026-08-31-docs-source-mount-coupling.md)
+
 - **2026-08-22 — delayed-nfs-container-recovery** — a hard power reset brought Bilby back before QNAP NFS; the finite pre-Docker wait timed out, Flood and StreamFab parked on OCI bind failures after storage later recovered, and stable Ofelia retained a schedule without their jobs. Manual starts plus an Ofelia restart exposed a second latent failure: Claude Code's `Write` bug had created six tracked files as `0600`; Git hid that local difference and the deploy mirror preserved it into a root-owned tree, making two uid-1000 job scripts unreadable. The six modes were corrected manually; that is the complete resolution, with no ongoing permission-regression work. EFI was also dirty because its fstab pass number disabled boot checking. No data loss; all non-Yiayia services recovered. The completed prevention replaces the finite gate with recurring, exact-mount-aware reconciliation for narrowly eligible `created`/`exited` containers, enables normal systemd EFI checking, pins Ofelia `0.4.0-beta.5`, removes its deployment restart workaround after live event-reload validation, and corrects Backrest's missing scheduler opt-in. [`docs/postmortems/2026-08-22-delayed-nfs-container-recovery.md`](docs/postmortems/2026-08-22-delayed-nfs-container-recovery.md)
 
 - **2026-08-22 — flic-bridge-boot-order-deafness** — the *same* power reset also killed all three Flic buttons, and that half went unnoticed for **two days**. Bilby rebooted while the Pi Zero was unreachable; HA dialed flicd at 08:15:11, got `[Errno 113] Host is unreachable`, and gave up permanently. HA's `flic` platform is set up exactly once — it catches only `ConnectionRefusedError`, never raises `PlatformNotReady`, and runs its event loop on a bare thread that returns **silently** when the socket drops (`pyflic`: "any use of this FlicClient is illegal" afterwards). So **a full HA restart was the only recovery**, and only one boot ordering out of six ever survived; five produced no log line at all. Power-cycling the Pi (the obvious move, and the one tried) could not help — flicd was healthy throughout and the broken half was on Bilby. **Nothing caught it**: Flic is not a container and not a Gatus endpoint, so the post-outage closeout reporting all containers healthy and 44/45 Gatus green was true and blind; discovery was a human pressing a button. Worse, `docs/plans/grasshopper-buttons.md` had recorded the gap under *"Settled constraints — do not relitigate"* as **"Flic reliability is already handled … has a plan of its own"** — that plan was never written, and the claim is why nobody rechecked. Fixed by **inverting the bridge**: `iot/pizero/flic-pusher` holds the flicd connection on *localhost* under systemd and POSTs each press to an HA webhook that re-fires `flic_click` unchanged, so no cross-host connection exists to go stale and every reboot ordering self-heals with no restart. Verified against flicd restart, `kill -9`, unreachable HA, and two Pi reboots — the first reboot test caught a real bug (unit started but never `enable`d). Monitoring deliberately declined. [`docs/postmortems/2026-08-22-flic-bridge-boot-order-deafness.md`](docs/postmortems/2026-08-22-flic-bridge-boot-order-deafness.md)
@@ -703,15 +705,17 @@ follow-up postmortems. Conventions:
 ## Editing docs
 
 `docs/` is served by the central **docs-server** (`~/repos/docs`) at
-`docs.pod.haus` — it scans every repo's `docs/` and renders Markdown
-(GFM) or HTML into one server-generated shell + sidebar. Edits are live:
-save, reload, no rebuild (it bind-mounts `~/repos` read-only).
+`docs.pod.haus`. A typed source catalog combines the host's aggregate
+repository directory with named checkouts such as canonical chezmoi; Ansible
+exposes them through read-only slots under `/opt/podhaus/docs-sources`. Edits
+are live: save, reload, no rebuild.
 
-Adding a doc: **write a Markdown `.md`** under `docs/` (preferred — the
-first `# H1` is the title). HTML works for layout, but only its `<main>`
-is used and the shell is injected, so write no `<head>`, topbar/sidebar,
-or `<script>`. There are **no** per-file metadata tags, no `nav.js`, and
-no per-repo `docs/assets/` — that old `_template.html` machinery is gone.
+Adding a doc: **write a Markdown `.md`** under `docs/` (preferred). The
+filename supplies its default navigation label; the first `# H1` supplies the
+page title. HTML works for layout, but only its `<main>` is used and the shell
+is injected, so write no `<head>`, topbar/sidebar, or `<script>`. There are
+**no** per-file metadata tags, no `nav.js`, and no per-repo `docs/assets/` —
+that old `_template.html` machinery is gone.
 
 Ordering is filesystem-based (directories + alphabetical; a leading
 number in a filename sorts it). To pin order or label a directory, add a

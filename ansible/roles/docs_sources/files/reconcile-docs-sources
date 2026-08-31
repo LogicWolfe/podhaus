@@ -95,6 +95,9 @@ class Commands:
     def mounted(self, path: Path) -> bool:
         return self.run(["mountpoint", "--quiet", str(path)], check=False).returncode == 0
 
+    def same_object(self, left: Path, right: Path) -> bool:
+        return left.samefile(right)
+
 
 class SourceReconciler:
     def __init__(self, sources: tuple[SourceSlot, ...], commands: Commands) -> None:
@@ -131,7 +134,11 @@ class SourceReconciler:
 
     def _mount(self, source: SourceSlot) -> None:
         current = source.state_file.read_text().strip() if source.state_file.is_file() else None
-        if self.commands.mounted(source.slot) and current == str(source.source):
+        if (
+            self.commands.mounted(source.slot)
+            and current == str(source.source)
+            and self.commands.same_object(source.source, source.slot)
+        ):
             return
         if self.commands.mounted(source.slot):
             self._unmount(source)

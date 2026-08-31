@@ -224,14 +224,16 @@
       <ul>
         <li><strong>Ansible-managed (root state):</strong> hostname via
           <code>/etc/wsl.conf</code>, timezone, Docker CE + <code>dockernet</code>,
-          the developer toolchain, the Pomerium SSH user-CA trust, and Komodo Periphery.
+          the developer toolchain, docs source slots, the Pomerium SSH user-CA trust,
+          and Komodo Periphery.
           Run <code>ansible/playbooks/fractal.yml</code>.</li>
         <li><strong>chezmoi-managed (user state):</strong> everything under
           <code>$HOME</code> — shell, dotfiles, the machine SSH key. Applied by Nathan as
           himself; Ansible never invokes it.</li>
         <li><strong>Komodo-managed:</strong> <code>fractal-relay</code> (rathole client),
           <code>fractal-caddy</code> (mTLS origin), <code>fractal-logging</code> (Alloy),
-          and <code>fractal-docs</code> (the docs-server over <code>~/repos</code>) through
+          and <code>fractal-docs</code> (the docs-server over its Ansible-exposed
+          repository sources) through
           linked repos <code>podhaus-fractal</code> and <code>docs-server-fractal</code>.</li>
         <li><strong>Bootstrap-managed:</strong> Komodo Periphery only — Core reaches this
           host solely through the connection Periphery makes, so a Komodo-driven redeploy of
@@ -291,15 +293,15 @@
       </p>
       <ul>
         <li><strong>Ansible-managed (root state):</strong> base packages, Docker CE +
-          <code>dockernet</code>, the developer toolchain, the Pomerium SSH user-CA
-          trust, and Komodo Periphery.</li>
+          <code>dockernet</code>, the developer toolchain, docs source slots, the
+          Pomerium SSH user-CA trust, and Komodo Periphery.</li>
         <li><strong>chezmoi-managed (user state):</strong> everything under
           <code>$HOME</code>, including the TPM-resident machine key.</li>
         <li><strong>Komodo-managed:</strong> <code>voltaire-relay</code> (rathole client),
           <code>voltaire-caddy</code> (mTLS origin), <code>voltaire-logging</code>,
           <code>voltaire-autoheal</code>, and <code>voltaire-docs</code> (the docs-server
-          over <code>~/repos</code>) through linked repos <code>podhaus-voltaire</code> and
-          <code>docs-server-voltaire</code>.</li>
+          over its Ansible-exposed repository sources) through linked repos
+          <code>podhaus-voltaire</code> and <code>docs-server-voltaire</code>.</li>
       </ul>
       <p>
         SELinux is enforcing (Fedora Workstation default), so every podhaus service that

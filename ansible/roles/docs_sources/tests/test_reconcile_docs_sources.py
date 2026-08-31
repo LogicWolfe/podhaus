@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from contextlib import redirect_stdout
 import importlib.machinery
 import importlib.util
-from io import StringIO
-from pathlib import Path
+import os
 import sys
 import tempfile
 import unittest
-
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "files" / "reconcile-docs-sources"
 LOADER = importlib.machinery.SourceFileLoader("reconcile_docs_sources", str(SCRIPT))
@@ -24,6 +24,7 @@ LOADER.exec_module(MODULE)
 class FakeCommands:
     def __init__(self) -> None:
         self.mounts: set[Path] = set()
+        self.bindings: dict[Path, os.stat_result] = {}
         self.calls: list[list[str]] = []
 
     def mounted(self, path: Path) -> bool:
@@ -32,9 +33,22 @@ class FakeCommands:
     def run(self, args: list[str], *, check: bool = True):
         self.calls.append(args)
         if args[:2] == ["mount", "--bind"]:
-            self.mounts.add(Path(args[-1]))
+            source, target = Path(args[-2]), Path(args[-1])
+            self.mounts.add(target)
+            self.bindings[target] = source.stat()
         elif args[0] == "umount":
-            self.mounts.remove(Path(args[-1]))
+            target = Path(args[-1])
+            self.mounts.remove(target)
+            self.bindings.pop(target)
+
+    def same_object(self, left: Path, right: Path) -> bool:
+        source_stat = left.stat()
+        mounted_stat = self.bindings.get(right)
+        return (
+            mounted_stat is not None
+            and mounted_stat.st_dev == source_stat.st_dev
+            and mounted_stat.st_ino == source_stat.st_ino
+        )
 
 
 class SourceReconcilerTest(unittest.TestCase):
@@ -82,6 +96,22 @@ class SourceReconcilerTest(unittest.TestCase):
         first_calls = len(self.commands.calls)
         self.reconciler.reconcile()
         self.assertEqual(len(self.commands.calls), first_calls)
+
+    def test_reconcile_remounts_source_replaced_at_same_path(self) -> None:
+        with redirect_stdout(StringIO()):
+            self.reconciler.prepare()
+            self.reconciler.reconcile()
+        original = self.source.with_name("original-source")
+        self.source.rename(original)
+        (self.source / ".git").mkdir(parents=True)
+        first_calls = len(self.commands.calls)
+
+        with redirect_stdout(StringIO()):
+            self.reconciler.reconcile()
+
+        self.assertGreater(len(self.commands.calls), first_calls)
+        self.assertIn(["umount", str(self.slot.slot)], self.commands.calls[first_calls:])
+        self.assertTrue(self.commands.same_object(self.source, self.slot.slot))
 
 
 if __name__ == "__main__":
