@@ -141,14 +141,30 @@ trees together. Its start hook stops Forgejo first because SQLite and repository
 data span two filesystems. Its end hook always starts Forgejo again, waits for
 health, clears the lock, and reports the result to Gatus.
 
+Forgejo runs with a ten-second graceful hammer time. The rathole relay holds an
+idle connection on the SSH listener that never drains on its own, so without
+that setting Forgejo sat in shutdown until the hook's sixty-second `docker stop`
+deadline killed it, and the snapshot read a hard-killed database. The stop now
+takes about eleven seconds and Forgejo closes SQLite cleanly first.
+
 Forgejo disables Komodo's stack-state notifications because they cannot
 distinguish this expected stop from a fault. Gatus remains the service-health
 authority: its two-minute checks require three consecutive failures before
 alerting, comfortably exceeding the normal backup stop.
 
-An ofelia job runs the recovery hook every five minutes. If Backrest is no
-longer running restic but the lock remains, it restarts Forgejo and raises a
-failed heartbeat. This covers interruption between the stop and end hooks.
+An ofelia job runs the recovery hook every five minutes, at 03:43 and 03:48
+either side of the snapshot rather than on the plain five-minute grid, so it
+never ticks while the snapshot has Forgejo stopped. It acts only when the lock
+has been held longer than fifteen minutes and no restic process is running:
+a healthy run holds the lock for about a minute, so anything older belongs to
+a run that died between the stop and end hooks. When it does act it restarts
+Forgejo and raises a failed heartbeat.
+
+All three subcommands take an exclusive lock on `/data/forgejo-backup.control`
+first. The snapshot's own hooks wait for it; the recovery tick gives up
+immediately, since there is nothing to recover while a snapshot is running.
+That file is never deleted — `/data/forgejo-backup.lock`, which is created and
+removed around each snapshot, cannot serve as the exclusion point.
 
 ## Restore
 

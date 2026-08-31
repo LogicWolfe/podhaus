@@ -5,6 +5,14 @@
 set -euo pipefail
 
 LOCK=/data/forgejo-backup.lock
+# Serialises one subcommand against another. Separate from $LOCK, which is
+# created and deleted around each snapshot; an flock on a file that gets
+# unlinked stops excluding anything.
+CONTROL=/data/forgejo-backup.control
+# A snapshot still in flight holds a young lock, so only an older one can
+# belong to a run that died between the stop and finish hooks. The slowest
+# nightly run observed is 69s.
+STALE_LOCK_SECONDS=900
 GATUS_URL="${GATUS_BASE_URL:?set GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_FORGEJO_ENDPOINT_ID:?set GATUS_BACKREST_FORGEJO_ENDPOINT_ID}/external"
 
 push_result() {
@@ -83,9 +91,22 @@ finish_backup() {
   push_result true
 }
 
+# Matches on the process basename, which identifies restic whatever path
+# Backrest invokes it by. `pgrep -x` is not usable: the busybox build in this
+# image compares argv[0] verbatim, so it never matches Backrest's /bin/restic.
+process_running() {
+  local comm
+  for comm in /proc/[0-9]*/comm; do
+    [[ -r $comm ]] || continue
+    [[ $(<"$comm") == "$1" ]] && return 0
+  done
+  return 1
+}
+
 recover_interrupted() {
   [[ -f "$LOCK" ]] || return 0
-  pgrep -x restic >/dev/null && return 0
+  (( $(date +%s) - $(stat -c %Y "$LOCK") < STALE_LOCK_SECONDS )) && return 0
+  process_running restic && return 0
 
   echo "recovering Forgejo from interrupted backup"
   if start_forgejo; then
@@ -97,15 +118,23 @@ recover_interrupted() {
   fi
 }
 
+# The snapshot's own hooks must run, so they wait for the control lock. The
+# periodic recovery tick has nothing to recover while another subcommand
+# holds it, so it gives up instead of queueing behind one.
+exec 9>"$CONTROL"
+
 case "${1:-}" in
   stop)
+    flock 9
     recover_interrupted
     stop_forgejo
     ;;
   finish)
+    flock 9
     finish_backup "${2:-}" "${3:-}"
     ;;
   recover)
+    flock -n 9 || exit 0
     recover_interrupted
     ;;
   *)

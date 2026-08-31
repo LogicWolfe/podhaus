@@ -28,6 +28,12 @@ x-forgejo-environment: &forgejo-environment
   FORGEJO__server__SSH_USER: git
   FORGEJO__server__LFS_START_SERVER: "true"
   FORGEJO__server__LFS_JWT_SECRET: ${FORGEJO_LFS_JWT_SECRET}
+  # The rathole relay holds an idle connection on the SSH listener that never
+  # drains, so shutdown always runs to the hammer. The 60s default ties with
+  # the backup hook's `docker stop --time 60` and Docker's SIGKILL won the
+  # tie, leaving the nightly snapshot to read a hard-killed database. Ten
+  # seconds force-closes well inside that window and Forgejo exits cleanly.
+  FORGEJO__server__GRACEFUL_HAMMER_TIME: 10s
   FORGEJO__database__DB_TYPE: sqlite3
   FORGEJO__database__PATH: /var/lib/gitea/database/forgejo.db
   FORGEJO__database__SQLITE_JOURNAL_MODE: WAL

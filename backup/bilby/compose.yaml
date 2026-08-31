@@ -143,7 +143,14 @@ services:
       # backrest keeps using whatever config it had when it last started.
       podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}
       ofelia.enabled: "true"
-      ofelia.job-exec.forgejo-backup-recover.schedule: "0 */5 * * * *"
+      # Offset off the 5-minute grid so this never ticks while the backrest
+      # forgejo plan (03:45) has Forgejo stopped: it lands at 03:43 and
+      # 03:48, roughly two minutes either side of the snapshot window. The
+      # control lock and stale-lock threshold in the hook make a collision
+      # harmless; the offset stops one from arising. On the plain grid both
+      # fired at 03:45:00.0 and the recovery job reported a false failed
+      # backup every night from 2026-08-22.
+      ofelia.job-exec.forgejo-backup-recover.schedule: "0 3-58/5 * * * *"
       ofelia.job-exec.forgejo-backup-recover.command: "/hooks/forgejo-backup-control recover"
 volumes:
   # External volumes owned by other stacks — Backrest mounts them

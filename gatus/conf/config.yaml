@@ -840,7 +840,7 @@ external-endpoints:
       interval: 25h
     alerts:
       - type: custom
-        description: "Forgejo's quiesced nightly snapshot did not check in. The hook stops Forgejo, snapshots local SQLite state plus Jump repositories, restarts Forgejo, and only then reports success. Check the backrest Forgejo plan, `docker logs backrest`, and `/data/forgejo-backup.lock` inside Backrest."
+        description: "Forgejo's quiesced nightly snapshot either reported a failure or did not check in at all — read the errors field to tell which. The hook stops Forgejo, snapshots local SQLite state plus Jump repositories, restarts Forgejo, and only then reports success; a separate recovery job reports a failure if it finds Forgejo left stopped by an interrupted snapshot. Check the backrest Forgejo plan, `docker logs backrest`, `docker logs ofelia`, and `/data/forgejo-backup.lock` inside Backrest."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true
