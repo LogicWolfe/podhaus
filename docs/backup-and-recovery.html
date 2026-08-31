@@ -69,9 +69,12 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
       </p>
       <p>
         Forgejo's plan uses start/end hooks to stop the service, snapshot both storage tiers,
-        restart it, wait for health, and report a dedicated Gatus heartbeat. A five-minute
-        recovery job restarts Forgejo if Backrest is interrupted while the quiesce lock exists.
-        See the <a href="/runbooks/forgejo">Forgejo runbook</a>.
+        restart it, wait for health, and report a dedicated Gatus heartbeat. A recovery job
+        ticks every five minutes, offset to :03 and :08 so it never runs while the snapshot
+        has Forgejo stopped. It restarts Forgejo only when the quiesce lock is more than
+        fifteen minutes old and no <code>restic</code> process is running &mdash; a healthy
+        snapshot holds that lock for well under a minute, so anything older means Backrest
+        died between the hooks. See the <a href="/runbooks/forgejo">Forgejo runbook</a>.
       </p>
       <p>
         The <code>backrest-state</code> plan runs last and has a
