@@ -1,0 +1,82 @@
+---
+- name: Require every docs host to declare its sources
+  ansible.builtin.assert:
+    that:
+      - podhaus_docs_sources is defined
+      - podhaus_docs_sources | length > 0
+    fail_msg: >-
+      {{ inventory_hostname }} is in docs_hosts but declares no
+      podhaus_docs_sources in inventory/host_vars/{{ inventory_hostname }}.yml
+
+- name: Create docs-source host directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/podhaus
+    - /opt/podhaus
+    - /etc/systemd/system/docker.service.d
+
+- name: Declare host repository source locations
+  ansible.builtin.copy:
+    content: "{{ podhaus_docs_sources | to_nice_json }}\n"
+    dest: "{{ docs_sources_config }}"
+    mode: "0644"
+
+- name: Install the docs-source reconciler
+  ansible.builtin.copy:
+    src: reconcile-docs-sources
+    dest: /usr/local/sbin/reconcile-docs-sources
+    mode: "0755"
+
+- name: Install docs-source systemd units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - podhaus-docs-source-root.service
+    - podhaus-docs-source-reconcile.service
+    - podhaus-docs-source-reconcile.timer
+  notify: Reload systemd units
+
+- name: Gate Docker on the shared docs-source root
+  ansible.builtin.copy:
+    src: 20-docs-source-root.conf
+    dest: /etc/systemd/system/docker.service.d/20-docs-source-root.conf
+    mode: "0644"
+  notify: Reload systemd units
+
+- name: Flush handlers before starting docs-source units
+  ansible.builtin.meta: flush_handlers
+
+- name: Prepare the shared source-slot root
+  ansible.builtin.command:
+    argv:
+      - /usr/local/sbin/reconcile-docs-sources
+      - prepare
+      - "{{ docs_sources_config }}"
+  register: docs_sources_prepare
+  changed_when: "'SOURCE-ROOT-PREPARED' in docs_sources_prepare.stdout or 'SOURCE-SLOT-CREATED' in docs_sources_prepare.stdout"
+  when: not ansible_check_mode
+
+- name: Reconcile available repository sources
+  ansible.builtin.command:
+    argv:
+      - /usr/local/sbin/reconcile-docs-sources
+      - reconcile
+      - "{{ docs_sources_config }}"
+  register: docs_sources_reconcile
+  changed_when: "'SOURCE-MOUNTED' in docs_sources_reconcile.stdout or 'SOURCE-UNMOUNTED' in docs_sources_reconcile.stdout"
+  when: not ansible_check_mode
+
+- name: Enable docs-source boot preparation and recurring reconciliation
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - podhaus-docs-source-root.service
+    - podhaus-docs-source-reconcile.timer
+  when: not ansible_check_mode

@@ -115,6 +115,7 @@ ansible/
     docker/                engine (where managed), daemon.json, host networks
     devbox/                the root-requiring half of a developer machine
     forgejo_runner/        Fractal's container-isolated Forgejo Actions runner
+    docs_sources/          Read-only repository source slots for docs-server
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
     storage_binds/         Late-arriving-volume hardening (bilby, fractal)
@@ -146,6 +147,9 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
   have not also joined a runtime group.
 - `linux_hosts` and `macos_appliance_hosts` separate operating-system role
   families. Linux-only base, account, and sshd roles never run on Darwin.
+- `docs_hosts` — Bilby, Fractal, and Voltaire. Each declares the aggregate
+  repository directory and canonical chezmoi checkout that `docs_sources`
+  exposes through stable root-owned slots.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes`, `edge_hosts`,
   `komodo_core_hosts`, `storage_binds_hosts`, `firewalld_hosts` — role
   groups. `site.yml` gates each role on membership.
@@ -246,6 +250,17 @@ pre-mount FAT check).
 later — a QNAP outage, or fractal's vault sitting locked until Nathan SSHes
 in — takes exactly the same path as one that returns in seconds. The role
 header carries the incident history; the postmortems are the full record.
+
+**`docs_sources`** separates Docker's stable mount contract from user-owned
+checkout availability. It creates `/opt/podhaus/docs-sources` as a shared host
+mountpoint and one slot per `podhaus_docs_sources` entry. The recurring
+`podhaus-docs-source-reconcile` service bind-mounts an available checkout
+read-only over its slot; when the declared source or `required_path` is absent,
+it withdraws the bind and reveals `.podhaus-source-unavailable`. Docs-server
+mounts the slot root once with `rslave` propagation, so source transitions reach
+the running container. Its `/health` becomes degraded while repositories from
+other slots continue serving. The role owns only root state under `/opt`,
+`/etc/podhaus`, and systemd; repository paths under `/home` remain user state.
 
 **`firewalld`** stages the declarative zone + service XML from role
 files — services before the zone, so the zone never references an

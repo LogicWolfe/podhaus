@@ -1,0 +1,12 @@
+[Unit]
+Description=Prepare the shared Podhaus docs source-slot root
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/reconcile-docs-sources prepare /etc/podhaus/docs-sources.json
+
+[Install]
+WantedBy=multi-user.target
+

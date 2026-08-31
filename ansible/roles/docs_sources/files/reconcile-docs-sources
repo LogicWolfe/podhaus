@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""Maintain read-only source mounts beneath docs-server's stable slot root."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+SLOT_ROOT = Path("/opt/podhaus/docs-sources")
+STATE_ROOT = Path("/run/podhaus/docs-sources")
+UNAVAILABLE_MARKER = ".podhaus-source-unavailable"
+COMMAND_TIMEOUT_SECONDS = 20
+
+
+def _name(value: Any) -> str:
+    if not isinstance(value, str) or not value or value.startswith("."):
+        raise RuntimeError(f"invalid source name: {value!r}")
+    if "/" in value or "\\" in value:
+        raise RuntimeError(f"invalid source name: {value!r}")
+    return value
+
+
+def _absolute_path(value: Any) -> Path:
+    if not isinstance(value, str) or not PurePosixPath(value).is_absolute():
+        raise RuntimeError(f"source path must be absolute: {value!r}")
+    return Path(value)
+
+
+def _required_path(value: Any) -> PurePosixPath:
+    if not isinstance(value, str):
+        raise TypeError("required_path must be a string")
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise RuntimeError(f"required_path must stay within its source: {value!r}")
+    return path
+
+
+@dataclass(frozen=True)
+class SourceSlot:
+    name: str
+    source: Path
+    required_path: PurePosixPath
+
+    @classmethod
+    def from_document(cls, value: Any) -> SourceSlot:
+        if not isinstance(value, dict) or set(value) != {"name", "source", "required_path"}:
+            raise RuntimeError("each docs source requires exactly name, source, and required_path")
+        return cls(
+            _name(value["name"]),
+            _absolute_path(value["source"]),
+            _required_path(value["required_path"]),
+        )
+
+    @property
+    def slot(self) -> Path:
+        return SLOT_ROOT / self.name
+
+    @property
+    def state_file(self) -> Path:
+        return STATE_ROOT / self.name
+
+    def available(self) -> bool:
+        return self.source.is_dir() and (self.source / self.required_path).exists()
+
+
+def load_sources(path: Path) -> tuple[SourceSlot, ...]:
+    values = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(values, list) or not values:
+        raise RuntimeError("docs source declaration must be a non-empty list")
+    sources = tuple(SourceSlot.from_document(value) for value in values)
+    names = [source.name for source in sources]
+    if len(names) != len(set(names)):
+        raise RuntimeError("docs source names must be unique")
+    return sources
+
+
+class Commands:
+    def run(self, args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+            check=False,
+        )
+        if check and result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise RuntimeError(f"command failed: {' '.join(args)}: {detail}")
+        return result
+
+    def mounted(self, path: Path) -> bool:
+        return self.run(["mountpoint", "--quiet", str(path)], check=False).returncode == 0
+
+
+class SourceReconciler:
+    def __init__(self, sources: tuple[SourceSlot, ...], commands: Commands) -> None:
+        self.sources = sources
+        self.commands = commands
+
+    def prepare(self) -> None:
+        SLOT_ROOT.mkdir(parents=True, exist_ok=True)
+        STATE_ROOT.mkdir(parents=True, exist_ok=True)
+        if not self.commands.mounted(SLOT_ROOT):
+            self.commands.run(["mount", "--bind", str(SLOT_ROOT), str(SLOT_ROOT)])
+            print("SOURCE-ROOT-PREPARED")
+        self.commands.run(["mount", "--make-rshared", str(SLOT_ROOT)])
+        for source in self.sources:
+            self._prepare_slot(source)
+
+    def _prepare_slot(self, source: SourceSlot) -> None:
+        if self.commands.mounted(source.slot):
+            return
+        created = not source.slot.exists()
+        source.slot.mkdir(mode=0o755, parents=True, exist_ok=True)
+        marker = source.slot / UNAVAILABLE_MARKER
+        if not marker.exists():
+            marker.touch()
+            created = True
+        if created:
+            print(f"SOURCE-SLOT-CREATED {source.name}")
+
+    def reconcile(self) -> None:
+        if not self.commands.mounted(SLOT_ROOT):
+            raise RuntimeError(f"source root is not a shared mountpoint: {SLOT_ROOT}")
+        for source in self.sources:
+            self._mount(source) if source.available() else self._unmount(source)
+
+    def _mount(self, source: SourceSlot) -> None:
+        current = source.state_file.read_text().strip() if source.state_file.is_file() else None
+        if self.commands.mounted(source.slot) and current == str(source.source):
+            return
+        if self.commands.mounted(source.slot):
+            self._unmount(source)
+        self.commands.run(["mount", "--bind", str(source.source), str(source.slot)])
+        self.commands.run(["mount", "--options", "remount,bind,ro", str(source.slot)])
+        source.state_file.write_text(f"{source.source}\n", encoding="utf-8")
+        print(f"SOURCE-MOUNTED {source.name} {source.source}")
+
+    def _unmount(self, source: SourceSlot) -> None:
+        if self.commands.mounted(source.slot):
+            self.commands.run(["umount", str(source.slot)])
+            print(f"SOURCE-UNMOUNTED {source.name}")
+        source.state_file.unlink(missing_ok=True)
+        self._prepare_slot(source)
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2 or argv[0] not in {"prepare", "reconcile"}:
+        print("usage: reconcile-docs-sources <prepare|reconcile> <config.json>", file=sys.stderr)
+        return 2
+    try:
+        reconciler = SourceReconciler(load_sources(Path(argv[1])), Commands())
+        getattr(reconciler, argv[0])()
+    except (
+        OSError,
+        TypeError,
+        json.JSONDecodeError,
+        RuntimeError,
+        subprocess.TimeoutExpired,
+    ) as error:
+        print(f"docs source reconciliation failed: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

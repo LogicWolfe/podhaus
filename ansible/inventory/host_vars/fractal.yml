@@ -55,6 +55,17 @@ podhaus_wsl_encrypted_home: true
 # is present.
 podhaus_repos_dir: /home/nathan/repos
 
+# Root-owned adapter slots expose only these checkouts to docs-server. The
+# paths remain user state; Ansible owns the read-only adapters, not the
+# repositories beneath $HOME.
+podhaus_docs_sources:
+  - name: home
+    source: /home/nathan/repos
+    required_path: .
+  - name: chezmoi
+    source: /home/nathan/.local/share/chezmoi
+    required_path: .git
+
 # Direct Forgejo origin for the Actions protocol. The public address traverses
 # Pomerium and correctly redirects unauthenticated browser-shaped traffic;
 # runner registration keeps git.pod.haus as TLS SNI but resolves it to Bilby's

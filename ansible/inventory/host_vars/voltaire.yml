@@ -21,6 +21,14 @@ podhaus_docker_live_restore: true
 # Nathan clones what he works on; nothing manufactures a repo manifest.
 podhaus_repos_dir: /home/nathan/repos
 
+podhaus_docs_sources:
+  - name: home
+    source: /home/nathan/repos
+    required_path: .
+  - name: chezmoi
+    source: /home/nathan/.local/share/chezmoi
+    required_path: .git
+
 # Komodo Periphery ------------------------------------------------------
 # Outbound v2: Periphery dials Core, so nothing listens publicly. Every
 # komodo_periphery role default already matches (/opt/komodo-periphery

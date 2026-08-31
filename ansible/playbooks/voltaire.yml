@@ -16,6 +16,8 @@
   roles:
     - role: base
       tags: [base]
+    - role: docs_sources
+      tags: [docs-sources]
     - role: docker
       tags: [docker]
     - role: devbox

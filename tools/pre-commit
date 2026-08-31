@@ -28,6 +28,9 @@
 #                                   halves. The .mount half being missed is
 #                                   what let the 2026-05-30 mount wedge
 #                                   recur on 2026-08-30.
+#   - docs_sources role tests:      source slots remain isolated and every
+#                                   docs host declares both aggregate and
+#                                   canonical chezmoi locations.
 set -e
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -48,3 +51,5 @@ mise exec -- pipenv run python "$root/tools/lint-stack-toml.py"
 mise exec -- pipenv run python "$root/tools/render-pomerium-keys.py" --verify
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/storage_binds/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/ansible/roles/docs_sources/tests"

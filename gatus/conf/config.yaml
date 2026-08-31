@@ -351,6 +351,36 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
 
+  - name: Fractal Periphery (via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Komodo
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"GetServerState","params":{"server":"fractal"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == Ok"
+
+  - name: Voltaire Periphery (via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Komodo
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"GetServerState","params":{"server":"voltaire"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == Ok"
+
   - name: Pinelake Periphery (via Komodo)
     url: http://komodo-core:9120/read
     method: POST
@@ -377,6 +407,55 @@ endpoints:
       X-Api-Secret: ${KOMODO_API_SECRET}
       Content-Type: application/json
     body: '{"type":"InspectDockerContainer","params":{"server":"pinelake","container":"pinelake-plex"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
+  # Source-aware health is intentionally allowed to go red while the
+  # process keeps serving repositories from available sources. docs-server
+  # has no autoheal label: restarting cannot restore a missing checkout.
+  - name: Docs (bilby)
+    url: http://docs:8000/health
+    group: Docs
+    interval: 60s
+    alerts:
+      - type: custom
+        description: "Bilby docs is unavailable or degraded. A 503 means at least one configured repository source is unavailable or conflicted; inspect `/health` and `systemctl status podhaus-docs-source-reconcile.service`. A connection failure means the container is down. Restore the source adapter or correct the deployment; restarting Caddy does not repair either condition."
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Docs (fractal, via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Docs
+    interval: 60s
+    alerts:
+      - type: custom
+        description: "Fractal docs is down or source-degraded. If the container is running/unhealthy, inspect its `/health` response and `podhaus-docs-source-reconcile.service`; if it is `created`, inspect `State.Error` for an OCI mount failure. Restore the source adapter or redeploy the corrected stack, not Caddy."
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"fractal","container":"docs"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
+  - name: Docs (voltaire, via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Docs
+    interval: 60s
+    alerts:
+      - type: custom
+        description: "Voltaire docs is down or source-degraded. If the container is running/unhealthy, inspect its `/health` response and `podhaus-docs-source-reconcile.service`; if it is `created`, inspect `State.Error` for an OCI mount failure. Restore the source adapter or redeploy the corrected stack, not Caddy."
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"voltaire","container":"docs"}}'
     conditions:
       - "[STATUS] == 200"
       - "[BODY].State.Status == running"

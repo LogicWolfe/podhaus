@@ -1,0 +1,10 @@
+[Unit]
+Description=Expose available repository sources to docs-server
+After=podhaus-docs-source-root.service
+Requires=podhaus-docs-source-root.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=30
+ExecStart=/usr/local/sbin/reconcile-docs-sources reconcile /etc/podhaus/docs-sources.json
+

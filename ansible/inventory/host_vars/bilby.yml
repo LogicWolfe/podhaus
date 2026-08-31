@@ -42,6 +42,15 @@ podhaus_machine_key: >-
   ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM=
   bilby machine key
 
+# Docs sources ----------------------------------------------------------
+podhaus_docs_sources:
+  - name: home
+    source: /home/nathan/repos
+    required_path: .
+  - name: chezmoi
+    source: /home/nathan/.local/share/chezmoi
+    required_path: .git
+
 # Storage binds ---------------------------------------------------------
 # The two QNAP exports bilby's containers bind. Source and fstype are what
 # make the reconciler's readiness check exact: a bare mountpoint on local

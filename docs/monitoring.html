@@ -94,11 +94,11 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           jobs/scripts POST to with <code>success=true|false&amp;error=...</code>. Used for
           Backrest nightly heartbeats, Sky cache invalidation, and the RAR-extraction backlog scan.</li>
         <li><strong>Komodo-API check</strong> — Gatus calls Komodo Core's <code>/read</code>
-          API and asserts a downstream state. Used for both Periphery reachability
-          (<code>GetServerState</code> → assert <code>status == Ok</code>) and for
-          containers gatus can't reach directly because they live on kangaroo
-          (<code>InspectDockerContainer</code> → assert <code>State.Status == running</code>;
-          covers <code>backrest</code> and <code>syncthing</code> on kangaroo).</li>
+          API and asserts a downstream state. Periphery checks cover every Komodo
+          host through <code>GetServerState</code>. Remote-container checks use
+          <code>InspectDockerContainer</code> and require both running state and healthy
+          Docker health; this covers kangaroo services and the Fractal/Voltaire docs
+          instances. Bilby's docs health is probed directly over dockernet.</li>
       </ul>
       <p>
         Live monitors today cover every podhaus service plus the Backrest, RAR-extraction
@@ -519,6 +519,15 @@ $DK restart alloy backrest                           # reattach by name + rebuil
       timeout: 10s
       retries: 3
       start_period: 30s</code></pre>
+      <p>
+        Docs-server is the deliberate exception. Its healthcheck represents the
+        complete configured source catalog, so one unavailable repository source
+        makes the container unhealthy while the process continues serving other
+        sources. It has no autoheal label: restarting cannot restore a checkout and
+        would turn a controlled degraded state into a restart loop. Gatus alerts on
+        the red health state; Docker's <code>unless-stopped</code> policy still handles
+        process exit.
+      </p>
 
       <h2 id="alerting-flow">Alerting flow</h2>
       <p>

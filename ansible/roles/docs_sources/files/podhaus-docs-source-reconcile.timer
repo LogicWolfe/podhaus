@@ -1,0 +1,11 @@
+[Unit]
+Description=Reconcile Podhaus docs sources as checkouts become available
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+Unit=podhaus-docs-source-reconcile.service
+
+[Install]
+WantedBy=timers.target
+

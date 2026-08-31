@@ -19,6 +19,9 @@
     - role: base
       when: inventory_hostname in groups['linux_hosts']
       tags: [base]
+    - role: docs_sources
+      when: inventory_hostname in groups['docs_hosts']
+      tags: [docs-sources]
     - role: docker
       when: inventory_hostname in groups['docker_hosts']
       tags: [docker]

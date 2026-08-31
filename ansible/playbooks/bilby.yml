@@ -18,6 +18,8 @@
   gather_facts: true
 
   roles:
+    - role: docs_sources
+      tags: [docs-sources]
     - role: docker
       tags: [docker]
     - role: authorized_keys
