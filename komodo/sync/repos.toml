@@ -186,3 +186,17 @@ branch = "main"
 
 [repo.config.on_pull]
 command = "git clean -fd"
+
+# Yiayia's stories: the linked-repo stack lives in the app's own repository
+# (stack.toml + compose.yaml + Dockerfile at the root), like fenwick and pets.
+[[repo]]
+name = "yiayia-stories"
+description = "Komodo-managed clone of the yiayia-stories repo on bilby's Periphery"
+tags = ["podhaus", "bilby", "yiayia-stories"]
+
+[repo.config]
+server = "podhaus"             # = bilby
+git_provider = "git.pod.haus"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/yiayia-stories"
+branch = "main"

@@ -322,3 +322,28 @@ enabled = true
 executions = [
   { execution.type = "RunAction", execution.params = { action = "podhaus-purge-stack-cache", args = { stack = "nathanbaxter-deploy" } }, enabled = true }
 ]
+
+
+# Yiayia's stories (yiayia.pod.haus). Same shape as pets: the Forgejo push
+# webhook (terraform/forgejo.tf) fires this; Stage 0 reconciles the stack def
+# from the linked repo, Stage 1 builds and deploys it.
+[[procedure]]
+name = "yiayia-stories-push-deploy"
+description = "Push-to-deploy for the yiayia-stories stack."
+tags = ["yiayia-stories", "podhaus"]
+config.webhook_enabled = true
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Reconcile yiayia-stories stack definition (sync TOML -> Komodo)"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params = { sync = "yiayia-stories" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy yiayia-stories (build + up; layer cache makes an unchanged push a no-op)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "yiayia-stories*" }, enabled = true },
+]

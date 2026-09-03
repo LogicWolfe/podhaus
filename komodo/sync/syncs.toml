@@ -58,3 +58,16 @@ include_variables = true
 include_resources = true
 delete = false
 managed = false
+
+[[resource_sync]]
+name = "yiayia-stories"
+description = "ResourceSync for the stack def that lives in the yiayia-stories repo."
+tags = ["yiayia-stories", "podhaus"]
+
+[resource_sync.config]
+linked_repo = "yiayia-stories"
+resource_path = ["./"]
+include_variables = true
+include_resources = true
+delete = false
+managed = false

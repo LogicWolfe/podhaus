@@ -99,6 +99,9 @@ services:
       # snapshot never has a dangling reference).
       - /var/lib/pets-alive:/userdata/pets:ro
       - /var/lib/minio/pets-alive-assets:/userdata/pets-assets:ro
+      # Yiayia's stories: SQLite (Sky's months of transcription) and the
+      # irreplaceable audio originals, one root so a snapshot is consistent.
+      - /var/lib/yiayia-stories:/userdata/yiayia-stories:ro
       # ClickStack HyperDX app-state: the nightly mongodump archives
       # (ofelia job on clickstack-mongo writes /var/lib/clickstack/
       # mongo-dumps). Quiescent gzip archives — restic-safe, unlike a

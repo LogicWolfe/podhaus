@@ -33,6 +33,27 @@ data "forgejo_repository" "nathanbaxter" {
   name  = "nathanbaxter"
 }
 
+data "forgejo_repository" "yiayia_stories" {
+  owner = "LogicWolfe"
+  name  = "yiayia-stories"
+}
+
+# Push webhook → Komodo's yiayia-stories-push-deploy procedure (linked-repo
+# stack defined in that repository; see komodo/sync/procedures.toml).
+resource "forgejo_repository_webhook" "yiayia_stories_deploy" {
+  repository    = data.forgejo_repository.yiayia_stories.full_name
+  type          = "forgejo"
+  url           = "https://komodo.pod.haus/listener/github/procedure/yiayia-stories-push-deploy/main"
+  content_type  = "json"
+  secret        = var.komodo_webhook_secret
+  branch_filter = "main"
+  active        = true
+
+  events {
+    push = true
+  }
+}
+
 # Fenwick was migrated through Forgejo's repository migration API, then
 # imported into this resource. Terraform owns repository policy but must never
 # be able to destroy source history.

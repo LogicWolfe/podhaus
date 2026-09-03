@@ -17,7 +17,6 @@ locals {
     "fm3._domainkey" = { content = "fm3.pod.haus.dkim.fmhosted.com" }
     "pm-bounces"     = { content = "pm.mtasv.net" }
     "doggos.indigo"  = { content = "x0y6bs3z.up.railway.app" }
-    "yiayia"         = { content = "06r38qgz.up.railway.app" }
   }
 }
 
@@ -77,4 +76,16 @@ resource "cloudflare_dns_record" "pod_haus_txt_postmark_dkim" {
   content = "\"k=rsa;p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCIH3KJg5M/6mLqrDZYGuTlo/giMs3jPAOQTDo0P98+Nn4/9+bJci69Gn+i+TUgJDtzftYVi+532+di1NQn2uaZiaw2IjSk1/kanoiexsSrge0oVXCGgAuMXkrWdHk5OO2S90dpmDho+enbWbuxdrOob7BfyZIkSmz6m9s37lW2fQIDAQAB\""
   ttl     = 300
   comment = "Postmark DKIM"
+}
+
+# yiayia.pod.haus — the family archive, served from bilby through Numbat's
+# relay and Caddy :4444 (the id.pod.haus posture). The app does its own
+# Pocket ID sign-in; no Pomerium, no CDN. Replaces the retired Railway board.
+resource "cloudflare_dns_record" "yiayia_pod_haus" {
+  zone_id = local.zones["pod.haus"]
+  name    = "yiayia.pod.haus"
+  type    = "A"
+  content = local.numbat_relay_ipv4
+  proxied = false
+  ttl     = 300
 }

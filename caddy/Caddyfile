@@ -406,6 +406,15 @@ id.pod.haus:4444 {
 	reverse_proxy pocket-id:1411
 }
 
+# yiayia.pod.haus: the family archive. The app gates everything itself
+# (family password + its own Pocket ID sign-in), so this is a plain proxy.
+yiayia.pod.haus:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	reverse_proxy yiayia-stories:8000
+}
+
 unifi.pod.haus, unifi.pod.haus:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}

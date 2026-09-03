@@ -251,15 +251,33 @@ endpoints:
     client:
       insecure: true
 
-  - name: Yiayia Board Frontend
-    url: https://yiayia.pod.haus/health
+  # Yiayia's stories (yiayia.pod.haus): the container on dockernet, then the
+  # full public path (relay -> rathole -> Caddy :4444 -> app). /health is the
+  # one route outside the family gate; its body carries the count of
+  # recordings, which catches a container up with its data bind missing.
+  - name: Yiayia's stories (container)
+    url: http://yiayia-stories:8000/health
     <<: *defaults
     group: Yiayia
 
-  - name: Yiayia Board Device
-    url: https://yiayia.pod.haus/boards/health
-    <<: *defaults
+  - name: Yiayia's stories (yiayia.pod.haus)
+    url: https://yiayia.pod.haus/health
     group: Yiayia
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].recordings > 0"
+    alerts: *alerts
+
+  # Signed out, the workbench must not exist: a 200 here means the editor
+  # gate has failed open.
+  - name: Yiayia's stories (workbench hidden)
+    url: https://yiayia.pod.haus/workbench
+    group: Yiayia
+    interval: 5m
+    conditions:
+      - "[STATUS] == 404"
+    alerts: *alerts
 
   # --- storage.pod.haus paths ---
   # On-bilby probe (LAN/split-horizon resolves to bilby:443 directly):
@@ -850,6 +868,18 @@ external-endpoints:
   # so it checks in hourly without false alarms during quiet periods.
   # Failures still also surface immediately on "Backrest Nightly" (the
   # repo-level any-error hook names the failing plan).
+  - name: Backrest Yiayia
+    group: Backup
+    token: ${GATUS_BACKREST_PUSH_TOKEN}
+    heartbeat:
+      interval: 3h
+    alerts:
+      - type: custom
+        description: "The hourly yiayia-stories backup stopped checking in. The plan pushes a heartbeat every hour on success or unchanged-skip; >3h of silence means it stopped running or backrest is down. Investigate: `docker logs backrest`, the backrest UI (backups.pod.haus), or query in HyperDX (watch.pod.haus)."
+        failure-threshold: 1
+        success-threshold: 1
+        send-on-resolved: true
+
   - name: Backrest Pets
     group: Backup
     token: ${GATUS_BACKREST_PUSH_TOKEN}

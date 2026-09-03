@@ -38,6 +38,13 @@ resource "pocketid_group" "tailscale_users" {
   friendly_name = "Tailscale users"
 }
 
+# Who may edit Yiayia's stories. The app never holds a list of emails; this
+# group is the whole of it.
+resource "pocketid_group" "yiayia_editors" {
+  name          = "yiayia-editors"
+  friendly_name = "Yiayia's stories editors"
+}
+
 resource "pocketid_user" "nathan" {
   username       = "LogicWolfe"
   email          = "nathan@nathanbaxter.com"
@@ -53,6 +60,7 @@ resource "pocketid_user" "nathan" {
     pocketid_group.forgejo_admins.id,
     pocketid_group.pomerium_users.id,
     pocketid_group.tailscale_users.id,
+    pocketid_group.yiayia_editors.id,
   ]
 
   # Pocket ID interprets a JSON-array custom-claim value as an array in
@@ -76,6 +84,7 @@ resource "pocketid_user" "sky" {
   groups = [
     pocketid_group.forgejo_users.id,
     pocketid_group.pomerium_users.id,
+    pocketid_group.yiayia_editors.id,
   ]
 
   custom_claims = {
@@ -101,6 +110,30 @@ resource "pocketid_client" "forgejo" {
 
   allowed_user_groups = [
     pocketid_group.forgejo_users.id,
+  ]
+}
+
+# yiayia.pod.haus is its own OpenID Connect client: public, PKCE, no secret.
+# The app trusts any ID token issued to this client, so membership of the
+# editors group is what decides who may edit.
+resource "pocketid_client" "yiayia_stories" {
+  name      = "Yiayia's stories"
+  client_id = "yiayia-stories"
+
+  callback_urls = [
+    "https://yiayia.pod.haus/sign-in/callback",
+  ]
+  logout_callback_urls = [
+    "https://yiayia.pod.haus/",
+  ]
+
+  launch_url                = "https://yiayia.pod.haus/"
+  is_public                 = true
+  pkce_enabled              = true
+  requires_reauthentication = false
+
+  allowed_user_groups = [
+    pocketid_group.yiayia_editors.id,
   ]
 }
 
