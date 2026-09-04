@@ -253,8 +253,9 @@ endpoints:
 
   # Yiayia's stories (yiayia.pod.haus): the container on dockernet, then the
   # full public path (relay -> rathole -> Caddy :4444 -> app). /health is the
-  # one route outside the family gate; its body carries the count of
-  # recordings, which catches a container up with its data bind missing.
+  # one route outside the family gate; it answers ok only when the database
+  # under the data bind is readable, which catches a container up with its
+  # bind missing.
   - name: Yiayia's stories (container)
     url: http://yiayia-stories:8000/health
     <<: *defaults
@@ -266,7 +267,7 @@ endpoints:
     interval: 2m
     conditions:
       - "[STATUS] == 200"
-      - "[BODY].recordings > 0"
+      - "[BODY].ok == true"
     alerts: *alerts
 
   # Signed out, the workbench must not exist: a 200 here means the editor
