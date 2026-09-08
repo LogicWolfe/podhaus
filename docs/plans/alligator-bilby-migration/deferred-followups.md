@@ -16,14 +16,23 @@ the bootstrap admin account, creates the API key, updates the existing 1Password
 item, and resumes the normal bootstrap. Keep the manual recovery path documented
 until the automated path is tested against an empty database.
 
-## Submit the komodo-op multi-arch fix upstream
+## Submit the komodo-op fixes upstream
 
 The upstream `ghcr.io/0dragosh/komodo-op` build hard-codes amd64. Podhaus builds
-`onepassword/komodo-op.Dockerfile` locally for arm64 instead.
+`onepassword/komodo-op.Dockerfile` locally for arm64 instead, from a pinned
+upstream commit with `onepassword/komodo-op.patch` applied on top.
 
-Submit the `BUILDPLATFORM` and `TARGETPLATFORM` fix upstream. Remove the local
-Dockerfile only after an upstream release is verified on bilby and the stack
-has been switched back without emulation.
+The patch is worth upstreaming on its own: upstream does a read plus an
+unconditional write per secret per pass, which costs Komodo Core a bcrypt
+API-key check per call and pegged bilby's Core for half of every minute. The
+patch lists variables once and writes only differences, aborts a pass when any
+1Password read fails (a partial vault read would otherwise delete variables),
+and logs a no-change pass at `DEBUG` only.
+
+Submit the `BUILDPLATFORM` and `TARGETPLATFORM` fix and the diff-before-write
+change upstream. Remove the local Dockerfile and patch only after an upstream
+release is verified on bilby and the stack has been switched back without
+emulation.
 
 ## Tune ClickHouse insert batching
 
