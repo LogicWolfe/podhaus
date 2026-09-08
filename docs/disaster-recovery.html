@@ -46,7 +46,7 @@ for cmd in git curl jq op restic rclone sqlite3 mount mount.nfs chattr firewall-
   command -v "$cmd" || echo "missing: $cmd"
 done</code></pre>
           Terraform is installed separately by the chezmoi Fedora package setup. MinIO
-          CLI, GitHub CLI, Railway, and Zellij are optional operator tools.</li>
+          CLI, GitHub CLI, and Zellij are optional operator tools.</li>
         <li>Mount Jump and Pouch from kangaroo:
           <pre><code>sudo mkdir -p /mnt/jump /mnt/pouch
 sudo mount -t nfs -o vers=4.1 10.0.0.25:/Jump  /mnt/jump
