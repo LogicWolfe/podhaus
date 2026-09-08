@@ -11,11 +11,14 @@ run_directory = "/etc/komodo/repo/minio"
 # bucket, idempotent). Without ignore_services Komodo would count
 # its exit-0 toward stack health and flip the stack Unhealthy. Same
 # pattern as plex/backup/flood/tailscale.
-ignore_services = ["minio-init"]
+ignore_services = ["minio-init", "minio-secrets-init"]
+# minio-secrets-init builds from ../init-tools.
+run_build = true
 
 environment = """
 TZ=[[TZ]]
 MINIO_ROOT_USER=[[OP__KOMODO__MINIO_ROOT__USERNAME]]
 MINIO_ROOT_PASSWORD=[[OP__KOMODO__MINIO_ROOT__CREDENTIAL]]
 MINIO_DOMAIN=storage.pod.haus
+MINIO_SFTP_HOST_KEY_B64=[[OP__KOMODO__MINIO_SFTP_HOST_KEY__PRIVATE_KEY_B64]]
 """

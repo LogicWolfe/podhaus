@@ -215,3 +215,135 @@ output "pets_alive_assets_secret_key" {
   value     = minio_iam_service_account.pets_alive_assets.secret_key
   sensitive = true
 }
+
+# doggos-indigo — Indigo's "Doggos Alive" site, exported from Blocs for
+# iPad and published by her over MinIO's SFTP server (see
+# docs/runbooks/doggos-indigo.md). Same shape as the two sites above,
+# minus the service account: Blocs logs in as the IAM user itself, since
+# a service account needs "=svc" appended to the username, which is a
+# footgun on an iPad keyboard.
+resource "minio_s3_bucket" "doggos_indigo" {
+  bucket = "doggos-indigo"
+  acl    = "private" # public read is granted narrowly by the policy below
+}
+
+# Versioning is her undo: every publish keeps the file it replaced.
+resource "minio_s3_bucket_versioning" "doggos_indigo" {
+  bucket = minio_s3_bucket.doggos_indigo.bucket
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "minio_s3_bucket_policy" "doggos_indigo" {
+  bucket = minio_s3_bucket.doggos_indigo.bucket
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "PublicReadObjects"
+      Effect    = "Allow"
+      Principal = { AWS = ["*"] }
+      Action    = ["s3:GetObject"]
+      Resource  = ["arn:aws:s3:::doggos-indigo/*"]
+    }]
+  })
+}
+
+resource "minio_iam_policy" "doggos_indigo_deploy" {
+  name = "doggos-indigo-deploy"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = ["arn:aws:s3:::doggos-indigo/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
+        Resource = ["arn:aws:s3:::doggos-indigo"]
+      },
+    ]
+  })
+}
+
+resource "minio_iam_user" "doggos_indigo_deploy" {
+  name = "doggos-indigo-deploy"
+}
+
+resource "minio_iam_user_policy_attachment" "doggos_indigo_deploy" {
+  user_name   = minio_iam_user.doggos_indigo_deploy.name
+  policy_name = minio_iam_policy.doggos_indigo_deploy.name
+}
+
+# The ready-to-type handoff for Blocs' Publish screen.
+resource "onepassword_item" "doggos_indigo_publish" {
+  vault    = data.onepassword_vault.homelab.uuid
+  title    = "Doggos Indigo Publish"
+  category = "login"
+  url      = "https://doggos.indigo.pod.haus"
+  username = minio_iam_user.doggos_indigo_deploy.name
+  password = minio_iam_user.doggos_indigo_deploy.secret
+  tags     = ["terraform-managed", "indigo"]
+
+  section {
+    label = "Blocs Publish settings"
+
+    field {
+      label = "Address"
+      type  = "STRING"
+      value = "bilby.pod.haus"
+    }
+    field {
+      label = "Port"
+      type  = "STRING"
+      value = "8022"
+    }
+    field {
+      label = "Protocol"
+      type  = "STRING"
+      value = "SFTP"
+    }
+    field {
+      label = "Path"
+      type  = "STRING"
+      value = "/doggos-indigo"
+    }
+    field {
+      label = "Reachable from"
+      type  = "STRING"
+      value = "the home network only"
+    }
+  }
+}
+
+# MinIO's SFTP host key. Generated once here so it never changes across
+# redeploys — a changed host key is a scary warning on her iPad.
+# Published for komodo-op → OP__KOMODO__MINIO_SFTP_HOST_KEY__PRIVATE_KEY_B64,
+# consumed by minio/stack.toml.
+resource "tls_private_key" "minio_sftp_host" {
+  algorithm = "ED25519"
+}
+
+resource "onepassword_item" "minio_sftp_host_key" {
+  vault    = data.onepassword_vault.homelab.uuid
+  title    = "MinIO SFTP Host Key"
+  category = "secure_note"
+  tags     = ["terraform-managed"]
+
+  section_map = {
+    Key = {
+      field_map = {
+        private_key_b64 = {
+          type  = "CONCEALED"
+          value = base64encode(tls_private_key.minio_sftp_host.private_key_openssh)
+        }
+        public_key = {
+          type  = "STRING"
+          value = trimspace(tls_private_key.minio_sftp_host.public_key_openssh)
+        }
+      }
+    }
+  }
+}

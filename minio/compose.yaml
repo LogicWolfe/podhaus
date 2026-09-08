@@ -1,13 +1,45 @@
 services:
+  # Writes the SFTP host key (Terraform-generated, held in 1Password) into
+  # a secrets volume before MinIO starts, in the caddy-secrets-init shape.
+  # A stable host key is the point: MinIO would otherwise mint a new one
+  # on every recreate and every SFTP client would warn.
+  minio-secrets-init:
+    build:
+      context: ../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_MINIO_SECRETS_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
+    restart: "no"
+    environment:
+      MINIO_SFTP_HOST_KEY_B64: ${MINIO_SFTP_HOST_KEY_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        printf '%s' "$${MINIO_SFTP_HOST_KEY_B64}" | base64 -d > /secrets/sftp-host-key
+    volumes:
+      - minio-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
   minio:
     container_name: minio
     image: quay.io/minio/minio:latest
     restart: unless-stopped
+    depends_on:
+      minio-secrets-init:
+        condition: service_completed_successfully
     # Single-node mode. `--console-address :9001` separates the admin UI
     # port (9001) from the S3 API port (9000) so the cloudflare tunnel
     # ingress can target just the console while internal services keep
     # using the API at `http://minio:9000`.
-    command: server /data --console-address :9001
+    # `--sftp` is MinIO's built-in SFTP server: same IAM, same policies,
+    # paths are /<bucket>/<object>. It exists so Blocs on Indigo's iPad
+    # can publish doggos.indigo.pod.haus straight into its bucket
+    # (docs/runbooks/doggos-indigo.md). No rename or append over SFTP.
+    command: server /data --console-address :9001 --sftp="address=:8022" --sftp="ssh-private-key=/run/podhaus-secrets/sftp-host-key"
     # SELinux on Fedora Asahi denies cross-label access into the
     # bind-mounted data dir; same pattern as every other bilby stack.
     security_opt:
@@ -32,6 +64,7 @@ services:
       # hot, and backed up nightly by Backrest. Absolute host path so
       # there's no relative-resolution-against-periphery surprise.
       - /var/lib/minio:/data
+      - minio-secrets:/run/podhaus-secrets:ro
     networks:
       - dockernet
     # API published on loopback only so bilby's host-installed `mcli`
@@ -39,10 +72,16 @@ services:
     # to use `http://minio:9000` over dockernet; the console comes in
     # via the cloudflare tunnel. Loopback binding keeps MinIO entirely
     # off the host LAN — only processes on bilby itself can hit it.
+    # SFTP is the one deliberate LAN listener: Indigo's iPad publishes to
+    # bilby.pod.haus:8022 from the home network. Docker-published ports
+    # bypass firewalld, and bilby's only path from outside is the Numbat
+    # relay, so this is reachable from the LAN and nowhere else.
     ports:
       - 127.0.0.1:9000:9000
+      - 8022:8022
     labels:
       autoheal: "true"
+      podhaus.depends-on-minio-secrets-init: ${BUILD_HASH_MINIO_SECRETS_INIT:-unset}
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
       # MinIO ships curl in the official image; the /minio/health/live
@@ -89,3 +128,6 @@ services:
 networks:
   dockernet:
     external: true
+
+volumes:
+  minio-secrets:
