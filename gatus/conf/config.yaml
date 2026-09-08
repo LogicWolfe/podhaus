@@ -301,12 +301,12 @@ endpoints:
     <<: *defaults
     group: nathanbaxter.com
 
-  # doggos.indigo.pod.haus: Numbat relay → rathole → Caddy → doggos-indigo
+  # doggos.indigopod.au: Numbat relay → rathole → Caddy → doggos-indigo
   # bucket (no CDN). Indigo's Blocs site.
-  - name: doggos.indigo.pod.haus
-    url: https://doggos.indigo.pod.haus/
+  - name: doggos.indigopod.au
+    url: https://doggos.indigopod.au/
     <<: *defaults
-    group: doggos.indigo.pod.haus
+    group: doggos.indigopod.au
 
   # Umami analytics — internal probe of the shared container's heartbeat
   # (the public stats.* hosts expose only /script.js and /api/send, so an

@@ -1,4 +1,6 @@
-# Doggos Alive (doggos.indigo.pod.haus)
+# Doggos Alive (doggos.indigopod.au)
+
+The old address `doggos.indigo.pod.haus` redirects here permanently.
 
 Indigo's website about dogs (and snakes), built in **Blocs for iPad**. The
 site is a static export served from the `doggos-indigo` MinIO bucket on

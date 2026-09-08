@@ -406,10 +406,10 @@ id.pod.haus:4444 {
 	reverse_proxy pocket-id:1411
 }
 
-# doggos.indigo.pod.haus: Indigo's "Doggos Alive", a Blocs export she
+# doggos.indigopod.au: Indigo's "Doggos Alive", a Blocs export she
 # publishes into the doggos-indigo bucket over MinIO's SFTP. Served like
-# skycroeser.net minus the CDN: pod.haus is not a cache zone, so plain
-# no-cache and ETag revalidation. Blocs busts its CSS/JS with query strings.
+# skycroeser.net minus the CDN: not a cache zone, so plain no-cache and
+# ETag revalidation. Blocs busts its CSS/JS with query strings.
 (doggos_site) {
 	header Cache-Control "no-cache"
 
@@ -446,11 +446,19 @@ id.pod.haus:4444 {
 	}
 }
 
-doggos.indigo.pod.haus:4444 {
+doggos.indigopod.au:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 	import doggos_site
+}
+
+# The site's old name from its Railway days; old links still land.
+doggos.indigo.pod.haus:4444 {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	redir https://doggos.indigopod.au{uri} permanent
 }
 
 # yiayia.pod.haus: the family archive. The app gates everything itself

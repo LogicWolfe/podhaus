@@ -37,7 +37,7 @@ services:
     # using the API at `http://minio:9000`.
     # `--sftp` is MinIO's built-in SFTP server: same IAM, same policies,
     # paths are /<bucket>/<object>. It exists so Blocs on Indigo's iPad
-    # can publish doggos.indigo.pod.haus straight into its bucket
+    # can publish doggos.indigopod.au straight into its bucket
     # (docs/runbooks/doggos-indigo.md). No rename or append over SFTP.
     command: server /data --console-address :9001 --sftp="address=:8022" --sftp="ssh-private-key=/run/podhaus-secrets/sftp-host-key"
     # SELinux on Fedora Asahi denies cross-label access into the

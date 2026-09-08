@@ -4,19 +4,17 @@
 # services_pod_haus.tf as `module.<name>` calls — the module owns the
 # CNAME alongside its Access app and tunnel ingress rule. What's left
 # here is everything the module is intentionally not responsible for:
-# Fastmail DKIM CNAMEs, Postmark bounce, Railway-hosted apps that
-# haven't been migrated home yet, plus the apex MX/TXT records.
+# Fastmail DKIM CNAMEs, Postmark bounce, plus the apex MX/TXT records.
 
 locals {
   # External CNAMEs: { name => { content } }. proxied=false, ttl=300
   # because these need DNS-level pass-through (Fastmail DKIM, Postmark
-  # bounce path, Railway frontends).
+  # bounce path).
   pod_haus_external_cnames = {
     "fm1._domainkey" = { content = "fm1.pod.haus.dkim.fmhosted.com" }
     "fm2._domainkey" = { content = "fm2.pod.haus.dkim.fmhosted.com" }
     "fm3._domainkey" = { content = "fm3.pod.haus.dkim.fmhosted.com" }
     "pm-bounces"     = { content = "pm.mtasv.net" }
-    "doggos.indigo"  = { content = "x0y6bs3z.up.railway.app" }
   }
 }
 
@@ -81,6 +79,17 @@ resource "cloudflare_dns_record" "pod_haus_txt_postmark_dkim" {
 # yiayia.pod.haus — the family archive, served from bilby through Numbat's
 # relay and Caddy :4444 (the id.pod.haus posture). The app does its own
 # Pocket ID sign-in; no Pomerium, no CDN. Replaces the retired Railway board.
+# doggos.indigo.pod.haus — the site's old name, kept only so old links
+# still work: Caddy redirects it permanently to doggos.indigopod.au.
+resource "cloudflare_dns_record" "doggos_indigo_pod_haus" {
+  zone_id = local.zones["pod.haus"]
+  name    = "doggos.indigo.pod.haus"
+  type    = "A"
+  content = local.numbat_relay_ipv4
+  proxied = false
+  ttl     = 300
+}
+
 resource "cloudflare_dns_record" "yiayia_pod_haus" {
   zone_id = local.zones["pod.haus"]
   name    = "yiayia.pod.haus"

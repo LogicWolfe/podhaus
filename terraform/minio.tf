@@ -282,7 +282,7 @@ resource "onepassword_item" "doggos_indigo_publish" {
   vault    = data.onepassword_vault.homelab.uuid
   title    = "Doggos Indigo Publish"
   category = "login"
-  url      = "https://doggos.indigo.pod.haus"
+  url      = "https://doggos.indigopod.au"
   username = minio_iam_user.doggos_indigo_deploy.name
   password = minio_iam_user.doggos_indigo_deploy.secret
   tags     = ["terraform-managed", "indigo"]
