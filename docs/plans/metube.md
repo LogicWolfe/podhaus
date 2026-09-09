@@ -123,5 +123,9 @@ single developer), Radarr now (movies are a later plan on the same pattern).
   side (yt-dlp "bytes read, more expected"). Re-downloaded directly: two placed
   as AV1; Judge's AV1 1080p stream returns HTTP 500 from YouTube, so it was
   taken as H.264 1080p. 59 of 59 on disk, staging empty, Plexify green.
-- ⏳ Plex (Nathan): TheTVDB episode ordering on the Kids library; first-play
-  check on the LG CX.
+- ✅ Plex: the Kids TV library already used TheTVDB aired ordering; all 59
+  matched. Its "Prefer local metadata" switch showed the embedded YouTube
+  titles, so the tag writer left the pipeline (bd83a1b) and the 59 files were
+  rewritten in place without container tags; after a refresh Plex shows
+  TheTVDB titles for all 59.
+- ⏳ Nathan: first-play check on the LG CX (direct play vs transcode).
