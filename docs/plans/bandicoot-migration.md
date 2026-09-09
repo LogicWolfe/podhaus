@@ -60,8 +60,8 @@ spiky consumers (flood, plex, backrest ≈ 15.6 GB of peaks between them — the
 shape behind the 2026-08-08 OOM). bandicoot takes ≈14 GB of peaks on 15 GiB:
 fine in practice (clickhouse idles at 1.4 GB, Fenwick bursts are short and
 rarely coincide with OCR), and every moved service keeps or gains a
-`mem_limit`, but it assumes the desktop is not also resident. See
-"Decisions that are Nathan's".
+`mem_limit`, GNOME stays resident by decision, so re-measure before the Fenwick
+family commits.
 
 ## Ingress: moved services keep bilby's front door
 
@@ -212,7 +212,7 @@ stable — none of the stack moves depend on it.
 
 | Decision | Recommendation | Trade-off |
 |---|---|---|
-| bandicoot to `multi-user.target` (no GNOME/GDM) | Yes — mirrors bilby, reclaims 1–2 GB, removes the reason the sleep masking exists | No local GUI on the laptop; SSH only |
+| bandicoot to `multi-user.target` (no GNOME/GDM) | **Decided: keep GNOME.** Nathan wants the laptop usable as one; cull only when a move needs the 1–2 GB | No local GUI on the laptop; SSH only |
 | Control-plane front door | Routes on bandicoot's own relay (survives bilby) | More Terraform/relay work than bilby upstreams |
 | bilby's Periphery after Core moves | Outbound, like every other host | None material; it is the fleet pattern |
 | Move the small extras | No, unless bilby measures tight after 3–5 | Extra moves for negligible gain |
@@ -229,9 +229,9 @@ stable — none of the stack moves depend on it.
 - ✅ ClickStack on bandicoot: 830 M rows carried over by a stopped-state
   rsync; fresh rows from every host within minutes; `watch.pod.haus` and
   `logs-ingest.pod.haus` proxied from bilby; Gatus heartbeats query
-  `10.0.0.90:8123`; Ofelia registered the mongo-dump job. bilby keeps its
-  pre-move copy under `/var/lib/clickstack` until the move has proven
-  itself. (7c90fa7)
+  `10.0.0.90:8123`; Ofelia registered the mongo-dump job. bilby's pre-move
+  copy and the stack's images were deleted after verification (bilby disk
+  79% → 61%). (7c90fa7)
 - ✅ `backup/bandicoot`: restic repo on `/mnt/jump/backups-bandicoot`,
   the mongo dumps as its first plan, Gatus heartbeat and container probe;
   container healthy, Gatus green. (0bc718e)
