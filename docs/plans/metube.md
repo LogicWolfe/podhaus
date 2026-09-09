@@ -77,9 +77,15 @@ episode to hand work; the Exec hook is one file and one bind).
 - ✅ Host prep via Ansible `--tags storage`: `/var/lib/metube/{state,tmp}` from
   `storage_binds_managed_dirs`, `/mnt/pouch/Kids` sentinel (changed=2, then 0).
 - ✅ Ingress: DNS record `metube.pod.haus` (Terraform applied, one record),
-  Pomerium family route, bilby Caddy `@metube` → 10.0.0.90:8081.
+  Pomerium family route, bilby Caddy `@metube` → 10.0.0.90:8081. The
+  Pomerium stack renders `config.yaml` at deploy time and its content hash
+  covers only `compose.yaml`, so the push did not redeploy it; a manual
+  `DeployStack numbat-pomerium` brought the route and its certificate up.
 - ✅ Gatus `MeTube` (group Media); Backrest bandicoot bind + plan `metube`.
 - ✅ Docs: hosts, networking, AGENTS.md; Komodo clone-before-pull note.
+- ✅ Smoke test: one Skillsville episode queued into `Kids/_incoming` landed as
+  AV1 1080p24 + AAC MP4 with the thumbnail embedded, 93 MB for 12.5 min;
+  Gatus `MeTube` green, front door redirects to sign-in like every family route.
 - ⏳ Episode naming: the per-show map is dropped. Requirement: a general
   show + episode-title → SxxEyy lookup for any show, no hand tables, no human
   per download (FileBot / own TheTVDB hook / other — decision pending).
