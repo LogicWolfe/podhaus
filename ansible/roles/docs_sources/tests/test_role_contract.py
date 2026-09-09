@@ -23,7 +23,7 @@ class RoleContractTest(unittest.TestCase):
     def test_docs_hosts_declare_home_and_chezmoi_sources(self) -> None:
         inventory = yaml.safe_load((ANSIBLE / "inventory" / "hosts.yml").read_text())
         docs_hosts = inventory["all"]["children"]["docs_hosts"]["hosts"]
-        self.assertEqual(sorted(docs_hosts), ["bilby", "fractal", "voltaire"])
+        self.assertEqual(sorted(docs_hosts), ["bandicoot", "bilby", "fractal", "voltaire"])
         for host in docs_hosts:
             with self.subTest(host=host):
                 variables = yaml.safe_load((HOST_VARS / f"{host}.yml").read_text())

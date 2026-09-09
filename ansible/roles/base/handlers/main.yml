@@ -2,3 +2,9 @@
 - name: Reload systemd units
   ansible.builtin.systemd_service:
     daemon_reload: true
+
+- name: Reload logind
+  # logind re-reads logind.conf.d on reload without dropping sessions.
+  ansible.builtin.systemd_service:
+    name: systemd-logind.service
+    state: reloaded

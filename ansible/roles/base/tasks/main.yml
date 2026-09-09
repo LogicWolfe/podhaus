@@ -85,3 +85,36 @@
     dest: /etc/systemd/system/user@.service.d/10-restart-on-failure.conf
     mode: "0644"
   notify: Reload systemd units
+
+- name: Create the logind drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/logind.conf.d
+    state: directory
+    mode: "0755"
+  when: podhaus_is_laptop | default(false)
+
+- name: Keep a laptop host awake with the lid closed
+  # Gated by podhaus_is_laptop so a desktop or server host never carries
+  # this. logind is the single owner of lid and idle policy, so the drop-in
+  # is enough for the lid; the sleep targets are masked below because a
+  # desktop session (GNOME on bandicoot, including the GDM greeter) requests
+  # suspend through logind on its own idle timer, and a masked target makes
+  # logind answer CanSuspend=no, which every requester honours.
+  ansible.builtin.copy:
+    src: 10-podhaus-laptop.conf
+    dest: /etc/systemd/logind.conf.d/10-podhaus-laptop.conf
+    mode: "0644"
+  notify: Reload logind
+  when: podhaus_is_laptop | default(false)
+
+- name: Mask every sleep target on a laptop host
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - sleep.target
+    - suspend.target
+    - hibernate.target
+    - hybrid-sleep.target
+    - suspend-then-hibernate.target
+  when: podhaus_is_laptop | default(false)

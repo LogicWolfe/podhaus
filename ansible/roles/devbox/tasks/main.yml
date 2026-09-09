@@ -18,12 +18,14 @@
 # TPM device nor USB passthrough into the WSL guest).
 ---
 - name: Import the 1Password signing key
+  tags: [package-repositories]
   ansible.builtin.get_url:
     url: https://downloads.1password.com/linux/keys/1password.asc
     dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-1password
     mode: "0644"
 
 - name: Add the 1Password repository
+  tags: [package-repositories]
   ansible.builtin.yum_repository:
     name: 1password
     description: 1Password Stable Channel
@@ -33,6 +35,7 @@
     gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-1password
 
 - name: Add the HashiCorp repository
+  tags: [package-repositories]
   # Not Fedora's repos (Terraform was dropped after the 2023 BSL relicense)
   # and not OpenTofu — podhaus Terraform state must stay compatible with
   # stock HashiCorp Terraform, which any machine is expected to run.

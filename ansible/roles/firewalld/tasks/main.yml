@@ -15,6 +15,23 @@
   ansible.builtin.command: firewall-cmd --state
   changed_when: false
 
+- name: Read the default zone
+  ansible.builtin.command: firewall-cmd --get-default-zone
+  changed_when: false
+  check_mode: false
+  register: firewalld_default_zone
+
+- name: Make public the default zone
+  # bilby's install shipped with `public` as the default zone, which is the
+  # one this role writes. Fedora Workstation (bandicoot) ships with
+  # `FedoraWorkstation` instead, a zone this role never touches, so without
+  # this step the zone file below would govern nothing on such a host. This
+  # is the role's one imperative call: --set-default-zone is firewalld's own
+  # interface for DefaultZone in firewalld.conf, persists across reboots and
+  # moves every non-pinned interface at once, so no reload is needed.
+  ansible.builtin.command: firewall-cmd --set-default-zone=public
+  when: firewalld_default_zone.stdout != 'public'
+
 - name: Ensure the custom-services directory exists
   ansible.builtin.file:
     path: /etc/firewalld/services

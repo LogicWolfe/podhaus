@@ -1,0 +1,40 @@
+# bandicoot — Apple Silicon MacBook Pro on Fedora Asahi Remix 44 (aarch64,
+# 16 KiB kernel pages). Runtime host and Nathan's development machine.
+---
+# Bootstrap over Wi-Fi; replace with Terraform's split-horizon name after
+# Nathan connects the USB Ethernet adapter and its MAC is reserved.
+ansible_host: 10.0.0.237
+ansible_user: nathan
+podhaus_hostname: bandicoot
+
+# A MacBook, so the lid will be closed and nobody will be at the keyboard
+# for weeks. The base role ignores the lid switch, turns off idle action
+# and masks the sleep targets so neither logind nor the GNOME session can
+# take the host off the network. Power draw with the lid shut is the
+# accepted cost of a laptop being a runtime host.
+podhaus_is_laptop: true
+
+# Fresh engine, live-restore from day one. SELinux remains enforcing;
+# the bind-mount stacks explicitly carry label:disable.
+podhaus_docker_engine_managed: true
+podhaus_docker_live_restore: true
+
+# User checkouts stay user state; Ansible exposes read-only docs slots.
+podhaus_repos_dir: /home/nathan/repos
+podhaus_docs_sources:
+  - name: home
+    source: /home/nathan/repos
+    required_path: .
+  - name: chezmoi
+    source: /home/nathan/.local/share/chezmoi
+    required_path: .git
+
+# Outbound Periphery uses the fleet defaults and this inventory hostname.
+podhaus_periphery_dir: /opt/komodo-periphery
+
+# Temporary onboarding key, already granted on bilby. Replace with the
+# chezmoi-minted id_bandicoot public half at the development-identity step.
+# /home is currently unencrypted; minting awaits Nathan's explicit decision.
+podhaus_machine_key: >-
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZ+qDyy0/btZnHSlv7d3ObC5xJx/UaVqjnSF04NeHRo
+  nathan

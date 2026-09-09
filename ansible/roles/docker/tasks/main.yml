@@ -6,6 +6,7 @@
 # and Compose refuses to adopt a pre-existing external network).
 ---
 - name: Add the Docker CE repository
+  tags: [package-repositories]
   # Flavour is distro-derived (podhaus_docker_repo_flavors) so the same task
   # serves Fedora hosts and Rocky/numbat, whose cloud-init installs Docker's
   # rhel repo at this same dest — a hardcoded fedora URL would overwrite it.
@@ -16,6 +17,7 @@
   when: podhaus_docker_engine_managed
 
 - name: Install Docker CE
+  tags: [docker-packages]
   # Gated on podhaus_docker_engine_managed: bilby runs Fedora's moby-engine
   # (pre-existing state, not part of the provisioning migration), and
   # installing docker-ce beside it would be a second engine.
@@ -30,6 +32,7 @@
   when: podhaus_docker_engine_managed
 
 - name: Assert podman is absent
+  tags: [docker-packages]
   # Docker is the fleet's single container engine. voltaire arrived
   # podman-only (its dev postgres container has since been dump/restored
   # onto docker); this keeps it from creeping back on any engine-managed
@@ -37,11 +40,14 @@
   # netavark, aardvark-dns, crun, ...) with it, so a bare presence check
   # is enough — no separate cleanup of those needed.
   ansible.builtin.dnf:
-    name: podman
+    # Fedora Workstation ships toolbox, which requires Podman. Neither is
+    # part of the fleet Docker runtime; remove them in one transaction.
+    name: [podman, toolbox]
     state: absent
   when: podhaus_docker_engine_managed
 
 - name: Install the daemon-API Python bindings
+  tags: [docker-packages]
   # community.docker talks to the daemon's HTTP API through requests. A task
   # of its own, outside the engine gate, because the network tasks below need
   # it on every docker host — including those whose engine this role does not
@@ -53,6 +59,7 @@
     state: present
 
 - name: Configure the Docker daemon
+  tags: [docker-daemon]
   # `local` log driver with rotation on every podhaus host; live-restore per
   # podhaus_docker_live_restore. The template's byte layout is load-bearing —
   # see templates/daemon.json.j2 before touching either. Flipping bilby to
@@ -70,15 +77,18 @@
   notify: Restart docker
 
 - name: Enable and start Docker
+  tags: [docker-daemon]
   ansible.builtin.systemd_service:
     name: docker.service
     enabled: true
     state: started
 
 - name: Flush handlers so the daemon config is live before the network is created
+  tags: [docker-daemon]
   ansible.builtin.meta: flush_handlers
 
 - name: Add the operator to the docker group
+  tags: [docker-daemon]
   ansible.builtin.user:
     name: "{{ podhaus_operator }}"
     groups: docker
