@@ -1,0 +1,85 @@
+# MeTube — yt-dlp web UI. Family pastes a video/playlist/channel URL on
+# metube.pod.haus; the file lands on Pouch for Plex's Kids libraries.
+# See docs/plans/metube.md for the full design.
+#
+#   - Download + remux is CPU/scratch work: runs on bandicoot (cores +
+#     NVMe), not bilby (Plex's host, RAM-tight).
+#   - DOWNLOAD_DIR is Pouch (/mnt/pouch/Kids) so the folder picker
+#     (CUSTOM_DIRS) offers the existing TV/Movies/Videos subfolders.
+#     TEMP_DIR and STATE_DIR are local NVMe, not Pouch, so a half-
+#     finished download never sits on the NAS and queue state survives
+#     a Pouch outage.
+#   - PUID/PGID match the Pouch owner (1000:100, `stat -c '%u:%g'
+#     /mnt/pouch/Kids` on bandicoot) so MeTube can write there.
+#     CHOWN_DIRS is off: the entrypoint chowns DOWNLOAD_DIR recursively
+#     on every start, and ownership already matches — skip the walk
+#     over the whole Kids library on every restart.
+#   - YTDL_OPTIONS: remote_components enables yt-dlp's JS solver
+#     (YouTube extraction 403s without it); format_sort prefers AV1 at
+#     the highest resolution with an AAC track so the mp4 merge is a
+#     stream copy (format stays unset — YTDL_OPTIONS overrides the UI's
+#     format entirely, so the codec preference has to live in
+#     format_sort instead); FFmpegMetadata + writethumbnail +
+#     EmbedThumbnail put a thumbnail in the file with no sidecar. The
+#     per-show renaming hook (MetadataFromField + the Exec postprocessor
+#     that calls a renamer script) is a follow-up, not in this stack yet
+#     — OUTPUT_TEMPLATE is plain `<title>.<ext>` until it lands.
+#   - ALLOW_YTDL_OPTIONS_OVERRIDES stays unset/false: enabling it lets
+#     anyone on metube.pod.haus pass arbitrary yt-dlp API options
+#     (arbitrary local file read/write via postprocessor args).
+#   - Healthcheck asserts the app responds AND that /downloads is the
+#     real Pouch share (the .podhaus-share-mounted sentinel), not a
+#     bare mountpoint stub left by an NFS outage — same pattern as
+#     fenwick's brinno-downloader.
+
+services:
+  metube:
+    container_name: metube
+    image: ghcr.io/alexta69/metube:2026.08.28
+    restart: unless-stopped
+    # SELinux enforcing on Fedora Asahi Remix; NFS bind (Pouch) plus the
+    # local NVMe binds below.
+    security_opt:
+      - label:disable
+    environment:
+      TZ: ${TZ}
+      PUID: "1000"
+      PGID: "100"
+      CHOWN_DIRS: "false"
+      DOWNLOAD_DIR: /downloads
+      TEMP_DIR: /tmp/metube
+      STATE_DIR: /var/lib/metube/state
+      CUSTOM_DIRS: "true"
+      CREATE_CUSTOM_DIRS: "true"
+      OUTPUT_TEMPLATE: "%(title)s.%(ext)s"
+      OUTPUT_TEMPLATE_PLAYLIST: "%(title)s.%(ext)s"
+      YTDL_OPTIONS: '{"remote_components":["ejs:github"],"format_sort":["res","vcodec:av01","acodec:m4a"],"merge_output_format":"mp4","writethumbnail":true,"postprocessors":[{"key":"FFmpegMetadata","add_metadata":true},{"key":"EmbedThumbnail","already_have_thumbnail":false}]}'
+    volumes:
+      - /mnt/pouch/Kids:/downloads
+      - /var/lib/metube/tmp:/tmp/metube
+      - /var/lib/metube/state:/var/lib/metube/state
+    ports:
+      # LAN only: the front door stays on bilby (Caddy metube.pod.haus
+      # → 10.0.0.90:8081, the moved-service pattern in docs/hosts.html).
+      - "8081:8081"
+    networks:
+      - dockernet
+    mem_limit: 1g
+    cpus: 4
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - timeout 12 sh -c 'curl -fsS http://localhost:8081/ >/dev/null && [ -e /downloads/.podhaus-share-mounted ]'
+      interval: 60s
+      timeout: 15s
+      # 15 retries (~15 min) rides out a transient kangaroo NFS stall
+      # without autoheal restart-storming this NFS-bind container.
+      retries: 15
+      start_period: 30s
+
+networks:
+  dockernet:
+    external: true

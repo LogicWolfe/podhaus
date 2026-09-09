@@ -43,6 +43,9 @@ services:
       # a quiet hour for the bot. Moved from bilby's backup 2026-09-09.
       - /var/lib/fenwick:/userdata/fenwick:ro
       - /var/lib/signal-cli:/userdata/signal-cli:ro
+      # MeTube: the download queue/history state only — the downloaded
+      # media itself lands on Pouch and is not backed up.
+      - /var/lib/metube/state:/userdata/metube:ro
       # Docker named volumes owned by Komodo Core and onepassword, moved
       # here from bilby. Referenced via `external: true` in the volumes
       # block below so docker can share the live data with the owning

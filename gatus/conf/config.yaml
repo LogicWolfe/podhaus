@@ -222,6 +222,12 @@ endpoints:
     <<: *defaults
     group: Plex
 
+  # MeTube lives on bandicoot; the front door stays on bilby's Caddy.
+  - name: MeTube
+    url: http://10.0.0.90:8081/
+    <<: *defaults
+    group: Media
+
   # Syncthing lives on kangaroo (network_mode: host). gatus can't reach
   # it directly, so we use the same Komodo InspectDockerContainer pattern
   # as Backrest (kangaroo) below — asserts the container is `running`.

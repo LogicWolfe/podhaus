@@ -69,4 +69,19 @@ episode to hand work; the Exec hook is one file and one bind).
 
 ## Ledger
 
-(filled in as the work lands)
+- ✅ Stack `metube/` (stack.toml, compose.yaml) on bandicoot: image pinned
+  2026.08.28, Pouch `Kids` at `/downloads`, NVMe scratch/state, PUID 1000 /
+  PGID 100, AV1-first `format_sort`, JS solver, thumbnails; healthcheck with
+  the Pouch sentinel. Output template is plain `%(title)s` until the naming
+  lookup below lands.
+- ✅ Host prep via Ansible `--tags storage`: `/var/lib/metube/{state,tmp}` from
+  `storage_binds_managed_dirs`, `/mnt/pouch/Kids` sentinel (changed=2, then 0).
+- ✅ Ingress: DNS record `metube.pod.haus` (Terraform applied, one record),
+  Pomerium family route, bilby Caddy `@metube` → 10.0.0.90:8081.
+- ✅ Gatus `MeTube` (group Media); Backrest bandicoot bind + plan `metube`.
+- ✅ Docs: hosts, networking, AGENTS.md; Komodo clone-before-pull note.
+- ⏳ Episode naming: the per-show map is dropped. Requirement: a general
+  show + episode-title → SxxEyy lookup for any show, no hand tables, no human
+  per download (FileBot / own TheTVDB hook / other — decision pending).
+- ⏳ Plex: TheTVDB episode ordering for Skillsville; first-play check on the
+  LG CX.

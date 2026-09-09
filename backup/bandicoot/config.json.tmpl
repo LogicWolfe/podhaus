@@ -120,6 +120,24 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "metube",
+      "repo": "podhaus-bandicoot",
+      "paths": ["/userdata/metube"],
+      "schedule": {
+        "cron": "10 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "fenwick",
       "repo": "podhaus-bandicoot",
       "paths": ["/userdata/fenwick", "/userdata/signal-cli"],

@@ -1,0 +1,16 @@
+[[stack]]
+name = "metube"
+description = "MeTube — yt-dlp web UI for downloading kids' TV onto Pouch for Plex"
+tags = ["podhaus"]
+
+[stack.config]
+# Download + remux is CPU/scratch work; bandicoot has the cores and NVMe
+# for TEMP_DIR/STATE_DIR, bilby only reads the finished files via Plex.
+# Linked repo, like every stack that is not on bilby. docs/plans/metube.md.
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "metube"
+
+environment = """
+TZ=[[TZ]]
+"""

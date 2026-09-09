@@ -47,6 +47,7 @@
 	@home host home.pod.haus
 	@plex host plex.pod.haus
 	@music host music.pod.haus
+	@metube host metube.pod.haus
 	@watch host watch.pod.haus
 	@docs host docs.pod.haus bilby.docs.pod.haus
 	@minio_console host minio.pod.haus
@@ -71,6 +72,8 @@
 		reverse_proxy @home 172.18.0.1:8123
 		reverse_proxy @plex 172.18.0.1:32400
 		reverse_proxy @music 172.18.0.1:8095
+		# MeTube lives on bandicoot; the front door stays here.
+		reverse_proxy @metube 10.0.0.90:8081
 		# HyperDX lives on bandicoot; the front door stays here.
 		reverse_proxy @watch 10.0.0.90:8080
 		reverse_proxy @docs docs:8000

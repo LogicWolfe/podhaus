@@ -93,6 +93,8 @@ routes:
     from: https://plex.pod.haus
   - <<: *family_route
     from: https://music.pod.haus
+  - <<: *family_route
+    from: https://metube.pod.haus
 
   - <<: *public_route
     from: https://watch.pod.haus
