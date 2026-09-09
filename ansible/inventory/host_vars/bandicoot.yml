@@ -71,6 +71,15 @@ storage_binds_rate_limit_dropin_dirs:
   - mnt-jump.mount.d
   - mnt-jump.automount.d
 
+# Forgejo Actions runner ------------------------------------------------
+# The fleet's one runner lives here (moved from fractal, which now carries
+# no active jobs). Registration keeps git.pod.haus as TLS SNI but resolves
+# it to bilby's internal Caddy; this address is Terraform-owned in UniFi.
+# Labels are the fleet's existing ones so workflows need no change; the
+# images behind them are multi-arch and run natively on aarch64, which
+# matches bilby, where Komodo builds the same images.
+podhaus_forgejo_internal_address: 10.0.0.119
+
 # Outbound Periphery uses the fleet defaults and this inventory hostname.
 podhaus_periphery_dir: /opt/komodo-periphery
 

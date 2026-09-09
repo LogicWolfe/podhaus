@@ -24,3 +24,6 @@
       tags: [firewall]
     - role: komodo_periphery
       tags: [periphery]
+    - role: forgejo_runner
+      become: true
+      tags: [forgejo-runner]
