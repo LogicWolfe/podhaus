@@ -27,20 +27,6 @@ podhaus_docker_engine_managed: false
 # restarts leave containers running instead of bouncing all 45.
 podhaus_docker_live_restore: true
 
-# The two fenwick-private bridges (browser-quarantine topology; rationale in
-# the fenwick repo's docs/networking.html). Labels match the live networks
-# exactly; subnets stay auto-assigned (172.27/172.28 today) — see the docker
-# role's network task for why they must not be specified.
-podhaus_extra_networks:
-  - name: fenwick-net
-    labels:
-      fenwick.net: private
-      managed-by: fenwick-repo
-  - name: fenwick-webagent-net
-    labels:
-      fenwick.net: webagent-quarantine
-      managed-by: fenwick-repo
-
 # Machine key: YubiKey PIV, hardware-resident, served by
 # machine-ssh-agent.service. Public half declared here so the
 # authorized_keys role can grant it on peers; see group_vars/all.yml.
