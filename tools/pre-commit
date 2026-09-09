@@ -31,6 +31,10 @@
 #   - docs_sources role tests:      source slots remain isolated and every
 #                                   docs host declares both aggregate and
 #                                   canonical chezmoi locations.
+#   - metube plexify tests:        the Sonarr-naming hook's title-matching
+#                                   confidence rule (containment, difflib
+#                                   ratio+margin, the 59-title Skillsville
+#                                   fixture) runs with no network.
 set -e
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -53,3 +57,5 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/storage_binds/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/docs_sources/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/metube/tests"

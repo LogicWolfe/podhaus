@@ -21,9 +21,14 @@
 #     format entirely, so the codec preference has to live in
 #     format_sort instead); FFmpegMetadata + writethumbnail +
 #     EmbedThumbnail put a thumbnail in the file with no sidecar. The
-#     per-show renaming hook (MetadataFromField + the Exec postprocessor
-#     that calls a renamer script) is a follow-up, not in this stack yet
-#     — OUTPUT_TEMPLATE is plain `<title>.<ext>` until it lands.
+#     Exec postprocessor runs scripts/plexify after every move: it asks
+#     Sonarr (docs/plans/metube.md) to identify the episode from the
+#     staging show-folder name plus the video title, then imports the
+#     file into /kids/TV with Sonarr's own season/episode naming — so
+#     OUTPUT_TEMPLATE stays plain `<title>.<ext>` (Sonarr does the real
+#     rename on import). Anything the hook can't confidently match fails
+#     the download (Gatus `metube_plexify` goes red) instead of leaving
+#     a wrongly-numbered file in the library.
 #   - ALLOW_YTDL_OPTIONS_OVERRIDES stays unset/false: enabling it lets
 #     anyone on metube.pod.haus pass arbitrary yt-dlp API options
 #     (arbitrary local file read/write via postprocessor args).
@@ -53,11 +58,25 @@ services:
       CREATE_CUSTOM_DIRS: "true"
       OUTPUT_TEMPLATE: "%(title)s.%(ext)s"
       OUTPUT_TEMPLATE_PLAYLIST: "%(title)s.%(ext)s"
-      YTDL_OPTIONS: '{"remote_components":["ejs:github"],"format_sort":["res","vcodec:av01","acodec:m4a"],"merge_output_format":"mp4","writethumbnail":true,"postprocessors":[{"key":"FFmpegMetadata","add_metadata":true},{"key":"EmbedThumbnail","already_have_thumbnail":false}]}'
+      YTDL_OPTIONS: '{"remote_components":["ejs:github"],"format_sort":["res","vcodec:av01","acodec:m4a"],"merge_output_format":"mp4","writethumbnail":true,"postprocessors":[{"key":"FFmpegMetadata","add_metadata":true},{"key":"EmbedThumbnail","already_have_thumbnail":false},{"key":"Exec","when":"after_move","exec_cmd":"/scripts/plexify %(filepath)q %(title)q"}]}'
+      # scripts/plexify's own config — read directly from os.environ, no
+      # defaults (see the script's docstring). Sonarr and Gatus are both
+      # on bilby/bandicoot's LAN, not dockernet, from this bandicoot
+      # container's point of view for Gatus (10.0.0.119, bilby's LAN
+      # address — same pattern as backup/bandicoot/stack.toml); Sonarr is
+      # dockernet-reachable by name since it runs on bandicoot too.
+      SONARR_URL: http://sonarr:8989
+      SONARR_API_KEY: ${SONARR_API_KEY}
+      GATUS_BASE_URL: http://10.0.0.119:8080
+      GATUS_PLEXIFY_ENDPOINT_ID: metube_plexify
+      GATUS_HEARTBEAT_PUSH_TOKEN: ${GATUS_HEARTBEAT_PUSH_TOKEN}
     volumes:
       - /mnt/pouch/Kids:/downloads
       - /var/lib/metube/tmp:/tmp/metube
       - /var/lib/metube/state:/var/lib/metube/state
+      # Naming hook script, bound from the bandicoot deploy clone (this
+      # stack runs via linked_repo, same pattern as Plex's scripts bind).
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot/metube/scripts:/scripts:ro
     ports:
       # LAN only: the front door stays on bilby (Caddy metube.pod.haus
       # → 10.0.0.90:8081, the moved-service pattern in docs/hosts.html).

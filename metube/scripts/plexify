@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+# yt-dlp Exec postprocessor (after_move), invoked as: plexify FILEPATH TITLE
+#
+# MeTube writes downloads under /downloads (= /mnt/pouch/Kids on the host).
+# The family stages a download into /downloads/_incoming/<Show>/ via
+# MeTube's folder picker. This hook asks Sonarr (which sees the same tree
+# as /kids/...) to identify the episode from the show folder + video title,
+# then runs a Sonarr ManualImport to move the file into /kids/TV with the
+# right season/episode name. Everything outside _incoming/ is none of this
+# hook's business and is left untouched.
+#
+# The episode number lives only in Sonarr's TheTVDB-backed episode list, not
+# in anything yt-dlp can see (see docs/plans/metube.md). Confidence rule is
+# ours: an exact containment match on normalised titles, or a difflib ratio
+# match with a clear margin over the runner-up — anything murkier fails
+# loudly rather than risking a wrong episode number.
+#
+# Every outcome except the _incoming-boundary no-op is reported to Gatus's
+# `metube_plexify` external endpoint (success=true, or success=false&error=...)
+# so a bad match reaches Nathan instead of silently sitting in staging.
+# yt-dlp/MeTube shows the download as errored when this hook exits non-zero.
+
+from __future__ import annotations
+
+import difflib
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+
+DOWNLOADS_ROOT = Path("/downloads")
+INCOMING_DIRNAME = "_incoming"
+# Sonarr binds the same Pouch share at /kids (see sonarr/compose.yaml); this
+# is the fixed translation between the two containers' views of one folder.
+SONARR_VIEW_PREFIX = "/kids"
+LIBRARY_ROOT = "/kids/TV"
+IMPORT_POLL_INTERVAL_S = 2
+IMPORT_POLL_TIMEOUT_S = 60
+TVDB_FOLDER_RE = re.compile(r"\{tvdb-(\d+)\}")
+NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+# Splits a raw (not yet normalised) video title into its junk-prefix and
+# career segments, e.g. "Skillsville FULL EPISODE | Entrepreneur" -> the
+# segment "Entrepreneur" alone, so a fuzzy match against it isn't diluted
+# by the length of the surrounding channel boilerplate.
+TITLE_SEGMENT_RE = re.compile(r"[|\-–—:]")
+
+# Ambiguity guard for the difflib fallback: the best candidate must clear
+# this ratio, and beat the runner-up by this much, or the match is refused.
+RATIO_MATCH_THRESHOLD = 0.9
+RATIO_MATCH_MARGIN = 0.05
+
+
+class PlexifyError(Exception):
+    """A hook failure with a message safe to hand to Gatus and stderr."""
+
+
+@dataclass(frozen=True)
+class Series:
+    id: int
+    title: str
+    tvdb_id: int
+
+
+@dataclass(frozen=True)
+class Episode:
+    id: int
+    title: str
+    season_number: int
+    episode_number: int
+
+
+def normalise(text: str) -> str:
+    """casefold, strip non-alphanumerics, collapse whitespace."""
+    collapsed = NON_ALNUM_RE.sub(" ", text.casefold())
+    return " ".join(collapsed.split())
+
+
+def title_segments(video_title: str) -> list[str]:
+    """The video title plus each `|`/`-`/`–`/`—`/`:`-delimited segment,
+    trimmed. A channel's boilerplate framing ("Skillsville FULL EPISODE
+    | Chef") splits the career name out on its own so a near-miss
+    spelling can be matched by ratio without the framing diluting it."""
+    segments = [part.strip() for part in TITLE_SEGMENT_RE.split(video_title)]
+    return [video_title] + [segment for segment in segments if segment]
+
+
+def required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise PlexifyError(f"missing required environment variable {name}")
+    return value
+
+
+class SonarrClient:
+    """Thin wrapper over the Sonarr v3 API endpoints this hook needs."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+
+    def _request(self, method: str, path: str, params: dict | None = None,
+                 body: dict | None = None):
+        url = f"{self._base_url}{path}"
+        if params:
+            url += "?" + urllib.parse.urlencode(params)
+        data = json.dumps(body).encode() if body is not None else None
+        request = urllib.request.Request(
+            url, data=data, method=method,
+            headers={"X-Api-Key": self._api_key, "Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                raw = response.read()
+        except urllib.error.HTTPError as exc:
+            raise PlexifyError(f"Sonarr {method} {path} failed: HTTP {exc.code} {exc.read()[:200]}") from exc
+        except urllib.error.URLError as exc:
+            raise PlexifyError(f"Sonarr {method} {path} unreachable: {exc.reason}") from exc
+        return json.loads(raw) if raw else None
+
+    def list_series(self) -> list[Series]:
+        rows = self._request("GET", "/api/v3/series")
+        return [Series(r["id"], r["title"], r["tvdbId"]) for r in rows]
+
+    def lookup_series(self, term: str) -> list[dict]:
+        return self._request("GET", "/api/v3/series/lookup", params={"term": term}) or []
+
+    def first_quality_profile_id(self) -> int:
+        profiles = self._request("GET", "/api/v3/qualityprofile")
+        if not profiles:
+            raise PlexifyError("Sonarr has no quality profiles configured")
+        return profiles[0]["id"]
+
+    def add_series(self, tvdb_id: int, title: str, quality_profile_id: int) -> Series:
+        body = {
+            "tvdbId": tvdb_id,
+            "title": title,
+            "qualityProfileId": quality_profile_id,
+            "rootFolderPath": LIBRARY_ROOT,
+            "monitored": False,
+            "seasonFolder": True,
+            "addOptions": {"searchForMissingEpisodes": False},
+        }
+        created = self._request("POST", "/api/v3/series", body=body)
+        return Series(created["id"], created["title"], created["tvdbId"])
+
+    def episodes_for(self, series_id: int) -> list[Episode]:
+        rows = self._request("GET", "/api/v3/episode", params={"seriesId": series_id})
+        return [Episode(r["id"], r["title"], r["seasonNumber"], r["episodeNumber"]) for r in rows]
+
+    def webdl_1080p_quality(self) -> dict:
+        for definition in self._request("GET", "/api/v3/qualitydefinition"):
+            if definition["quality"]["name"] == "WEBDL-1080p":
+                return definition["quality"]
+        raise PlexifyError("Sonarr has no WEBDL-1080p quality definition")
+
+    def english_language(self) -> dict:
+        for language in self._request("GET", "/api/v3/language"):
+            if language["name"] == "English":
+                return language
+        raise PlexifyError("Sonarr has no English language entry")
+
+    def manual_import(self, sonarr_path: str, series_id: int, episode_id: int,
+                       quality: dict, language: dict) -> int:
+        body = {
+            "name": "ManualImport",
+            "importMode": "move",
+            "files": [{
+                "path": sonarr_path,
+                "seriesId": series_id,
+                "episodeIds": [episode_id],
+                "quality": {"quality": quality, "revision": {"version": 1, "real": 0, "isRepack": False}},
+                "languages": [language],
+                "releaseGroup": "",
+            }],
+        }
+        command = self._request("POST", "/api/v3/command", body=body)
+        return command["id"]
+
+    def wait_for_command(self, command_id: int) -> None:
+        deadline = time.monotonic() + IMPORT_POLL_TIMEOUT_S
+        while time.monotonic() < deadline:
+            command = self._request("GET", f"/api/v3/command/{command_id}")
+            status = command["status"]
+            if status == "completed":
+                return
+            if status == "failed":
+                raise PlexifyError(f"Sonarr import command failed: {command.get('message', 'no message')}")
+            time.sleep(IMPORT_POLL_INTERVAL_S)
+        raise PlexifyError(f"Sonarr import command {command_id} did not finish within {IMPORT_POLL_TIMEOUT_S}s")
+
+
+def add_series_from_lookup(sonarr: SonarrClient, result: dict) -> Series:
+    quality_profile_id = sonarr.first_quality_profile_id()
+    return sonarr.add_series(result["tvdbId"], result["title"], quality_profile_id)
+
+
+def resolve_series_by_tvdb_id(sonarr: SonarrClient, tvdb_id: int, folder_name: str) -> Series:
+    for series in sonarr.list_series():
+        if series.tvdb_id == tvdb_id:
+            return series
+    results = sonarr.lookup_series(f"tvdb:{tvdb_id}")
+    if not results:
+        raise PlexifyError(f"no Sonarr lookup result for tvdb:{tvdb_id} (folder {folder_name!r})")
+    return add_series_from_lookup(sonarr, results[0])
+
+
+def resolve_series(sonarr: SonarrClient, folder_name: str) -> Series:
+    tvdb_tag = TVDB_FOLDER_RE.search(folder_name)
+    if tvdb_tag:
+        return resolve_series_by_tvdb_id(sonarr, int(tvdb_tag.group(1)), folder_name)
+
+    normalised_folder = normalise(folder_name)
+    for series in sonarr.list_series():
+        if normalise(series.title) == normalised_folder:
+            return series
+
+    matches = [r for r in sonarr.lookup_series(folder_name) if normalise(r["title"]) == normalised_folder]
+    if len(matches) != 1:
+        raise PlexifyError(f"no exact Sonarr match for show folder {folder_name!r}")
+    return add_series_from_lookup(sonarr, matches[0])
+
+
+def best_ratio_against_title(episode_title: str, normalised_candidates: list[str]) -> float:
+    normalised_episode = normalise(episode_title)
+    return max(
+        difflib.SequenceMatcher(None, normalised_episode, candidate).ratio()
+        for candidate in normalised_candidates
+    )
+
+
+def select_episode(video_title: str, episodes: list[Episode]) -> Episode:
+    normalised_video = normalise(video_title)
+    containing = [e for e in episodes if normalise(e.title) in normalised_video]
+    if len(containing) == 1:
+        return containing[0]
+
+    normalised_candidates = [normalise(segment) for segment in title_segments(video_title)]
+    scored = sorted(
+        ((best_ratio_against_title(e.title, normalised_candidates), e) for e in episodes),
+        key=lambda pair: pair[0], reverse=True,
+    )
+    if not scored:
+        raise PlexifyError(f"Sonarr series has no episodes to match against {video_title!r}")
+    best_ratio, best = scored[0]
+    runner_up_ratio = scored[1][0] if len(scored) > 1 else 0.0
+    if best_ratio >= RATIO_MATCH_THRESHOLD and (best_ratio - runner_up_ratio) >= RATIO_MATCH_MARGIN:
+        return best
+    top = ", ".join(f"{e.title!r} ({ratio:.2f})" for ratio, e in scored[:5])
+    raise PlexifyError(f"no confident episode match for {video_title!r}; top candidates: {top}")
+
+
+def place_episode(path: Path, relative: Path, title: str) -> None:
+    if len(relative.parts) < 2:
+        raise PlexifyError(f"{path} is directly under _incoming with no show folder")
+    folder_name = relative.parts[0]
+    sonarr = SonarrClient(required_env("SONARR_URL"), required_env("SONARR_API_KEY"))
+    series = resolve_series(sonarr, folder_name)
+    episode = select_episode(title, sonarr.episodes_for(series.id))
+    sonarr_path = f"{SONARR_VIEW_PREFIX}/{INCOMING_DIRNAME}/{relative.as_posix()}"
+    command_id = sonarr.manual_import(
+        sonarr_path, series.id, episode.id, sonarr.webdl_1080p_quality(), sonarr.english_language(),
+    )
+    sonarr.wait_for_command(command_id)
+    if path.exists():
+        # Sonarr reports command success even on a no-op import; the file
+        # still sitting in staging means no episode actually moved.
+        raise PlexifyError(f"Sonarr reported success but {path} is still in staging")
+
+
+def report_gatus(success: bool, error: str | None) -> None:
+    # A Gatus outage must not mask the hook's own result, so every failure
+    # here — including a missing env var — is swallowed after logging.
+    try:
+        base_url = os.environ["GATUS_BASE_URL"].rstrip("/")
+        endpoint_id = os.environ["GATUS_PLEXIFY_ENDPOINT_ID"]
+        token = os.environ["GATUS_HEARTBEAT_PUSH_TOKEN"]
+        params = {"success": "true" if success else "false"}
+        if error:
+            params["error"] = error
+        url = f"{base_url}/api/v1/endpoints/{endpoint_id}/external?{urllib.parse.urlencode(params)}"
+        request = urllib.request.Request(
+            url, data=b"", method="POST", headers={"Authorization": f"Bearer {token}"},
+        )
+        urllib.request.urlopen(request, timeout=10).read()
+    except Exception as exc:  # noqa: BLE001 - network boundary, see comment above
+        print(f"plexify: Gatus push failed: {exc}", file=sys.stderr)
+
+
+def main() -> int:
+    path = Path(sys.argv[1])
+    title = sys.argv[2]
+    incoming_root = DOWNLOADS_ROOT / INCOMING_DIRNAME
+    try:
+        relative = path.relative_to(incoming_root)
+    except ValueError:
+        print(f"plexify: {path} is not under {incoming_root}; leaving untouched")
+        return 0
+
+    try:
+        place_episode(path, relative, title)
+    except Exception as exc:  # noqa: BLE001 - top-level boundary, see module docstring
+        print(f"plexify: {exc}", file=sys.stderr)
+        report_gatus(success=False, error=str(exc))
+        return 1
+    report_gatus(success=True, error=None)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
