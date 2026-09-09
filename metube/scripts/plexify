@@ -11,9 +11,12 @@
 #
 # The episode number lives only in Sonarr's TheTVDB-backed episode list, not
 # in anything yt-dlp can see (see docs/plans/metube.md). Confidence rule is
-# ours: an exact containment match on normalised titles, or a difflib ratio
-# match with a clear margin over the runner-up — anything murkier fails
-# loudly rather than risking a wrong episode number.
+# ours: an episode title that exactly equals the whole video title or one of
+# its "|"/"-"/":"-delimited segments, or else a difflib ratio match (scored
+# the same way, over the whole title and every segment) with a clear margin
+# over the runner-up — anything murkier fails loudly rather than risking a
+# wrong episode number. Substring containment alone isn't enough: "Plumber"
+# must not match "Quantum Plumber" just because it's a substring of it.
 #
 # Every outcome except the _incoming-boundary no-op is reported to Gatus's
 # `metube_plexify` external endpoint (success=true, or success=false&error=...)
@@ -235,12 +238,17 @@ def best_ratio_against_title(episode_title: str, normalised_candidates: list[str
 
 
 def select_episode(video_title: str, episodes: list[Episode]) -> Episode:
-    normalised_video = normalise(video_title)
-    containing = [e for e in episodes if normalise(e.title) in normalised_video]
-    if len(containing) == 1:
-        return containing[0]
-
     normalised_candidates = [normalise(segment) for segment in title_segments(video_title)]
+
+    # A whole delimited segment equalling an episode title, not merely
+    # containing it — "Plumber" must not match "Quantum Plumber" just
+    # because it's a substring of it.
+    exact = [e for e in episodes if normalise(e.title) in normalised_candidates]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        raise PlexifyError(f"ambiguous exact title match for {video_title!r}: " + ", ".join(e.title for e in exact))
+
     scored = sorted(
         ((best_ratio_against_title(e.title, normalised_candidates), e) for e in episodes),
         key=lambda pair: pair[0], reverse=True,

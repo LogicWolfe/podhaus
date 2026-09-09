@@ -64,8 +64,8 @@ class NormaliseTest(unittest.TestCase):
         )
 
 
-class ContainmentMatchTest(unittest.TestCase):
-    def test_junk_prefixed_title_matches_by_containment(self) -> None:
+class SegmentEqualityMatchTest(unittest.TestCase):
+    def test_junk_prefixed_title_matches_the_delimited_segment(self) -> None:
         episodes = [
             Episode(1, "Chef", 1, 1),
             Episode(2, "Chemist", 1, 39),
@@ -73,13 +73,28 @@ class ContainmentMatchTest(unittest.TestCase):
         ]
         match = select_episode("Skillsville FULL EPISODE | Chef", episodes)
         self.assertEqual(match.title, "Chef")
+        self.assertNotIn(match.title, ("Chemist", "Detective"))
+
+    def test_substring_alone_does_not_match_a_longer_title(self) -> None:
+        # Regression: "Plumber" is a substring of "Quantum Plumber" but is
+        # not equal to any delimited segment of the video title, and the
+        # ratio fallback must not be confident enough to accept it either.
+        episodes = skillsville_episodes()
+        with self.assertRaises(PlexifyError):
+            select_episode("Skillsville FULL EPISODE | Quantum Plumber", episodes)
+
+    def test_substring_ratio_stays_under_the_confidence_floor(self) -> None:
+        segments = [normalise(s) for s in MODULE.title_segments("Skillsville FULL EPISODE | Quantum Plumber")]
+        ratio = MODULE.best_ratio_against_title("Plumber", segments)
+        self.assertLess(ratio, MODULE.RATIO_MATCH_THRESHOLD)
 
 
 class AmbiguityTest(unittest.TestCase):
     def test_two_equally_close_candidates_fails(self) -> None:
         # Two episodes that normalise identically (a duplicate/reformatted
-        # title) tie exactly, so neither containment (both contain) nor the
-        # ratio margin (zero) can pick one.
+        # title) both equal the same delimited segment exactly, so segment
+        # equality itself is ambiguous — this fails before the ratio
+        # fallback is ever consulted.
         episodes = [Episode(1, "Chef", 1, 1), Episode(2, "CHEF!!", 1, 2)]
         with self.assertRaises(PlexifyError):
             select_episode("Skillsville FULL EPISODE | Chef", episodes)
