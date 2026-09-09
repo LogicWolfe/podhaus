@@ -20,13 +20,13 @@ Done and verified:
   authorized_keys files removed on both hosts.
 
 Remaining:
-- `op-vault mint dev` needs the `my` service account (Dev read/write, Homelab
-  read); until then a full `chezmoi apply` stops at the first secret-derived
-  target (.claude.json) and the Forgejo CLI is not converged.
-- Forgejo learns the machine key from the Pocket ID claim on Nathan's next
-  Forgejo login; `git push` to git.pod.haus from bandicoot works after that.
 - The GitHub SSH *signing* key registration is out-of-band (as for every fleet
   machine key).
 - Other homelab targets (fractal, voltaire, numbat, pinelake) admit bandicoot's
   key on their next `--tags ssh` playbook run.
 - Remove this plan once the above is done.
+
+Done since the first draft: `op-vault mint dev` enrolled (file backend, on
+bilby's terms); full `chezmoi apply` converges; Forgejo synced the machine
+key from the Pocket ID claim; `fj` is authenticated; git pushes from
+bandicoot to git.pod.haus and github.com unattended.
