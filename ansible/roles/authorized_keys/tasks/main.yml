@@ -48,7 +48,8 @@
 
 - name: Assemble the authorized key set
   ansible.builtin.set_fact:
-    podhaus_authorized_key_set: "{{ (_personal + _peer_keys) | unique }}"
+    podhaus_authorized_key_set: >-
+      {{ (_personal + _peer_keys + podhaus_host_authorized_keys) | unique }}
   vars:
     # Nathan's own key, which is how the MacBook connects: it has no machine
     # key of its own, so it rides this one into every homelab target.

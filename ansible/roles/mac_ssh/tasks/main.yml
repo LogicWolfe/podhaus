@@ -50,7 +50,7 @@
 - name: Assemble the authorized key set
   ansible.builtin.set_fact:
     podhaus_authorized_key_set: >-
-      {{ ([podhaus_personal_key] +
+      {{ ([podhaus_personal_key] + podhaus_host_authorized_keys +
           (mac_ssh_peers | map('extract', hostvars, 'podhaus_machine_key') | list))
          | unique }}
 

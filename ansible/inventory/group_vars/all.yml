@@ -52,3 +52,8 @@ ansible_ssh_common_args: >-
 podhaus_personal_key: >-
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZSaoga8/dYnCgeiOSaV+3Xe5Tl6AkBpqO0T863ZajR
   Nathan personal key
+
+# Keys granted only on a specific target. Host vars override this empty fleet
+# default when a key should not become a personal or machine identity across
+# the wider SSH policy.
+podhaus_host_authorized_keys: []

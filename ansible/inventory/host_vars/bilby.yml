@@ -42,6 +42,13 @@ podhaus_machine_key: >-
   ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM=
   bilby machine key
 
+# Direct access to bilby only; this identity is not registered as a
+# fleet-wide personal key or a development-machine peer.
+podhaus_host_authorized_keys:
+  - >-
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZ+qDyy0/btZnHSlv7d3ObC5xJx/UaVqjnSF04NeHRo
+    nathan
+
 # Docs sources ----------------------------------------------------------
 podhaus_docs_sources:
   - name: home
