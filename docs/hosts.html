@@ -331,9 +331,9 @@
         host on the home LAN, provisioned by <a href="/host-provisioning.md">Ansible</a>
         (<code>playbooks/bandicoot.yml</code>). Since 2026-09-09 it is also the Komodo
         Core host (Postgres + FerretDB + Core), the 1Password Connect host, the
-        Ansible/Terraform control node, and the host for ClickStack and the Fenwick
-        family (the bot, signal-cli, brinno-downloader, fenwick-web-agent) — see
-        <a href="/komodo.html">Komodo</a>.
+        Ansible/Terraform control node, and the host for ClickStack, MeTube, and the
+        Fenwick family (the bot, signal-cli, brinno-downloader, fenwick-web-agent) —
+        see <a href="/komodo.html">Komodo</a>.
       </p>
       <p>
         Everything else in and out is a connection bandicoot makes, on the fractal
@@ -367,13 +367,22 @@
           <code>bandicoot-autoheal</code>, <code>bandicoot-docs</code>,
           <code>bandicoot-ofelia</code>, <code>bandicoot-backup</code> and, since 2026-09-09,
           <code>clickstack</code> (the observability backend, see
-          <a href="/monitoring.html#clickstack">Monitoring</a>), Komodo Core's own
+          <a href="/monitoring.html#clickstack">Monitoring</a>), <code>metube</code>
+          (the family's self-serve video downloader, below), Komodo Core's own
           <code>onepassword</code> stack, and the Fenwick family (<code>fenwick</code>,
           <code>signal-cli-rest-api</code>, <code>fenwick-brinno-downloader</code>,
           <code>fenwick-web-agent</code>) — through linked repos
           <code>podhaus-bandicoot</code>, <code>docs-server-bandicoot</code>, and
           <code>fenwick</code>.</li>
       </ul>
+      <p>
+        <strong>MeTube</strong> lets anyone in the family paste a video, playlist, or
+        channel URL at <code>metube.pod.haus</code> — the front door is bilby's Caddy
+        behind a Pomerium family route — and have the result land on Pouch under
+        <code>Kids/</code> (AV1 preferred, MP4 + AAC, thumbnails embedded) for Plex to
+        pick up. The web UI itself is LAN-only, at <code>10.0.0.90:8081</code>; scratch
+        space and queue state live under <code>/var/lib/metube</code> on local NVMe.
+      </p>
       <p>
         It is a laptop, so the <code>base</code> role's <code>podhaus_is_laptop</code>
         policy keeps it on the network: a logind drop-in ignores the lid switch and idle,
@@ -395,7 +404,9 @@
         snapshots the state of services that live here to a restic repository on Jump
         (<code>/mnt/jump/backups-bandicoot</code>), Jump-sentinel-gated like bilby's;
         that covers the ClickStack mongo dumps, Komodo's Postgres/FerretDB, the
-        1Password Connect data volume, and (since 2026-09-09) the Fenwick bot's SQLite
+        1Password Connect data volume, MeTube's queue state under
+        <code>/var/lib/metube/state</code> (its downloaded media on Pouch is not
+        backed up), and (since 2026-09-09) the Fenwick bot's SQLite
         and the Signal device link. Local-only, as pinelake's is: no OneDrive leg yet.
       </p>
 

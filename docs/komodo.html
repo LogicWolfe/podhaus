@@ -342,6 +342,21 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         needs unwinding.
       </blockquote>
       <blockquote>
+        <p><strong>Moving a Repo to a new server needs one CloneRepo first</strong></p>
+        A Repo resource's clone is per-Periphery: re-pointing an existing
+        Repo's <code>server</code> field at a different host does not carry
+        the clone with it, because the new server's Periphery has never
+        cloned anything for that Repo. The first <code>PullRepo</code> (or
+        any procedure that runs one) fails at the "Git Init" step with a
+        <code>NotFound</code> — there is no working tree there yet to pull
+        into. Run <code>CloneRepo</code> on the Repo once, from the Komodo UI
+        or API, before the first <code>PullRepo</code> or procedure against
+        it on the new server; every pull after that succeeds normally.
+        Evidence: <code>fenwick-push-deploy</code> failed exactly this way
+        after the fenwick Repo moved from bilby to bandicoot, and succeeded
+        once a single <code>CloneRepo</code> had run.
+      </blockquote>
+      <blockquote>
         <p><strong>Auto-deploy on push (one webhook → one procedure)</strong></p>
         Komodo's webhook contract is per-resource:
         <code>https://&lt;host&gt;/listener/&lt;auth&gt;/&lt;resource_type&gt;/&lt;id&gt;/&lt;seg&gt;</code>.
