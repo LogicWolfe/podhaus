@@ -18,11 +18,14 @@
 //  - timestamp: parsed with location=Australia/Perth so the local
 //    wall-clock instant is anchored to the correct UTC time.
 //  - severity: gatus emits NO level token. `[component]` is a function
-//    name, and `success=false` (a monitored-endpoint failure, not a
-//    gatus-process error) has not appeared in 7d of data. There is no
-//    crisp, reliable severity signal, so we do NOT set detected_level —
-//    the generic OTTL fallback derives severity from message content.
-//    Fabricating a level here would be worse than the fallback.
+//    name. Left unset, the ClickStack collector keyword-scans the body
+//    and stamps ERROR on every watchdog line (the "err" in `errors=0`)
+//    and FATAL on any endpoint whose name contains "alert" — 300k
+//    false errors a day. So every gatus line is INFO unless it carries
+//    the one real failure signal, `success=false` (a monitored endpoint
+//    failing its conditions), which is WARN: the endpoint is down, not
+//    gatus. The unbracketed process lines ("Received termination
+//    signal", "Shutting down") are INFO as well.
 //  - body: reduced to just the message; the `[component]` capture is
 //    intentionally dropped (not lifted to a label — it's a high-
 //    cardinality function name) and kept out of Body to match the
@@ -49,6 +52,18 @@ declare "gatus" {
 
       stage.output {
         source = "msg"
+      }
+
+      stage.static_labels {
+        values = {detected_level = "INFO"}
+      }
+
+      stage.match {
+        selector = "{service=\"gatus\"} |= \"success=false\""
+
+        stage.static_labels {
+          values = {detected_level = "WARN"}
+        }
       }
     }
   }
