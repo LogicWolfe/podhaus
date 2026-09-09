@@ -1,6 +1,6 @@
 // Per-service log parser — clickstack-mongo
 //
-// See parsers/komodo-op.alloy for the pattern/rationale.
+// See komodo-op.alloy for the pattern/rationale.
 //
 // MongoDB Log v2: one structured-JSON object per line. The event time
 // is a nested `{"t":{"$date":"..."}}` with a local (+08:00) offset, not
@@ -31,7 +31,7 @@ declare "clickstack_mongo" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{container=\"clickstack-mongo\"}"
+      selector = "{service=\"clickstack-mongo\"}"
 
       stage.json {
         expressions = {

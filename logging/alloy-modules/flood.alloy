@@ -1,6 +1,6 @@
 // Per-service log parser — flood (rtorrent web UI)
 //
-// See parsers/komodo-op.alloy for the pattern/rationale. Replaces the
+// See komodo-op.alloy for the pattern/rationale. Replaces the
 // legacy stage.match for flood that lived in loki.process "containers".
 //
 // flood emits pino JSON, e.g.:
@@ -20,7 +20,7 @@ declare "flood" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{container=\"flood\"}"
+      selector = "{service=\"flood\"}"
 
       stage.json {
         expressions = { lvl = "level", ts = "time", msg = "msg" }

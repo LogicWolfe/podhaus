@@ -1,9 +1,11 @@
 // Per-service log parser — komodo-op
 //
-// Config-as-code: one tracked file per service. Imported by
-// config.alloy via `import.file "parsers"` and composed into the
-// processing chain. Adding a service = add a file here + one line in
-// the chain. See docs/monitoring.html.
+// Config-as-code: one tracked file per service, shared by every host.
+// Imported by each host's config.alloy via `import.file "podhaus"` and
+// composed by chain.alloy. Adding a service = add a file here + one line
+// in chain.alloy. Selectors match the `service` label (the container
+// name with the host's own prefix stripped, so `pinelake-flood` and
+// `flood` hit the same parser). See docs/monitoring.html.
 //
 // komodo-op log format (UTC):
 //   2026/05/16 03:27:18 [INFO] Syncing Komodo secret 'OP__...'
@@ -22,7 +24,7 @@ declare "komodo_op" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{container=\"komodo-op\"}"
+      selector = "{service=\"komodo-op\"}"
 
       stage.regex {
         expression = "^(?P<ts>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}) \\[(?P<lvl>[A-Z]+)\\]\\s+(?P<msg>.*)$"

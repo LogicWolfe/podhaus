@@ -1,6 +1,6 @@
 // Per-service log parser — clickstack-clickhouse
 //
-// See parsers/komodo-op.alloy for the pattern/rationale.
+// See komodo-op.alloy for the pattern/rationale.
 //
 // ClickHouse server native log format (UTC, dotted date, microseconds);
 // the real server log goes to a file inside the container, only the
@@ -25,7 +25,7 @@ declare "clickstack_clickhouse" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{container=\"clickstack-clickhouse\"}"
+      selector = "{service=\"clickstack-clickhouse\"}"
 
       stage.regex {
         expression = "^(?P<ts>\\d{4}\\.\\d{2}\\.\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+) \\[ (?P<thread>\\d+) \\] \\{(?P<qid>[^}]*)\\} <(?P<lvl>[A-Za-z]+)> (?P<msg>.*)$"

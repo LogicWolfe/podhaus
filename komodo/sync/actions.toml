@@ -325,6 +325,29 @@ async function hashDir(absDir) {
     .slice(0, 16);
 }
 
+// Extra directories a stack's compose files fold into STACK_CONTENT_HASH,
+// declared as a top-level `x-podhaus-content-paths` list (relative to the
+// stack dir). For content the stack reads from OUTSIDE its own directory —
+// the logging stacks' shared ../alloy-modules — where a change would
+// otherwise never move the hash, so the linked-repo hosts (whose clones
+// only advance on a deploy) would never pull it. Returns normalized
+// absolute paths; a listed path that does not exist is a misconfiguration
+// and throws when hashed.
+async function extraContentPaths(stackDir, composeFiles) {
+  const out = [];
+  for (const cf of composeFiles) {
+    let doc;
+    try { doc = YAML.parse(await Deno.readTextFile(cf)); } catch { continue; }
+    const extra = doc?.['x-podhaus-content-paths'];
+    if (!Array.isArray(extra)) continue;
+    for (const rel of extra) {
+      if (typeof rel !== 'string') continue;
+      out.push(rel.startsWith('/') ? rel : normalize(`${stackDir}/${rel}`));
+    }
+  }
+  return out.sort();
+}
+
 // Resolve compose file paths for a stack (from stack.config.file_paths,
 // default `compose.yaml`). Returns absolute paths to existing files.
 async function resolveComposeFiles(stackDir, filePaths) {
@@ -467,16 +490,28 @@ for (const s of stacksSummary) {
     throw new Error(`${stack.name}: ${stackDir} is not a directory`);
   }
 
-  // Hash 1: the stack dir itself. Drives every service's
-  // podhaus.stack-content-hash label.
-  const stackHash = await hashDir(stackDir);
-
-  // Hash 2..N: per-service build-context hashes. Drive build-arg cache
-  // busting + depends-on label propagation.
   const composeFiles = await resolveComposeFiles(
     stackDir,
     stack.config?.file_paths ?? [],
   );
+
+  // Hash 1: the stack dir itself, plus any x-podhaus-content-paths the
+  // compose declares (each hashed as its own directory and folded in by
+  // path, so the same extra dir hashes identically for every stack that
+  // lists it). Drives every service's podhaus.stack-content-hash label.
+  let stackHash = await hashDir(stackDir);
+  for (const extraDir of await extraContentPaths(stackDir, composeFiles)) {
+    const extraHash = await hashDir(extraDir);
+    const combined = new TextEncoder().encode(`${stackHash}${NL}${extraDir}${NL}${extraHash}`);
+    const digestBuf = await crypto.subtle.digest('SHA-256', combined);
+    stackHash = Array.from(new Uint8Array(digestBuf))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+      .slice(0, 16);
+  }
+
+  // Hash 2..N: per-service build-context hashes. Drive build-arg cache
+  // busting + depends-on label propagation.
   const ctxMap = await buildContexts(composeFiles);
   const buildHashes = {};
   for (const [svc, absCtx] of Object.entries(ctxMap)) {

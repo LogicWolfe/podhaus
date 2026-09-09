@@ -1,0 +1,81 @@
+// systemd journal for one Linux host, warning severity and worse.
+//
+// This is where OpenSSH accepts, OOM kills, mount failures and kernel
+// faults live — both the bilby OOM and NFS postmortems were reconstructed
+// from journald by hand. Needs `/var/log/journal` and `/etc/machine-id`
+// bound read-only into the Alloy container (see each host's compose).
+//
+// `matches` are sd_journal matches: repeats of one field OR together, so
+// this is "PRIORITY <= 4". Entries with no PRIORITY field (the audit
+// transport — SELinux AVC denials, ~1.6k a day on voltaire from the SSH
+// remote-forward every session requests) are excluded by the same rule.
+//
+// Labels: host, service_name=journald (enrich.alloy maps it to
+// service.name), unit, identifier, transport, priority; detected_level
+// from the priority.
+
+declare "journal" {
+	argument "host" { }
+	argument "forward_to" { }
+
+	loki.relabel "fields" {
+		forward_to = []
+
+		rule {
+			source_labels = ["__journal__systemd_unit"]
+			target_label  = "unit"
+		}
+
+		rule {
+			source_labels = ["__journal_syslog_identifier"]
+			target_label  = "identifier"
+		}
+
+		rule {
+			source_labels = ["__journal__transport"]
+			target_label  = "transport"
+		}
+
+		rule {
+			source_labels = ["__journal_priority"]
+			target_label  = "priority"
+		}
+	}
+
+	loki.source.journal "this" {
+		path          = "/var/log/journal"
+		matches       = "PRIORITY=0 PRIORITY=1 PRIORITY=2 PRIORITY=3 PRIORITY=4"
+		max_age       = "12h"
+		relabel_rules = loki.relabel.fields.rules
+		labels        = {"host" = argument.host.value, "service_name" = "journald", "stream" = "journal"}
+		forward_to    = [loki.process.severity.receiver]
+	}
+
+	loki.process "severity" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector = "{priority=\"4\"}"
+
+			stage.static_labels {
+				values = {detected_level = "WARN"}
+			}
+		}
+
+		stage.match {
+			selector = "{priority=\"3\"}"
+
+			stage.static_labels {
+				values = {detected_level = "ERROR"}
+			}
+		}
+
+		stage.match {
+			selector = "{priority=~\"[0-2]\"}"
+
+			stage.static_labels {
+				values = {detected_level = "FATAL"}
+			}
+		}
+	}
+}

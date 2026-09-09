@@ -1,181 +1,69 @@
-// ACTIVE bilby logging config. Pipeline:
-//   docker discovery → loki.process "containers" (ANSI strip +
-//   op-connect-api/flood JSON) → per-service parser chain (imported
-//   from parsers/, one tracked file per service) → Loki→OTLP bridge →
-//   OTTL enrich (service.name + severity fallback) → ClickStack collector.
-//   Gatus /metrics is scraped here and rides the same authed exporter.
+// bilby's Alloy. Pipeline (all shared modules in ../alloy-modules):
+//   docker_logs → chain (per-service parsers) → Loki→OTLP bridge → enrich
+//   (host + service.name resource attributes, severity) → batch → the
+//   ClickStack collector on bandicoot, cross-LAN. Plex's server log, the
+//   Flood job logs and the systemd journal ride the same path. Gatus,
+//   ESPHome and Alloy's own metrics are scraped here and bridged to OTLP.
 //   Alloy self-telemetry (own pipeline spans + self metrics) rides the
 //   same exporter; its logs do NOT (already captured via the Docker
-//   discovery path + parsers.alloy — write_to here would double-ingest,
+//   discovery path + alloy.alloy — write_to here would double-ingest,
 //   see the fenwick double-ingest note in fenwick/compose.yaml).
 //
-// Per-service parsers are config-as-code: parsers/<service>.alloy is a
-// `declare` module owning that service's shaping (real event-time
-// parse, level→detected_level, Body=message). Add a service = add a
-// file in parsers/ + one line in the chain below. Unparsed services
-// pass through untouched and get the generic OTTL severity fallback.
+// Per-service parsing is config-as-code in ../alloy-modules (one module per
+// service, one chain for every host), so a service moving between hosts
+// keeps its parsing with no change here. See docs/monitoring.html.
 
-// Alloy's own internal-pipeline tracing. Net-new signal: a per-host
-// `alloy` service in HyperDX Traces showing component-eval spans —
-// the pipeline diagnosing itself. Low sampling on purpose: this is the
-// one mem-risky box (4g ClickHouse cap), span volume scales with
-// component count, and the value here is health not request flow.
+// Alloy's own internal-pipeline tracing. A per-host `alloy` service in
+// HyperDX Traces showing component-eval spans — the pipeline diagnosing
+// itself. Low sampling on purpose: span volume scales with component
+// count, and the value here is health not request flow.
 tracing {
-  sampling_fraction = 0.1
-  write_to          = [otelcol.processor.batch.clickstack.input]
+	sampling_fraction = 0.1
+	write_to          = [otelcol.processor.batch.clickstack.input]
 }
 
-import.file "parsers" {
-  filename = "/etc/alloy/parsers"
+import.file "podhaus" {
+	filename = "/etc/alloy-modules"
 }
 
-discovery.docker "containers" {
-  host             = "unix:///var/run/docker.sock"
-  refresh_interval = "30s"
+podhaus.docker_logs "run" {
+	host       = "bilby"
+	forward_to = [podhaus.chain.run.receiver]
 }
 
-discovery.relabel "container_logs" {
-  targets = discovery.docker.containers.targets
-
-  // Drop the leading slash that Docker prepends to container names.
-  rule {
-    source_labels = ["__meta_docker_container_name"]
-    regex         = "/(.*)"
-    target_label  = "container"
-  }
-
-  rule {
-    source_labels = ["__meta_docker_container_log_stream"]
-    target_label  = "stream"
-  }
-
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
-    target_label  = "compose_project"
-  }
-
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-    target_label  = "compose_service"
-  }
+podhaus.plex_server_log "run" {
+	host       = "bilby"
+	container  = "plex"
+	logs_dir   = "/var/log/podhaus/plex"
+	timezone   = "Australia/Perth"
+	forward_to = [podhaus.chain.run.receiver]
 }
 
-loki.source.docker "containers" {
-  host          = "unix:///var/run/docker.sock"
-  targets       = discovery.relabel.container_logs.output
-  forward_to    = [loki.process.containers.receiver]
-  relabel_rules = discovery.relabel.container_logs.rules
-  labels        = {"host" = "bilby"}
+podhaus.flood_job_logs "run" {
+	host       = "bilby"
+	container  = "flood"
+	flood_db   = "/var/log/podhaus/flood-db"
+	forward_to = [podhaus.chain.run.receiver]
 }
 
-// Universal pre-shaping: strip ANSI so the per-service parsers (and
-// JSON stages) never see colour codes. komodo-core, home-assistant,
-// flood etc. emit raw ANSI. Per-container shaping now lives in
-// parsers/<service>.alloy (config-as-code) — op-connect-api and flood
-// moved to their own parser modules; the legacy inline stage.match
-// blocks are gone.
-loki.process "containers" {
-  forward_to = [parsers.fenwick.run.receiver]
-
-  stage.decolorize {}
+podhaus.journal "run" {
+	host       = "bilby"
+	forward_to = [podhaus.chain.run.receiver]
 }
 
-// ---- ClickStack OTLP sink (replaces loki.write to Victoria Logs) ----
-// Alloy is itself an OTel Collector distro: bridge the Loki-shaped
-// entries to OTLP, batch, and ship to ClickStack's bundled collector
-// over OTLP/HTTP. bilby reaches it in-network by container name.
-
-// Per-service parser chain (config-as-code, one module file per
-// service in parsers/). Order is functionally irrelevant — each module
-// only transforms its own container's streams via stage.match and
-// passes every other stream through untouched. Extend by adding
-// parsers/<svc>.alloy and inserting another link in this chain.
-// Anything without a parser here (e.g. rtorrent-cleanup, docs-server,
-// signal-cli-rest-api) still flows and gets the generic OTTL
-// service.name + severity fallback in otelcol.processor.transform.
-// fenwick is the exception: its parser DROPS the stream (it
-// self-reports OTLP directly to ClickStack) — runs first so the drop
-// is cheap. See parsers/fenwick.alloy.
-parsers.fenwick           "run" { forward_to = [parsers.komodo_op.run.receiver] }
-parsers.komodo_op         "run" { forward_to = [parsers.komodo_core.run.receiver] }
-parsers.komodo_core       "run" { forward_to = [parsers.komodo_ferretdb.run.receiver] }
-parsers.komodo_ferretdb   "run" { forward_to = [parsers.komodo_postgres.run.receiver] }
-parsers.komodo_postgres   "run" { forward_to = [parsers.paperless_postgres.run.receiver] }
-parsers.paperless_postgres "run" { forward_to = [parsers.op_connect_api.run.receiver] }
-parsers.op_connect_api    "run" { forward_to = [parsers.op_connect_sync.run.receiver] }
-parsers.op_connect_sync   "run" { forward_to = [parsers.clickstack_mongo.run.receiver] }
-parsers.clickstack_mongo  "run" { forward_to = [parsers.hyperdx.run.receiver] }
-parsers.hyperdx           "run" { forward_to = [parsers.clickstack_otel.run.receiver] }
-parsers.clickstack_otel   "run" { forward_to = [parsers.alloy.run.receiver] }
-parsers.alloy             "run" { forward_to = [parsers.gatus.run.receiver] }
-parsers.gatus             "run" { forward_to = [parsers.paperless.run.receiver] }
-parsers.paperless         "run" { forward_to = [parsers.home_assistant.run.receiver] }
-parsers.home_assistant    "run" { forward_to = [parsers.cloudflare_tunnel.run.receiver] }
-parsers.cloudflare_tunnel "run" { forward_to = [parsers.unpackerr.run.receiver] }
-parsers.unpackerr         "run" { forward_to = [parsers.clickstack_clickhouse.run.receiver] }
-parsers.clickstack_clickhouse "run" { forward_to = [parsers.autoheal.run.receiver] }
-parsers.autoheal          "run" { forward_to = [parsers.flood.run.receiver] }
-parsers.flood             "run" { forward_to = [otelcol.receiver.loki.clickstack.receiver] }
+podhaus.chain "run" {
+	forward_to = [otelcol.receiver.loki.clickstack.receiver]
+}
 
 otelcol.receiver.loki "clickstack" {
-  output {
-    logs = [otelcol.processor.transform.enrich.input]
-  }
+	output {
+		logs = [podhaus.enrich.run.input]
+	}
 }
 
-// Enrich bridged logs before export:
-//  1. Set the OTLP service.name resource attribute from the Docker
-//     container name. The Loki→OTLP bridge only puts `container` in log
-//     attributes; without this HyperDX's ServiceName column, Service
-//     Map and service filters are all blank.
-//  2. Re-derive severity from the real level token at the START of the
-//     line. ClickStack otherwise keyword-scans the whole body and
-//     mislabels lines like "[INFO] ... Total errors encountered: 0" as
-//     ERROR. One delimiter-anchored pattern over the first ~60 chars
-//     ("errors" ≠ "error"); lines with no recognisable level keep
-//     whatever ClickStack inferred. OTTL, not per-container regex.
-otelcol.processor.transform "enrich" {
-  error_mode = "ignore"
-
-  log_statements {
-    context = "log"
-    statements = [
-      `set(resource.attributes["service.name"], attributes["container"]) where attributes["container"] != nil`,
-
-      `set(severity_text, "TRACE") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
-      `set(severity_number, 1) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
-
-      `set(severity_text, "DEBUG") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
-      `set(severity_number, 5) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
-
-      `set(severity_text, "INFO") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
-      `set(severity_number, 9) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
-
-      `set(severity_text, "WARN") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
-      `set(severity_number, 13) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
-
-      `set(severity_text, "ERROR") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
-      `set(severity_number, 17) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
-
-      `set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
-      `set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
-
-      // Authoritative: per-service parsers (parsers/*.alloy) set
-      // `detected_level` from the real parsed level. Runs LAST so it
-      // overrides the body-keyword heuristic above for parsed services.
-      `set(severity_text, attributes["detected_level"]) where attributes["detected_level"] != nil`,
-      `set(severity_number, 1)  where attributes["detected_level"] == "TRACE"`,
-      `set(severity_number, 5)  where attributes["detected_level"] == "DEBUG"`,
-      `set(severity_number, 9)  where attributes["detected_level"] == "INFO"`,
-      `set(severity_number, 13) where attributes["detected_level"] == "WARN" or attributes["detected_level"] == "WARNING"`,
-      `set(severity_number, 17) where attributes["detected_level"] == "ERROR" or attributes["detected_level"] == "ERR"`,
-      `set(severity_number, 21) where attributes["detected_level"] == "FATAL" or attributes["detected_level"] == "PANIC"`,
-    ]
-  }
-
-  output {
-    logs = [otelcol.processor.batch.clickstack.input]
-  }
+podhaus.enrich "run" {
+	host   = "bilby"
+	output = [otelcol.processor.batch.clickstack.input]
 }
 
 // Gatus exposes Prometheus metrics at :8080/metrics (metrics: true in

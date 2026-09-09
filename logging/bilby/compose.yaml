@@ -18,8 +18,16 @@ services:
       # Directory bind (not file bind) — alloy reloads config on file
       # change, and a file-level bind pins the inode at mount time so
       # atomic-rename host edits would silently never reach the container.
-      # The bound dir contains config.alloy + parsers/ (per-service
-      # config-as-code modules imported via import.file).
+      # The bound dir holds config.alloy; the per-service parser modules
+      # are the shared ../alloy-modules bind below.
       - ${PODHAUS_REPO}/logging/bilby/alloy-conf:/etc/alloy:ro
+      # Shared parser/pipeline modules, one directory for every host.
+      - ${PODHAUS_REPO}/logging/alloy-modules:/etc/alloy-modules:ro
+      # Files Alloy tails on this host (see config.alloy): Plex's server
+      # log, the Flood job logs + rtorrent.log, and the systemd journal.
+      - /var/lib/plex-local/Library/Application Support/Plex Media Server/Logs:/var/log/podhaus/plex:ro
+      - /var/lib/flood-db:/var/log/podhaus/flood-db:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

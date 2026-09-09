@@ -1,6 +1,6 @@
 // Per-service log parser — alloy
 //
-// See parsers/komodo-op.alloy for the pattern/rationale.
+// See komodo-op.alloy for the pattern/rationale.
 //
 // Alloy emits its own logs as logfmt (UTC, RFC3339 nanosecond ts):
 //   ts=2026-05-16T03:56:20.117255871Z level=info msg="finished
@@ -30,7 +30,7 @@ declare "alloy" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{container=\"alloy\"}"
+      selector = "{service=\"alloy\"}"
 
       stage.logfmt {
         mapping = {

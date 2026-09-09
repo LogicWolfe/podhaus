@@ -1,0 +1,46 @@
+// One log file that belongs to a container, tailed under that container's
+// service so the matching parser module in chain.alloy shapes it exactly
+// like the container's stdout. Used for ClickHouse's error log on
+// bandicoot: the file is the only place ClickHouse's own errors land, and
+// its lines are the same format the clickstack-clickhouse parser already
+// handles. Bind the log directory read-only into Alloy and give `path`
+// the in-container path.
+//
+// `tail_from_end` skips the existing contents on first sight — right for
+// a large, long-lived file (ClickHouse's is ~90 MB) where only new lines
+// matter.
+
+declare "container_file_log" {
+	argument "host" { }
+	argument "container" { }
+	argument "service" { }
+	argument "path" { }
+	argument "tail_from_end" { }
+	argument "forward_to" { }
+
+	local.file_match "this" {
+		path_targets = [{
+			__path__  = argument.path.value,
+			host      = argument.host.value,
+			container = argument.container.value,
+			service   = argument.service.value,
+			stream    = "file",
+		}]
+	}
+
+	discovery.relabel "log_file" {
+		targets = local.file_match.this.targets
+
+		rule {
+			source_labels = ["__path__"]
+			regex         = ".*/([^/]+)$"
+			target_label  = "log_file"
+		}
+	}
+
+	loki.source.file "this" {
+		targets       = discovery.relabel.log_file.output
+		tail_from_end = argument.tail_from_end.value
+		forward_to    = argument.forward_to.value
+	}
+}

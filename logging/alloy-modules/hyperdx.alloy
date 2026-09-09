@@ -1,6 +1,6 @@
 // Per-service log parser — hyperdx
 //
-// See parsers/komodo-op.alloy for the pattern/rationale.
+// See komodo-op.alloy for the pattern/rationale.
 //
 // hyperdx (HyperDX / ClickStack app server, Node + pino) emits a
 // bracketed component prefix followed by a pino JSON object:
@@ -23,7 +23,7 @@ declare "hyperdx" {
 		forward_to = argument.forward_to.value
 
 		stage.match {
-			selector = "{container=\"hyperdx\"}"
+			selector = "{service=\"hyperdx\"}"
 
 			// Split "[COMP] {json}". Non-matching lines (no bracket prefix
 			// or no trailing JSON object) leave all groups empty and the

@@ -1,6 +1,6 @@
 // Per-service log parser — clickstack-otel
 //
-// See parsers/komodo-op.alloy for the pattern/rationale.
+// See komodo-op.alloy for the pattern/rationale.
 //
 // clickstack-otel (the OpenTelemetry Collector supervisor) emits
 // zap-style JSON, one object per line:
@@ -22,7 +22,7 @@ declare "clickstack_otel" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{container=\"clickstack-otel\"}"
+      selector = "{service=\"clickstack-otel\"}"
 
       stage.json {
         expressions = {lvl = "level", ts = "ts", msg = "msg"}

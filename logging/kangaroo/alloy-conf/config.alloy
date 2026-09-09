@@ -1,140 +1,41 @@
-// ACTIVE kangaroo logging config. Mirrors bilby: docker discovery →
-// loki.process "containers" (ANSI strip) → per-service parser chain
-// (config-as-code, parsers/<service>.alloy) → Loki→OTLP bridge → OTTL
-// enrich → bandicoot's published collector cross-LAN at 10.0.0.90:4318.
-// Alloy self-telemetry (own pipeline spans + self metrics) rides the
-// same cross-LAN exporter; its logs do NOT (already captured via the
-// Docker discovery path + parsers.alloy — write_to here would
-// double-ingest, see fenwick/compose.yaml).
+// kangaroo's Alloy. Shared modules in ../alloy-modules do the work:
+//   docker_logs → chain (per-service parsers) → Loki→OTLP bridge → enrich
+//   → batch → the ClickStack collector on bandicoot, cross-LAN plaintext.
+//   QTS has no journald, so container output is the only log source.
 //
-// kangaroo's container set differs from bilby's (alloy, syncthing,
-// backrest, komodo-periphery, autoheal). alloy.alloy / autoheal.alloy
-// are byte-identical copies of bilby's (same images/format). No Gatus
-// scrape / rtorrent tail / op-connect / flood — those are bilby-only.
+// Per-service parsing is config-as-code in ../alloy-modules (one module per
+// service, one chain for every host), so a service moving between hosts
+// keeps its parsing with no change here. See docs/monitoring.html.
 
-// Alloy's own internal-pipeline tracing — mirrors bilby. Gives a
-// per-host `alloy` service in HyperDX Traces (kangaroo's collector
-// hop included). Low sampling: pipeline health, not request flow.
+// Internal-pipeline tracing — unified `alloy` service in HyperDX
+// (same name on every host; one row per host).
 tracing {
-  sampling_fraction = 0.1
-  write_to          = [otelcol.processor.batch.clickstack.input]
+	sampling_fraction = 0.1
+	write_to          = [otelcol.processor.batch.clickstack.input]
 }
 
-import.file "parsers" {
-  filename = "/etc/alloy/parsers"
+import.file "podhaus" {
+	filename = "/etc/alloy-modules"
 }
 
-discovery.docker "containers" {
-  host             = "unix:///var/run/docker.sock"
-  refresh_interval = "30s"
+podhaus.docker_logs "run" {
+	host       = "kangaroo"
+	forward_to = [podhaus.chain.run.receiver]
 }
 
-discovery.relabel "container_logs" {
-  targets = discovery.docker.containers.targets
-
-  // Drop the leading slash that Docker prepends to container names.
-  rule {
-    source_labels = ["__meta_docker_container_name"]
-    regex         = "/(.*)"
-    target_label  = "container"
-  }
-
-  rule {
-    source_labels = ["__meta_docker_container_log_stream"]
-    target_label  = "stream"
-  }
-
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
-    target_label  = "compose_project"
-  }
-
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-    target_label  = "compose_service"
-  }
+podhaus.chain "run" {
+	forward_to = [otelcol.receiver.loki.clickstack.receiver]
 }
-
-loki.source.docker "containers" {
-  host          = "unix:///var/run/docker.sock"
-  targets       = discovery.relabel.container_logs.output
-  forward_to    = [loki.process.containers.receiver]
-  relabel_rules = discovery.relabel.container_logs.rules
-  labels        = {"host" = "kangaroo"}
-}
-
-// Universal pre-shaping: ANSI strip before the per-service parsers.
-loki.process "containers" {
-  forward_to = [parsers.komodo_periphery.run.receiver]
-
-  stage.decolorize {}
-}
-
-// Per-service parser chain (config-as-code, parsers/<service>.alloy).
-// Each module only transforms its own container's streams; the rest
-// pass through and get the generic OTTL fallback.
-parsers.komodo_periphery "run" { forward_to = [parsers.alloy.run.receiver] }
-parsers.alloy            "run" { forward_to = [parsers.autoheal.run.receiver] }
-parsers.autoheal         "run" { forward_to = [parsers.syncthing.run.receiver] }
-parsers.syncthing        "run" { forward_to = [parsers.backrest.run.receiver] }
-parsers.backrest         "run" { forward_to = [otelcol.receiver.loki.clickstack.receiver] }
-
-// ---- ClickStack OTLP sink (replaces loki.write to Victoria Logs) ----
-// kangaroo has no in-network path to the collector, so it ships
-// cross-LAN to bilby's published OTLP/HTTP port (matches the old
-// cross-LAN VL push, just OTLP now). LAN-only, plaintext — same trust
-// posture as the previous :9428 path.
 
 otelcol.receiver.loki "clickstack" {
-  output {
-    logs = [otelcol.processor.transform.enrich.input]
-  }
+	output {
+		logs = [podhaus.enrich.run.input]
+	}
 }
 
-// Same enrichment as bilby (service.name from container + correct
-// severity from the leading level token). See the bilby config for the
-// full rationale.
-otelcol.processor.transform "enrich" {
-  error_mode = "ignore"
-
-  log_statements {
-    context = "log"
-    statements = [
-      `set(resource.attributes["service.name"], attributes["container"]) where attributes["container"] != nil`,
-
-      `set(severity_text, "TRACE") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
-      `set(severity_number, 1) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
-
-      `set(severity_text, "DEBUG") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
-      `set(severity_number, 5) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
-
-      `set(severity_text, "INFO") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
-      `set(severity_number, 9) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
-
-      `set(severity_text, "WARN") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
-      `set(severity_number, 13) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
-
-      `set(severity_text, "ERROR") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
-      `set(severity_number, 17) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
-
-      `set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
-      `set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
-
-      // Authoritative: per-service parsers (parsers/*.alloy) set
-      // `detected_level`. Runs LAST so it overrides the body heuristic.
-      `set(severity_text, attributes["detected_level"]) where attributes["detected_level"] != nil`,
-      `set(severity_number, 1)  where attributes["detected_level"] == "TRACE"`,
-      `set(severity_number, 5)  where attributes["detected_level"] == "DEBUG"`,
-      `set(severity_number, 9)  where attributes["detected_level"] == "INFO"`,
-      `set(severity_number, 13) where attributes["detected_level"] == "WARN" or attributes["detected_level"] == "WARNING"`,
-      `set(severity_number, 17) where attributes["detected_level"] == "ERROR" or attributes["detected_level"] == "ERR"`,
-      `set(severity_number, 21) where attributes["detected_level"] == "FATAL" or attributes["detected_level"] == "PANIC"`,
-    ]
-  }
-
-  output {
-    logs = [otelcol.processor.batch.clickstack.input]
-  }
+podhaus.enrich "run" {
+	host   = "kangaroo"
+	output = [otelcol.processor.batch.clickstack.input]
 }
 
 // Alloy self metrics — Prometheus→OTLP bridge (net-new on kangaroo;

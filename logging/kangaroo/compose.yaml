@@ -1,8 +1,5 @@
-# Kangaroo's logging overlay. Just the alloy bind-mount for the
-# kangaroo-specific config.alloy (different host label, write target
-# points cross-LAN to bilby's ClickStack collector at 10.0.0.119:4318,
-# no per-container JSON-rewrite stages since the
-# matched container names — op-connect-api, flood — only exist on bilby).
+# Kangaroo's logging overlay: the alloy-conf bind for the kangaroo
+# config.alloy plus the shared ../alloy-modules bind every host carries.
 
 
 services:
@@ -19,5 +16,6 @@ services:
       # shared compose's `command:` line. See
       # docs/stack-conventions.html#bind-mounts.
       - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/logging/kangaroo/alloy-conf:/etc/alloy:ro
+      - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/logging/alloy-modules:/etc/alloy-modules:ro
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

@@ -1,0 +1,74 @@
+// Container stdout/stderr for one host: Docker discovery → labels → tail
+// → ANSI strip. Shared by every host; the only per-host input is the
+// host name.
+//
+// Labels:
+//   host            the host name, for HyperDX filtering and the Gatus
+//                   staleness checks (mirrored onto the OTLP resource by
+//                   enrich.alloy, where a JSON `host` field in a log body
+//                   cannot overwrite it).
+//   container       the container name as Docker reports it.
+//   service         the container name with this host's own `<host>-`
+//                   prefix stripped, so `pinelake-flood` on Pinelake and
+//                   `flood` on bilby select the same parser module.
+//   stream          stdout / stderr.
+//   compose_project, compose_service  from the compose labels.
+
+declare "docker_logs" {
+	argument "host" { }
+	argument "forward_to" { }
+
+	discovery.docker "containers" {
+		host             = "unix:///var/run/docker.sock"
+		refresh_interval = "30s"
+	}
+
+	discovery.relabel "container_logs" {
+		targets = discovery.docker.containers.targets
+
+		// Drop the leading slash that Docker prepends to container names.
+		rule {
+			source_labels = ["__meta_docker_container_name"]
+			regex         = "/(.*)"
+			target_label  = "container"
+		}
+
+		rule {
+			source_labels = ["__meta_docker_container_name"]
+			regex         = "/(?:" + argument.host.value + "-)?(.*)"
+			target_label  = "service"
+		}
+
+		rule {
+			source_labels = ["__meta_docker_container_log_stream"]
+			target_label  = "stream"
+		}
+
+		rule {
+			source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+			target_label  = "compose_project"
+		}
+
+		rule {
+			source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+			target_label  = "compose_service"
+		}
+	}
+
+	loki.source.docker "containers" {
+		host          = "unix:///var/run/docker.sock"
+		targets       = discovery.relabel.container_logs.output
+		forward_to    = [loki.process.decolorize.receiver]
+		relabel_rules = discovery.relabel.container_logs.rules
+		labels        = {"host" = argument.host.value}
+	}
+
+	// Universal pre-shaping: strip ANSI so the per-service parsers (and
+	// JSON stages) never see colour codes. komodo-core, home-assistant,
+	// flood etc. emit raw ANSI.
+	loki.process "decolorize" {
+		forward_to = argument.forward_to.value
+
+		stage.decolorize { }
+	}
+}

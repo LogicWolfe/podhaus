@@ -21,6 +21,14 @@ max_uploads = 15
 
 network.xmlrpc.size_limit.set = 10000000
 
+# rtorrent's own log: tracker and peer failures otherwise go nowhere (the
+# daemon has no stdout on the container). Written into the session dir so
+# the logging stack's flood_job_logs module tails it alongside the job
+# logs. "info" cascades to notice/warn/error/critical and their subsystem
+# groups; lines are `<epoch> <C|E|W|N|I|D> <message>`.
+log.open_file = "log", /flood-db/rtorrent.log
+log.add_output = "info", "log"
+
 schedule = watch_directory,1,1,"load.start=/data/.watch/*.torrent"
 schedule = untied_directory,5,5,"stop_untied=/data/.watch/*.torrent"
 schedule = scgi_permission,0,0,"execute.nothrow=chmod,\"g+w,o=\",/tmp/rtorrent.sock"

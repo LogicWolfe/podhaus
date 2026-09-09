@@ -1,0 +1,43 @@
+// The per-service parser chain, shared by every host.
+//
+// One `<service>.alloy` module per parsed service lives beside this file;
+// each only transforms its own service's streams via stage.match and passes
+// every other stream through untouched, so the same chain runs on all
+// hosts regardless of which containers a host has. That is the point: a
+// service moving between hosts takes its parsing with it, with no logging
+// change at all. Order is functionally irrelevant except fenwick, whose
+// module DROPS the stream (it self-reports OTLP) and so runs first.
+//
+// To parse a new service: add `<service>.alloy` here and insert one link
+// below. Anything not in the chain still ships and gets the generic OTTL
+// severity fallback in enrich.alloy.
+
+declare "chain" {
+	argument "forward_to" { }
+
+	fenwick "run" { forward_to = [komodo_op.run.receiver] }
+	komodo_op "run" { forward_to = [komodo_core.run.receiver] }
+	komodo_core "run" { forward_to = [komodo_periphery.run.receiver] }
+	komodo_periphery "run" { forward_to = [komodo_ferretdb.run.receiver] }
+	komodo_ferretdb "run" { forward_to = [komodo_postgres.run.receiver] }
+	komodo_postgres "run" { forward_to = [paperless_postgres.run.receiver] }
+	paperless_postgres "run" { forward_to = [op_connect_api.run.receiver] }
+	op_connect_api "run" { forward_to = [op_connect_sync.run.receiver] }
+	op_connect_sync "run" { forward_to = [clickstack_mongo.run.receiver] }
+	clickstack_mongo "run" { forward_to = [hyperdx.run.receiver] }
+	hyperdx "run" { forward_to = [clickstack_otel.run.receiver] }
+	clickstack_otel "run" { forward_to = [clickstack_clickhouse.run.receiver] }
+	clickstack_clickhouse "run" { forward_to = [alloy.run.receiver] }
+	alloy "run" { forward_to = [gatus.run.receiver] }
+	gatus "run" { forward_to = [paperless.run.receiver] }
+	paperless "run" { forward_to = [home_assistant.run.receiver] }
+	home_assistant "run" { forward_to = [autoheal.run.receiver] }
+	autoheal "run" { forward_to = [syncthing.run.receiver] }
+	syncthing "run" { forward_to = [backrest.run.receiver] }
+	backrest "run" { forward_to = [flood.run.receiver] }
+	flood "run" { forward_to = argument.forward_to.value }
+
+	export "receiver" {
+		value = fenwick.run.receiver
+	}
+}

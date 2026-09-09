@@ -1,6 +1,6 @@
 // Per-service log parser — op-connect-sync
 //
-// See parsers/komodo-op.alloy for the pattern/rationale.
+// See komodo-op.alloy for the pattern/rationale.
 //
 // 1Password Connect sync (connect-sync) emits the same JSON shape as
 // op-connect-api, one object per line:
@@ -30,7 +30,7 @@ declare "op_connect_sync" {
 		forward_to = argument.forward_to.value
 
 		stage.match {
-			selector = "{container=\"op-connect-sync\"}"
+			selector = "{service=\"op-connect-sync\"}"
 
 			stage.json {
 				expressions = {

@@ -1,12 +1,20 @@
 # Shared service definition for the logging stack's Alloy. Each host
 # stack combines its overlay with this file through `file_paths` and adds
-# host-specific bits (alloy-conf bind path + per-service parsers/, and
-# on bilby the rtorrent-cleanup file tail).
+# the host-specific bits: the alloy-conf bind, the shared ../alloy-modules
+# bind, and the read-only binds for whatever files that host tails (Plex
+# and Flood logs, the systemd journal, ClickHouse's error log).
 #
-# Alloy bridges container logs to OTLP and ships to ClickStack: bilby
-# in-network, kangaroo cross-LAN, and Numbat/fractal through their mTLS
-# ingest paths. The
-# ingestion key and endpoint live in each host's config and stack TOML.
+# Alloy bridges container logs, tailed files and the journal to OTLP and
+# ships to the ClickStack collector on bandicoot: bilby and kangaroo
+# cross-LAN in plaintext, every other host through the mTLS ingest path.
+# The ingestion key and endpoint live in each host's config and stack TOML.
+
+# ../alloy-modules is outside every host's stack directory, so on its own
+# a change there would not move STACK_CONTENT_HASH and the linked-repo
+# hosts would never pull it (their clones only advance on a deploy). The
+# content-hash action folds these extra paths into the stack hash.
+x-podhaus-content-paths:
+  - ../alloy-modules
 
 services:
   alloy:

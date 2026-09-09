@@ -686,8 +686,12 @@ endpoints:
       X-ClickHouse-User: default
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
     # See Kangaroo check above for why this is count() over a windowed
-    # scan rather than max(Timestamp) over the whole table.
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 10 MINUTE AND LogAttributes['host']='bilby'"
+    # scan rather than max(Timestamp) over the whole table. The host is
+    # the RESOURCE attribute stamped by the shared enrich module
+    # (logging/alloy-modules/enrich.alloy): the collector promotes a JSON
+    # `host` field in a log body over LogAttributes['host'], so the log
+    # attribute is wrong for Pomerium, Caddy and FerretDB lines.
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 10 MINUTE AND ResourceAttributes['host']='bilby'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"

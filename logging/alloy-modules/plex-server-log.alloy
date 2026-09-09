@@ -1,0 +1,79 @@
+// Plex Media Server's own log file. Plex prints three lines a day to
+// stdout; playback decisions, client sessions and scanner results only
+// exist in `Plex Media Server.log` under the config volume. Bind that
+// Logs directory read-only into Alloy and point `logs_dir` at it.
+//
+// Line shape (local wall-clock in the container's TZ, hence `timezone`):
+//   Sep 09, 2026 17:44:40.556 [281472660173024] DEBUG - Request: [...] GET /identity ...
+//
+// Dropped before parsing: the Gatus /identity healthcheck pair (a request
+// and its completion every minute) and every other `Completed:` line,
+// which is the response half of a `Request:` line already kept. The log
+// is debug level by design — the debug lines are the playback decisions
+// — so the level is not filtered.
+//
+// Labels: host, container (the Plex container, so the file lands under
+// the same service as its stdout), service=plex, log_file, stream=file.
+
+declare "plex_server_log" {
+	argument "host" { }
+	argument "container" { }
+	argument "logs_dir" { }
+	argument "timezone" { }
+	argument "forward_to" { }
+
+	local.file_match "this" {
+		path_targets = [{
+			__path__  = argument.logs_dir.value + "/Plex Media Server.log",
+			host      = argument.host.value,
+			container = argument.container.value,
+			service   = "plex",
+			log_file  = "Plex Media Server.log",
+			stream    = "file",
+		}]
+	}
+
+	loki.source.file "this" {
+		targets    = local.file_match.this.targets
+		forward_to = [loki.process.this.receiver]
+	}
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.drop {
+			expression = "GET /identity( |$)"
+		}
+
+		stage.drop {
+			expression = "\\] DEBUG - Completed: \\["
+		}
+
+		stage.match {
+			selector = "{service=\"plex\"} |~ \"^[A-Z][a-z]{2} \\\\d{2}, \\\\d{4} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d{3} \\\\[\""
+
+			stage.regex {
+				expression = "^(?P<ts>[A-Z][a-z]{2} \\d{2}, \\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(?P<thread>\\d+)\\] (?P<lvl>[A-Z]+) - (?P<msg>.*)$"
+			}
+
+			stage.timestamp {
+				source   = "ts"
+				format   = "Jan 02, 2006 15:04:05.000"
+				location = argument.timezone.value
+			}
+
+			stage.template {
+				source   = "lvl"
+				template = "{{ if eq .Value \"VERBOSE\" }}TRACE{{ else }}{{ .Value }}{{ end }}"
+			}
+
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+
+			stage.output {
+				source = "msg"
+			}
+		}
+	}
+}

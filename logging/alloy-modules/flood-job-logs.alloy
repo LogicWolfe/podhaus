@@ -1,0 +1,155 @@
+// The Flood stack's job logs and rtorrent's own log, all files under the
+// flood-db volume. The publish / extract / label-sync / stignore scripts
+// redirect their own output to these files on purpose: rtorrent's
+// finished-download hooks run outside ofelia and discard stdout, so a
+// stdout-only pipeline would lose every hook-triggered run. Bind flood-db
+// read-only into Alloy and point `flood_db` at it.
+//
+// Shapes:
+//   flood-publish / plex-label-sync / pinelake-stignore (UTC):
+//     [2026-09-09 09:04:55 UTC] linked /data/torrents/... -> /data/Kids/...
+//     [2026-09-09 09:05:00 UTC] WARN: gatus heartbeat push failed: ...
+//   rtorrent-extract: a timestamped header per invocation, then
+//     untimestamped `[rtorrent-extract] ...` lines that keep ingest time.
+//     === 2026-09-09 09:04:55 UTC invoked argc=1 argv=[...] ===
+//   rtorrent.log (flood/conf/rtorrent.rc log.open_file; epoch seconds
+//     and a level letter C/E/W/N/I/D):
+//     1757408695 N Using 'epoll' based polling.
+//
+// pinelake-stignore reports "changed=0" every five minutes on bilby
+// (~26k lines); those lines are dropped here and the file stays as the
+// on-disk heartbeat. rtorrent-cleanup.log is a dead file from 2026-06
+// and is not tailed.
+//
+// Labels: host, container (the Flood container), service=flood, log_file,
+// stream=file.
+
+declare "flood_job_logs" {
+	argument "host" { }
+	argument "container" { }
+	argument "flood_db" { }
+	argument "forward_to" { }
+
+	local.file_match "this" {
+		path_targets = [{
+			__path__  = argument.flood_db.value + "/{flood-publish,rtorrent-extract,plex-label-sync,pinelake-stignore,rtorrent}.log",
+			host      = argument.host.value,
+			container = argument.container.value,
+			service   = "flood",
+			stream    = "file",
+		}]
+	}
+
+	discovery.relabel "log_file" {
+		targets = local.file_match.this.targets
+
+		rule {
+			source_labels = ["__path__"]
+			regex         = ".*/([^/]+)$"
+			target_label  = "log_file"
+		}
+	}
+
+	loki.source.file "this" {
+		targets    = discovery.relabel.log_file.output
+		forward_to = [loki.process.this.receiver]
+	}
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector = "{log_file=\"pinelake-stignore.log\"} |= \"changed=0\""
+			action   = "drop"
+		}
+
+		stage.match {
+			selector = "{log_file=~\"flood-publish.log|plex-label-sync.log|pinelake-stignore.log\"} |~ \"^\\\\[\\\\d{4}-\""
+
+			stage.regex {
+				expression = "^\\[(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) UTC\\] (?P<msg>.*)$"
+			}
+
+			stage.timestamp {
+				source   = "ts"
+				format   = "2006-01-02 15:04:05"
+				location = "UTC"
+			}
+
+			stage.output {
+				source = "msg"
+			}
+		}
+
+		// Only the job scripts' explicit `WARN:` / `ERROR:` prefixes carry a
+		// level; a bare `detected_level` label on every other line would
+		// override the body-keyword fallback with an empty value.
+		stage.match {
+			selector = "{log_file=~\"flood-publish.log|plex-label-sync.log|pinelake-stignore.log\"} |~ \"^(ERROR|WARN):\""
+
+			stage.regex {
+				expression = "^(?P<lvl>ERROR|WARN):"
+			}
+
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+
+		stage.match {
+			selector = "{log_file=\"rtorrent-extract.log\"} |~ \"^=== \""
+
+			stage.regex {
+				expression = "^=== (?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) UTC (?P<msg>.*) ===$"
+			}
+
+			stage.timestamp {
+				source   = "ts"
+				format   = "2006-01-02 15:04:05"
+				location = "UTC"
+			}
+
+			stage.output {
+				source = "msg"
+			}
+		}
+
+		stage.match {
+			selector = "{log_file=\"rtorrent-extract.log\"} |~ \"^\\\\[rtorrent-extract\\\\] \""
+
+			stage.regex {
+				expression = "^\\[rtorrent-extract\\] (?P<msg>.*)$"
+			}
+
+			stage.output {
+				source = "msg"
+			}
+		}
+
+		stage.match {
+			selector = "{log_file=\"rtorrent.log\"} |~ \"^\\\\d{9,10} [A-Z] \""
+
+			stage.regex {
+				expression = "^(?P<ts>\\d{9,10}) (?P<lvl>[A-Z]) (?P<msg>.*)$"
+			}
+
+			stage.timestamp {
+				source = "ts"
+				format = "Unix"
+			}
+
+			stage.template {
+				source   = "lvl"
+				template = "{{ if eq .Value \"C\" }}FATAL{{ else if eq .Value \"E\" }}ERROR{{ else if eq .Value \"W\" }}WARN{{ else if eq .Value \"D\" }}DEBUG{{ else }}INFO{{ end }}"
+			}
+
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+
+			stage.output {
+				source = "msg"
+			}
+		}
+	}
+}

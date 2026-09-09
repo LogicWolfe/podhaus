@@ -28,6 +28,10 @@ services:
         condition: service_completed_successfully
     volumes:
       - ${FRACTAL_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-fractal}/logging/fractal/alloy-conf:/etc/alloy:ro
+      - ${FRACTAL_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-fractal}/logging/alloy-modules:/etc/alloy-modules:ro
+      # The systemd journal, tailed by config.alloy.
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
       - alloy-secrets:/run/podhaus-secrets:ro
     labels:
       podhaus.depends-on-alloy-secrets-init: ${BUILD_HASH_ALLOY_SECRETS_INIT:-unset}

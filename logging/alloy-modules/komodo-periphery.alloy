@@ -1,6 +1,6 @@
 // Per-service log parser — komodo-periphery (kangaroo)
 //
-// See bilby parsers/komodo-core.alloy for the pattern/rationale.
+// See komodo-core.alloy for the pattern/rationale.
 // komodo-periphery is the same Komodo (Rust tracing) codebase as
 // komodo-core, so the format is assumed identical:
 //   2026-05-16T03:33:14.137997Z  INFO <message>
@@ -16,7 +16,7 @@ declare "komodo_periphery" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{container=\"komodo-periphery\"}"
+      selector = "{service=\"komodo-periphery\"}"
 
       stage.regex {
         expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"

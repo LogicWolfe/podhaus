@@ -24,23 +24,25 @@
           <tr><td>ClickStack</td><td><code>clickstack/</code> (bandicoot)</td>
             <td>Observability backend — ClickHouse store, HyperDX UI, bundled OTel
               collector, Mongo app-state</td></tr>
-          <tr><td>Alloy (<code>logging</code> / <code>kangaroo-logging</code>)</td>
-            <td><code>logging/</code> (bilby + kangaroo)</td>
-            <td>Container-log collection + per-service parsing, bridged to OTLP</td></tr>
+          <tr><td>Alloy (<code>logging</code> / <code>&lt;host&gt;-logging</code>)</td>
+            <td><code>logging/</code> (every host)</td>
+            <td>Container logs, tailed log files and journald, parsed by the shared
+              modules in <code>logging/alloy-modules/</code> and bridged to OTLP</td></tr>
           <tr><td>Autoheal</td><td><code>autoheal/</code> (bilby + kangaroo)</td>
             <td>Restarts unhealthy labelled containers on the local daemon</td></tr>
         </tbody>
       </table>
 
       <h2 id="flow">Flow</h2>
-      <pre><code>bilby Docker logs ─┐
-kangaroo Docker logs ─┤  Alloy (per-host)
-                   │   discover → ANSI-strip → per-service parser chain
-                   │   → Loki→OTLP bridge → OTTL enrich (service.name +
-                   │   severity) → batch → OTLP/HTTP exporter
-                   │
-bilby, kangaroo ──────► 10.0.0.90:4318        (cross-LAN, plaintext)
-bandicoot ────────────► logs-ingest.pod.haus  (mTLS via bilby's Caddy → 10.0.0.90:4318)
+      <pre><code>Docker logs (every host) ─┐
+Plex + Flood log files    ─┤  Alloy (per-host config, shared modules)
+journald (Linux hosts)    ─┤   discover/tail → ANSI-strip → per-service parser
+                          │   chain → Loki→OTLP bridge → OTTL enrich (host +
+                          │   service.name resource attributes, severity)
+                          │   → batch → OTLP/HTTP exporter
+                          │
+bilby, kangaroo ──────────► 10.0.0.90:4318        (cross-LAN, plaintext)
+every other host ─────────► logs-ingest.pod.haus  (mTLS via bilby's Caddy → 10.0.0.90:4318)
                           │  (HyperDX ingestion API key on every request)
                           ▼
                   ClickStack OTel collector
@@ -277,15 +279,19 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
 
       <h3 id="alloy">Alloy log collection</h3>
       <p>
-        Alloy runs on all six active hosts as the multi-host
+        Alloy runs on all seven active hosts as the multi-host
         <code>logging</code> service: <code>logging</code> on bilby,
-        <code>kangaroo-logging</code> on kangaroo, <code>numbat-logging</code> on Numbat,
-        <code>fractal-logging</code> on fractal, <code>voltaire-logging</code> on voltaire,
-        and <code>pinelake-logging</code> on pinelake. They share
-        <code>logging/compose.shared.yaml</code>. Alloy scrapes each host's
-        Docker socket, bridges Loki-format input to
-        OTLP (<code>otelcol.receiver.loki</code> → batch → <code>otelcol.exporter.otlphttp</code>)
-        and ships to the ClickStack collector:
+        <code>bandicoot-logging</code> on bandicoot, <code>kangaroo-logging</code> on
+        kangaroo, <code>numbat-logging</code> on Numbat, <code>fractal-logging</code> on
+        fractal, <code>voltaire-logging</code> on voltaire, and
+        <code>pinelake-logging</code> on pinelake. They share
+        <code>logging/compose.shared.yaml</code> and the module directory
+        <code>logging/alloy-modules/</code>; each host's
+        <code>logging/&lt;host&gt;/alloy-conf/config.alloy</code> is a short list of which
+        shared modules to run, plus that host's scrapes and exporter. Alloy tails each
+        host's Docker socket (and the files and journal below), bridges Loki-format
+        input to OTLP (<code>otelcol.receiver.loki</code> → enrich → batch →
+        <code>otelcol.exporter.otlphttp</code>) and ships to the ClickStack collector:
       </p>
       <ul>
         <li><strong>bilby</strong> and <strong>kangaroo</strong> — cross-LAN to
@@ -309,12 +315,49 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         with no silent fallback to the old sink.
       </p>
 
+      <h3 id="sources">Beyond container stdout</h3>
+      <p>
+        Container output is the default source everywhere. Services that write their
+        real log to a file inside a volume, and the host itself, are covered by shared
+        source modules that a host opts into with a few lines in its
+        <code>config.alloy</code> and a read-only bind in its compose overlay:
+      </p>
+      <ul>
+        <li><strong>Plex Media Server.log</strong> (<code>plex_server_log</code>, bilby and
+          pinelake) — playback decisions, client sessions and scanner results; stdout
+          carries three lines a day. Debug level is kept on purpose (that is where the
+          decisions are); the Gatus <code>/identity</code> healthcheck pair and the
+          <code>Completed:</code> response lines are dropped. Lands under the Plex
+          container's service with <code>log_file</code> set.</li>
+        <li><strong>Flood job logs + rtorrent.log</strong> (<code>flood_job_logs</code>,
+          bilby and pinelake) — <code>flood-publish</code>, <code>rtorrent-extract</code>,
+          <code>plex-label-sync</code> and <code>pinelake-stignore</code> redirect their own
+          output to files under flood-db because rtorrent's finish hooks discard stdout;
+          rtorrent's own log is opened by <code>flood/conf/rtorrent.rc</code>. The
+          five-minute <code>changed=0</code> stignore heartbeat is dropped in Alloy.</li>
+        <li><strong>ClickHouse error log</strong> (<code>container_file_log</code>,
+          bandicoot) — the only place ClickHouse's own errors land; tailed from the end
+          under the <code>clickstack-clickhouse</code> service so the same parser shapes
+          it.</li>
+        <li><strong>systemd journal</strong> (<code>journal</code>, bilby, bandicoot,
+          Numbat, fractal, voltaire) — priority warning and worse, as service
+          <code>journald</code> with <code>unit</code>, <code>identifier</code> and
+          <code>priority</code> attributes. OpenSSH accepts, OOM kills and mount failures
+          live here. Kangaroo (QTS) has no journald; Pinelake's macOS unified log has no
+          Alloy source.</li>
+      </ul>
+
       <h3 id="parsers">Per-service log parsing</h3>
       <p>
-        Log parsing is config-as-code. Each parsed service has a module at
-        <code>logging/&lt;host&gt;/alloy-conf/parsers/&lt;service&gt;.alloy</code> — one Alloy
-        <code>declare</code> module per service, imported via <code>import.file</code> and
-        composed into an explicit chain in <code>config.alloy</code>. Each module:
+        Log parsing is config-as-code and <strong>host-independent</strong>. Each parsed
+        service has one module at <code>logging/alloy-modules/&lt;service&gt;.alloy</code>
+        — an Alloy <code>declare</code> — and <code>chain.alloy</code> composes every module
+        into one chain that every host runs. A module only touches its own service's
+        streams (<code>stage.match</code> on the <code>service</code> label: the container
+        name with the host's own <code>&lt;host&gt;-</code> prefix stripped, so
+        <code>pinelake-flood</code> and <code>flood</code> hit the same parser) and passes
+        everything else through, so a service moving between hosts takes its parsing
+        with it and no logging change is needed. Each module:
       </p>
       <ul>
         <li>parses that service's real event timestamp into the log entry,</li>
@@ -322,22 +365,27 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         <li>reduces the Body down to the message.</li>
       </ul>
       <p>
-        After the chain, an OTTL <code>transform.enrich</code> block sets
-        <code>service.name</code> from the container name and maps
-        <code>detected_level</code> → OTLP severity. That mapping is authoritative; for lines
-        with no parsed level there's a body-keyword severity fallback (anchored to the first
-        ~60 chars so e.g. "Total errors encountered: 0" isn't mislabelled ERROR). Services
-        without a parser — <code>rtorrent-cleanup</code>, <code>fenwick</code>,
-        <code>docs-server</code>, <code>ofelia</code>, <code>signal-cli-rest-api</code> —
-        still flow with the generic fallback. Roughly 20 bilby services are parsed; kangaroo
-        parses <code>alloy</code>, <code>syncthing</code>, <code>backrest</code>,
-        <code>komodo-periphery</code>, and <code>autoheal</code>.
+        After the chain, the shared <code>enrich.alloy</code> OTTL module stamps the host
+        and <code>service.name</code> (from the container name) as <strong>resource</strong>
+        attributes and maps <code>detected_level</code> → OTLP severity. The host is a
+        resource attribute because the ClickStack collector promotes JSON body fields over
+        log attributes: Pomerium, Caddy's admin API and FerretDB emit their own
+        <code>host</code> field, so <code>LogAttributes['host']</code> lies for those rows;
+        <code>ResourceAttributes['host']</code> does not, and is what the Gatus staleness
+        checks query. The severity mapping is authoritative; for lines with no parsed level
+        there's a body-keyword fallback (anchored to the first ~60 chars so e.g. "Total
+        errors encountered: 0" isn't mislabelled ERROR). Services without a parser —
+        <code>docs</code>, <code>ofelia</code>, <code>pomerium</code>, <code>caddy</code> —
+        still flow with the generic fallback.
       </p>
       <p>
-        To parse a new service: add
-        <code>logging/&lt;host&gt;/alloy-conf/parsers/&lt;service&gt;.alloy</code> and insert
-        one link into the parser chain in that host's <code>config.alloy</code>. Anything not
-        in the chain still ships, just with the generic fallback.
+        To parse a new service: add <code>logging/alloy-modules/&lt;service&gt;.alloy</code>
+        and insert one link in <code>chain.alloy</code>. That is the whole change, for every
+        host at once. The module directory sits outside every host's stack directory, so
+        <code>logging/compose.shared.yaml</code> lists it under
+        <code>x-podhaus-content-paths</code> and the content-hash action folds it into each
+        logging stack's <code>STACK_CONTENT_HASH</code>; without that the linked-repo hosts
+        would never pull a module-only change.
       </p>
 
       <h3 id="retention">Retention</h3>

@@ -1,8 +1,6 @@
 // Per-service log parser — fenwick
 //
-// See bilby's parsers/komodo-op.alloy for the pattern/rationale (bandicoot
-// carries no per-service parsers of its own yet — this one module is copied
-// over verbatim now that the Fenwick family runs here).
+// See komodo-op.alloy for the pattern/rationale.
 //
 // Fenwick is the one service that does NOT go through this Loki→OTLP
 // path: it runs Deno's built-in OpenTelemetry (OTEL_DENO=true) and
@@ -10,11 +8,13 @@
 // the ClickStack collector — the same endpoint and ingestion key Alloy
 // itself exports to. Its docker stdout is therefore redundant; left in
 // the pipeline it would double-ingest every log as an unparsed Loki
-// line (the blob this whole parsers/ system exists to avoid).
+// line (the blob this whole module directory exists to avoid).
 //
 // So this module simply DROPS the fenwick container's stream. `docker
 // logs fenwick` still works for humans (Deno keeps printing to the
-// console); HyperDX gets the structured OTLP copy, not this one.
+// console); HyperDX gets the structured OTLP copy, not this one. The
+// module is in the chain on every host, so it follows fenwick wherever
+// it runs.
 
 declare "fenwick" {
 	argument "forward_to" { }
@@ -23,7 +23,7 @@ declare "fenwick" {
 		forward_to = argument.forward_to.value
 
 		stage.match {
-			selector = "{container=\"fenwick\"}"
+			selector = "{service=\"fenwick\"}"
 			action   = "drop"
 		}
 	}

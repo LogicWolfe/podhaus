@@ -1,6 +1,6 @@
 // Per-service log parser — op-connect-api
 //
-// See parsers/komodo-op.alloy for the pattern/rationale.
+// See komodo-op.alloy for the pattern/rationale.
 //
 // 1Password Connect API (connect-api) emits one JSON object per line:
 //   {"log_message":"(I) GET /v1/vaults/.../items completed (200: OK) in 23ms",
@@ -29,7 +29,7 @@ declare "op_connect_api" {
 		forward_to = argument.forward_to.value
 
 		stage.match {
-			selector = "{container=\"op-connect-api\"}"
+			selector = "{service=\"op-connect-api\"}"
 
 			stage.json {
 				expressions = {

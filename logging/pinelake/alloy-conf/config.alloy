@@ -1,73 +1,57 @@
+// Pinelake's Alloy. Shared modules in ../alloy-modules do the work:
+//   docker_logs → chain (per-service parsers) → Loki→OTLP bridge → enrich
+//   → batch → logs-ingest.pod.haus with Pinelake's dedicated client
+//   certificate. Plex's server log and the Flood job logs ride the same
+//   path. macOS has no journald and the unified log has no Alloy source.
+//
+// Per-service parsing is config-as-code in ../alloy-modules (one module per
+// service, one chain for every host), so a service moving between hosts
+// keeps its parsing with no change here. See docs/monitoring.html.
+
+// Internal-pipeline tracing — unified `alloy` service in HyperDX
+// (same name on every host; one row per host).
 tracing {
-  sampling_fraction = 0.1
-  write_to          = [otelcol.processor.batch.clickstack.input]
+	sampling_fraction = 0.1
+	write_to          = [otelcol.processor.batch.clickstack.input]
 }
 
-discovery.docker "containers" {
-  host             = "unix:///var/run/docker.sock"
-  refresh_interval = "30s"
+import.file "podhaus" {
+	filename = "/etc/alloy-modules"
 }
 
-discovery.relabel "container_logs" {
-  targets = discovery.docker.containers.targets
-
-  rule {
-    source_labels = ["__meta_docker_container_name"]
-    regex         = "/(.*)"
-    target_label  = "container"
-  }
-  rule {
-    source_labels = ["__meta_docker_container_log_stream"]
-    target_label  = "stream"
-  }
-  rule {
-    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
-    target_label  = "compose_project"
-  }
+podhaus.docker_logs "run" {
+	host       = "pinelake"
+	forward_to = [podhaus.chain.run.receiver]
 }
 
-loki.source.docker "containers" {
-  host          = "unix:///var/run/docker.sock"
-  targets       = discovery.relabel.container_logs.output
-  forward_to    = [loki.process.containers.receiver]
-  relabel_rules = discovery.relabel.container_logs.rules
-  labels        = {"host" = "pinelake"}
+podhaus.plex_server_log "run" {
+	host       = "pinelake"
+	container  = "pinelake-plex"
+	logs_dir   = "/var/log/podhaus/plex"
+	timezone   = "America/Edmonton"
+	forward_to = [podhaus.chain.run.receiver]
 }
 
-loki.process "containers" {
-  forward_to = [otelcol.receiver.loki.clickstack.receiver]
-  stage.decolorize {}
+podhaus.flood_job_logs "run" {
+	host       = "pinelake"
+	container  = "pinelake-flood"
+	flood_db   = "/var/log/podhaus/flood-db"
+	forward_to = [podhaus.chain.run.receiver]
+}
+
+podhaus.chain "run" {
+	forward_to = [otelcol.receiver.loki.clickstack.receiver]
 }
 
 otelcol.receiver.loki "clickstack" {
-  output {
-    logs = [otelcol.processor.transform.enrich.input]
-  }
+	output {
+		logs = [podhaus.enrich.run.input]
+	}
 }
 
-otelcol.processor.transform "enrich" {
-  error_mode = "ignore"
-  log_statements {
-    context = "log"
-    statements = [
-      `set(resource.attributes["service.name"], attributes["container"]) where attributes["container"] != nil`,
-      `set(severity_text, "TRACE") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
-      `set(severity_number, 1) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
-      `set(severity_text, "DEBUG") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
-      `set(severity_number, 5) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
-      `set(severity_text, "INFO") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
-      `set(severity_number, 9) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
-      `set(severity_text, "WARN") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
-      `set(severity_number, 13) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
-      `set(severity_text, "ERROR") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
-      `set(severity_number, 17) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
-      `set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
-      `set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
-    ]
-  }
-  output {
-    logs = [otelcol.processor.batch.clickstack.input]
-  }
+podhaus.enrich "run" {
+	host   = "pinelake"
+	output = [otelcol.processor.batch.clickstack.input]
 }
 
 prometheus.exporter.self "alloy" { }
