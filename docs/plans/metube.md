@@ -109,7 +109,18 @@ single developer), Radarr now (movies are a later plan on the same pattern).
 - ✅ Smoke test: one Skillsville episode queued into `Kids/_incoming` landed as
   AV1 1080p24 + AAC MP4 with the thumbnail embedded, 93 MB for 12.5 min;
   Gatus `MeTube` green, front door redirects to sign-in like every family route.
-- ⏳ Naming via Sonarr: stack, hook, Gatus external endpoint, ingress (approved
-  2026-09-09; building).
-- ⏳ Plex: TheTVDB episode ordering for Skillsville; first-play check on the
-  LG CX.
+- ✅ Sonarr stack on bandicoot (2271ab9), the plexify hook and tests (30c07b4),
+  Sonarr configured via API (root folder, naming formats, Plex connection with
+  the existing Plex token, no indexers or clients), `sonarr.pod.haus` live.
+- ✅ Smoke test: Sound Effects Artist placed as
+  `Skillsville (2025) {tvdb-460946}/Season 01/Skillsville (2025) - S01E09 - Sound Effects Artist.mp4`.
+- ✅ Negative test caught a real bug first: the containment rule imported a
+  "Quantum Plumber" dummy as the episode "Plumber". Fixed in d1ee47e (segment
+  equality). Re-run: exit 1, file left in staging, Gatus Plexify red with the
+  candidate list, Fenwick sent the Signal alert and later the resolution.
+- ✅ Channel fill: 58 queued, 55 placed with no mismatches; Judge (E50),
+  Lighting Designer (E40) and Firefighter (E13) failed twice on the download
+  side (yt-dlp "bytes read, more expected", a dropped connection) — 56 of 59
+  on disk, staging empty.
+- ⏳ Plex (Nathan): TheTVDB episode ordering on the Kids library; first-play
+  check on the LG CX. Three dropped downloads to re-queue.
