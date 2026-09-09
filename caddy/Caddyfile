@@ -69,7 +69,8 @@
 		reverse_proxy @home 172.18.0.1:8123
 		reverse_proxy @plex 172.18.0.1:32400
 		reverse_proxy @music 172.18.0.1:8095
-		reverse_proxy @watch hyperdx:8080
+		# HyperDX lives on bandicoot; the front door stays here.
+		reverse_proxy @watch 10.0.0.90:8080
 		reverse_proxy @docs docs:8000
 		reverse_proxy @minio_console minio:9001
 		reverse_proxy @sync 10.0.0.25:8384
@@ -103,7 +104,9 @@ logs-ingest.pod.haus, logs-ingest.pod.haus:4444 {
 			trust_pool file /run/podhaus-secrets/log-ingest-ca.pem
 		}
 	}
-	reverse_proxy clickstack-otel:4318
+	# The collector lives on bandicoot; mTLS still terminates here, so every
+	# remote host's client certificate is checked before the LAN hop.
+	reverse_proxy 10.0.0.90:4318
 }
 
 storage.pod.haus, *.storage.pod.haus, storage.pod.haus:4444, *.storage.pod.haus:4444 {

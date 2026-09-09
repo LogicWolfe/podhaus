@@ -21,8 +21,11 @@ ls -1t /dump/hyperdx-*.archive | tail -n +15 | xargs -r rm -f
 push_heartbeat() {
     local token="${GATUS_OFELIA_PUSH_TOKEN:-}"
     [ -n "$token" ] || return 0
-    exec 3<>/dev/tcp/gatus/8080 || return 0
-    printf 'POST /api/v1/endpoints/observability_clickstack-mongo-dump/external?success=true HTTP/1.0\r\nHost: gatus:8080\r\nAuthorization: Bearer %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n' "$token" >&3
+    # Gatus runs on bilby; from bandicoot that is its LAN-published :8080
+    # (GATUS_HOST, set in compose), not a dockernet name.
+    local host="${GATUS_HOST:-gatus:8080}"
+    exec 3<>"/dev/tcp/${host%:*}/${host##*:}" || return 0
+    printf 'POST /api/v1/endpoints/observability_clickstack-mongo-dump/external?success=true HTTP/1.0\r\nHost: %s\r\nAuthorization: Bearer %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n' "$host" "$token" >&3
     cat <&3 >/dev/null
     exec 3>&-
 }

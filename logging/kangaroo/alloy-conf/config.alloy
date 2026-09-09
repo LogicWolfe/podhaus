@@ -1,7 +1,7 @@
 // ACTIVE kangaroo logging config. Mirrors bilby: docker discovery →
 // loki.process "containers" (ANSI strip) → per-service parser chain
 // (config-as-code, parsers/<service>.alloy) → Loki→OTLP bridge → OTTL
-// enrich → bilby's published collector cross-LAN at 10.0.0.119:4318.
+// enrich → bandicoot's published collector cross-LAN at 10.0.0.90:4318.
 // Alloy self-telemetry (own pipeline spans + self metrics) rides the
 // same cross-LAN exporter; its logs do NOT (already captured via the
 // Docker discovery path + parsers.alloy — write_to here would
@@ -190,20 +190,20 @@ otelcol.processor.batch "clickstack" {
 
 otelcol.exporter.otlphttp "clickstack" {
   client {
-    endpoint = "http://10.0.0.119:4318"
+    endpoint = "http://10.0.0.90:4318"
     headers  = {
-      // ClickStack ingestion API key (same key as bilby; injected via
+      // ClickStack ingestion API key (same key every host uses; injected via
       // logging/kangaroo/stack.toml ← 1Password). Empty ⇒ 401 ⇒ no
       // data — loud failure, no silent fallback.
       "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
     }
     // No keepalive: kangaroo pushes cross-LAN to a FIXED IP behind
-    // bilby's published :4318 + NAT. When the collector container
+    // bandicoot's published :4318 + NAT. When the collector container
     // recreates, the IP is unchanged but the backend isn't — an existing
     // keepalive TCP connection stays mapped (conntrack) to the dead old
     // container, so the next send blackholes and HANGS silently (no RST).
     // A fresh connection per batch always reaches the current collector.
-    // bilby ships in-network by container name (DNS re-resolves) and
+    // bandicoot ships in-network by container name (DNS re-resolves) and
     // needs no equivalent. Low volume makes the per-batch connection cost
     // negligible (the docs' overhead caveat is for high-throughput
     // exporters). Root cause of the recurring kangaroo wedge, 2026-06-19.

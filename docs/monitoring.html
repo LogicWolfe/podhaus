@@ -21,7 +21,7 @@
             <td>Endpoint + heartbeat monitoring, alerts → Fenwick (Signal) with a
               Postmark-email backstop for fenwick-health, Prometheus
               <code>/metrics</code></td></tr>
-          <tr><td>ClickStack</td><td><code>clickstack/</code> (bilby)</td>
+          <tr><td>ClickStack</td><td><code>clickstack/</code> (bandicoot)</td>
             <td>Observability backend — ClickHouse store, HyperDX UI, bundled OTel
               collector, Mongo app-state</td></tr>
           <tr><td>Alloy (<code>logging</code> / <code>kangaroo-logging</code>)</td>
@@ -39,8 +39,8 @@ kangaroo Docker logs ─┤  Alloy (per-host)
                    │   → Loki→OTLP bridge → OTTL enrich (service.name +
                    │   severity) → batch → OTLP/HTTP exporter
                    │
-bilby  ───────────────► clickstack-otel:4318  (in-network, by name)
-kangaroo ─────────────► 10.0.0.119:4318       (cross-LAN, plaintext)
+bilby, kangaroo ──────► 10.0.0.90:4318        (cross-LAN, plaintext)
+bandicoot ────────────► logs-ingest.pod.haus  (mTLS via bilby's Caddy → 10.0.0.90:4318)
                           │  (HyperDX ingestion API key on every request)
                           ▼
                   ClickStack OTel collector
@@ -247,7 +247,9 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
 
       <h2 id="clickstack">ClickStack</h2>
       <p>
-        ClickStack is the observability backend on bilby. It is the
+        ClickStack is the observability backend on bandicoot (moved from bilby on
+        2026-09-09: 21 GB of growing local state and the fleet's one sustained CPU load
+        belong on the host with the NVMe and the cores). It is the
         <code>clickstack/</code> stack and bundles four containers:
       </p>
       <ul>
@@ -261,9 +263,13 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
           <code>https://watch.pod.haus</code>. Also hosts the OpAMP server the collector
           talks to.</li>
         <li><strong>OTel collector</strong> (<code>clickstack-otel</code>) — the bundled
-          OpenTelemetry collector. Its OTLP/HTTP port <code>4318</code> is the only published
-          port on the stack (kangaroo ships to it cross-LAN; bilby reaches it by container
-          name).</li>
+          OpenTelemetry collector. Its OTLP/HTTP port <code>4318</code> is published on the
+          LAN: bilby's and kangaroo's Alloy ship to it directly, and bilby's Caddy forwards
+          <code>logs-ingest.pod.haus</code> to it for every remote host after checking the
+          client certificate. HyperDX's <code>8080</code> (for <code>watch.pod.haus</code>,
+          which still terminates on bilby) and ClickHouse's <code>8123</code> (for Gatus's
+          pipeline heartbeats) are the other two LAN-published ports; the front doors
+          stay on bilby, on the moved-service pattern.</li>
         <li><strong>Mongo</strong> (<code>clickstack-mongo</code>) — HyperDX app-state only:
           dashboards, alerts, users, source definitions, the ingestion key. Tiny but
           irreplaceable.</li>
@@ -282,10 +288,11 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         and ships to the ClickStack collector:
       </p>
       <ul>
-        <li><strong>bilby</strong> — in-network to <code>clickstack-otel:4318</code> by
-          container name.</li>
-        <li><strong>kangaroo</strong> — cross-LAN to <code>http://10.0.0.119:4318</code>
-          (plaintext, LAN-only).</li>
+        <li><strong>bilby</strong> and <strong>kangaroo</strong> — cross-LAN to
+          <code>http://10.0.0.90:4318</code> (plaintext, LAN-only), each with
+          <code>disable_keep_alives</code> for the published-port reason below.</li>
+        <li><strong>bandicoot</strong> — HTTPS to <code>logs-ingest.pod.haus</code> like the
+          remote hosts; the path loops through bilby's Caddy and back across the LAN.</li>
         <li><strong>Numbat</strong>: HTTPS to <code>logs-ingest.pod.haus</code> through
           rathole and Caddy, with a dedicated client certificate.</li>
         <li><strong>fractal</strong>: the same HTTPS ingress with its own client certificate.</li>
@@ -349,13 +356,14 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
 
       <h3 id="storage">Storage</h3>
       <p>
-        ClickStack data lives on bilby's <strong>local NVMe</strong>, not Jump:
+        ClickStack data lives on bandicoot's <strong>local NVMe</strong>, not Jump:
         <code>/var/lib/clickstack/{clickhouse,clickhouse-logs,mongo,mongo-dumps}</code>.
         ClickHouse and Mongo <code>chown</code> their data dirs to their own uid at startup;
         the NFS Jump all-squash blocks that, so local disk is mandatory here. Steady-state
         footprint is ~1.3 GB RAM, bounded by <code>mem_limit</code> on every container plus
         the ClickHouse <code>config.d</code> memory caps — this is the one memory-risky stack
-        on the shared 15 GB M1.
+        on a shared 15 GB machine. bilby keeps its copy of the pre-move data under
+        <code>/var/lib/clickstack</code> until the move has proven itself.
       </p>
 
       <h3 id="backup">Backup</h3>
@@ -389,7 +397,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
             <li><strong>Exporter wedge (root cause fixed 2026-06-19)</strong> — the exporter
               would stop shipping silently (no errors, just silence) and not recover without a
               restart. <strong>Root cause:</strong> kangaroo/kookaburra push cross-network to a
-              fixed endpoint behind bilby's published <code>:4318</code> + NAT; when the
+              fixed endpoint behind the collector host's published <code>:4318</code> + NAT; when the
               <code>clickstack-otel</code> collector container recreates (e.g. on any
               <code>clickstack/</code> edit, via the content hash), the old keepalive TCP
               connection stays mapped through conntrack to the dead container, so the next send
@@ -397,8 +405,9 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
               max_elapsed_time = "0s"</code> (retry forever) made it permanent. <strong>Fixed</strong>
               by <code>disable_keep_alives = true</code> + a bounded 30m retry on both
               cross-network exporters' <code>config.alloy</code>: a fresh connection per batch
-              always reaches the current collector. (bilby ships in-network by container name —
-              DNS re-resolves — and never hit this.) Validated by recreating the collector and
+              always reaches the current collector. (A host that ships in-network by container
+              name — DNS re-resolves — never hits this; since the move to bandicoot, bilby's
+              exporter is cross-network too and carries the same setting.) Validated by recreating the collector and
               confirming kangaroo shipped straight across it. If a wedge somehow recurs despite
               this, <code>RestartStack kangaroo-logging</code> remains the fallback.</li>
             <li><strong>dockernet detach / phantom network</strong> — the log shows

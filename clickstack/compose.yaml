@@ -1,6 +1,6 @@
 # ClickStack — ClickHouse + HyperDX UI + bundled OTel collector + Mongo.
-# ClickStack observability backend on bilby. Alloy on all managed hosts
-# ships here over OTLP; Gatus metrics ride the same pipeline. See
+# ClickStack observability backend on bandicoot. Alloy on all managed
+# hosts ships here over OTLP; Gatus metrics ride the same pipeline. See
 # docs/monitoring.html.
 #
 # Adaptations from upstream ClickHouse/ClickStack docker-compose.yml:
@@ -8,10 +8,14 @@
 #   - containers renamed (globally-unique names on the host)
 #   - data on local NVMe /var/lib/clickstack/* (NFS Jump all-squash
 #     blocks the chown clickhouse/mongo do at startup — decision 2)
-#   - only OTLP/HTTP 4318 published (kangaroo ships cross-LAN); the UI
-#     reaches the tunnel via dockernet by name, nothing else published
+#   - three ports published on the LAN, because the front doors stay on
+#     bilby (the moved-service pattern in docs/hosts.html): OTLP/HTTP 4318
+#     for kangaroo's and bilby's Alloy and for logs-ingest.pod.haus,
+#     HyperDX 8080 for watch.pod.haus, ClickHouse HTTP 8123 for Gatus's
+#     pipeline heartbeats. bandicoot's firewalld public zone accepts the
+#     home LAN, as bilby's does; nothing is reachable from outside it
 #   - mem_limit on every service: this is the one memory-risky stack on
-#     a 15 GB shared M1; bound it so a bad query can't OOM the box
+#     a 15 GB shared machine; bound it so a bad query can't OOM the box
 #   - ClickHouse config via a config.d *directory* drop-in (Hard Rule:
 #     never single-file binds for config read after startup)
 
@@ -20,8 +24,8 @@ services:
     container_name: clickstack-clickhouse
     image: clickhouse/clickhouse-server:26.1-alpine
     restart: unless-stopped
-    # SELinux enforcing on Fedora Asahi: clickhouse writes its data dir
-    # and reads the bound config.d; label:disable covers both.
+    # SELinux enforcing on Fedora Asahi Remix: clickhouse writes its data
+    # dir and reads the bound config.d; label:disable covers both.
     security_opt:
       - label:disable
     environment:
@@ -38,6 +42,11 @@ services:
       # memory + bounds the internal log so neither runs away on the
       # shared box. Upstream defaults stay; we only override specifics.
       - ${PODHAUS_REPO}/clickstack/clickhouse-conf/config.d:/etc/clickhouse-server/config.d:ro
+    ports:
+      # ClickHouse HTTP for Gatus's telemetry-pipeline heartbeats, which run
+      # on bilby and query row counts here. Password-protected (default
+      # user), LAN only.
+      - "8123:8123"
     networks:
       - dockernet
     mem_limit: 4g
@@ -86,6 +95,9 @@ services:
       # Heartbeat push token for /scripts/mongo-dump.sh → Gatus
       # observability_clickstack-mongo-dump. Shared ofelia push token.
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
+      # Gatus stays on bilby; its :8080 is published on the LAN for exactly
+      # this kind of cross-host heartbeat.
+      GATUS_HOST: 10.0.0.119:8080
     volumes:
       # Local NVMe. Holds HyperDX app state only (dashboards, alerts,
       # users, source defs, ingestion key) — tiny but irreplaceable;
@@ -139,9 +151,9 @@ services:
       OPAMP_SERVER_URL: "http://hyperdx:4320"
       HYPERDX_OTEL_EXPORTER_CREATE_LEGACY_SCHEMA: "true"
     ports:
-      # The ONLY published port. kangaroo's Alloy ships cross-LAN to
-      # 10.0.0.119:4318 (OTLP/HTTP); bilby's Alloy uses dockernet DNS
-      # (clickstack-otel:4318). gRPC 4317, Fluentd 24225, health 13133,
+      # OTLP/HTTP. bilby's and kangaroo's Alloy ship cross-LAN to
+      # 10.0.0.90:4318, and bilby's Caddy forwards logs-ingest.pod.haus
+      # here for every other host. gRPC 4317, Fluentd 24225, health 13133,
       # self-metrics 8888 stay dockernet-internal — not published.
       - "4318:4318"
     networks:
@@ -210,6 +222,10 @@ services:
       EXPRESS_SESSION_SECRET: ${EXPRESS_SESSION_SECRET}
       DEFAULT_CONNECTIONS: '[{"name":"Local ClickHouse","host":"http://clickstack-clickhouse:8123","username":"default","password":"${CLICKHOUSE_PASSWORD}"}]'
       DEFAULT_SOURCES: '[{"from":{"databaseName":"default","tableName":"otel_logs"},"kind":"log","timestampValueExpression":"TimestampTime","name":"Logs","displayedTimestampValueExpression":"Timestamp","implicitColumnExpression":"Body","serviceNameExpression":"ServiceName","bodyExpression":"Body","eventAttributesExpression":"LogAttributes","resourceAttributesExpression":"ResourceAttributes","defaultTableSelectExpression":"Timestamp,ServiceName,SeverityText,Body","severityTextExpression":"SeverityText","traceIdExpression":"TraceId","spanIdExpression":"SpanId","connection":"Local ClickHouse","traceSourceId":"Traces","sessionSourceId":"Sessions","metricSourceId":"Metrics"},{"from":{"databaseName":"default","tableName":"otel_traces"},"kind":"trace","timestampValueExpression":"Timestamp","name":"Traces","displayedTimestampValueExpression":"Timestamp","implicitColumnExpression":"SpanName","serviceNameExpression":"ServiceName","eventAttributesExpression":"SpanAttributes","resourceAttributesExpression":"ResourceAttributes","defaultTableSelectExpression":"Timestamp,ServiceName,StatusCode,round(Duration/1e6),SpanName","traceIdExpression":"TraceId","spanIdExpression":"SpanId","durationExpression":"Duration","durationPrecision":9,"parentSpanIdExpression":"ParentSpanId","spanNameExpression":"SpanName","spanKindExpression":"SpanKind","statusCodeExpression":"StatusCode","statusMessageExpression":"StatusMessage","connection":"Local ClickHouse","logSourceId":"Logs","sessionSourceId":"Sessions","metricSourceId":"Metrics"},{"from":{"databaseName":"default","tableName":""},"kind":"metric","timestampValueExpression":"TimeUnix","name":"Metrics","resourceAttributesExpression":"ResourceAttributes","metricTables":{"gauge":"otel_metrics_gauge","histogram":"otel_metrics_histogram","sum":"otel_metrics_sum","_id":"682586a8b1f81924e628e808","id":"682586a8b1f81924e628e808"},"connection":"Local ClickHouse","logSourceId":"Logs","traceSourceId":"Traces","sessionSourceId":"Sessions"},{"from":{"databaseName":"default","tableName":"hyperdx_sessions"},"kind":"session","timestampValueExpression":"TimestampTime","name":"Sessions","displayedTimestampValueExpression":"Timestamp","implicitColumnExpression":"Body","serviceNameExpression":"ServiceName","bodyExpression":"Body","eventAttributesExpression":"LogAttributes","resourceAttributesExpression":"ResourceAttributes","defaultTableSelectExpression":"Timestamp,ServiceName,SeverityText,Body","severityTextExpression":"SeverityText","traceIdExpression":"TraceId","spanIdExpression":"SpanId","connection":"Local ClickHouse","logSourceId":"Logs","traceSourceId":"Traces","metricSourceId":"Metrics"}]'
+    ports:
+      # The UI, for bilby's Caddy: watch.pod.haus terminates on bilby and
+      # proxies here across the LAN.
+      - "8080:8080"
     networks:
       - dockernet
     mem_limit: 1g

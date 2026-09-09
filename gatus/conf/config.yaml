@@ -126,7 +126,7 @@ _defaults: &defaults
 
 endpoints:
   - name: HyperDX (ClickStack)
-    url: http://hyperdx:8080/
+    url: http://10.0.0.90:8080/
     <<: *defaults
     group: Observability
 
@@ -584,7 +584,7 @@ endpoints:
   # (that's "Pipeline Log Ingest (bilby / total)" below, which counts
   # otel_logs rows); named for what they measure.
   - name: Kangaroo Telemetry Pipeline (heartbeat)
-    url: http://clickstack-clickhouse:8123/
+    url: http://10.0.0.90:8123/
     method: POST
     group: Observability
     interval: 5m
@@ -627,7 +627,7 @@ endpoints:
         send-on-resolved: true
 
   - name: Numbat Telemetry Pipeline (heartbeat)
-    url: http://clickstack-clickhouse:8123/
+    url: http://10.0.0.90:8123/
     method: POST
     group: Observability
     interval: 5m
@@ -646,7 +646,7 @@ endpoints:
         send-on-resolved: true
 
   - name: Pinelake Telemetry Pipeline (heartbeat)
-    url: http://clickstack-clickhouse:8123/
+    url: http://10.0.0.90:8123/
     method: POST
     group: Observability
     interval: 5m
@@ -665,7 +665,7 @@ endpoints:
         send-on-resolved: true
 
   - name: Pipeline Log Ingest (bilby / total)
-    url: http://clickstack-clickhouse:8123/
+    url: http://10.0.0.90:8123/
     method: POST
     group: Observability
     interval: 5m
@@ -769,7 +769,7 @@ endpoints:
   # the log-ingest staleness checks; the Map predicate is bounded by the
   # 24h Timestamp filter so the scan stays well under the 10s budget.
   - name: Signal Delivery (Fenwick)
-    url: http://clickstack-clickhouse:8123/
+    url: http://10.0.0.90:8123/
     method: POST
     group: Fenwick
     interval: 15m

@@ -326,7 +326,12 @@ otelcol.processor.batch "clickstack" {
 
 otelcol.exporter.otlphttp "clickstack" {
   client {
-    endpoint = "http://clickstack-otel:4318"
+    // ClickStack lives on bandicoot: cross-LAN to its published :4318.
+    endpoint = "http://10.0.0.90:4318"
+    // Same reasoning as kangaroo's exporter: a fixed IP behind a published
+    // port + NAT keeps a kept-alive connection mapped to a dead collector
+    // after a recreate, so every batch opens a fresh connection.
+    disable_keep_alives = true
     headers  = {
       // ClickStack ingestion API key. Empty ⇒ 401 ⇒ no data in
       // HyperDX — a loud, visible failure. No silent fallback to the

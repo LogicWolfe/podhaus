@@ -102,12 +102,6 @@ services:
       # Yiayia's stories: SQLite (Sky's months of transcription) and the
       # irreplaceable audio originals, one root so a snapshot is consistent.
       - /var/lib/yiayia-stories:/userdata/yiayia-stories:ro
-      # ClickStack HyperDX app-state: the nightly mongodump archives
-      # (ofelia job on clickstack-mongo writes /var/lib/clickstack/
-      # mongo-dumps). Quiescent gzip archives — restic-safe, unlike a
-      # live mongo data dir. ClickHouse telemetry is deliberately NOT
-      # backed up because telemetry is regenerable; see docs/monitoring.html.
-      - /var/lib/clickstack/mongo-dumps:/userdata/clickstack/mongo:ro
       #
       # Docker named volumes from stacks that still use them (NAS squash
       # carve-out stacks + logging + onepassword). Referenced via
