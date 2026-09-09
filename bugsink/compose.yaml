@@ -36,9 +36,11 @@ services:
       BASE_URL: https://bugs.pod.haus
       # Explicit comma-separated override (independent of BASE_URL) so
       # internal dockernet ingest with Host: bugsink is accepted while
-      # the public UI host stays bugs.pod.haus. fenwick → Bugsink goes
-      # over dockernet (http://bugsink:8000), never via Cloudflare.
-      ALLOWED_HOSTS: bugs.pod.haus,bugsink,localhost,127.0.0.1
+      # the public UI host stays bugs.pod.haus. Fenwick moved to
+      # bandicoot, so it now reaches Bugsink over the LAN
+      # (http://10.0.0.119:8000), not dockernet — bugs.pod.haus's own
+      # host is added below.
+      ALLOWED_HOSTS: bugs.pod.haus,bugsink,localhost,127.0.0.1,10.0.0.119
       # TLS terminates at the Cloudflare edge; origin is plain HTTP.
       # Required or the login POST fails CSRF behind the tunnel.
       BEHIND_HTTPS_PROXY: "true"
@@ -47,6 +49,13 @@ services:
       SINGLE_USER: "true"
       SINGLE_TEAM: "true"
       TIME_ZONE: ${TZ}
+    # Published on the LAN so the Fenwick bot on bandicoot can reach
+    # Bugsink's ingest endpoint — the same published-LAN-port pattern
+    # every other cross-host hop uses (docs/hosts.html "Adding another
+    # host"). The DSN's key is the auth, as with every Sentry-protocol
+    # ingest; no new exposure class.
+    ports:
+      - "8000:8000"
     volumes:
       - bugsink-data:/data
     networks:

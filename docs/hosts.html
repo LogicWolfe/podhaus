@@ -329,11 +329,11 @@
         Workstation with 16 KiB kernel pages, 1 TB local NVMe. Like fractal and voltaire it
         is two things at once: one of Nathan's development machines and an ordinary podhaus
         host on the home LAN, provisioned by <a href="/host-provisioning.md">Ansible</a>
-        (<code>playbooks/bandicoot.yml</code>). It is the designated successor host for
-        ClickStack, the Fenwick stacks and Paperless; that migration is separate work and
-        nothing has moved yet. Since 2026-09-09 it is also the Komodo Core host (Postgres +
-        FerretDB + Core), the 1Password Connect host, and the Ansible/Terraform control
-        node — see <a href="/komodo.html">Komodo</a>.
+        (<code>playbooks/bandicoot.yml</code>). Since 2026-09-09 it is also the Komodo
+        Core host (Postgres + FerretDB + Core), the 1Password Connect host, the
+        Ansible/Terraform control node, and the host for ClickStack and the Fenwick
+        family (the bot, signal-cli, brinno-downloader, fenwick-web-agent) — see
+        <a href="/komodo.html">Komodo</a>.
       </p>
       <p>
         Everything else in and out is a connection bandicoot makes, on the fractal
@@ -367,8 +367,12 @@
           <code>bandicoot-autoheal</code>, <code>bandicoot-docs</code>,
           <code>bandicoot-ofelia</code>, <code>bandicoot-backup</code> and, since 2026-09-09,
           <code>clickstack</code> (the observability backend, see
-          <a href="/monitoring.html#clickstack">Monitoring</a>) through linked
-          repos <code>podhaus-bandicoot</code> and <code>docs-server-bandicoot</code>.</li>
+          <a href="/monitoring.html#clickstack">Monitoring</a>), Komodo Core's own
+          <code>onepassword</code> stack, and the Fenwick family (<code>fenwick</code>,
+          <code>signal-cli-rest-api</code>, <code>fenwick-brinno-downloader</code>,
+          <code>fenwick-web-agent</code>) — through linked repos
+          <code>podhaus-bandicoot</code>, <code>docs-server-bandicoot</code>, and
+          <code>fenwick</code>.</li>
       </ul>
       <p>
         It is a laptop, so the <code>base</code> role's <code>podhaus_is_laptop</code>
@@ -390,8 +394,9 @@
         <strong>Backup:</strong> <code>bandicoot-backup</code> (<code>backup/bandicoot</code>)
         snapshots the state of services that live here to a restic repository on Jump
         (<code>/mnt/jump/backups-bandicoot</code>), Jump-sentinel-gated like bilby's;
-        today that is the ClickStack mongo dumps. Local-only, as pinelake's is: no
-        OneDrive leg yet.
+        that covers the ClickStack mongo dumps, Komodo's Postgres/FerretDB, the
+        1Password Connect data volume, and (since 2026-09-09) the Fenwick bot's SQLite
+        and the Signal device link. Local-only, as pinelake's is: no OneDrive leg yet.
       </p>
 
       <h2 id="pinelake">pinelake</h2>

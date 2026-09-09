@@ -61,7 +61,8 @@
 		reverse_proxy @gatus gatus:8080
 		reverse_proxy @bugs bugsink:8000
 		reverse_proxy @backup backrest:9898
-		reverse_proxy @fenwick fenwick:8088
+		# The bot lives on bandicoot; the front door stays here.
+		reverse_proxy @fenwick 10.0.0.90:8088
 		reverse_proxy @kangaroo_backup 10.0.0.25:9898
 		reverse_proxy @kangaroo 10.0.0.25:8080
 		# Komodo Core lives on bandicoot; the front door stays here.
@@ -521,7 +522,8 @@ fenwick-events.pod.haus:4444 {
 		header X-Podhaus-Gateway-Token {env.FENWICK_EVENTS_GATEWAY_TOKEN}
 	}
 	handle @events {
-		reverse_proxy fenwick:8088
+		# The bot lives on bandicoot; the front door stays here.
+		reverse_proxy 10.0.0.90:8088
 	}
 	handle {
 		respond 404

@@ -60,7 +60,8 @@ alerting:
   # [RESULT_CONDITIONS] token — still a valid JSON string; the agent
   # ignores it.)
   custom:
-    url: "http://fenwick:8088/events/async"
+    # The bot lives on bandicoot; Gatus reaches it across the LAN.
+    url: "http://10.0.0.90:8088/events/async"
     method: POST
     headers:
       Content-Type: application/json
@@ -762,7 +763,8 @@ endpoints:
   # (minutes) detection of a hard container-down / crash-loop / failed
   # deploy — the case where alerts vanish entirely.
   - name: Fenwick
-    url: http://fenwick:8088/health
+    # The bot lives on bandicoot; Gatus reaches it across the LAN.
+    url: http://10.0.0.90:8088/health
     group: Fenwick
     interval: 1m
     conditions:

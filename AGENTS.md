@@ -94,8 +94,8 @@ Docker container infrastructure for **seven** active hosts:
   (`playbooks/bandicoot.yml`, run locally — `ansible_connection: local`),
   with the `base` role's laptop policy so the lid never takes it offline.
   Runs Komodo Core, `onepassword`, ClickStack, the Forgejo Actions runner,
-  and its own Backrest; the Fenwick stacks are next
-  (docs/plans/bandicoot-migration.md).
+  its own Backrest, and (since 2026-09-09) the Fenwick family — the bot,
+  signal-cli, brinno-downloader, and fenwick-web-agent.
 - **pinelake** (Apple M1 Mac mini, macOS, second household) is a dedicated
   media appliance. OrbStack is its sole container runtime; Plex, Flood,
   Syncthing, backup, ingress, logging, scheduling, and Autoheal follow the

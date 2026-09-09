@@ -24,21 +24,22 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"
 branch = "main"
 
-# Bilby clone of the fenwick monorepo. The fenwick repo carries
+# Bandicoot clone of the fenwick monorepo. The fenwick repo carries
 # its own stack defs (both the bot and the credential-redactor
-# service) — see fenwick-push-deploy in procedures.toml. This is
-# bilby's first linked-repo (its other stacks use files_on_host
-# against the podhaus working clone); the design generalises to any
-# fenwick-sourced stack ("fenwick-*") via the dedicated webhook +
-# procedure. It follows the Forgejo `deploy` branch, not `main`: green
-# Forgejo Actions is the only writer that advances this promotion pointer.
+# service) — see fenwick-push-deploy in procedures.toml. It follows
+# the Forgejo `deploy` branch, not `main`: green Forgejo Actions is
+# the only writer that advances this promotion pointer. Moved from
+# bilby 2026-09-09 so the Fenwick family can reach op-connect-api on
+# bandicoot's dockernet by name again; git.pod.haus resolves via
+# bandicoot's Periphery extra_hosts entry (see bandicoot/periphery/
+# compose.yaml).
 [[repo]]
 name = "fenwick"
-description = "Komodo-managed clone of the fenwick monorepo on bilby's Periphery"
-tags = ["podhaus", "bilby", "fenwick"]
+description = "Komodo-managed clone of the fenwick monorepo on bandicoot's Periphery"
+tags = ["podhaus", "bandicoot", "fenwick"]
 
 [repo.config]
-server = "podhaus"             # = bilby
+server = "bandicoot"
 git_provider = "git.pod.haus"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/fenwick"

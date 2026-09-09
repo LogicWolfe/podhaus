@@ -1,15 +1,20 @@
 // bandicoot ships container telemetry to Bilby over HTTPS. Caddy requires
 // bandicoot's dedicated client certificate before forwarding OTLP.
-// No per-service parsers yet; bandicoot runs Periphery, rathole, autoheal,
-// Alloy, and Nathan's dev containers. The same generic severity-enrich +
-// service.name-from-container as bilby/kangaroo so logs are
-// queryable identically in HyperDX.
+// bandicoot runs Periphery, rathole, autoheal, Komodo Core, onepassword,
+// ClickStack, and Nathan's dev containers, plus (since 2026-09-09) the
+// Fenwick family. The same generic severity-enrich + service.name-from-
+// container as bilby/kangaroo so logs are queryable identically in
+// HyperDX. One per-service parser so far — see parsers/fenwick.alloy.
 
 // Internal-pipeline tracing — unified `alloy` service in HyperDX
 // (same name on every host; one row per host).
 tracing {
   sampling_fraction = 0.1
   write_to          = [otelcol.processor.batch.clickstack.input]
+}
+
+import.file "parsers" {
+  filename = "/etc/alloy/parsers"
 }
 
 discovery.docker "containers" {
@@ -45,10 +50,15 @@ loki.source.docker "containers" {
 
 // ANSI strip — generic pre-shaping.
 loki.process "containers" {
-  forward_to = [otelcol.receiver.loki.clickstack.receiver]
+  forward_to = [parsers.fenwick.run.receiver]
 
   stage.decolorize {}
 }
+
+// fenwick self-reports OTLP directly to ClickStack (see
+// parsers/fenwick.alloy), so its docker stdout is dropped here to avoid
+// double-ingest. Everything else passes through untouched.
+parsers.fenwick "run" { forward_to = [otelcol.receiver.loki.clickstack.receiver] }
 
 // ---- ClickStack OTLP sink (mTLS to bilby) ----
 
