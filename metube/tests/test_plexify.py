@@ -27,6 +27,7 @@ LeftoverFile = MODULE.LeftoverFile
 select_episode = MODULE.select_episode
 assign_batch = MODULE.assign_batch
 token_fit = MODULE.token_fit
+batch_done = MODULE.batch_done
 normalise = MODULE.normalise
 PlexifyError = MODULE.PlexifyError
 
@@ -306,6 +307,29 @@ class SkillsvilleFixtureTest(unittest.TestCase):
             match = select_episode(video_title, episodes)
             resolved_numbers.add(match.episode_number)
         self.assertEqual(len(resolved_numbers), 59)
+
+
+class BatchDoneTest(unittest.TestCase):
+    """batch_done: the Exec postprocessor runs inside yt-dlp's own
+    postprocessing chain, before MeTube moves that same download from
+    `queue` to `done` — so a lone download's own hook invocation always
+    finds its own entry still "queued". A bare "is the queue empty"
+    check would never fire the sweep from inside a batch; this is what
+    the real fix checks instead."""
+
+    def test_empty_queue_is_done(self) -> None:
+        self.assertTrue(batch_done([], "SPACE RACERS: Cadet Dodo"))
+
+    def test_queue_with_only_this_invocations_own_title_is_done(self) -> None:
+        queue = [{"title": "SPACE RACERS: Cadet Dodo", "status": "finished"}]
+        self.assertTrue(batch_done(queue, "SPACE RACERS: Cadet Dodo"))
+
+    def test_queue_with_another_entry_is_not_done(self) -> None:
+        queue = [
+            {"title": "SPACE RACERS: Cadet Dodo", "status": "finished"},
+            {"title": "SPACE RACERS: Different", "status": "downloading"},
+        ]
+        self.assertFalse(batch_done(queue, "SPACE RACERS: Cadet Dodo"))
 
 
 class StagedFilesTest(unittest.TestCase):

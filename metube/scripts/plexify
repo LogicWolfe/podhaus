@@ -263,6 +263,18 @@ class SonarrClient:
         raise PlexifyError(f"Sonarr import command {command_id} did not finish within {IMPORT_POLL_TIMEOUT_S}s")
 
 
+def batch_done(queue: list[dict], own_title: str) -> bool:
+    """True when MeTube's download queue is empty, or contains only
+    entries whose title is this invocation's own file. The Exec
+    postprocessor that calls this runs inside yt-dlp's own postprocessing
+    chain, before MeTube moves that same download from `queue` to `done`
+    — so a lone download's own hook invocation always finds its own entry
+    still "queued", and a bare `if queue: return 0` would defer forever,
+    letting some later, unrelated download be the one that always
+    happens to run the sweep."""
+    return all(entry["title"] == own_title for entry in queue)
+
+
 class MeTubeClient:
     """Thin wrapper over the one MeTube endpoint the batch sweep needs.
     Reachable at localhost because this hook runs as a subprocess inside
@@ -480,13 +492,14 @@ def _staged_files(directory: Path) -> list[Path]:
     return [p for p in sorted(directory.iterdir()) if p.is_file() and not p.name.startswith(".")]
 
 
-def sweep_show(show_dir: Path, done_titles: dict[str, str], sonarr: SonarrClient) -> list[str]:
+def sweep_show(show_dir: Path, done_titles: dict[str, str], sonarr: SonarrClient) -> tuple[int, list[str]]:
     """Sweeps one show's staging folder: places every safely-matched
-    leftover file, then returns a display name (title where known, else
-    filename) for each file still left over afterwards."""
+    leftover file, then returns how many it placed plus a display name
+    (title where known, else filename) for each file still left over
+    afterwards."""
     disk_files = _staged_files(show_dir)
     if not disk_files:
-        return []
+        return 0, []
     titled = [LeftoverFile(p.name, done_titles[p.name]) for p in disk_files if p.name in done_titles]
     untitled_names = [p.name for p in disk_files if p.name not in done_titles]
 
@@ -498,26 +511,31 @@ def sweep_show(show_dir: Path, done_titles: dict[str, str], sonarr: SonarrClient
         relative = Path(show_dir.name) / pair.file.name
         import_episode(sonarr, show_dir / pair.file.name, relative, series, pair.episode)
 
-    return untitled_names + [f.title for f in assignment.leftover_files]
+    return len(assignment.pairs), untitled_names + [f.title for f in assignment.leftover_files]
 
 
 def run_sweep(sonarr: SonarrClient, done_entries: list[dict]) -> bool:
     """Runs once MeTube's whole download queue is empty: sweeps every
     show folder in staging (a loose file at the staging root can't be
     show-resolved at all, and is always a leftover), places what it
-    safely can, and reports the whole sweep as one Gatus result.
-    Returns whether staging ended up empty."""
+    safely can, prints one operational line so `docker logs metube`
+    shows the sweep ran, and reports the whole sweep as one Gatus
+    result. Returns whether staging ended up empty."""
     done_titles = {e["filename"]: e["title"] for e in done_entries}
     failures: dict[str, list[str]] = {}
+    placed_total = 0
 
     root_files = [p.name for p in _staged_files(STAGING_ROOT)]
     if root_files:
         failures["(staging root)"] = root_files
     for show_dir in sorted(p for p in STAGING_ROOT.iterdir() if p.is_dir()):
-        leftover = sweep_show(show_dir, done_titles, sonarr)
+        placed, leftover = sweep_show(show_dir, done_titles, sonarr)
+        placed_total += placed
         if leftover:
             failures[show_dir.name] = leftover
 
+    left_total = sum(len(names) for names in failures.values())
+    print(f"plexify: batch sweep placed {placed_total}, left {left_total}", file=sys.stderr)
     report_sweep(failures)
     return not failures
 
@@ -574,7 +592,7 @@ def main() -> int:
         print(f"plexify: {exc}", file=sys.stderr)
         report_gatus(success=False, error=str(exc))
         return 1
-    if history["queue"]:
+    if not batch_done(history["queue"], title):
         return 0
     return 0 if run_sweep(sonarr, history["done"]) else 1
 
