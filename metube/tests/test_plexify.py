@@ -75,6 +75,11 @@ class SegmentEqualityMatchTest(unittest.TestCase):
         self.assertEqual(match.title, "Chef")
         self.assertNotIn(match.title, ("Chemist", "Detective"))
 
+    def test_full_width_bar_is_a_delimiter(self) -> None:
+        episodes = [Episode(1, "Chef", 1, 1), Episode(2, "Chemist", 1, 39)]
+        match = select_episode("Skillsville FULL EPISODE ｜ Chef", episodes)
+        self.assertEqual(match.title, "Chef")
+
     def test_substring_alone_does_not_match_a_longer_title(self) -> None:
         # Regression: "Plumber" is a substring of "Quantum Plumber" but is
         # not equal to any delimited segment of the video title, and the

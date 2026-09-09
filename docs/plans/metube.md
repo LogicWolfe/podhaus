@@ -120,7 +120,8 @@ single developer), Radarr now (movies are a later plan on the same pattern).
   candidate list, Fenwick sent the Signal alert and later the resolution.
 - ✅ Channel fill: 58 queued, 55 placed with no mismatches; Judge (E50),
   Lighting Designer (E40) and Firefighter (E13) failed twice on the download
-  side (yt-dlp "bytes read, more expected", a dropped connection) — 56 of 59
-  on disk, staging empty.
+  side (yt-dlp "bytes read, more expected"). Re-downloaded directly: two placed
+  as AV1; Judge's AV1 1080p stream returns HTTP 500 from YouTube, so it was
+  taken as H.264 1080p. 59 of 59 on disk, staging empty, Plexify green.
 - ⏳ Plex (Nathan): TheTVDB episode ordering on the Kids library; first-play
-  check on the LG CX. Three dropped downloads to re-queue.
+  check on the LG CX.

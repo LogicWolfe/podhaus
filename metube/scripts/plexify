@@ -51,7 +51,9 @@ NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 # career segments, e.g. "Skillsville FULL EPISODE | Entrepreneur" -> the
 # segment "Entrepreneur" alone, so a fuzzy match against it isn't diluted
 # by the length of the surrounding channel boilerplate.
-TITLE_SEGMENT_RE = re.compile(r"[|\-–—:]")
+# The full-width bar (U+FF5C) is what yt-dlp writes into filenames for `|`,
+# and some channels use it in titles outright.
+TITLE_SEGMENT_RE = re.compile(r"[|｜\-–—:]")
 
 # Ambiguity guard for the difflib fallback: the best candidate must clear
 # this ratio, and beat the runner-up by this much, or the match is refused.
