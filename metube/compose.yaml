@@ -4,16 +4,19 @@
 #
 #   - Download + remux is CPU/scratch work: runs on bandicoot (cores +
 #     NVMe), not bilby (Plex's host, RAM-tight).
-#   - DOWNLOAD_DIR is Pouch (/mnt/pouch/Kids) so the folder picker
-#     (CUSTOM_DIRS) offers the existing TV/Movies/Videos subfolders.
-#     TEMP_DIR and STATE_DIR are local NVMe, not Pouch, so a half-
-#     finished download never sits on the NAS and queue state survives
-#     a Pouch outage.
+#   - DOWNLOAD_DIR is Pouch's staging tree (/mnt/pouch/Kids/_incoming), not
+#     the Kids library root — everything MeTube writes is staging, never
+#     the Plex library itself. The folder picker (CUSTOM_DIRS) lists show
+#     folders already staged there; typing a new name (or picking none, see
+#     scripts/plexify) works too — the hook falls back to the video's
+#     channel when there's no folder. TEMP_DIR and STATE_DIR are local
+#     NVMe, not Pouch, so a half-finished download never sits on the NAS
+#     and queue state survives a Pouch outage.
 #   - PUID/PGID match the Pouch owner (1000:100, `stat -c '%u:%g'
 #     /mnt/pouch/Kids` on bandicoot) so MeTube can write there.
 #     CHOWN_DIRS is off: the entrypoint chowns DOWNLOAD_DIR recursively
 #     on every start, and ownership already matches — skip the walk
-#     over the whole Kids library on every restart.
+#     over the staging tree on every restart.
 #   - YTDL_OPTIONS: remote_components enables yt-dlp's JS solver
 #     (YouTube extraction 403s without it); format_sort prefers AV1 at
 #     the highest resolution with an AAC track so the mp4 merge is a
@@ -24,14 +27,17 @@
 #     the YouTube title into the MP4 title tag, and a Plex library with
 #     "Prefer local metadata" on shows that tag instead of the agent's
 #     episode title (docs/plex.html, the embedded title trap). The
-#     Exec postprocessor runs scripts/plexify after every move: it asks
-#     Sonarr (docs/plans/metube.md) to identify the episode from the
-#     staging show-folder name plus the video title, then imports the
-#     file into /kids/TV with Sonarr's own season/episode naming — so
-#     OUTPUT_TEMPLATE stays plain `<title>.<ext>` (Sonarr does the real
-#     rename on import). Anything the hook can't confidently match fails
-#     the download (Gatus `metube_plexify` goes red) instead of leaving
-#     a wrongly-numbered file in the library.
+#     Exec postprocessor runs scripts/plexify after every move, passing
+#     the file path, video title, and channel: it asks Sonarr
+#     (docs/plans/metube.md) to identify the episode from the staging
+#     show-folder name — or, when the family picked no folder, the
+#     video's channel, which for these kids' shows is the show name
+#     itself — plus the video title, then imports the file into /kids/TV
+#     with Sonarr's own season/episode naming — so OUTPUT_TEMPLATE stays
+#     plain `<title>.<ext>` (Sonarr does the real rename on import).
+#     Anything the hook can't confidently match fails the download (Gatus
+#     `metube_plexify` goes red) instead of leaving a wrongly-numbered
+#     file in the library.
 #   - ALLOW_YTDL_OPTIONS_OVERRIDES stays unset/false: enabling it lets
 #     anyone on metube.pod.haus pass arbitrary yt-dlp API options
 #     (arbitrary local file read/write via postprocessor args).
@@ -61,7 +67,7 @@ services:
       CREATE_CUSTOM_DIRS: "true"
       OUTPUT_TEMPLATE: "%(title)s.%(ext)s"
       OUTPUT_TEMPLATE_PLAYLIST: "%(title)s.%(ext)s"
-      YTDL_OPTIONS: '{"remote_components":["ejs:github"],"format_sort":["res","vcodec:av01","acodec:m4a"],"merge_output_format":"mp4","writethumbnail":true,"postprocessors":[{"key":"EmbedThumbnail","already_have_thumbnail":false},{"key":"Exec","when":"after_move","exec_cmd":"/scripts/plexify %(filepath)q %(title)q"}]}'
+      YTDL_OPTIONS: '{"remote_components":["ejs:github"],"format_sort":["res","vcodec:av01","acodec:m4a"],"merge_output_format":"mp4","writethumbnail":true,"postprocessors":[{"key":"EmbedThumbnail","already_have_thumbnail":false},{"key":"Exec","when":"after_move","exec_cmd":"/scripts/plexify %(filepath)q %(title)q %(channel)q"}]}'
       # scripts/plexify's own config — read directly from os.environ, no
       # defaults (see the script's docstring). Sonarr and Gatus are both
       # on bilby/bandicoot's LAN, not dockernet, from this bandicoot
@@ -74,7 +80,7 @@ services:
       GATUS_PLEXIFY_ENDPOINT_ID: metube_plexify
       GATUS_HEARTBEAT_PUSH_TOKEN: ${GATUS_HEARTBEAT_PUSH_TOKEN}
     volumes:
-      - /mnt/pouch/Kids:/downloads
+      - /mnt/pouch/Kids/_incoming:/downloads
       - /var/lib/metube/tmp:/tmp/metube
       - /var/lib/metube/state:/var/lib/metube/state
       # Naming hook script, bound from the bandicoot deploy clone (this

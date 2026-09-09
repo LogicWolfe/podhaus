@@ -151,14 +151,26 @@ class NoCandidateTest(unittest.TestCase):
             select_episode("Some totally unrelated video about kittens", episodes)
 
 
-class NoOpOutsideIncomingTest(unittest.TestCase):
-    def test_main_exits_zero_and_touches_nothing_outside_incoming(self) -> None:
-        argv = sys.argv
-        sys.argv = ["plexify", "/downloads/TV/Bluey/Bluey - S01E01.mp4", "Bluey - S01E01"]
-        try:
-            self.assertEqual(MODULE.main(), 0)
-        finally:
-            sys.argv = argv
+class ShowNameResolutionTest(unittest.TestCase):
+    """resolve_show_name: the staging folder wins when the family chose
+    one; a file dropped directly in staging (no folder) falls back to the
+    video's yt-dlp %(channel)s — which for these kids' shows is the show
+    name itself — and a channel of "NA" (yt-dlp's literal rendering of a
+    missing field) with no folder either fails loudly."""
+
+    def test_channel_is_the_show_when_the_file_has_no_folder(self) -> None:
+        show = MODULE.resolve_show_name(Path("SPACE RACERS The Haunted Asteroid.mp4"), "Space Racers")
+        self.assertEqual(show, "Space Racers")
+
+    def test_folder_wins_over_channel_when_both_are_present(self) -> None:
+        show = MODULE.resolve_show_name(
+            Path("Skillsville/Skillsville FULL EPISODE - Chef.mp4"), "SomeOtherChannel",
+        )
+        self.assertEqual(show, "Skillsville")
+
+    def test_na_channel_with_no_folder_fails_loudly(self) -> None:
+        with self.assertRaisesRegex(PlexifyError, "no channel and no folder"):
+            MODULE.resolve_show_name(Path("Some Video.mp4"), MODULE.NO_CHANNEL)
 
 
 class NewSeriesEpisodeWaitTest(unittest.TestCase):

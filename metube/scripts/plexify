@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-# yt-dlp Exec postprocessor (after_move), invoked as: plexify FILEPATH TITLE
+# yt-dlp Exec postprocessor (after_move), invoked as:
+#   plexify FILEPATH TITLE CHANNEL
 #
-# MeTube writes downloads under /downloads (= /mnt/pouch/Kids on the host).
-# The family stages a download into /downloads/_incoming/<Show>/ via
-# MeTube's folder picker. This hook asks Sonarr (which sees the same tree
-# as /kids/...) to identify the episode from the show folder + video title,
-# then runs a Sonarr ManualImport to move the file into /kids/TV with the
-# right season/episode name. Everything outside _incoming/ is none of this
-# hook's business and is left untouched.
+# MeTube's /downloads bind is Pouch's Kids/_incoming staging tree (see
+# metube/compose.yaml) — every file MeTube writes is staging, never the Plex
+# library itself. The family may pick a show folder in MeTube's folder
+# picker (or type one); a file that lands directly in staging with no
+# folder falls back to the video's yt-dlp %(channel)s, which for these
+# kids' shows is the show name itself. Either way, this hook asks Sonarr
+# (which sees the same tree at /kids, with our staging root appearing there
+# as /kids/_incoming) to identify the episode from the show name + video
+# title, then runs a Sonarr ManualImport to move the file into /kids/TV
+# with the right season/episode name. A file with neither a folder nor a
+# channel (yt-dlp renders a missing field as the literal string "NA") fails
+# loudly instead of silently sitting in staging forever.
 #
 # The episode number lives only in Sonarr's TheTVDB-backed episode list, not
 # in anything yt-dlp can see (see docs/plans/metube.md). Confidence rule is
@@ -18,10 +24,10 @@
 # wrong episode number. Substring containment alone isn't enough: "Plumber"
 # must not match "Quantum Plumber" just because it's a substring of it.
 #
-# Every outcome except the _incoming-boundary no-op is reported to Gatus's
-# `metube_plexify` external endpoint (success=true, or success=false&error=...)
-# so a bad match reaches Nathan instead of silently sitting in staging.
-# yt-dlp/MeTube shows the download as errored when this hook exits non-zero.
+# Every outcome is reported to Gatus's `metube_plexify` external endpoint
+# (success=true, or success=false&error=...) so a bad match reaches Nathan
+# instead of silently sitting in staging. yt-dlp/MeTube shows the download
+# as errored when this hook exits non-zero.
 
 from __future__ import annotations
 
@@ -37,12 +43,15 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-DOWNLOADS_ROOT = Path("/downloads")
+# MeTube's own view of its staging root (see the module docstring).
+STAGING_ROOT = Path("/downloads")
+# Sonarr binds the whole Kids share at /kids (see sonarr/compose.yaml), so
+# STAGING_ROOT appears there as /kids/_incoming — the fixed translation
+# between the two containers' views of one folder.
 INCOMING_DIRNAME = "_incoming"
-# Sonarr binds the same Pouch share at /kids (see sonarr/compose.yaml); this
-# is the fixed translation between the two containers' views of one folder.
 SONARR_VIEW_PREFIX = "/kids"
 LIBRARY_ROOT = "/kids/TV"
+NO_CHANNEL = "NA"  # yt-dlp's literal rendering of a missing %(channel)s
 IMPORT_POLL_INTERVAL_S = 2
 IMPORT_POLL_TIMEOUT_S = 60
 TVDB_FOLDER_RE = re.compile(r"\{tvdb-(\d+)\}")
@@ -223,30 +232,44 @@ def wait_for_episodes(sonarr: SonarrClient, series: Series) -> None:
     raise PlexifyError(f"Sonarr listed no episodes for {series.title!r} within {IMPORT_POLL_TIMEOUT_S}s of adding it")
 
 
-def resolve_series_by_tvdb_id(sonarr: SonarrClient, tvdb_id: int, folder_name: str) -> Series:
+def resolve_series_by_tvdb_id(sonarr: SonarrClient, tvdb_id: int, show_name: str) -> Series:
     for series in sonarr.list_series():
         if series.tvdb_id == tvdb_id:
             return series
     results = sonarr.lookup_series(f"tvdb:{tvdb_id}")
     if not results:
-        raise PlexifyError(f"no Sonarr lookup result for tvdb:{tvdb_id} (folder {folder_name!r})")
+        raise PlexifyError(f"no Sonarr lookup result for tvdb:{tvdb_id} (show {show_name!r})")
     return add_series_from_lookup(sonarr, results[0])
 
 
-def resolve_series(sonarr: SonarrClient, folder_name: str) -> Series:
-    tvdb_tag = TVDB_FOLDER_RE.search(folder_name)
+def resolve_series(sonarr: SonarrClient, show_name: str) -> Series:
+    """Resolve a Sonarr series from a show name — either a staging folder
+    name (a `{tvdb-N}` tag wins) or, when there was no folder, the video's
+    channel, which must then be an exact TheTVDB title itself."""
+    tvdb_tag = TVDB_FOLDER_RE.search(show_name)
     if tvdb_tag:
-        return resolve_series_by_tvdb_id(sonarr, int(tvdb_tag.group(1)), folder_name)
+        return resolve_series_by_tvdb_id(sonarr, int(tvdb_tag.group(1)), show_name)
 
-    normalised_folder = normalise(folder_name)
+    normalised_show = normalise(show_name)
     for series in sonarr.list_series():
-        if normalise(series.title) == normalised_folder:
+        if normalise(series.title) == normalised_show:
             return series
 
-    matches = [r for r in sonarr.lookup_series(folder_name) if normalise(r["title"]) == normalised_folder]
+    matches = [r for r in sonarr.lookup_series(show_name) if normalise(r["title"]) == normalised_show]
     if len(matches) != 1:
-        raise PlexifyError(f"no exact Sonarr match for show folder {folder_name!r}")
+        raise PlexifyError(f"no exact Sonarr match for show {show_name!r}")
     return add_series_from_lookup(sonarr, matches[0])
+
+
+def resolve_show_name(relative: Path, channel: str) -> str:
+    """The show is the staging folder name when the family chose one,
+    else the video's channel — a channel of "NA" means yt-dlp saw neither
+    a folder nor a channel to fall back on."""
+    if len(relative.parts) >= 2:
+        return relative.parts[0]
+    if channel == NO_CHANNEL:
+        raise PlexifyError("video has no channel and no folder was chosen")
+    return channel
 
 
 def best_ratio_against_title(episode_title: str, normalised_candidates: list[str]) -> float:
@@ -283,12 +306,10 @@ def select_episode(video_title: str, episodes: list[Episode]) -> Episode:
     raise PlexifyError(f"no confident episode match for {video_title!r}; top candidates: {top}")
 
 
-def place_episode(path: Path, relative: Path, title: str) -> None:
-    if len(relative.parts) < 2:
-        raise PlexifyError(f"{path} is directly under _incoming with no show folder")
-    folder_name = relative.parts[0]
+def place_episode(path: Path, relative: Path, title: str, channel: str) -> None:
+    show_name = resolve_show_name(relative, channel)
     sonarr = SonarrClient(required_env("SONARR_URL"), required_env("SONARR_API_KEY"))
-    series = resolve_series(sonarr, folder_name)
+    series = resolve_series(sonarr, show_name)
     episode = select_episode(title, sonarr.episodes_for(series.id))
     sonarr_path = f"{SONARR_VIEW_PREFIX}/{INCOMING_DIRNAME}/{relative.as_posix()}"
     command_id = sonarr.manual_import(
@@ -323,15 +344,10 @@ def report_gatus(success: bool, error: str | None) -> None:
 def main() -> int:
     path = Path(sys.argv[1])
     title = sys.argv[2]
-    incoming_root = DOWNLOADS_ROOT / INCOMING_DIRNAME
+    channel = sys.argv[3]
     try:
-        relative = path.relative_to(incoming_root)
-    except ValueError:
-        print(f"plexify: {path} is not under {incoming_root}; leaving untouched")
-        return 0
-
-    try:
-        place_episode(path, relative, title)
+        relative = path.relative_to(STAGING_ROOT)
+        place_episode(path, relative, title, channel)
     except Exception as exc:  # noqa: BLE001 - top-level boundary, see module docstring
         print(f"plexify: {exc}", file=sys.stderr)
         report_gatus(success=False, error=str(exc))

@@ -48,7 +48,7 @@ a file named only with a YouTube title plus an explicit episode id came out as
 |---|---|---|
 | Host | bandicoot | Download + remux is CPU/scratch work; bilby keeps Plex and only reads the result |
 | Stack | `metube/` linked-repo stack, `scripts/` bound from the deploy clone like Plex's | Fleet shape |
-| Downloads | `/mnt/pouch/Kids` at `/downloads`; NVMe `TEMP_DIR` and `STATE_DIR` under `/var/lib/metube` | Folder picker offers `TV`, `Movies`, `Videos` and the staging tree; nothing half-written on the NAS |
+| Downloads | `/mnt/pouch/Kids/_incoming` at `/downloads` (staging only, never the library root); NVMe `TEMP_DIR` and `STATE_DIR` under `/var/lib/metube` | Everything MeTube writes is staging; the folder picker offers the staged show folders; nothing half-written on the NAS |
 | Format | `format_sort: ["res","vcodec:av01","acodec:m4a"]`, MP4 merge, thumbnail embedded, JS solver on; no `format` key | AV1 (Nathan's choice; bilby transcodes it at 9.9× if a client cannot), UI quality picker keeps working |
 | Ingress | `metube.pod.haus`: DNS, Pomerium family route, bilby Caddy → 10.0.0.90:8081 | Moved-service pattern |
 | Monitoring / backup | Gatus `MeTube` (Media); Backrest bandicoot `metube` plan for the queue state | Media itself is not backed up |
@@ -57,12 +57,12 @@ a file named only with a YouTube title plus an explicit episode id came out as
 
 | Concern | Decision | Why |
 |---|---|---|
-| Staging | The family picks `_incoming/<Show>` in MeTube's folder picker. `_incoming` lives under `Kids` on Pouch, outside every Plex library root | The folder name is the show; the move into the library is a rename on the same filesystem |
-| Sonarr stack | `sonarr/` on bandicoot: `lscr.io/linuxserver/sonarr` pinned, `/var/lib/sonarr` config (managed dir, 1000:100), `/mnt/pouch/Kids:/kids`, root folder `/kids/TV`, LAN port 8989, `label:disable`, `mem_limit`, healthcheck `/ping` | Same shape as MeTube; Sonarr sees staging and library under one bind |
+| Staging | MeTube's `/downloads` bind is `_incoming` itself (`/mnt/pouch/Kids/_incoming`), outside every Plex library root. The family picks a show folder in MeTube's folder picker, or types one; picking none falls back to the video's `%(channel)s`, which for these kids' shows is the show name itself | Defaults land in the right spot with no folder needed; a picker folder still overrides the channel |
+| Sonarr stack | `sonarr/` on bandicoot: `lscr.io/linuxserver/sonarr` pinned, `/var/lib/sonarr` config (managed dir, 1000:100), `/mnt/pouch/Kids:/kids` (the whole share — staging and library both, since MeTube's own bind is now scoped to the `_incoming` subtree), root folder `/kids/TV`, LAN port 8989, `label:disable`, `mem_limit`, healthcheck `/ping` | Same shape as MeTube; Sonarr sees staging and library under one bind |
 | Sonarr auth | `SONARR__AUTH__METHOD=External`; API key set from the vault (`SONARR__AUTH__APIKEY`) | Pomerium is the front door and the LAN is trusted, as for MeTube; the key is shared with the hook |
 | Sonarr settings | Rename Episodes on; series folder `{Series TitleYear} {tvdb-{TvdbId}}`; season folder `Season {season:00}`; episode `{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle}`; no indexers, no download clients; series added unmonitored; Plex connection if a Plex token is in the vault | Plex's naming guide; Sonarr never searches for anything; Plex learns of new files on import |
 | Secret | 1Password item `Sonarr API` (Homelab) → komodo-op variable `OP__KOMODO__SONARR_API__CREDENTIAL`, used by both stacks | Existing secret pattern |
-| Hook | `metube/scripts/plexify FILE TITLE`, yt-dlp `Exec` postprocessor `after_move`, Python stdlib. Not under `_incoming/`: exit 0, untouched. Under `_incoming/` with no show folder: fail. Otherwise: find the series in Sonarr by folder name (a `{tvdb-N}` tag wins; else an exact normalised title match in Sonarr's lookup, added unmonitored if absent), fetch episodes, match the title (normalised episode title contained in the normalised video title, exactly one candidate; else difflib ratio ≥ 0.9 with a clear margin over the runner-up; else fail), then `ManualImport` with explicit `episodeIds`, quality WEBDL-1080p, poll the command, and confirm the file has left staging | The number is Sonarr's; the confidence rule is ours. Sonarr reports success on an import with no episode chosen, so the guard is in the hook before the call and the after-check catches a silent no-op |
+| Hook | `metube/scripts/plexify FILE TITLE CHANNEL`, yt-dlp `Exec` postprocessor `after_move`, Python stdlib. Show name is the staging folder when there is one, else the channel argument; a channel of `NA` (yt-dlp's literal for a missing field) with no folder fails loudly. Find the series in Sonarr by show name (a `{tvdb-N}` tag wins; else an exact normalised title match in Sonarr's lookup, added unmonitored if absent), fetch episodes, match the title (normalised episode title contained in the normalised video title, exactly one candidate; else difflib ratio ≥ 0.9 with a clear margin over the runner-up; else fail), then `ManualImport` with explicit `episodeIds`, quality WEBDL-1080p, poll the command, and confirm the file has left staging | The number is Sonarr's; the confidence rule is ours. Sonarr reports success on an import with no episode chosen, so the guard is in the hook before the call and the after-check catches a silent no-op |
 | Fail loudly | Gatus external endpoint `metube_plexify` (Media), brinno's heartbeat pattern: the hook posts `success=false&error=…` on any failure and `success=true` on each placement; Gatus alerts route to Fenwick → Signal | Nathan's requirement: a non-match must reach him |
 | Sonarr ingress | `sonarr.pod.haus`: DNS, Pomerium route on the Nathan-only policy the other admin tools use, bilby Caddy → 10.0.0.90:8989; Gatus `Sonarr` check; Backrest `sonarr` plan for `/var/lib/sonarr` | Admin tool, not family |
 | Plex | Library episode ordering set to TheTVDB (Nathan, once) | Plex's TMDB default has 15 paired Skillsville episodes |
@@ -75,8 +75,9 @@ single developer), Radarr now (movies are a later plan on the same pattern).
 
 - Hook unit tests (pytest, in the repo's test discovery): the 59 Skillsville
   titles resolve to 59 distinct numbers; junk-prefixed YouTube titles match by
-  containment; two close candidates fail; a title with no candidate fails; a
-  path outside `_incoming` is a no-op.
+  containment; two close candidates fail; a title with no candidate fails;
+  the channel is the show when there's no folder, a folder overrides the
+  channel, and a missing channel with no folder fails loudly.
 - Smoke file already in `Kids/_incoming` moved into `_incoming/Skillsville`
   and the hook run by hand inside the container: lands as
   `Kids/TV/Skillsville (2025) {tvdb-460946}/Season 01/Skillsville - S01Exx - Sound Effects Artist.mp4`,
