@@ -61,40 +61,23 @@ op-vault mint dev</code></pre>
           The token paste stays on bilby's terminal and is never written to the
           checkout or sent over SSH.</li>
         <li>Lay down host state with the bilby playbook (Docker daemon config,
-          dockernet + fenwick networks, NFS-bind hardening, firewall, Komodo
-          host directories) — bootstrap the repo venv per <code>README.md</code>
-          first:
+          dockernet + fenwick networks, NFS-bind hardening, firewall, an
+          outbound Komodo Periphery) — bootstrap the repo venv per
+          <code>README.md</code> first:
           <pre><code>cd ansible
 op-vault dev -- ansible-playbook playbooks/bilby.yml --check --diff   # read first
 op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
         </li>
-        <li>Run <code>op-vault dev -- ./komodo-start</code>. This:
-          <ul>
-            <li>Brings up Komodo Core (Postgres, FerretDB, Core, Periphery).</li>
-            <li>Waits for Core to be healthy.</li>
-            <li>Seeds the five chicken-and-egg variables (4
-              <code>ONEPASSWORD_*</code> + <code>PODHAUS_CHECKOUT</code>).
-              <code>TZ</code>, <code>MEDIA_DIR</code>, and the fixed
-              <code>PODHAUS_REPO</code> (deploy-tree path) live in
-              <code>komodo/sync/variables.toml</code> and apply via
-              the sync's <code>include_variables=true</code>.</li>
-            <li>Ensures the <code>podhaus-deploy</code> Repo resource
-              exists and pulls it, populating the deploy tree at
-              <code>/etc/komodo/repos/podhaus-deploy</code> before the
-              first sync reads it.</li>
-            <li>Idempotently creates the podhaus ResourceSync (with
-              <code>include_variables=true</code>; GetResourceSync first
-              so re-runs are clean).</li>
-            <li>Runs the bootstrap double-sync: first sync registers
-              stacks + TOML-declared vars (including
-              <code>komodo-op</code>'s stack def); waits for
-              <code>komodo-op</code> to backfill
-              <code>OP__KOMODO__*</code> secrets; second sync re-renders
-              stack env blocks so they resolve to live secret values.</li>
-            <li>Stops there. <code>komodo-start</code> doesn't deploy
-              stacks — that's a separate concern.</li>
-          </ul>
-        </li>
+        <li><strong>Komodo Core itself now lives on bandicoot, not bilby</strong> —
+          do not run <code>komodo-start</code> here. The
+          <code>komodo_periphery</code> role above brings up bilby's outbound
+          Periphery and waits for bandicoot's Core to report server
+          <code>podhaus</code> as <code>Ok</code>. The remaining steps below
+          (ResourceSync bootstrap, the double-sync, restic restore ordering)
+          were written when bilby was Core's host and need re-verifying
+          against Core now running on bandicoot — see
+          <a href="/komodo.html">Komodo</a> for <code>komodo-start</code>'s
+          current, bandicoot-only, behaviour.</li>
         <li>In the Komodo UI: confirm Servers list shows <code>podhaus</code> as healthy.
           <code>komodo-op</code> should already be deployed. After the
           bootstrap sync registers the stack, run
@@ -197,8 +180,8 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
           necessary before <code>terraform apply -replace=binarylane_server.numbat</code> can
           create the replacement first. Terraform then provisions the VM, both addresses,
           DNS, PKI, Pocket ID client, and 1Password handoffs.</li>
-        <li>From bilby (it streams the Periphery keys from <code>/opt/komodo/keys</code>
-          and polls Core on localhost), with bilby's machine-key agent active, run
+        <li>From bandicoot (it streams the Periphery keys from <code>/opt/komodo/keys</code>
+          and polls Core on localhost), with bandicoot's machine-key agent active, run
           <pre><code>cd ansible
 op-vault dev -- ansible-playbook playbooks/numbat-bootstrap.yml</code></pre>
           First contact is pinned against the Terraform-generated host key published to
@@ -248,7 +231,7 @@ op-vault dev -- ansible-playbook playbooks/pinelake.yml \
   -e ansible_host=&lt;tailscale-address&gt; -e ansible_user=baxter</code></pre>
           The play configures power policy and OrbStack, proves the exact TerraMaster volume,
           installs Pomerium Secure Shell trust, and brings outbound Periphery up with its
-          existing keypair from bilby. Pinelake receives no 1Password service account.</li>
+          existing keypair from bandicoot. Pinelake receives no 1Password service account.</li>
         <li>From Komodo, deploy <code>pinelake-relay</code> and
           <code>pinelake-backup</code>. The relay restores
           <code>home.pinelake.haus</code>; Backrest exposes its user interface on port 9898 of
@@ -258,7 +241,7 @@ op-vault dev -- ansible-playbook playbooks/pinelake.yml \
           empty host path under <code>/Users/Shared/Podhaus</code> with owner
           <code>baxter:staff</code>. Restore Plex as one complete tree; never mix individual
           database or preference files from different snapshots.</li>
-        <li>From bilby, run <code>./komodo-sync</code>. The Pinelake pre-deploy gates prove the
+        <li>From bandicoot, run <code>./komodo-sync</code>. The Pinelake pre-deploy gates prove the
           mounted media roots before each stateful stack starts. Plex additionally validates
           all four identity fields from
           <code>ansible/roles/pinelake_macos/files/plex-identity.json</code>.</li>

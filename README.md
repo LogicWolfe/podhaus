@@ -4,8 +4,8 @@ Docker infrastructure for six managed hosts. Compose stacks live in this
 repo, Komodo deploys them, 1Password supplies secrets, and Terraform owns the
 external infrastructure.
 
-- **bilby:** Apple M1 Mac mini running Fedora Asahi Linux. It hosts Komodo Core
-  and the primary services.
+- **bilby:** Apple M1 Mac mini running Fedora Asahi Linux. It hosts an
+  outbound Komodo Periphery and the primary services.
 - **kangaroo:** QNAP NAS running QTS and Container Station. It hosts Syncthing,
   Backrest, Autoheal, Alloy, and Pouch MinIO.
 - **numbat:** BinaryLane Rocky Linux VM in Perth. It is the public Pomerium and
@@ -14,8 +14,9 @@ external infrastructure.
   podhaus service host.
 - **voltaire:** Fedora Workstation. It is an outbound-only remote development
   and podhaus service host.
-- **bandicoot:** Apple Silicon MacBook Pro on Fedora Asahi Remix. It is a
-  development and podhaus service host on the home LAN, and the successor host
+- **bandicoot:** Apple Silicon MacBook Pro on Fedora Asahi Remix. It hosts
+  Komodo Core and is the Ansible/Terraform control node, alongside its own
+  development and podhaus service use on the home LAN — the successor host
   for bilby's heavier services.
 - **pinelake:** Apple M1 Mac mini running macOS and OrbStack. It is the
   task-specific media appliance for the second household.
@@ -33,7 +34,7 @@ The live documentation is at <https://docs.pod.haus>. Start with:
 
 ## Day-to-day operation
 
-On bilby:
+On bandicoot:
 
 ```sh
 ./komodo-start
@@ -65,11 +66,13 @@ The pre-commit hook runs the linters through that environment. No lock file is
 kept. Running those commands again upgrades mise's rolling `latest` aliases;
 use `mise exec -- pipenv remove` first when Python itself has changed.
 
-Bootstrap the remote hosts from bilby:
+Bootstrap the remote hosts. `kangaroo_bootstrap` still runs from bilby (it
+dials kangaroo directly over the LAN); the Ansible playbook runs from
+bandicoot, now the Ansible control node:
 
 ```sh
-./kangaroo_bootstrap
-(cd ansible && ansible-playbook playbooks/numbat-bootstrap.yml)
+./kangaroo_bootstrap                                            # from bilby
+(cd ansible && ansible-playbook playbooks/numbat-bootstrap.yml) # from bandicoot
 ```
 
 ## Terraform

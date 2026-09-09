@@ -9,8 +9,8 @@
       <h2 id="topology">Topology</h2>
       <p>
         <strong>bilby</strong> (Apple M1 Mac mini, 15 GB RAM, Asahi Linux) is the primary host. It
-        runs Komodo Core, the Periphery agent for itself, and the primary podhaus stacks
-        (Plex, Paperless, Home Assistant, Flood, etc.).
+        runs an outbound Komodo Periphery and the primary podhaus stacks
+        (Plex, Paperless, Home Assistant, Flood, etc.). Komodo Core itself runs on bandicoot.
       </p>
       <p>
         <strong>kangaroo</strong> (QNAP NAS, QTS, ext4) runs a second Periphery agent registered to
@@ -65,8 +65,9 @@
           <a href="/terraform.html">Terraform</a>.</li>
       </ul>
       <p>
-        The repo is bind-mounted into bilby's Komodo Core (for ResourceSync) and bilby's
-        Periphery (for stack compose files). Every other deploy target's Periphery clones
+        The repo's deploy tree is bind-mounted into bandicoot's Komodo Core (for
+        ResourceSync) and, as a separate clone, into bilby's own Periphery (for its
+        files_on_host stack compose files). Every other deploy target's Periphery clones
         the repo through Komodo's Linked Repo resource (different Repo names per
         host since each clone is independent state) — see
         <a href="/komodo.html#operating-models">Komodo → operating models</a>.

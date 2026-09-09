@@ -66,17 +66,17 @@ The resulting ledger:
 | numbat host SSH key | TF `tls_private_key.numbat_ssh_host` | 1P (public half) | numbat bootstrap play pins first contact |
 | Rathole tokens, noise keys | TF `random_password` | 1P `Numbat Rathole` | relay `.env` renders via lookup |
 | Per-host log-shipping mTLS certs | TF `voltaire_log_client` etc. | 1P `Log Ingest PKI` | logging stacks via Komodo variables |
-| Periphery X25519 private keys | generated on bilby | `/opt/komodo/keys` on the control node only | `komodo_periphery` role |
+| Periphery X25519 private keys | generated on bandicoot | `/opt/komodo/keys` on the control node only | `komodo_periphery` role |
 | Forgejo SSH host key | Forgejo container | committed literal in dotfiles (root of trust) | chezmoi `00-ssh-hostkeys` |
 
 ## Which hosts Ansible manages
 
 **fractal**, **bilby**, **numbat**, **voltaire**, **bandicoot**, and **pinelake** — the `provisioned`
 group, which is what `site.yml` targets. How each is reached is a
-per-host fact in `host_vars/`: bilby is the control node and runs
-against itself (`ansible_connection: local`); fractal is direct on the
-home LAN (`10.0.0.70`, the Windows host's `:22` forward); bandicoot is
-direct on the home LAN too; numbat and
+per-host fact in `host_vars/`: bandicoot is the control node and runs
+against itself (`ansible_connection: local`); bilby is direct on the
+home LAN via `bilby.pod.haus`; fractal is direct on the home LAN too
+(`10.0.0.70`, the Windows host's `:22` forward); numbat and
 voltaire have no inbound path of their own and route through Pomerium,
 carrying `nathan@numbat` / `nathan@voltaire` as `ansible_user` — that is
 a Pomerium *route selector*, not an OS account, which is why
@@ -105,8 +105,8 @@ ansible/
   playbooks/
     site.yml               targets the `provisioned` group
     fractal.yml            single-host entry point
-    bandicoot.yml          single-host entry point
-    bilby.yml              single-host entry point (+ Komodo host dirs)
+    bandicoot.yml          single-host entry point (+ Komodo host dirs)
+    bilby.yml              single-host entry point (+ Komodo Periphery)
     numbat.yml             single-host entry point (steady state)
     numbat-bootstrap.yml   fresh-VM bring-up, sequencing preserved as play order
     pinelake.yml           macOS appliance and OrbStack entry point
@@ -122,7 +122,7 @@ ansible/
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
     storage_binds/         Late-arriving-volume hardening (bilby, fractal)
     firewalld/             declarative zone + service XML (bilby, bandicoot)
-    komodo_core_host/      Komodo Core's host directories (bilby)
+    komodo_core_host/      Komodo Core's host directories (bandicoot)
     numbat_edge/           numbat's nftables ruleset, relay-IP dispatcher, loopback sshd
     mac_ssh/               MacBook FileVault gate, key-only sshd policy and mesh keys
     pinelake_macos/        macOS power, OrbStack and Plex safety gates
@@ -345,7 +345,7 @@ guest agent. Activation of a changed ruleset is a handler gated on
 
 numbat is a remote, self-firewalling host, so its bring-up is
 *sequencing* — preserved in `playbooks/numbat-bootstrap.yml` as task
-order, each constraint commented. The play runs **from bilby** (it
+order, each constraint commented. The play runs **from bandicoot** (it
 streams Periphery keys from `/opt/komodo/keys` and polls Core on
 localhost), connects to the application IP on first-boot port 2222 with
 the host key pinned from 1Password, stages the `numbat_edge` config

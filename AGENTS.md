@@ -58,8 +58,8 @@ machine SSH key.
 ## What podhaus is
 
 Docker container infrastructure for **seven** active hosts:
-- **bilby** (Apple M1 Mac mini, primary; Fedora Asahi Linux) — runs
-  Komodo Core, MinIO, Caddy, every primary service.
+- **bilby** (Apple M1 Mac mini, primary; Fedora Asahi Linux) — runs an
+  outbound Komodo Periphery, MinIO, Caddy, every primary service.
 - **kangaroo** (QNAP NAS, QTS + Container Station) — secondary LAN
   deploy target via linked-repo Periphery.
 - **numbat** (BinaryLane Perth, Rocky Linux 10, x86_64) is the active
@@ -84,14 +84,17 @@ Docker container infrastructure for **seven** active hosts:
   Ansible (`playbooks/voltaire.yml`); its old Cloudflare tunnel and
   systemd rathole origin are gone.
 - **bandicoot** (Apple Silicon MacBook Pro, Fedora Asahi Remix 44, aarch64,
-  home LAN) is one of Nathan's development machines and an ordinary podhaus
-  host on the fractal pattern: Periphery to `core-connect.pod.haus`, a
-  rathole client (`relay/bandicoot`) carrying `ssh://bandicoot` and
+  home LAN) is one of Nathan's development machines, **Komodo Core's
+  host**, and the Ansible/Terraform control node: its own outbound
+  Periphery dials Core directly (`ws://bandicoot.pod.haus:9120`, LAN,
+  since they share a host) rather than `core-connect.pod.haus`, a rathole
+  client (`relay/bandicoot`) carrying `ssh://bandicoot` and
   `bandicoot.docs.pod.haus`, Alloy to `logs-ingest.pod.haus`; direct LAN
   SSH via split-horizon `bandicoot.pod.haus`. Provisioned by Ansible
-  (`playbooks/bandicoot.yml`), with the `base` role's laptop policy so the
-  lid never takes it offline. Runs ClickStack, the Forgejo
-  Actions runner and its own Backrest; the Fenwick stacks are next
+  (`playbooks/bandicoot.yml`, run locally — `ansible_connection: local`),
+  with the `base` role's laptop policy so the lid never takes it offline.
+  Runs Komodo Core, `onepassword`, ClickStack, the Forgejo Actions runner,
+  and its own Backrest; the Fenwick stacks are next
   (docs/plans/bandicoot-migration.md).
 - **pinelake** (Apple M1 Mac mini, macOS, second household) is a dedicated
   media appliance. OrbStack is its sole container runtime; Plex, Flood,
@@ -115,8 +118,8 @@ hosted JetKVM is Pinelake's independent recovery path.
 
 ## Architecture
 
-- **Komodo Core** on bilby manages stacks on all active deploy hosts via per-host
-  Periphery agents.
+- **Komodo Core** on bandicoot manages stacks on all active deploy hosts via
+  per-host Periphery agents.
 - Single-host services live in a top-level directory with `compose.yaml`
   and `stack.toml` (e.g. `paperless/`, `plex/`, `gatus/`).
 - **Multi-host shared services** use `<service>/{compose.shared.yaml,
@@ -124,11 +127,15 @@ hosted JetKVM is Pinelake's independent recovery path.
   `file_paths = ["compose.yaml", "../compose.shared.yaml"]`; its compose
   file contains only the host-specific overlay. Pattern in use: `backup/`,
   `autoheal/`, `logging/`.
-- Komodo Core and bilby's Periphery both mount the **deploy tree**, a
-  Komodo-managed clone of this repo (`/etc/komodo/repos/podhaus-deploy`,
-  Repo resource `podhaus-deploy` in `komodo/sync/repos.toml`) — never
-  bilby's own working checkout (`~/repos/podhaus`). A push forces the
-  deploy tree to `origin/main`; `./komodo-sync` instead overlays it with
+- Two Komodo-managed clones of this repo stand in for a working
+  checkout: Core's own **sync tree** on bandicoot (`podhaus-bandicoot` in
+  `komodo/sync/repos.toml`, at
+  `/opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot`, mounted
+  into Core at `/syncs/podhaus`), and bilby's own **deploy tree**
+  (`podhaus-deploy`, at `/etc/komodo/repos/podhaus-deploy`, mounted into
+  bilby's Periphery), feeding bilby's `files_on_host` stacks — never
+  either host's own working checkout. A push forces both trees to
+  `origin/main`; `./komodo-sync` instead overlays bandicoot's tree with
   the working checkout's current state. See `docs/komodo.html`.
   Kangaroo's Periphery clones the repo itself via Komodo's Linked Repo
   feature.
@@ -173,12 +180,13 @@ hosted JetKVM is Pinelake's independent recovery path.
 - **External networks are host-provisioned by the Ansible docker role**
   (`ansible/roles/docker`) — the only config-as-code path, since Komodo
   has no `CreateNetwork` execution and Compose won't adopt a pre-existing
-  external network. Bilby declares `dockernet` (Komodo Core itself
-  attaches to it) plus, via `podhaus_extra_networks`, the two
-  Fenwick-private nets `fenwick-net` and `fenwick-webagent-net` (the
-  browser-quarantine link); per-container membership stays config-as-code
-  in each stack's `compose.yaml`. Fenwick's topology + rationale live in
-  the fenwick repo's `docs/networking.html`.
+  external network. Every host declares its own `dockernet` this way
+  (bandicoot's is what Komodo Core itself attaches to); bilby additionally
+  declares, via `podhaus_extra_networks`, the two Fenwick-private nets
+  `fenwick-net` and `fenwick-webagent-net` (the browser-quarantine link);
+  per-container membership stays config-as-code in each stack's
+  `compose.yaml`. Fenwick's topology + rationale live in the fenwick
+  repo's `docs/networking.html`.
 - Containers reach each other by **container name** (Docker DNS), never
   by static IP.
 - Static IPs are for LAN devices (e.g. UniFi gateway at `10.0.0.1`) or
@@ -213,17 +221,17 @@ hosted JetKVM is Pinelake's independent recovery path.
 
 | File | What it is |
 |---|---|
-| `komodo/ferretdb.compose.yaml` | Komodo Core infra (postgres, FerretDB, Core, Periphery) |
+| `komodo/ferretdb.compose.yaml` | Komodo Core infra (postgres, FerretDB, Core) — on bandicoot; Periphery moved out to `bandicoot/periphery/compose.yaml` |
 | `komodo/compose.env` | Komodo config with `op://` secret references |
 | `<name>/compose.yaml` | Docker Compose file for each service stack |
 | `<name>/stack.toml` | Komodo stack metadata (server assignment, environment block) |
 | `komodo/sync/variables.toml` | Global non-secret variable declarations (TZ, MEDIA_DIR, and `PODHAUS_REPO` — the fixed path of bilby's Komodo-managed deploy tree). Authoritative — applied by the podhaus sync (`include_variables = true`). Stack-private vars live as inline `[[variable]]` blocks in `<stack>/stack.toml` instead. |
 | `komodo/sync/servers.toml` | Server definitions (bilby, kangaroo, numbat, fractal, voltaire, bandicoot, pinelake) |
-| `komodo/sync/repos.toml` | Per-host Linked Repo definitions (including `podhaus-numbat`), plus the `podhaus-deploy` Repo resource — bilby's own Komodo-managed deploy tree, fed by `podhaus-push-deploy`'s pull stage and by `komodo-sync`'s local-tree overlay. |
-| `komodo/sync/procedures.toml` | Two procedures. `podhaus-push-deploy` is the GitHub webhook entrypoint: Stage 0 `PullRepo podhaus-deploy` force-pulls the deploy tree to `origin/main`, Stage 1 `RunProcedure podhaus-deploy` runs the internal procedure below. `podhaus-deploy` (webhook/schedule disabled — invoked only by `podhaus-push-deploy` and by `./komodo-sync`; deploys whatever the deploy tree currently holds) has three stages: Stage 0 RunSync (reconcile defs) → Stage 1 RunAction `podhaus-inject-content-hashes` (stamp content hashes into stored env **and** force-deploy stacks with stale hash labels — the actual config-only/build-context trigger) → Stage 2 BatchDeployStackIfChanged "*" (owns compose-text changes + new stacks; does NOT see hash changes). Ofelia `0.4.0-beta.5` follows Docker events and no longer needs a deployment-boundary restart. |
+| `komodo/sync/repos.toml` | Per-host Linked Repo definitions (including `podhaus-numbat`), plus two podhaus deploy trees: `podhaus-bandicoot` — Core's own sync tree — and `podhaus-deploy` — bilby's, feeding its `files_on_host` stacks — both fed by `podhaus-push-deploy`'s pull stage and (for `podhaus-bandicoot`) by `komodo-sync`'s local-tree overlay. |
+| `komodo/sync/procedures.toml` | Two procedures. `podhaus-push-deploy` is the GitHub webhook entrypoint: Stage 0 `PullRepo` force-pulls both deploy trees (`podhaus-bandicoot`, `podhaus-deploy`) to `origin/main`, Stage 1 `RunProcedure podhaus-deploy` runs the internal procedure below. `podhaus-deploy` (webhook/schedule disabled — invoked only by `podhaus-push-deploy` and by `./komodo-sync`; deploys whatever the deploy trees currently hold) has three stages: Stage 0 RunSync (reconcile defs) → Stage 1 RunAction `podhaus-inject-content-hashes` (stamp content hashes into stored env **and** force-deploy stacks with stale hash labels — the actual config-only/build-context trigger) → Stage 2 BatchDeployStackIfChanged "*" (owns compose-text changes + new stacks; does NOT see hash changes). Ofelia `0.4.0-beta.5` follows Docker events and no longer needs a deployment-boundary restart. |
 | `komodo/sync/actions.toml` | Komodo Actions invoked by procedures and by `komodo-sync`. `podhaus-load-local-tree` is `komodo-sync`'s first step: mirrors bilby's working checkout (tracked + untracked-unignored files, read-only at `/syncs/podhaus-local`) into the deploy tree at `/syncs/podhaus` via `git ls-files` enumeration on both sides, so everything downstream deploys exactly local state. `podhaus-inject-content-hashes` is Stage 1 of the internal `podhaus-deploy` procedure. For every stack visible at `/syncs/podhaus` (the deploy tree), it hashes (a) the stack directory (committed files; `.env` excluded) → `STACK_CONTENT_HASH`, and (b) each service's resolved build context → `BUILD_HASH_<UPPER_SERVICE>`; injects both into stored env. **Then it force-deploys any stack whose running container has stale `podhaus.*` labels or, for a build service, a stale baked `STACK_CONTENT_HASH`, while its compose text is unchanged**. This reconcile is the load-bearing trigger for podhaus's "any in-stack file change → recreate; any build-context change → image rebuild + recreate" property, because Komodo's IfChanged (Stage 2) only diffs compose text and never sees a hash change. `podhaus-purge-stack-cache` reads a deployed stack's `podhaus.cloudflare-cache-*` labels and purges those tags after the stack's deployment stage. See the Stage-1/content-hash notes in "When adding a new service" and [`docs/caching.md`](docs/caching.md). |
 | `tools/lint-stack-content-hash.py` | Pre-commit consumer-wiring lint for the content-hash mechanism: every service has the `podhaus.stack-content-hash` label; every build service has `build.args.STACK_CONTENT_HASH` referencing its own `BUILD_HASH_<self>` + the matching `ARG`/`ENV` pair in its Dockerfile; every service that `depends_on` a build service has the `podhaus.depends-on-<dep>` label. Run via `tools/pre-commit` alongside `lint-stack-env.py`. |
-| `komodo-start` | Bootstrap-only script: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_CHECKOUT`, the host-discovered `$PWD` consumed only by home-assistant's live config bind), idempotent deploy-tree bootstrap (`CreateRepo podhaus-deploy` + `PullRepo` + poll, so `/syncs/podhaus` is populated before the first sync reads it), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync). Needs no sudo — host prerequisites (external networks, `/etc/komodo/ssl`, `/opt/komodo/keys`) come from `ansible/playbooks/bilby.yml`. Idempotent — safe to re-run. |
+| `komodo-start` | Bootstrap-only script, run on bandicoot: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_CHECKOUT`, the host-discovered `$PWD` consumed only by home-assistant's live config bind), idempotent bootstrap of Core's own sync tree (`CreateServer bandicoot` + `CreateRepo podhaus-bandicoot` + `PullRepo` + poll, so `/syncs/podhaus` is populated before the first sync reads it), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync), then the same idempotent bootstrap for bilby's own deploy tree (`podhaus-deploy`, which by then has a server to attach to). Needs no sudo — host prerequisites (`/opt/komodo/keys`, dockernet) come from `ansible/playbooks/bandicoot.yml`. Idempotent — safe to re-run. |
 | `komodo-sync` | Steady-state debug-iterate tool, **and** the recovery path for procedure-stage edits the push webhook can't apply by itself. Step 0: `RunAction podhaus-load-local-tree` overlays the deploy tree with bilby's working checkout's current state (tracked + untracked-unignored). Step 1: unfiltered `RunSync(podhaus)` directly via the API (out-of-procedure, so Komodo's `resource::update::<Procedure>` busy guard doesn't fire — procedure-definition changes land cleanly here, surgically — only stacks whose files actually changed get redeployed), now reading the overlaid tree. Step 2+: invokes `podhaus-deploy` (deliberately **not** `podhaus-push-deploy` — that procedure's own first stage would pull the deploy tree back to `origin/main` and clobber the overlay step 0 just wrote) + `fenwick-push-deploy` + `pets-push-deploy` + `docs-push-deploy` procedures (whose own Stage 0 RunSync is now a no-op because step 1 already reconciled state). Use when iterating locally without pushing, or after a push that touches `komodo/sync/procedures.toml`. |
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. |
 | `tools/lint-stack-toml.py` | Pre-commit lint: rejects `deploy = true` on any podhaus-tagged stack. See "Hard rules" for why — Komodo's `Sync Deploy` sub-stage in `RunSync` would auto-deploy on Stage 0 and break on transient linked-repo timeouts. |
@@ -232,16 +240,18 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `komodo-stop` | Stop Komodo Core |
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |
-| `ansible/roles/storage_binds/` | Late-arriving-volume hardening and stopped-container recovery for **bilby and fractal**. Each host declares its volumes as `storage_binds_mounts` in `host_vars` (root + expected source + expected fstypes); bilby declares the two QNAP NFS exports, fractal declares `/home`, the LUKS volume unlocked by hand. A recurring systemd timer with **no readiness deadline** starts only opted-in `created`/`exited` containers whose retained OCI error names an unavailable declared bind, after that exact volume is healthy again — so a volume returning hours later takes the same path as one returning in seconds; `StartLimit*=0` drop-ins keep the mounts retryable forever — on **both** the `.mount` and `.automount` half of each pair, because systemd caps the `.mount` unit and an automount whose mount trips that cap wedges in `mount-start-limit-hit` and never retries; the `chattr +i` tripwire protects every bare mountpoint (sweeping empty Docker auto-create debris, failing loudly on anything holding bytes); sentinels prove the expected volume; and per-host opt-ins cover Forgejo directory ownership plus `/boot/efi`'s fsck pass number. Apply via `ansible-playbook playbooks/bilby.yml` or `playbooks/fractal.yml` (tag `storage`), **run from bilby** — it is the Ansible control node, and fractal does not authorize its own key. See [`docs/postmortems/2026-08-22-delayed-nfs-container-recovery.md`](docs/postmortems/2026-08-22-delayed-nfs-container-recovery.md). |
+| `ansible/roles/storage_binds/` | Late-arriving-volume hardening and stopped-container recovery for **bilby and fractal**. Each host declares its volumes as `storage_binds_mounts` in `host_vars` (root + expected source + expected fstypes); bilby declares the two QNAP NFS exports, fractal declares `/home`, the LUKS volume unlocked by hand. A recurring systemd timer with **no readiness deadline** starts only opted-in `created`/`exited` containers whose retained OCI error names an unavailable declared bind, after that exact volume is healthy again — so a volume returning hours later takes the same path as one returning in seconds; `StartLimit*=0` drop-ins keep the mounts retryable forever — on **both** the `.mount` and `.automount` half of each pair, because systemd caps the `.mount` unit and an automount whose mount trips that cap wedges in `mount-start-limit-hit` and never retries; the `chattr +i` tripwire protects every bare mountpoint (sweeping empty Docker auto-create debris, failing loudly on anything holding bytes); sentinels prove the expected volume; and per-host opt-ins cover Forgejo directory ownership plus `/boot/efi`'s fsck pass number. Apply via `ansible-playbook playbooks/bilby.yml` or `playbooks/fractal.yml` (tag `storage`), **run from bandicoot** — it is the Ansible control node, and fractal does not authorize its own key. See [`docs/postmortems/2026-08-22-delayed-nfs-container-recovery.md`](docs/postmortems/2026-08-22-delayed-nfs-container-recovery.md). |
 | `ansible/roles/firewalld/` | **Source of truth for firewalld on bilby and bandicoot** (absorbed the deleted `bilby/firewalld/`) — `files/zones/public.xml` (the LAN zone, `end0` on bilby) + `files/services/*.xml` (custom port groups). The role makes `public` the default zone (Fedora Workstation ships `FedoraWorkstation`), installs services, then the zone, runs `firewall-cmd --check-config`, then reloads. **Never** run `firewall-cmd --add-*` (even `--permanent`) — it diverges from the role files and the next play run reverts it; edit the XML and re-run `ansible-playbook playbooks/bilby.yml` (tag `firewall`). The `public` zone trusts the whole home LAN (`10.0.0.0/24 → accept`), so LAN-only services need no explicit rule; services reached from dockernet get an explicit service XML (plex, music-assistant). See [`docs/hosts.html#bilby-firewall`](docs/hosts.html#bilby-firewall). |
 | `iot/` | **Devices bridged into Home Assistant** — BLE/RF remotes, plus purpose-built hardware such as the grasshopper LED strip switch. One subdirectory per bridging system: `iot/esphome/` (the ESPHome dashboard stack plus one config-as-code YAML per physical device in `iot/esphome/config/`) and `iot/pizero/` (two systemd units plus an install script for the Pi Zero, which bridges the Flic buttons — **not** a Komodo stack, because ARMv6 has no Docker; see [`docs/runbooks/pizero.md`](docs/runbooks/pizero.md)). The Pi **pushes** to Home Assistant: `flicd` owns the radio and `flic-pusher` dials it on *localhost* and POSTs each press to an HA webhook, which re-fires the `flic_click` event. Home Assistant deliberately does **not** dial the Pi — that direction died permanently on any reboot ordering and cost two days of dead buttons on 2026-08-22. There are no `binary_sensor.flic_*` entities; automations trigger on the event. Device YAMLs are flat in that directory because the ESPHome dashboard only lists configs at its config root. Firmware is built and OTA-pushed from the dashboard; `secrets.yaml` is rendered at deploy time by `esphome-init` from the 1Password Homelab item **ESPHome** and is never in the checkout. The matching Home Assistant automations live in `home-assistant/config/automations.yaml` alongside the other remotes, not in a package. Button *behaviour* is HA-side — firmware emits `event` entities and knows nothing about lights or scenes. Firmware does own link health: a connection-state BLE watchdog plus diagnostic entities exported as OpenMetrics for bilby's Alloy to scrape into HyperDX (`service.name = esphome`). A new device needs a UniFi DHCP reservation and a scrape target, or the scrape dies silently on the first DHCP drift. See [`docs/runbooks/ble-remotes.md`](docs/runbooks/ble-remotes.md) for the remotes and the shared dashboard/deploy flow, and [`docs/runbooks/led-strip-grasshopper.md`](docs/runbooks/led-strip-grasshopper.md) for the LED strip switch. |
 | `ansible/` | **Host provisioning — the machine half of a host.** Roles for base packages, WSL, Docker engine/daemon + host-provisioned networks, the developer toolchain, Komodo Periphery, Komodo Core's host directories (`komodo_core_host`), Pomerium SSH CA trust, late-arriving-volume hardening (`storage_binds`), firewalld, and numbat's edge (`numbat_edge`: dual-address nftables + relay-IP dispatcher as jinja templates fed from 1P-published addresses). Ansible owns root state; chezmoi owns `$HOME`; the boundary is "needs sudo" and it means chezmoi never prompts for a password. **fractal**, **bilby**, **numbat**, and **voltaire** are the `provisioned` group that `site.yml` targets (numbat keeps `playbooks/numbat-bootstrap.yml` for a fresh VM and `playbooks/numbat.yml` as its single-host entry point, reached through Pomerium; voltaire's is `playbooks/voltaire.yml`); kangaroo is permanently `excluded` (QTS has no Python — `kangaroo_bootstrap` covers it, including Pomerium SSH CA trust). **Not wired into push-to-deploy:** host state changes when a human runs a playbook, never on a push. Read `--check --diff` and audit every delta before a real run against a loaded host; second run must report `changed=0`. See [`docs/host-provisioning.md`](docs/host-provisioning.md). |
-| `fractal/periphery/`, `voltaire/periphery/`, `bandicoot/periphery/` | The dev hosts' bootstrap-managed outbound Peripheries, dialing `wss://core-connect.pod.haus`. Installed by the `komodo_periphery` Ansible role, not by a script. |
+| `fractal/periphery/`, `voltaire/periphery/` | The remaining dev hosts' bootstrap-managed outbound Peripheries, dialing `wss://core-connect.pod.haus`. Installed by the `komodo_periphery` Ansible role, not by a script. |
+| `bandicoot/periphery/` | Bandicoot's own outbound Periphery, dialing Core directly (`ws://bandicoot.pod.haus:9120`) since they share a host. Installed by the `komodo_periphery` Ansible role. |
+| `bilby/periphery/` | Bilby's outbound Periphery (was the inbound service bundled in `komodo/ferretdb.compose.yaml` before Core moved to bandicoot), dialing `ws://bandicoot.pod.haus:9120`. Installed by the `komodo_periphery` Ansible role. |
 | `ansible/roles/docs_sources/` | Stable read-only repository source slots for docs-server on Bilby, Fractal, Voltaire, and Bandicoot. The recurring reconciler exposes each available user-owned checkout beneath `/opt/podhaus/docs-sources`; unavailable sources reveal a marker, making docs health red while other sources continue serving. |
 | `relay/fractal/`, `caddy/fractal/`, `logging/fractal/` | fractal's outbound ingress + observability: rathole client → Numbat (`fractal_http` → `127.0.0.1:8444`, `fractal_ssh` → `127.0.0.1:2204`), Caddy mTLS origin on `:4443`, Alloy to `logs-ingest.pod.haus`. The `fractal-docs` stack and its multi-location repository catalog are defined in the **docs repo**, while Ansible owns the host source slots. |
 | `relay/voltaire/`, `logging/voltaire/`, `autoheal/voltaire/` | voltaire's outbound ingress + observability on the fractal pattern: rathole client → Numbat (`voltaire_ssh` only — no HTTPS service), Alloy to `logs-ingest.pod.haus`, autoheal. All linked-repo (`podhaus-voltaire`); the Fedora Workstation host runs SELinux enforcing, so every bind-mounting service carries `security_opt: [label:disable]`. |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
-| `ansible/playbooks/numbat-bootstrap.yml` + `ansible/playbooks/numbat.yml` | Numbat's two plays. The bootstrap play (fresh VM only, run from bilby) pins Terraform's 1P-published host key for first contact, connects on first-boot port 2222, stages the `numbat_edge` firewall without activating it, starts rathole before outbound Periphery, enrolls the userspace SSH recovery daemon, then loads the final ruleset and closes 2222 last. The steady-state play (base, docker, numbat_edge, sshd_pomerium_ca, komodo_periphery) reaches the host through Pomerium and is what check-mode equivalence proves. Numbat application stacks are Komodo-managed. |
+| `ansible/playbooks/numbat-bootstrap.yml` + `ansible/playbooks/numbat.yml` | Numbat's two plays. The bootstrap play (fresh VM only, run from bandicoot) pins Terraform's 1P-published host key for first contact, connects on first-boot port 2222, stages the `numbat_edge` firewall without activating it, starts rathole before outbound Periphery, enrolls the userspace SSH recovery daemon, then loads the final ruleset and closes 2222 last. The steady-state play (base, docker, numbat_edge, sshd_pomerium_ca, komodo_periphery) reaches the host through Pomerium and is what check-mode equivalence proves. Numbat application stacks are Komodo-managed. |
 | `tailscale-recovery-bootstrap` | Host-native, userspace-mode Tailscale recovery bootstrap for bilby, numbat, and kangaroo. It publishes only loopback OpenSSH through Tailscale Serve on TCP 22; no host route, DNS override, TUN, or container socket/state exposure. |
 | `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS/CDN/AOP, UniFi DNS, GitHub deploy webhooks, the SSH-only Tailscale recovery plane, MinIO IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in MinIO via public `https://storage.pod.haus`; run stock `terraform` directly. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (per-site static hosting) via `storage.pod.haus`. |
@@ -282,9 +292,10 @@ hosted JetKVM is Pinelake's independent recovery path.
    both. **Don't** add to `komodo-start` — that script is bootstrap-only
    and the only seed it still owns is host-discovered `PODHAUS_CHECKOUT`.
 5. **Push the commit.** The webhook fires `podhaus-push-deploy`, which
-   pulls bilby's Komodo-managed deploy tree to `origin/main`
-   (`PullRepo podhaus-deploy`) and then runs the internal
-   `podhaus-deploy` procedure. Its Stage 0 RunSync registers the new
+   pulls both Komodo-managed deploy trees to `origin/main`
+   (`PullRepo podhaus-bandicoot`, `PullRepo podhaus-deploy`) and then
+   runs the internal `podhaus-deploy` procedure. Its Stage 0 RunSync
+   registers the new
    stack + any new variables; Stage 2 `BatchDeployStackIfChanged "*"`
    deploys it (the `(None, _) => DeployIfChangedAction::FullDeploy`
    path covers brand-new stacks regardless of the `deploy` flag). No
@@ -296,14 +307,16 @@ hosted JetKVM is Pinelake's independent recovery path.
 6. **Nothing to do for push-to-deploy.** There is ONE GitHub `push`
    webhook for the whole repo; it drives the `podhaus-push-deploy`
    Komodo Procedure (`komodo/sync/procedures.toml`), which force-pulls
-   bilby's Komodo-managed **deploy tree**
-   (`/etc/komodo/repos/podhaus-deploy`) to `origin/main`
-   (`PullRepo podhaus-deploy`) and then runs the internal
-   `podhaus-deploy` procedure — source-agnostic, it just deploys
-   whatever the deploy tree currently holds, whether that's a fresh
-   pull from a push or (via `./komodo-sync`) an overlay of the working
-   checkout. Bilby's own working checkout (`~/repos/podhaus`) is never
-   read by either pipeline path. Three stages inside `podhaus-deploy`:
+   both Komodo-managed **deploy trees** — bandicoot's own sync tree
+   (`podhaus-bandicoot`) and bilby's (`podhaus-deploy`, at
+   `/etc/komodo/repos/podhaus-deploy`) — to `origin/main`
+   (`PullRepo podhaus-bandicoot`, `PullRepo podhaus-deploy`) and then
+   runs the internal `podhaus-deploy` procedure — source-agnostic, it
+   just deploys whatever the deploy trees currently hold, whether
+   that's a fresh pull from a push or (via `./komodo-sync`) an overlay
+   of the working checkout. Neither host's own working checkout is
+   ever read by either pipeline path. Three stages inside
+   `podhaus-deploy`:
    **Stage 0** `RunSync "podhaus"` reconciles stack defs + TOML-declared
    variables from disk into Komodo's stored resource state (so a push
    that adds/changes an `environment` line or a `[[variable]]` block
@@ -587,10 +600,12 @@ These have failure modes that you must not introduce:
   green light. `terraform plan` is fine. Note that every `git push` to `main` fires
   the single GitHub webhook (`terraform/github.tf` →
   `komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main`),
-  which force-pulls bilby's Komodo-managed deploy tree
-  (`/etc/komodo/repos/podhaus-deploy`) to `origin/main`
-  (`PullRepo podhaus-deploy`) and then runs the internal
-  `podhaus-deploy` procedure: Stage 0 `RunSync "podhaus"` reconciles
+  which force-pulls both Komodo-managed deploy trees (bandicoot's own
+  `podhaus-bandicoot` and bilby's `podhaus-deploy`, at
+  `/etc/komodo/repos/podhaus-deploy`) to `origin/main`
+  (`PullRepo podhaus-bandicoot`, `PullRepo podhaus-deploy`) and then
+  runs the internal `podhaus-deploy` procedure: Stage 0
+  `RunSync "podhaus"` reconciles
   stack defs + TOML-declared variables; Stage 1 `RunAction
   "podhaus-inject-content-hashes"` stamps a per-stack content hash
   into each stack's stored env; Stage 2 `BatchDeployStackIfChanged
@@ -614,15 +629,17 @@ These have failure modes that you must not introduce:
 - **Don't bypass git hooks (`--no-verify`, etc.) without explicit
   permission.** Same for force-push, hard reset, branch deletion.
 - **Komodo Core ↔ Periphery uses v2 X25519 noise-handshake PKI auth
-  (no shared passkey).** Private keys live in `/opt/komodo/keys/` on
-  bilby (Core's + bilby Periphery's) and on each Periphery host's keys
-  dir (kangaroo/numbat/fractal). Pubkeys are checked in at
+  (no shared passkey).** Core's private key and every Periphery's
+  pubkey live in `/opt/komodo/keys/` on bandicoot (Core's host); each
+  Periphery's own private key stays on its own host instead (e.g.
+  `/opt/komodo-periphery/keys/` on bilby — see
+  `bilby/periphery/compose.yaml`). Pubkeys are checked in at
   `komodo/keys/*.pub`. Never commit a `*.key` file; the
   `komodo/keys/.gitignore` defends against it. To add a new Periphery
-  host: generate its keypair on bilby (openssl in alpine container, see
-  `docs/komodo.html#auth`), SCP the privkey to the new host's keys dir,
-  drop its pubkey in `/opt/komodo/keys/` + `komodo/keys/<host>.pub`,
-  and append `file:/config/keys/<host>.pub` to
+  host: generate its keypair on bandicoot (openssl in alpine container,
+  see `docs/komodo.html#auth`), SCP the privkey to the new host's keys
+  dir, drop its pubkey in `/opt/komodo/keys/` + `komodo/keys/<host>.pub`
+  on bandicoot, and append `file:/config/keys/<host>.pub` to
   `KOMODO_PERIPHERY_PUBLIC_KEYS` in `komodo/compose.env`.
 - **Plex identity is sacred.** Never let Plex start without an init
   container that confirms `Preferences.xml` has the expected

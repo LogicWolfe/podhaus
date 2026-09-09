@@ -2,28 +2,28 @@
 
       <h1>Komodo</h1>
       <p class="lead text-lg text-text-muted">
-        Komodo is the orchestrator. One Core runs on bilby (with its own Periphery for the local
-        host). Kangaroo runs a second Periphery, registered to the same Core. Every stack is a
-        Docker Compose project plus a <code>stack.toml</code> file declaring server assignment
-        and environment.
+        Komodo is the orchestrator. One Core runs on bandicoot, the control node. Every
+        other host — bilby included — runs an outbound Periphery, registered to that
+        Core. Every stack is a Docker Compose project plus a <code>stack.toml</code> file
+        declaring server assignment and environment.
       </p>
 
       <h2 id="components">Components</h2>
       <p>
-        Komodo Core itself runs as four containers in the <code>komodo/</code> stack:
+        Komodo Core itself runs as three containers in the <code>komodo/</code> stack, on
+        bandicoot:
       </p>
       <ul>
         <li><strong><code>komodo-core</code></strong> — the API + web UI on port 9120.</li>
-        <li><strong><code>komodo-periphery</code></strong> — bilby's local agent (the daemon Core
-          actually talks to in order to run <code>docker compose</code>).</li>
         <li><strong><code>komodo-ferretdb</code></strong> — MongoDB-compatible API; Komodo's
           metadata store.</li>
         <li><strong><code>komodo-postgres</code></strong> — backing store for FerretDB.</li>
       </ul>
       <p>
-        Kangaroo runs its own <code>komodo-periphery</code> container — see
-        <a href="/hosts.html#kangaroo">Hosts → kangaroo</a>. Both Peripheries are registered as
-        Server resources in Komodo via <code>komodo/sync/servers.toml</code>.
+        Every other host, including bilby now, runs its own outbound
+        <code>komodo-periphery</code> container — see
+        <a href="/hosts.html#kangaroo">Hosts → kangaroo</a>. Every Periphery is registered as a
+        Server resource in Komodo via <code>komodo/sync/servers.toml</code>.
       </p>
 
       <h2 id="auth">Core ↔ Periphery auth (v2 PKI noise handshake)</h2>
@@ -33,17 +33,17 @@
         private key; the trust list lives as a set of public-key files.
       </p>
       <ul>
-        <li><strong>bilby</strong>: Core and bilby Periphery share a host
-          bind (<code>/opt/komodo/keys</code> → <code>/config/keys</code>),
-          so each picks up the other's <code>.pub</code> from the same
-          directory. Bilby is also where the master copies of all four
-          keypairs live; the pubkeys are committed to
+        <li><strong>bandicoot</strong>: the Core host. <code>/opt/komodo/keys</code>
+          → <code>/config/keys</code> holds every fleet Periphery's public key plus
+          Core's own private key. Bandicoot is also where the master copies of
+          every keypair live; the pubkeys are committed to
           <code>komodo/keys/*.pub</code> in the repo for reference + rebuild.</li>
-        <li><strong>kangaroo, numbat, fractal</strong>: Each host has its own
-          keys directory (bootstrap-managed bind, separate from
+        <li><strong>bilby, kangaroo, numbat, fractal</strong>: Each host,
+          including bilby now that Core has moved off it, has its own keys
+          directory (bootstrap-managed bind, separate from
           <code>etc-komodo</code>). The bootstrap script SCPs that host's
           <code>periphery.key</code> + Core's <code>core.pub</code> from
-          bilby's <code>/opt/komodo/keys/</code> into the remote keys dir.
+          bandicoot's <code>/opt/komodo/keys/</code> into the remote keys dir.
           Privkeys never live outside the host they belong to.</li>
         <li><strong>Trust list on Core</strong>: <code>KOMODO_PERIPHERY_PUBLIC_KEYS</code>
           (in <code>komodo/compose.env</code>) is a comma-separated list of
@@ -61,15 +61,19 @@
         populated address = Core dials; empty = Periphery dials.
       </p>
       <ul>
-        <li><strong>bilby</strong>: inbound. Core dials
-          <code>https://periphery:8120</code> via dockernet (same compose).</li>
+        <li><strong>bilby</strong>: outbound, like every other host now that Core
+          has moved off it. Periphery dials
+          <code>ws://bandicoot.pod.haus:9120</code> over the LAN.</li>
+        <li><strong>bandicoot</strong>: outbound. The Core host's own Periphery
+          dials <code>ws://bandicoot.pod.haus:9120</code> — the LAN name the
+          published port answers on, since Core runs on the same host.</li>
         <li><strong>kangaroo</strong>: outbound. Periphery dials
-          <code>ws://10.0.0.119:9120</code> (bilby LAN). No inbound
+          <code>ws://10.0.0.90:9120</code> (bandicoot LAN). No inbound
           <code>:8120</code> listener exposed on kangaroo.</li>
         <li><strong>numbat</strong>: outbound. Periphery dials
           <code>wss://core-connect.pod.haus</code> through the public TLS rathole
-          path. Komodo Noise keys authenticate the connection; no inbound listener
-          is exposed.</li>
+          path, which now forwards to Core on bandicoot. Komodo Noise keys
+          authenticate the connection; no inbound listener is exposed.</li>
         <li><strong>fractal</strong>: outbound. Periphery dials the same public
           <code>wss://core-connect.pod.haus</code> endpoint.</li>
       </ul>
@@ -99,7 +103,7 @@
             <td>How the repo gets there</td>
             <td>A Komodo-managed clone — the <strong>deploy tree</strong>
               (Repo resource <code>podhaus-deploy</code>) — bind-mounted
-              into Core and Periphery. bilby's own working checkout
+              into bilby's Periphery. bilby's own working checkout
               (<code>~/repos/podhaus</code>) is never read by the
               pipeline; the deploy tree is fed by the push webhook's
               pull stage or by <code>komodo-sync</code>'s local-checkout
@@ -246,15 +250,18 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
       <ul>
         <li><code>komodo/sync/servers.toml</code> — bilby and kangaroo Server entries.</li>
         <li><code>komodo/sync/repos.toml</code> — the <code>podhaus</code> Linked Repo for
-          kangaroo, plus the <code>podhaus-deploy</code> Repo resource:
-          bilby's own Komodo-managed <strong>deploy tree</strong>
-          (<code>/etc/komodo/repos/podhaus-deploy</code>), the single
-          tree every deploy decision reads. It's fed two ways: the push
-          webhook force-pulls it to <code>origin/main</code>
-          (<code>on_pull</code> runs <code>git clean -fd</code> to clear
-          untracked strays without touching gitignored files like the
-          deploy-written <code>.env</code>), and <code>komodo-sync</code>
-          overlays it with bilby's working checkout via the
+          kangaroo, plus two deploy-tree Repo resources:
+          <code>podhaus-bandicoot</code>, Core's own <strong>sync
+          tree</strong> on bandicoot (the one Komodo's own deploy
+          decisions read), and <code>podhaus-deploy</code>, bilby's own
+          Komodo-managed tree feeding its outbound Periphery and
+          files_on_host stacks. Both are fed two ways: the push webhook
+          force-pulls each to <code>origin/main</code>
+          (<code>on_pull</code> runs <code>git clean -fd</code> on both
+          to clear untracked strays without touching gitignored files
+          like the deploy-written <code>.env</code>), and
+          <code>komodo-sync</code> overlays the bandicoot tree with
+          bandicoot's working checkout via the
           <code>podhaus-load-local-tree</code> action.</li>
         <li><code>komodo/sync/variables.toml</code> — global non-secret
           variable declarations (<code>TZ</code>, <code>MEDIA_DIR</code>,
@@ -275,7 +282,7 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <li><code>komodo/sync/actions.toml</code> — Komodo Actions
           referenced by procedures and by <code>komodo-sync</code>.
           <code>podhaus-load-local-tree</code> is <code>komodo-sync</code>'s
-          first step: mirrors bilby's working checkout (read-only at
+          first step: mirrors bandicoot's working checkout (read-only at
           <code>/syncs/podhaus-local</code>) into the deploy tree at
           <code>/syncs/podhaus</code> via <code>git ls-files</code>
           enumeration on both sides.
@@ -353,13 +360,14 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         secret applies).
         <br><br>
         <code>podhaus-push-deploy</code> itself is two thin stages: Stage 0
-        <code>PullRepo&nbsp;"podhaus-deploy"</code> force-pulls bilby's
-        Komodo-managed <strong>deploy tree</strong>
-        (<code>/etc/komodo/repos/podhaus-deploy</code>) to
-        <code>origin/main</code>, then Stage 1
-        <code>RunProcedure&nbsp;"podhaus-deploy"</code> runs the internal
-        procedure below. bilby's own working checkout
-        (<code>~/repos/podhaus</code>) is never touched by this path.
+        force-pulls both Komodo-managed <strong>deploy trees</strong> to
+        <code>origin/main</code> —
+        <code>PullRepo&nbsp;"podhaus-bandicoot"</code> (Core's own sync
+        tree) and <code>PullRepo&nbsp;"podhaus-deploy"</code> (bilby's
+        tree, feeding its outbound Periphery and files_on_host stacks) —
+        then Stage 1 <code>RunProcedure&nbsp;"podhaus-deploy"</code> runs
+        the internal procedure below. Neither host's own working
+        checkout is ever touched by this path.
         <br><br>
         The internal <code>podhaus-deploy</code> procedure
         (<code>komodo/sync/procedures.toml</code>) deploys whatever the
@@ -407,8 +415,8 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <code>managed: true</code>).
         <code>./komodo-sync</code> runs a first step,
         <code>RunAction&nbsp;"podhaus-load-local-tree"</code>, which
-        overlays the deploy tree with bilby's working checkout's current
-        state (tracked + untracked-unignored files), then invokes
+        overlays the deploy tree with bandicoot's working checkout's
+        current state (tracked + untracked-unignored files), then invokes
         <code>podhaus-deploy</code> directly — deliberately <em>not</em>
         <code>podhaus-push-deploy</code>, whose pull stage would clobber
         that overlay — after the same out-of-procedure pre-sync round-trip
@@ -422,11 +430,11 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
       <table>
         <thead><tr><th>Script</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>komodo-start</code></td><td>First-boot or post-recovery: starts the Komodo Core stack; seeds the five chicken-and-egg variables (4 ONEPASSWORD_* + PODHAUS_CHECKOUT, the host-discovered <code>$PWD</code> consumed only by home-assistant's live config bind); idempotently bootstraps the deploy tree (<code>CreateRepo podhaus-deploy</code> + <code>PullRepo</code> + poll, so <code>/syncs/podhaus</code> is populated before the first sync reads it); idempotently creates the podhaus ResourceSync (with <code>include_variables = true</code>); runs the bootstrap double-sync (first sync registers stacks + TOML-declared vars; wait for komodo-op to backfill OP secrets; second sync re-renders stack env blocks). Stops there — deploys are a separate concern (push or <code>./komodo-sync</code>). Idempotent — safe to re-run.</td></tr>
+          <tr><td><code>komodo-start</code></td><td>First-boot or post-recovery: starts the Komodo Core stack on bandicoot; seeds the five chicken-and-egg variables (4 ONEPASSWORD_* + PODHAUS_CHECKOUT, the host-discovered <code>$PWD</code> consumed only by home-assistant's live config bind); idempotently bootstraps the bandicoot Server and its deploy tree (<code>CreateServer bandicoot</code>, <code>CreateRepo podhaus-bandicoot</code> + <code>PullRepo</code> + poll, so <code>/syncs/podhaus</code> is populated before the first sync reads it); idempotently creates the podhaus ResourceSync (with <code>include_variables = true</code>); runs the bootstrap double-sync (first sync registers stacks + TOML-declared vars; wait for komodo-op to backfill OP secrets; second sync re-renders stack env blocks); then, once the sync has created server <code>podhaus</code> (bilby) from servers.toml, idempotently bootstraps bilby's own deploy tree the same way (<code>CreateRepo podhaus-deploy</code> + <code>PullRepo</code> + poll) for its files_on_host stacks. Stops there — deploys are a separate concern (push or <code>./komodo-sync</code>). Idempotent — safe to re-run.</td></tr>
           <tr><td><code>komodo-stop</code></td><td>Stops the Komodo Core stack (everything else stays running, since Komodo's job is just orchestration; the running containers are managed by Docker directly).</td></tr>
           <tr><td><code>komodo-status</code></td><td>Shows the Komodo Core container status.</td></tr>
-          <tr><td><code>komodo-sync</code></td><td>Steady-state debug-iterate tool, <strong>and</strong> the recovery path for <code>komodo/sync/procedures.toml</code> edits. Step 0 calls <code>RunAction(podhaus-load-local-tree)</code> to overlay the deploy tree with bilby's working checkout's current state. Step 1 calls <code>RunSync(podhaus)</code> directly via the API (out-of-procedure, so Komodo's <code>resource::update::&lt;Procedure&gt;</code> busy guard doesn't fire — procedure-stage changes land here cleanly, surgically), now reading the overlaid tree. Step 2 invokes <code>podhaus-deploy</code> directly (deliberately not <code>podhaus-push-deploy</code>, whose pull stage would clobber the overlay); further steps invoke <code>fenwick-push-deploy</code>, <code>pets-push-deploy</code>, <code>docs-push-deploy</code>. Use when iterating locally without pushing, or after a push that touches procedures.toml (whose in-procedure RunSync can't update its own running procedure).</td></tr>
-          <tr><td><code>komodo-upgrade</code></td><td>Pulls current Komodo images and restarts the Core + bilby Periphery stack. Converge Ansible-managed remote Peripheries with <code>ansible-playbook playbooks/site.yml --tags periphery</code>; the role pulls before Compose-up and verifies each connection through Core. Re-run <code>kangaroo_bootstrap</code> for QTS, which applies the same pull-before-up policy.</td></tr>
+          <tr><td><code>komodo-sync</code></td><td>Steady-state debug-iterate tool, <strong>and</strong> the recovery path for <code>komodo/sync/procedures.toml</code> edits. Step 0 calls <code>RunAction(podhaus-load-local-tree)</code> to overlay the deploy tree with bandicoot's working checkout's current state. Step 1 calls <code>RunSync(podhaus)</code> directly via the API (out-of-procedure, so Komodo's <code>resource::update::&lt;Procedure&gt;</code> busy guard doesn't fire — procedure-stage changes land here cleanly, surgically), now reading the overlaid tree. Step 2 invokes <code>podhaus-deploy</code> directly (deliberately not <code>podhaus-push-deploy</code>, whose pull stage would clobber the overlay); further steps invoke <code>fenwick-push-deploy</code>, <code>pets-push-deploy</code>, <code>docs-push-deploy</code>. Use when iterating locally without pushing, or after a push that touches procedures.toml (whose in-procedure RunSync can't update its own running procedure).</td></tr>
+          <tr><td><code>komodo-upgrade</code></td><td>Pulls current Komodo images and restarts the Core stack (postgres, FerretDB, Core) on bandicoot. Converge every Ansible-managed Periphery, including bilby's now, with <code>ansible-playbook playbooks/site.yml --tags periphery</code>; the role pulls before Compose-up and verifies each connection through Core. Re-run <code>kangaroo_bootstrap</code> for QTS, which applies the same pull-before-up policy.</td></tr>
           <tr><td><code>kangaroo_bootstrap</code></td><td>Idempotent kangaroo bring-up. Renders Periphery config from 1Password, ships compose + keys to the QNAP, pulls and starts the current outbound-mode Periphery, installs the native QNAP boot-DOM autorun hook, and verifies the committed kangaroo Server definition.</td></tr>
         </tbody>
       </table>
