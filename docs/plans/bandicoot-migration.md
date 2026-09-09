@@ -32,7 +32,7 @@ a move does not fit.
 | Paperless (+ tika, gotenberg, postgres, redis) | bilby | ✅ moved back from bandicoot |
 | Komodo Core (+ postgres, ferretdb) | **bandicoot** | ✅ moved (432c350, 3ad7e29) |
 | `onepassword` (op-connect-api, op-connect-sync, komodo-op) | **bandicoot** | ✅ moved with the existing credentials — no new Connect server |
-| Fenwick family (fenwick, signal-cli, web-agent, brinno-downloader) | **bandicoot** | ⏳ after the control plane, so `op-connect-api` resolves on bandicoot's dockernet again |
+| Fenwick family (fenwick, signal-cli, web-agent, brinno-downloader) | **bandicoot** | ✅ moved (77caca3, 97d7d2d, 57b571b) |
 | Plex, Music Assistant, Home Assistant, ESPHome, Flood, StreamFab, MinIO, Forgejo, Pocket ID, Gatus, Caddy, Backrest, Ofelia, the relay, Bugsink, Umami, pets, yiayia-stories, nathanbaxter-dev | bilby | stay |
 
 **Memory after the moves.** bandicoot today: 9.9 GB used of 15.4 with
@@ -334,3 +334,44 @@ is deleted.
   puts it back on the dockernet name.
 - Not done, deliberately: bilby's `docker system prune` (Nathan's call,
   above).
+- ✅ Step 3: the Fenwick family (bot, signal-cli-rest-api,
+  brinno-downloader, fenwick-web-agent) moved from bilby to bandicoot
+  (podhaus 77caca3, 57b571b; fenwick 97d7d2d). Caddy and Gatus on bilby
+  now reach the bot over the LAN (`10.0.0.90:8088`) instead of a
+  dockernet name; Bugsink gained a published LAN port (`10.0.0.119:8000`)
+  and its Fenwick DSN item was updated to match; the bot's OTLP export
+  moved back to the `clickstack-otel` dockernet name now that both it and
+  the bot live on bandicoot; Backrest's fenwick/signal-cli binds and plan
+  moved from `backup/bilby` to `backup/bandicoot`; bandicoot's Alloy
+  gained the `parsers/fenwick.alloy` module that drops the bot's own
+  stdout (it self-reports OTLP instead). State (`/var/lib/fenwick`,
+  `/var/lib/signal-cli`, `/var/lib/brinno-downloader`, 25 MB) moved by a
+  root rsync, verified byte-identical on both hosts before the source was
+  removed. One gap found and fixed along the way: re-homing the `fenwick`
+  Komodo Repo resource to a Periphery that had never cloned it before
+  broke the push-to-deploy pull stage (it can only pull an existing
+  clone) — fixed with a one-time `CloneRepo` call before re-running the
+  deploy; see the loose thread in this step's report for future re-homes.
+  Verified: the bot answers on Signal and its web UI loads through
+  `fenwick.pod.haus` (302); a Gatus alert reached Signal; an email tool
+  call succeeded (op-connect-api reachable on bandicoot's dockernet, 200
+  on `/heartbeat`); a Bugsink event from the bot reached `bugs.pod.haus`
+  (LAN path, 302); Gatus "Fenwick" and "Signal Delivery (Fenwick)" are
+  green; 127 ClickStack trace rows for `ServiceName=fenwick` in the prior
+  20 minutes; brinno-downloader's Firebase/MCS reconcile loop runs
+  normally; bilby's container, network, image and state-directory
+  footprint for all four services is gone. Not independently confirmed:
+  a fresh `timelapse_brinno` heartbeat push since the move (last one seen
+  was from the day before, within the plan's tolerance but not a new
+  sample) and an explicit "digest scheduling" log line (other operation
+  evidence is strong). bilby's host_vars no longer declares
+  `podhaus_extra_networks` (57b571b); `--tags docker` came back
+  `changed=0`. A `--check --diff` of the full `playbooks/bilby.yml`
+  (the run deferred in step 2 for live Plex streaming) came back clean —
+  `changed=0` on all 47 tasks, including the docker-daemon and firewalld
+  tasks — but the real run is still pending: it was blocked by this
+  session's own safety controls as too broad an action to run
+  unsupervised, not by anything in the check output. Nathan or a future
+  session should run `cd ansible && op-vault dev -- pipenv run
+  ansible-playbook playbooks/bilby.yml`, expecting `changed=0` throughout
+  given the check result above.
