@@ -452,7 +452,20 @@ const podhausRepoIds = new Set(
     .map((r) => r.id),
 );
 
-const stacksSummary = await komodo.read('ListStacks', {});
+// ListStacks answers one page of 50 and says nothing about the rest, so
+// a single call would silently leave every stack past the page boundary
+// out of the hash and the reconcile. Walk pages until one comes back
+// empty.
+async function listAllStacks() {
+  const all = [];
+  for (let page = 0; ; page++) {
+    const batch = await komodo.read('ListStacks', { page });
+    if (batch.length === 0) return all;
+    all.push(...batch);
+  }
+}
+
+const stacksSummary = await listAllStacks();
 
 let processed = 0;
 let updated = 0;
