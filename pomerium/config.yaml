@@ -151,6 +151,9 @@ routes:
   # voltaire's docs server. Same shape as fractal's, its own loopback rathole
   # service and its own Caddy mTLS origin.
   - <<: *nathan_route
+    from: https://bandicoot.docs.pod.haus
+    to: https://127.0.0.1:8447
+  - <<: *nathan_route
     from: https://voltaire.docs.pod.haus
     to: https://127.0.0.1:8445
   - <<: *nathan_route
@@ -210,6 +213,9 @@ routes:
                 is: nathan
   - from: ssh://bilby
     to: ssh://127.0.0.1:2201
+    policy: *nathan_ssh_policy
+  - from: ssh://bandicoot
+    to: ssh://127.0.0.1:2206
     policy: *nathan_ssh_policy
   - from: ssh://voltaire
     to: ssh://127.0.0.1:2202

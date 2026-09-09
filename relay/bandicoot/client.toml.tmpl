@@ -1,0 +1,22 @@
+[client]
+remote_addr = "relay.numbat.pod.haus:2333"
+
+[client.transport]
+type = "noise"
+
+[client.transport.noise]
+remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
+
+# Host sshd across dockernet. The outbound relay provides off-LAN SSH;
+# split-horizon DNS selects direct SSH on the home LAN.
+[client.services.bandicoot_ssh]
+type = "tcp"
+local_addr = "172.18.0.1:22"
+token = "${RATHOLE_BANDICOOT_SSH_TOKEN}"
+
+# bandicoot's own mTLS origin. Pomerium's client certificate is verified by
+# bandicoot-caddy, so the tunnel carries TLS rather than terminating it.
+[client.services.bandicoot_http]
+type = "tcp"
+local_addr = "bandicoot-caddy:4443"
+token = "${RATHOLE_BANDICOOT_HTTP_TOKEN}"

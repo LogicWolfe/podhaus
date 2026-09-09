@@ -98,3 +98,17 @@ enabled = true
 send_cpu_alerts = false
 disk_warning = 85.0
 disk_critical = 95.0
+
+[[server]]
+name = "bandicoot"
+description = "Apple Silicon MacBook Pro, Fedora Asahi Remix. Runtime and development host with outbound Periphery."
+tags = ["bandicoot", "podhaus"]
+
+[server.config]
+# Periphery dials Core; its management port is never published.
+address = ""
+enabled = true
+# Development builds can saturate CPU; reachability and stack alerts remain on.
+send_cpu_alerts = false
+disk_warning = 85.0
+disk_critical = 95.0

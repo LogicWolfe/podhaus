@@ -1,0 +1,10 @@
+[[stack]]
+name = "bandicoot-autoheal"
+description = "Restart unhealthy autoheal-labelled containers on bandicoot"
+tags = ["bandicoot", "podhaus"]
+
+[stack.config]
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "autoheal/bandicoot"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]

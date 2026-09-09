@@ -65,3 +65,13 @@ token = "${RATHOLE_PINELAKE_SSH_TOKEN}"
 type = "tcp"
 bind_addr = "127.0.0.1:8446"
 token = "${RATHOLE_PINELAKE_HTTP_TOKEN}"
+
+[server.services.bandicoot_ssh]
+type = "tcp"
+bind_addr = "127.0.0.1:2206"
+token = "${RATHOLE_BANDICOOT_SSH_TOKEN}"
+
+[server.services.bandicoot_http]
+type = "tcp"
+bind_addr = "127.0.0.1:8447"
+token = "${RATHOLE_BANDICOOT_HTTP_TOKEN}"

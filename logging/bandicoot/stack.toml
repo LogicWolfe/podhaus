@@ -1,0 +1,18 @@
+[[stack]]
+name = "bandicoot-logging"
+description = "Alloy on bandicoot, shipping to Bilby through the mTLS log-ingest gateway"
+tags = ["bandicoot", "podhaus"]
+
+[stack.config]
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "logging/bandicoot"
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
+ignore_services = ["alloy-secrets-init"]
+run_build = true
+
+environment = """
+CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
+BANDICOOT_CERT_B64=[[OP__KOMODO__LOG_INGEST_PKI__BANDICOOT_CERT_B64]]
+BANDICOOT_KEY_B64=[[OP__KOMODO__LOG_INGEST_PKI__BANDICOOT_KEY_B64]]
+"""

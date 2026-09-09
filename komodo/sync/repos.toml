@@ -200,3 +200,27 @@ git_provider = "git.pod.haus"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/yiayia-stories"
 branch = "main"
+
+[[repo]]
+name = "podhaus-bandicoot"
+description = "Komodo-managed podhaus clone on bandicoot"
+tags = ["podhaus", "bandicoot"]
+
+[repo.config]
+server = "bandicoot"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/podhaus"
+branch = "main"
+
+[[repo]]
+name = "docs-server-bandicoot"
+description = "Komodo-managed docs-server clone on bandicoot"
+tags = ["podhaus", "bandicoot"]
+
+[repo.config]
+server = "bandicoot"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/docs-server"
+branch = "main"
