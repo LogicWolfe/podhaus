@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 import unittest
+import unittest.mock
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -80,6 +81,15 @@ class SegmentEqualityMatchTest(unittest.TestCase):
         match = select_episode("Skillsville FULL EPISODE ｜ Chef", episodes)
         self.assertEqual(match.title, "Chef")
 
+    def test_episode_title_containing_a_delimiter_survives_prefix_removal(self) -> None:
+        episodes = [
+            Episode(1, "Starling: Space Racer!", 1, 39),
+            Episode(2, "Starling, D.S.V.", 1, 2),
+            Episode(3, "Space Racer Storm Chaser", 1, 29),
+        ]
+        match = select_episode("SPACE RACERS: Starling: Space Racer!", episodes)
+        self.assertEqual(match.title, "Starling: Space Racer!")
+
     def test_substring_alone_does_not_match_a_longer_title(self) -> None:
         # Regression: "Plumber" is a substring of "Quantum Plumber" but is
         # not equal to any delimited segment of the video title, and the
@@ -149,6 +159,30 @@ class NoOpOutsideIncomingTest(unittest.TestCase):
             self.assertEqual(MODULE.main(), 0)
         finally:
             sys.argv = argv
+
+
+class NewSeriesEpisodeWaitTest(unittest.TestCase):
+    class SonarrStub:
+        def __init__(self, answers: list[list]) -> None:
+            self.answers = answers
+            self.calls = 0
+
+        def episodes_for(self, series_id: int) -> list:
+            self.calls += 1
+            return self.answers.pop(0)
+
+    def test_waits_until_sonarr_has_fetched_the_episode_list(self) -> None:
+        stub = self.SonarrStub([[], [], [Episode(1, "Where Are We?", 1, 1)]])
+        with unittest.mock.patch.object(MODULE.time, "sleep"):
+            MODULE.wait_for_episodes(stub, MODULE.Series(2, "Space Racers", 282447))
+        self.assertEqual(stub.calls, 3)
+
+    def test_fails_loud_when_the_episode_list_never_arrives(self) -> None:
+        stub = self.SonarrStub([[] for _ in range(100)])
+        with unittest.mock.patch.object(MODULE.time, "sleep"), \
+                unittest.mock.patch.object(MODULE, "IMPORT_POLL_TIMEOUT_S", 0):
+            with self.assertRaises(PlexifyError):
+                MODULE.wait_for_episodes(stub, MODULE.Series(2, "Space Racers", 282447))
 
 
 class TvdbFolderTagTest(unittest.TestCase):

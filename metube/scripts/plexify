@@ -87,12 +87,16 @@ def normalise(text: str) -> str:
 
 
 def title_segments(video_title: str) -> list[str]:
-    """The video title plus each `|`/`-`/`–`/`—`/`:`-delimited segment,
-    trimmed. A channel's boilerplate framing ("Skillsville FULL EPISODE
-    | Chef") splits the career name out on its own so a near-miss
-    spelling can be matched by ratio without the framing diluting it."""
+    """The video title, each `|`/`-`/`–`/`—`/`:`-delimited segment, and
+    the remainder after each delimiter, all trimmed. A channel's
+    boilerplate framing ("Skillsville FULL EPISODE | Chef") splits the
+    career name out on its own so a near-miss spelling can be matched by
+    ratio without the framing diluting it; the remainders keep an episode
+    title that itself contains a delimiter ("SPACE RACERS: Starling:
+    Space Racer!") intact once the framing prefix is dropped."""
     segments = [part.strip() for part in TITLE_SEGMENT_RE.split(video_title)]
-    return [video_title] + [segment for segment in segments if segment]
+    remainders = [video_title[m.end():].strip() for m in TITLE_SEGMENT_RE.finditer(video_title)]
+    return [video_title] + [part for part in segments + remainders if part]
 
 
 def required_env(name: str) -> str:
@@ -202,7 +206,21 @@ class SonarrClient:
 
 def add_series_from_lookup(sonarr: SonarrClient, result: dict) -> Series:
     quality_profile_id = sonarr.first_quality_profile_id()
-    return sonarr.add_series(result["tvdbId"], result["title"], quality_profile_id)
+    series = sonarr.add_series(result["tvdbId"], result["title"], quality_profile_id)
+    wait_for_episodes(sonarr, series)
+    return series
+
+
+def wait_for_episodes(sonarr: SonarrClient, series: Series) -> None:
+    """Sonarr answers the add before it has fetched the episode list; a
+    match attempted against that empty list would fail the first download
+    of every new show."""
+    deadline = time.monotonic() + IMPORT_POLL_TIMEOUT_S
+    while time.monotonic() < deadline:
+        if sonarr.episodes_for(series.id):
+            return
+        time.sleep(IMPORT_POLL_INTERVAL_S)
+    raise PlexifyError(f"Sonarr listed no episodes for {series.title!r} within {IMPORT_POLL_TIMEOUT_S}s of adding it")
 
 
 def resolve_series_by_tvdb_id(sonarr: SonarrClient, tvdb_id: int, folder_name: str) -> Series:
