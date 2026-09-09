@@ -233,7 +233,25 @@ stable — none of the stack moves depend on it.
   pre-move copy under `/var/lib/clickstack` until the move has proven
   itself. (7c90fa7)
 - ✅ `backup/bandicoot`: restic repo on `/mnt/jump/backups-bandicoot`,
-  the mongo dumps as its first plan, Gatus heartbeat and container probe.
+  the mongo dumps as its first plan, Gatus heartbeat and container probe;
+  container healthy, Gatus green. (0bc718e)
+- ✅ Runner proven: fenwick CI run 26 (deno, webui, web-agent,
+  brinno-downloader, promote) went green on the `bandicoot` runner and
+  advanced the `deploy` branch.
+- ✅ Paperless re-homed (44b34cc): state copied stopped, stack, Caddy, Gatus
+  and Backrest plan moved; deploy in progress at the time of writing —
+  verify `paperless.pod.haus` and the Gatus check once the build lands.
+- ⛔ Fenwick family: **blocked on a decision.** The bot reaches
+  1Password Connect (`op-connect-api`) and Bugsink by dockernet name and
+  neither publishes a LAN port, so a move needs one of: bilby publishing
+  Connect (token-authenticated) and Bugsink on the LAN, on the same
+  published-port pattern as Gatus's `:8080`; or the Fenwick family staying
+  on bilby. Exposing a secrets API on the LAN is Nathan's call. Interim:
+  the bot's own telemetry export was re-pointed at `10.0.0.90:4318`
+  (fenwick 46fdc1f) because the collector left bilby's dockernet.
+- Not done, deliberately: bilby's `docker system prune`. Pruning the build
+  cache changes the next fenwick/pets push from a container-level no-op to
+  a rebuild; that trade-off is Nathan's.
 
 The plan is deleted when everything above is folded into `docs/hosts.html`,
 `docs/monitoring.html` and `docs/host-provisioning.md`.
