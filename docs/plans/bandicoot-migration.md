@@ -30,8 +30,8 @@ a move does not fit.
 | ClickStack (clickhouse, hyperdx, otel, mongo) | bandicoot | ✅ moved (7c90fa7); front door stays on bilby's Caddy |
 | Backrest overlay `backup/bandicoot`, Ofelia `ofelia/bandicoot`, NAS path | bandicoot | ✅ (0bc718e, 8e7909b) |
 | Paperless (+ tika, gotenberg, postgres, redis) | bilby | ✅ moved back from bandicoot |
-| Komodo Core (+ postgres, ferretdb) | **bandicoot** | ⏳ |
-| `onepassword` (op-connect-api, op-connect-sync, komodo-op) | **bandicoot** | ⏳ with the existing credentials — no new Connect server |
+| Komodo Core (+ postgres, ferretdb) | **bandicoot** | ✅ moved (432c350, 3ad7e29) |
+| `onepassword` (op-connect-api, op-connect-sync, komodo-op) | **bandicoot** | ✅ moved with the existing credentials — no new Connect server |
 | Fenwick family (fenwick, signal-cli, web-agent, brinno-downloader) | **bandicoot** | ⏳ after the control plane, so `op-connect-api` resolves on bandicoot's dockernet again |
 | Plex, Music Assistant, Home Assistant, ESPHome, Flood, StreamFab, MinIO, Forgejo, Pocket ID, Gatus, Caddy, Backrest, Ofelia, the relay, Bugsink, Umami, pets, yiayia-stories, nathanbaxter-dev | bilby | stay |
 
@@ -306,6 +306,29 @@ is deleted.
   bandicoot's six paperless containers and the paperless-ngx/tika/
   gotenberg/redis/postgres images (nothing else on bandicoot used them)
   were removed after verification.
+- ✅ Step 2: Komodo Core, Postgres, FerretDB and the `onepassword` stack
+  (op-connect-api, op-connect-sync, komodo-op) moved from bilby to
+  bandicoot (432c350, 3ad7e29). bilby's Periphery is now outbound
+  (`bilby/periphery/compose.yaml`, bootstrap-managed); bandicoot is the
+  Ansible/Terraform control node. State carried over by root rsync
+  (postgres-data, ferretdb-state and op-connect-data volumes; the
+  17-file `/opt/komodo/keys`); downtime ran from stopping bilby's
+  containers to Core answering healthy on bandicoot on the copied
+  database. Verified: all 7 Komodo servers report Ok (including
+  kangaroo, re-pointed from bilby via its own admitted key); all 50
+  stacks running except the one-shot `nathanbaxter-deploy`; 24 Gatus
+  checks naming Komodo or Backrest all green; `komodo-op`'s sync log
+  shows 195 variables unchanged with 0 errors; `playbooks/bandicoot.yml`
+  ran clean (check and a real run both `changed=0`); Terraform `plan`
+  exit code 0 (no diff). bilby's old Core/onepassword containers,
+  volumes, local `komodo-op` image, `/opt/komodo/keys` and
+  `/opt/komodo/backups` were removed once verification was green
+  (bilby: 91G/160G disk used, 698 MB free RAM of 15.7 GB with 9.9 GB in
+  buff/cache). `playbooks/bilby.yml --check --diff` came back clean
+  (changed=0) but the real run was deliberately deferred — Plex was
+  streaming live on bilby at cutover time — as was `./komodo-sync`,
+  since it also touches the unrelated fenwick/pets procedures; both are
+  a follow-up.
 - Interim: the bot's telemetry export was re-pointed at `10.0.0.90:4318`
   (fenwick 46fdc1f) because the collector left bilby's dockernet; step 3
   puts it back on the dockernet name.
