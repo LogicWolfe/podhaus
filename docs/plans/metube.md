@@ -252,3 +252,38 @@ single developer), Radarr now (movies are a later plan on the same pattern).
   afterwards, Sonarr's series-2 file count 43 → 46, Gatus `metube_plexify`
   posted three `success=true` with no failures, and Plex's `allLeaves`
   for the series listed S02E01-04 immediately with no manual refresh.
+- ✅ Fixed a real bug the three-file batch above should have caught but
+  didn't: the sweep never actually ran from inside a batch. yt-dlp's `Exec`
+  postprocessor runs inside yt-dlp's own postprocessing chain, which
+  finishes before MeTube moves that same download from its `queue` list to
+  its `done` list — so the invocation's own entry is always still "queued"
+  at the moment the hook checks, and the old `if queue: return 0` check
+  therefore always deferred, never firing the sweep; it would only have
+  been triggered later by some unrelated download. Fixed by replacing that
+  check with `batch_done(queue, own_title)`, a pure function that is true
+  when the queue is empty or contains only entries whose title is this
+  invocation's own file, false otherwise; `metube/tests/test_plexify.py`
+  grew from 29 to 32 tests (`BatchDoneTest`, all three cases). Also added
+  one operational line to stderr when the sweep runs
+  (`plexify: batch sweep placed N, left M`) so `docker logs metube` shows
+  it happened. Pushed as 7c696ea; confirmed live with `docker exec metube
+  grep -n "def batch_done" /scripts/plexify`. Proved end to end: queued
+  "SPACE RACERS: Cadet Dodo" (S02E05) alone with no folder chosen.
+  `docker logs metube` showed `plexify: batch sweep placed 0, left 0`
+  logged in the same second the download finished — the sweep ran and
+  correctly found nothing left over, because this file placed strictly on
+  its own. Gatus `metube_plexify` posted two `success=true` results for it
+  (14:29:38.559Z the file's own placement, 14:29:38.571Z the sweep), one
+  clean pair back to back. Staging ended up empty, Sonarr's series-2 file
+  count went 46 → 47 with S02E05 `hasFile: true`, and Plex's `allLeaves`
+  for the series listed S02E05 "Cadet Dodo" with no manual refresh. One
+  environmental wrinkle during this run, unrelated to the fix: the
+  `metube` container was recreated by an unrelated Komodo reconcile a
+  moment after the download started (its content-hash label had gone
+  stale from the 7c696ea push, since the hook script lives inside the
+  same tree Komodo hashes even though it's bind-mounted, not baked into
+  the image); the interrupted first attempt on the old container posted
+  one extra lone `success=true` for its own placement before being killed
+  mid-check, then the new container replayed the still-queued download
+  from scratch and completed the full run (place, then sweep) cleanly —
+  the two-post pair above is from that completed run.
