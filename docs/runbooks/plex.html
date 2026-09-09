@@ -239,10 +239,46 @@ ffprobe -v error -select_streams v:0 \
         only one track.
       </p>
       <p>
-        <strong>Known affected.</strong> <code>Star Wars: Maul — Shadow Lord</code> S01 (17
-        audio tracks, remuxed 2026-07-25) and <code>DuckTales (1987)</code> (23 audio tracks).
-        Both under Pouch. If a third title turns up, the layout signature to look for is a
-        double-digit audio-track count on a <code>MULTi</code> release.
+        The layout signature to look for is a double-digit audio-track count on a
+        <code>MULTi</code> release, typically a Disney+ rip.
+      </p>
+
+      <h2 id="embedded-metadata-override">Scene MP4s override the title and poster</h2>
+      <p>
+        <strong>Symptom.</strong> A correctly matched movie displays its release name as the
+        title (dotted words, resolution, a group tag in square brackets) and a poster stamped
+        with the group's branding and a codec banner. Fixing the match changes nothing. Locking
+        the title by hand fixes that one item and nothing else.
+      </p>
+      <p>
+        <strong>Cause.</strong> Some release groups write the release name into the MP4
+        container's <code>title</code> tag and embed a branded cover image in the file. With
+        the library's <em>Prefer local metadata</em> switch on, Plex lets embedded tags and
+        images beat the agent's values <em>after</em> matching, so the match is right and the
+        display is wrong. <code>ffprobe -show_entries format_tags=title</code> on the file
+        prints the release name; that is the trap. MKVs from the same groups are usually fine
+        because the tag is not set.
+      </p>
+      <p>
+        <strong>Fix.</strong> Turn <em>Prefer local metadata</em> off for the library and
+        refresh the affected items. It is off on every movie library on bilby and Pinelake;
+        leave it off. <em>Use local assets</em> is a different switch (sidecar posters and
+        subtitles) and stays on.
+      </p>
+      <pre><code>curl -X PUT "http://localhost:32400/library/sections/&lt;section&gt;/prefs?respectTags=0&amp;X-Plex-Token=$TOKEN"
+curl -X PUT "http://localhost:32400/library/metadata/&lt;key&gt;/refresh?X-Plex-Token=$TOKEN"</code></pre>
+      <p>
+        The refresh corrects the title but leaves an already-selected embedded poster in
+        place. Pick the agent's poster by hand (Edit → Poster) or via the API: the candidate
+        list marks the bad one <code>provider="embedded"</code>, and any
+        <code>image.tmdb.org</code> entry is a proper poster.
+      </p>
+      <pre><code>curl "http://localhost:32400/library/metadata/&lt;key&gt;/posters?X-Plex-Token=$TOKEN"
+curl -X PUT "http://localhost:32400/library/metadata/&lt;key&gt;/poster?url=&lt;url-encoded tmdb url&gt;&amp;X-Plex-Token=$TOKEN"</code></pre>
+      <p>
+        Verify with <code>/library/metadata/&lt;key&gt;/thumb</code>, not the
+        <code>/photo/:/transcode</code> endpoint — the latter serves a cached copy of the old
+        image for a while after the change.
       </p>
 
       <h2 id="maintenance">Monthly stats cleanup</h2>
