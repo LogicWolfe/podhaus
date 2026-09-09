@@ -288,11 +288,16 @@ is deleted.
   container healthy, Gatus green. (0bc718e)
 - ✅ Paperless re-homed to bandicoot (44b34cc) and verified — superseded by
   Nathan's decision to keep it on bilby; step 1 reverses it.
-- ✅ Step 1: Paperless moved back to bilby. State (95 MB pgdata, 87 MB
-  data) rsynced from bandicoot before the containers there were removed;
-  the reverse of 44b34cc applied to stack.toml, compose.yaml, the
-  Caddyfile, Gatus, both Backrest overlays, bandicoot's storage sentinels
-  and the docs. Pre-stop document count was 1118.
+- ✅ Step 1: Paperless moved back to bilby (1b1bbc8), the reverse of
+  44b34cc. State (95 MB pgdata, 87 MB data) rsynced from bandicoot before
+  the containers there were removed. Verified: document count unchanged
+  at 1118 after the move; `paperless.pod.haus` serves a 302 to login;
+  Gatus "Paperless" green again once the deploy landed; bilby's Backrest
+  config lists the `paperless` plan; bandicoot's Ansible `--tags storage`
+  ran clean (check, apply and a third confirmation run all `changed=0`).
+  bandicoot's six paperless containers and the paperless-ngx/tika/
+  gotenberg/redis/postgres images (nothing else on bandicoot used them)
+  were removed after verification.
 - Interim: the bot's telemetry export was re-pointed at `10.0.0.90:4318`
   (fenwick 46fdc1f) because the collector left bilby's dockernet; step 3
   puts it back on the dockernet name.
