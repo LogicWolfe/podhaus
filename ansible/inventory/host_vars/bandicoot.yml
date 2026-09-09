@@ -48,6 +48,29 @@ podhaus_docs_sources:
     source: /home/nathan/.local/share/chezmoi
     required_path: .git
 
+# Storage binds ---------------------------------------------------------
+# The same two QNAP exports bilby binds, on the same terms (see bilby.yml
+# for what the options mean), so a service moved here finds /mnt/jump and
+# /mnt/pouch exactly as it left them. kangaroo exports both to every LAN
+# address. Sentinels and managed directories are added per service as it
+# arrives; the volume roots get a sentinel automatically.
+storage_binds_mounts:
+  - root: /mnt/jump
+    source: "10.0.0.25:/Jump"
+    fstypes: [nfs, nfs4]
+    fstab_options: nfsvers=4.1,rw,nolock,soft,timeo=600,retrans=5,noatime,_netdev,nofail,x-systemd.automount
+  - root: /mnt/pouch
+    source: "10.0.0.25:/Pouch"
+    fstypes: [nfs, nfs4]
+    fstab_options: nfsvers=4.1,rw,nolock,soft,timeo=600,retrans=5,noatime,_netdev,nofail,x-systemd.automount
+
+# Both halves of both automount pairs, as on bilby.
+storage_binds_rate_limit_dropin_dirs:
+  - mnt-pouch.mount.d
+  - mnt-pouch.automount.d
+  - mnt-jump.mount.d
+  - mnt-jump.automount.d
+
 # Outbound Periphery uses the fleet defaults and this inventory hostname.
 podhaus_periphery_dir: /opt/komodo-periphery
 

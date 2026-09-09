@@ -1,0 +1,19 @@
+# bandicoot's Ofelia. Runs the job-exec labels on containers that live here
+# (the ClickStack Mongo dump first), the way bilby's Ofelia does for bilby's
+# and pinelake's for pinelake's: jobs exec into local containers, so every
+# host with scheduled work carries its own scheduler.
+services:
+  bandicoot-ofelia:
+    container_name: bandicoot-ofelia
+    image: mcuadros/ofelia:0.4.0-beta.5
+    restart: unless-stopped
+    command: daemon --docker
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt:
+      # SELinux is enforcing on Fedora Asahi Remix; the socket is cross-label.
+      - label:disable
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

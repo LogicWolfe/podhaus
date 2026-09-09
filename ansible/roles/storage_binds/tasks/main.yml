@@ -29,6 +29,11 @@
 #      healthchecks can prove they bound the volume and not a stub.
 #   5. An optional fstab pass number, so systemd checks a FAT volume
 #      before mounting it after an unclean shutdown.
+#   6. The fstab entries themselves for mounts that declare fstab_options.
+#      bilby's NFS lines were written by hand during the 2026-05-23
+#      incident and every other host would have needed the same hand step;
+#      rendering them here from the same declaration the reconciler reads
+#      is what makes a second NAS host identical to the first.
 #
 # Postmortems: docs/postmortems/2026-05-23-pouch-jump-mount-failure.md,
 # 2026-05-30-power-outage-nfs-recovery.md, 2026-06-16-firmware-reboot-
@@ -125,6 +130,42 @@
   loop: "{{ storage_binds_rate_limit_dropin_dirs }}"
   notify: Reload systemd units
 
+- name: Install the NFS client for fstab-managed NFS mounts
+  ansible.builtin.dnf:
+    name: nfs-utils
+    state: present
+  when: >-
+    storage_binds_mounts
+    | selectattr('fstab_options', 'defined')
+    | selectattr('fstypes', 'contains', 'nfs')
+    | list | length > 0
+
+- name: Create the mountpoint for every fstab-managed mount
+  # fstab validation refuses a target that does not exist, and the bare
+  # directory is what the immutable-bit tripwire below is set on.
+  ansible.builtin.file:
+    path: "{{ item.root }}"
+    state: directory
+  loop: "{{ storage_binds_mounts | selectattr('fstab_options', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.root }}"
+
+- name: Write the fstab entry for every mount that declares one
+  # Matched on the mountpoint column, so an existing hand-written line for
+  # the same path is adopted rather than duplicated. The fstype column is
+  # the first declared fstype (nfs), which is what mount(8) wants; the
+  # reconciler's readiness check accepts either nfs or nfs4 as reported.
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^\S+\s+{{ item.root | regex_escape }}\s+'
+    line: >-
+      {{ item.source }}  {{ item.root }}  {{ item.fstypes[0] }}  {{ item.fstab_options }}  0 0
+    validate: 'findmnt --verify --tab-file %s'
+  loop: "{{ storage_binds_mounts | selectattr('fstab_options', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.root }}"
+  notify: Reload systemd units
+
 - name: Enable filesystem checking for a partition that needs a pass number
   ansible.builtin.lineinfile:
     path: /etc/fstab
@@ -136,6 +177,21 @@
 
 - name: Flush handlers so systemd knows the units before they are enabled
   ansible.builtin.meta: flush_handlers
+
+- name: Start the automount for every fstab-managed mount
+  # fstab units are generated, not enabled; after the daemon-reload above
+  # the automount half is started so the first access mounts the share.
+  # Nothing is mounted here on purpose: the kernel mounts on first use and
+  # retries on the next, which is the recovery primitive the fstab options
+  # rely on.
+  ansible.builtin.systemd_service:
+    name: "{{ item.root | regex_replace('^/', '') | replace('/', '-') }}.automount"
+    state: started
+  loop: "{{ storage_binds_mounts | selectattr('fstab_options', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.root }}"
+  # The unit is generated from the fstab line, which a dry run never writes.
+  when: not ansible_check_mode
 
 - name: Enable and start recurring stopped-container recovery
   ansible.builtin.systemd_service:

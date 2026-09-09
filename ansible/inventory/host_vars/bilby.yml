@@ -55,13 +55,21 @@ podhaus_docs_sources:
 # The two QNAP exports bilby's containers bind. Source and fstype are what
 # make the reconciler's readiness check exact: a bare mountpoint on local
 # disk matches the path but never the source.
+#
+# fstab_options are the 2026-05-23 postmortem's settings: soft with a long
+# timeout so a stalled NAS returns errors instead of hanging containers,
+# nofail so boot never waits on it, and x-systemd.automount so the kernel
+# mounts on first access and retries on the next. The role renders the
+# fstab lines from these, replacing the hand-written ones from that day.
 storage_binds_mounts:
   - root: /mnt/jump
     source: "10.0.0.25:/Jump"
     fstypes: [nfs, nfs4]
+    fstab_options: nfsvers=4.1,rw,nolock,soft,timeo=600,retrans=5,noatime,_netdev,nofail,x-systemd.automount
   - root: /mnt/pouch
     source: "10.0.0.25:/Pouch"
     fstypes: [nfs, nfs4]
+    fstab_options: nfsvers=4.1,rw,nolock,soft,timeo=600,retrans=5,noatime,_netdev,nofail,x-systemd.automount
 
 # Subpath markers for container healthchecks. Both volume roots get one
 # automatically, so only the deeper paths are listed.

@@ -18,6 +18,8 @@
       tags: [ssh]
     - role: sshd_pomerium_ca
       tags: [ssh]
+    - role: storage_binds
+      tags: [storage]
     - role: firewalld
       tags: [firewall]
     - role: komodo_periphery

@@ -1,0 +1,12 @@
+[[stack]]
+name = "bandicoot-ofelia"
+description = "Label-based scheduler for jobs on bandicoot's containers"
+tags = ["bandicoot", "podhaus"]
+
+[stack.config]
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "ofelia/bandicoot"
+environment = """
+TZ=[[TZ]]
+"""
