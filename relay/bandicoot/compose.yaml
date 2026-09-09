@@ -1,12 +1,11 @@
-# Bandicoot outbound SSH and mTLS docs origins, managed by Komodo.
-services: host SSH and the local mTLS origin (bandicoot-caddy, for
+# bandicoot rathole CLIENT — dials OUT to Numbat's control port and publishes
+# two services: host SSH and the local mTLS origin (bandicoot-caddy, for
 # bandicoot.docs.pod.haus).
 #
-# This replaces the podhaus-pomerium-ssh-origin systemd unit (the last
-# consumer of the script-managed origin pattern besides kangaroo's --ca-only
-# branch). bandicoot sits on a foreign LAN with no route from the home
-# network, so this outbound tunnel is what makes `ssh bandicoot.pod.haus`
-# work at all.
+# bandicoot lives on the home LAN, so on the LAN `ssh bandicoot.pod.haus`
+# goes direct via the split-horizon record; this tunnel is the off-LAN path
+# (ssh://bandicoot through Pomerium) and the only path for the docs route,
+# on the fractal pattern.
 services:
   bandicoot-rathole-client:
     container_name: bandicoot-rathole-client
