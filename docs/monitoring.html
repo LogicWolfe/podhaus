@@ -362,8 +362,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         the NFS Jump all-squash blocks that, so local disk is mandatory here. Steady-state
         footprint is ~1.3 GB RAM, bounded by <code>mem_limit</code> on every container plus
         the ClickHouse <code>config.d</code> memory caps — this is the one memory-risky stack
-        on a shared 15 GB machine. bilby keeps its copy of the pre-move data under
-        <code>/var/lib/clickstack</code> until the move has proven itself.
+        on a shared 15 GB machine.
       </p>
 
       <h3 id="backup">Backup</h3>
