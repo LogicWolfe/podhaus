@@ -46,6 +46,9 @@ services:
       # MeTube: the download queue/history state only — the downloaded
       # media itself lands on Pouch and is not backed up.
       - /var/lib/metube/state:/userdata/metube:ro
+      # Sonarr: its database + config (series/episode metadata, import
+      # history). The library files themselves live on Pouch, not here.
+      - /var/lib/sonarr:/userdata/sonarr:ro
       # Docker named volumes owned by Komodo Core and onepassword, moved
       # here from bilby. Referenced via `external: true` in the volumes
       # block below so docker can share the live data with the owning

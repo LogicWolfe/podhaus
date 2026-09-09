@@ -228,6 +228,12 @@ endpoints:
     <<: *defaults
     group: Media
 
+  # Sonarr lives on bandicoot; the front door stays on bilby's Caddy.
+  - name: Sonarr
+    url: http://10.0.0.90:8989/ping
+    <<: *defaults
+    group: Media
+
   # Syncthing lives on kangaroo (network_mode: host). gatus can't reach
   # it directly, so we use the same Komodo InspectDockerContainer pattern
   # as Backrest (kangaroo) below — asserts the container is `running`.
@@ -851,6 +857,29 @@ external-endpoints:
     alerts:
       - type: custom
         description: "Site time-lapse footage stopped arriving. The brinno-downloader checks in once per archived video (~daily); >48h of silence means no new footage is being downloaded — the camera may be offline, unpowered, or moved, its MCS cloud upload may have stalled, or the downloader is stuck. Investigate: `docker logs brinno-downloader`, the camera's power/connectivity, or the MCS app (mcs.my.brinno.com)."
+        failure-threshold: 1
+        success-threshold: 1
+        send-on-resolved: true
+
+  # MeTube's plexify hook (the Exec postprocessor yt-dlp runs after every
+  # download lands under Kids/_incoming/<Show>) posts here once per file:
+  # success=true once Sonarr's ManualImport has placed it in the TV
+  # library, success=false&error=... when the title can't be confidently
+  # matched to one Sonarr episode or the import silently did nothing. No
+  # heartbeat/staleness window — a family download has no fixed cadence,
+  # so days of silence are not themselves a failure; only a reported
+  # failure needs Nathan. Group is `MeTube`, not `Media` (the polled
+  # Sonarr/MeTube checks' group): Gatus derives the push key applications
+  # POST to from sanitize(group)_sanitize(name), so this group is what
+  # makes the key come out to the literal `metube_plexify` the hook is
+  # built to call — using `Media` here would silently give the hook a URL
+  # nothing listens on. See docs/plans/metube.md.
+  - name: Plexify
+    group: MeTube
+    token: ${GATUS_HEARTBEAT_PUSH_TOKEN}
+    alerts:
+      - type: custom
+        description: "MeTube downloaded a file the plexify hook could not confidently place in the Plex library. Either the video title didn't clearly match exactly one Sonarr episode (no candidate, or two close candidates), or Sonarr's ManualImport reported success without actually placing a file. The file is left untouched under Kids/_incoming/<Show> on Pouch. Investigate: `docker logs metube` for the hook's match attempt, then place or rename the file by hand via Sonarr (sonarr.pod.haus)."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true

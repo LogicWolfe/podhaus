@@ -96,6 +96,11 @@ storage_binds_managed_dirs:
   - path: /var/lib/metube/tmp
     owner: "1000"
     group: "100"
+  # Sonarr's config dir. Same owner as MeTube — Sonarr also writes into
+  # /mnt/pouch/Kids (the TV library import target) as this uid.
+  - path: /var/lib/sonarr
+    owner: "1000"
+    group: "100"
 
 # Both halves of both automount pairs, as on bilby.
 storage_binds_rate_limit_dropin_dirs:

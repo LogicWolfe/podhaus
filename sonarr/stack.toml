@@ -1,0 +1,17 @@
+[[stack]]
+name = "sonarr"
+description = "Sonarr — numbers and files MeTube's downloads against TheTVDB for Plex"
+tags = ["podhaus"]
+
+[stack.config]
+# Same host as MeTube: it reads MeTube's staging area and the same Kids
+# library on Pouch under one bind. Linked repo, like every stack that is
+# not on bilby. docs/plans/metube.md.
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "sonarr"
+
+environment = """
+TZ=[[TZ]]
+SONARR_API_KEY=[[OP__KOMODO__SONARR_API__CREDENTIAL]]
+"""

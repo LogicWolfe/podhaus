@@ -44,6 +44,7 @@ locals {
     music           = local.numbat_application_ipv4
     paperless       = local.numbat_application_ipv4
     plex            = local.numbat_application_ipv4
+    sonarr          = local.numbat_application_ipv4
     stats           = local.numbat_application_ipv4
     sync            = local.numbat_application_ipv4
     torrent         = local.numbat_application_ipv4

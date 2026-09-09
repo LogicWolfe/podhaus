@@ -135,6 +135,10 @@ routes:
                 is: nathan@nathanbaxter.com
   - <<: *nathan_route
     from: https://dev.nathanbaxter.com
+  # Sonarr is an admin tool (numbers MeTube's downloads for Plex), not a
+  # family surface like MeTube itself — nathan_route, not family_route.
+  - <<: *nathan_route
+    from: https://sonarr.pod.haus
 
   # Per-host docs servers. nathan-only (not the shared docs.pod.haus'
   # family_route) because each host's own repos tree is more sensitive than

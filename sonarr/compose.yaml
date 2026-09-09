@@ -1,0 +1,66 @@
+# Sonarr — numbers and files MeTube's downloads for Plex. MeTube drops a raw
+# download under Pouch's Kids/_incoming/<Show>; MeTube's plexify hook asks
+# Sonarr which episode a file is, then hands it an explicit ManualImport so
+# Sonarr renames and moves it into the Kids/TV library Plex reads. Sonarr's
+# metadata proxy fronts the same TheTVDB list Plex's TheTVDB episode
+# ordering reads, with no key and no subscription — see docs/plans/metube.md.
+#
+#   - No indexers, no download clients: Sonarr never searches for or
+#     fetches anything itself. It only answers "what episode is this" and
+#     performs the manual import the hook drives.
+#   - /kids is the same Pouch bind MeTube writes into (staging under
+#     _incoming/ and the TV library root live on one filesystem), so the
+#     import is a rename, not a cross-filesystem copy.
+#   - Auth: SONARR__AUTH__METHOD=External hands authentication off to
+#     Pomerium entirely (documented Servarr value; Sonarr performs none of
+#     its own) — same LAN-trusted stance as MeTube, since Pomerium is the
+#     front door at sonarr.pod.haus and the LAN is trusted. The API key is
+#     shared with the plexify hook via the vault.
+#   - PUID/PGID match the Pouch owner (1000:100), same as MeTube.
+#   - Healthcheck asserts the app responds AND that /kids is the real
+#     Pouch share (the .podhaus-share-mounted sentinel), not a bare
+#     mountpoint stub left by an NFS outage — same pattern as MeTube.
+
+services:
+  sonarr:
+    container_name: sonarr
+    image: lscr.io/linuxserver/sonarr:4.0.19.2979-ls323
+    restart: unless-stopped
+    # SELinux enforcing on Fedora Asahi Remix; NFS bind (Pouch) plus the
+    # local config bind below.
+    security_opt:
+      - label:disable
+    environment:
+      TZ: ${TZ}
+      PUID: "1000"
+      PGID: "100"
+      SONARR__AUTH__METHOD: External
+      SONARR__AUTH__APIKEY: ${SONARR_API_KEY}
+    volumes:
+      - /var/lib/sonarr:/config
+      - /mnt/pouch/Kids:/kids
+    ports:
+      # LAN only: the front door stays on bilby (Caddy sonarr.pod.haus
+      # → 10.0.0.90:8989), the moved-service pattern in docs/hosts.html.
+      - "8989:8989"
+    networks:
+      - dockernet
+    mem_limit: 1g
+    cpus: 2
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - timeout 12 sh -c 'curl -fsS http://localhost:8989/ping >/dev/null && [ -e /kids/.podhaus-share-mounted ]'
+      interval: 60s
+      timeout: 15s
+      # 15 retries (~15 min) rides out a transient kangaroo NFS stall
+      # without autoheal restart-storming this NFS-bind container.
+      retries: 15
+      start_period: 30s
+
+networks:
+  dockernet:
+    external: true
