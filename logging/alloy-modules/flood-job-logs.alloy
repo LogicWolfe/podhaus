@@ -21,7 +21,10 @@
 // on-disk heartbeat. rtorrent-cleanup.log is a dead file from 2026-06
 // and is not tailed.
 //
-// Labels: host, container (the Flood container), service=flood, log_file,
+// Labels: host, container (the Flood container, so enrich.alloy files
+// these under the same service.name as its stdout), service=flood-jobs
+// (its own parser key: with `flood` the chain's flood.alloy would run its
+// pino template over these lines and stamp an empty level), log_file,
 // stream=file.
 
 declare "flood_job_logs" {
@@ -35,7 +38,7 @@ declare "flood_job_logs" {
 			__path__  = argument.flood_db.value + "/{flood-publish,rtorrent-extract,plex-label-sync,pinelake-stignore,rtorrent}.log",
 			host      = argument.host.value,
 			container = argument.container.value,
-			service   = "flood",
+			service   = "flood-jobs",
 			stream    = "file",
 		}]
 	}
