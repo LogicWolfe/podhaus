@@ -58,24 +58,6 @@
       "skipIfUnchanged": true
     },
     {
-      "id": "paperless",
-      "repo": "podhaus-bandicoot",
-      "paths": ["/userdata/paperless"],
-      "schedule": {
-        "cron": "30 4 * * *",
-        "clock": "CLOCK_LOCAL"
-      },
-      "retention": {
-        "policyTimeBucketed": {
-          "daily": 14,
-          "weekly": 4,
-          "monthly": 6
-        }
-      },
-      "hooks": [],
-      "skipIfUnchanged": true
-    },
-    {
       "id": "backrest-state",
       "repo": "podhaus-bandicoot",
       "paths": ["/userdata/backrest-state"],

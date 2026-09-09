@@ -90,7 +90,7 @@ Docker container infrastructure for **seven** active hosts:
   `bandicoot.docs.pod.haus`, Alloy to `logs-ingest.pod.haus`; direct LAN
   SSH via split-horizon `bandicoot.pod.haus`. Provisioned by Ansible
   (`playbooks/bandicoot.yml`), with the `base` role's laptop policy so the
-  lid never takes it offline. Runs ClickStack, Paperless, the Forgejo
+  lid never takes it offline. Runs ClickStack, the Forgejo
   Actions runner and its own Backrest; the Fenwick stacks are next
   (docs/plans/bandicoot-migration.md).
 - **pinelake** (Apple M1 Mac mini, macOS, second household) is a dedicated

@@ -34,11 +34,6 @@ services:
       # Ofelia job on clickstack-mongo writes. Quiescent gzip archives,
       # restic-safe. ClickHouse telemetry is deliberately not backed up.
       - /var/lib/clickstack/mongo-dumps:/userdata/clickstack/mongo:ro
-      # Paperless: Postgres data dir and app state on local NVMe, the
-      # documents on Jump. Same three binds bilby carried.
-      - /var/lib/paperless-pgdata:/userdata/paperless/pgdata:ro
-      - /var/lib/paperless-data:/userdata/paperless/data:ro
-      - /mnt/jump/paperless/documents:/userdata/paperless/documents:ro
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
       podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}

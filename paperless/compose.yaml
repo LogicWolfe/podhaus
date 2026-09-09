@@ -113,10 +113,6 @@ services:
       # app path uses underscores (the source package is paperlessngx_mail_parser);
       # the project README's hyphenated form is a typo.
       PAPERLESS_APPS: paperlessngx_mail_parser.apps.MailparserConfig
-    ports:
-      # For bilby's Caddy (paperless.pod.haus, paperless-api.pod.haus) and
-      # Gatus, which stay on bilby and reach this across the LAN.
-      - "8000:8000"
     volumes:
       # Paperless app state (search index, models, classifiers) on local
       # NVMe per the sizing rule. Documents on Jump — small + random-read,

@@ -29,7 +29,7 @@ a move does not fit.
 | Forgejo Actions runner | bandicoot | ✅ moved from fractal (2534886) |
 | ClickStack (clickhouse, hyperdx, otel, mongo) | bandicoot | ✅ moved (7c90fa7); front door stays on bilby's Caddy |
 | Backrest overlay `backup/bandicoot`, Ofelia `ofelia/bandicoot`, NAS path | bandicoot | ✅ (0bc718e, 8e7909b) |
-| Paperless (+ tika, gotenberg, postgres, redis) | **bilby** | ⏳ was moved to bandicoot (44b34cc); moves back — Nathan's decision, to keep bandicoot's RAM for the control plane and Fenwick |
+| Paperless (+ tika, gotenberg, postgres, redis) | bilby | ✅ moved back from bandicoot |
 | Komodo Core (+ postgres, ferretdb) | **bandicoot** | ⏳ |
 | `onepassword` (op-connect-api, op-connect-sync, komodo-op) | **bandicoot** | ⏳ with the existing credentials — no new Connect server |
 | Fenwick family (fenwick, signal-cli, web-agent, brinno-downloader) | **bandicoot** | ⏳ after the control plane, so `op-connect-api` resolves on bandicoot's dockernet again |
@@ -288,6 +288,11 @@ is deleted.
   container healthy, Gatus green. (0bc718e)
 - ✅ Paperless re-homed to bandicoot (44b34cc) and verified — superseded by
   Nathan's decision to keep it on bilby; step 1 reverses it.
+- ✅ Step 1: Paperless moved back to bilby. State (95 MB pgdata, 87 MB
+  data) rsynced from bandicoot before the containers there were removed;
+  the reverse of 44b34cc applied to stack.toml, compose.yaml, the
+  Caddyfile, Gatus, both Backrest overlays, bandicoot's storage sentinels
+  and the docs. Pre-stop document count was 1118.
 - Interim: the bot's telemetry export was re-pointed at `10.0.0.90:4318`
   (fenwick 46fdc1f) because the collector left bilby's dockernet; step 3
   puts it back on the dockernet name.
