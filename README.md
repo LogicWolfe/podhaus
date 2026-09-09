@@ -14,6 +14,9 @@ external infrastructure.
   podhaus service host.
 - **voltaire:** Fedora Workstation. It is an outbound-only remote development
   and podhaus service host.
+- **bandicoot:** Apple Silicon MacBook Pro on Fedora Asahi Remix. It is a
+  development and podhaus service host on the home LAN, and the successor host
+  for bilby's heavier services.
 - **pinelake:** Apple M1 Mac mini running macOS and OrbStack. It is the
   task-specific media appliance for the second household.
 
@@ -98,6 +101,6 @@ DNSControl has been retired.
 | `tailscale-recovery-bootstrap` | SSH-only host recovery plane |
 | `backup/`, `autoheal/`, `logging/` | Multi-host shared services |
 | `clickstack/`, `gatus/` | Observability, health checks, and alerting |
-| `bilby/`, `kangaroo/`, `numbat/`, `fractal/`, `voltaire/`, `pinelake/` | Host bootstrap and host-level configuration |
+| `bilby/`, `kangaroo/`, `numbat/`, `fractal/`, `voltaire/`, `bandicoot/`, `pinelake/` | Host bootstrap and host-level configuration |
 | `docs/` | Current-state documentation and live plans |
 | `<service>/compose.yaml` | A single-host service stack |

@@ -71,11 +71,12 @@ The resulting ledger:
 
 ## Which hosts Ansible manages
 
-**fractal**, **bilby**, **numbat**, **voltaire**, and **pinelake** — the `provisioned`
+**fractal**, **bilby**, **numbat**, **voltaire**, **bandicoot**, and **pinelake** — the `provisioned`
 group, which is what `site.yml` targets. How each is reached is a
 per-host fact in `host_vars/`: bilby is the control node and runs
 against itself (`ansible_connection: local`); fractal is direct on the
-home LAN (`10.0.0.70`, the Windows host's `:22` forward); numbat and
+home LAN (`10.0.0.70`, the Windows host's `:22` forward); bandicoot is
+direct on the home LAN too; numbat and
 voltaire have no inbound path of their own and route through Pomerium,
 carrying `nathan@numbat` / `nathan@voltaire` as `ansible_user` — that is
 a Pomerium *route selector*, not an OS account, which is why
@@ -104,13 +105,14 @@ ansible/
   playbooks/
     site.yml               targets the `provisioned` group
     fractal.yml            single-host entry point
+    bandicoot.yml          single-host entry point
     bilby.yml              single-host entry point (+ Komodo host dirs)
     numbat.yml             single-host entry point (steady state)
     numbat-bootstrap.yml   fresh-VM bring-up, sequencing preserved as play order
     pinelake.yml           macOS appliance and OrbStack entry point
     nb-macbook-air.yml     macOS development-client SSH policy entry point
   roles/
-    base/                  timezone, baseline packages, dirs
+    base/                  timezone, baseline packages, dirs, laptop power policy
     wsl/                   /etc/wsl.conf, hostname
     docker/                engine (where managed), daemon.json, host networks
     devbox/                the root-requiring half of a developer machine
@@ -119,7 +121,7 @@ ansible/
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
     storage_binds/         Late-arriving-volume hardening (bilby, fractal)
-    firewalld/             declarative zone + service XML (bilby)
+    firewalld/             declarative zone + service XML (bilby, bandicoot)
     komodo_core_host/      Komodo Core's host directories (bilby)
     numbat_edge/           numbat's nftables ruleset, relay-IP dispatcher, loopback sshd
     mac_ssh/               MacBook FileVault gate, key-only sshd policy and mesh keys
@@ -147,7 +149,7 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
   have not also joined a runtime group.
 - `linux_hosts` and `macos_appliance_hosts` separate operating-system role
   families. Linux-only base, account, and sshd roles never run on Darwin.
-- `docs_hosts` — Bilby, Fractal, and Voltaire. Each declares the aggregate
+- `docs_hosts` — Bilby, Fractal, Voltaire, and Bandicoot. Each declares the aggregate
   repository directory and canonical chezmoi checkout that `docs_sources`
   exposes through stable root-owned slots.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes`, `edge_hosts`,

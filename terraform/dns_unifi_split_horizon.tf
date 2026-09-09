@@ -90,6 +90,20 @@ resource "unifi_dns_record" "fractal_pod_haus" {
   enabled     = true
 }
 
+# bandicoot.pod.haus → its reserved Ethernet address, LAN only. SSH-only,
+# like fractal: bandicoot.docs.pod.haus is a separate name and stays on
+# Pomerium, and there is deliberately NO public record — off-LAN SSH rides
+# the ssh://bandicoot Pomerium route via the chezmoi ssh config rewrite.
+# LAN clients (and bilby-resident agents running its playbook) connect
+# direct, keeping bandicoot reachable when the Pomerium edge is not.
+resource "unifi_dns_record" "bandicoot_pod_haus" {
+  name        = "bandicoot.pod.haus"
+  record_type = "A"
+  value       = local.bandicoot_ip
+  ttl         = "5m0s"
+  enabled     = true
+}
+
 # nb-macbook-air.pod.haus → the MacBook Air's reserved wifi address, LAN
 # only. SSH-only, like fractal: there is no HTTPS route and deliberately no
 # public or Pomerium record — the Mac has no inbound path from outside the

@@ -84,6 +84,18 @@ resource "unifi_client" "fractal_windows" {
   # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
 
+# bandicoot, by its USB Ethernet adapter's permanent MAC. Pinned because
+# the split-horizon bandicoot.pod.haus record (dns_unifi_split_horizon.tf)
+# and bandicoot's Ansible connection both name this address; a DHCP drift
+# would strand every direct path at once. The wifi interface is deliberately
+# not reserved: it uses a randomised MAC and is not a management path.
+resource "unifi_client" "bandicoot" {
+  mac      = "00:e0:4c:68:07:fe"
+  name     = "Bandicoot"
+  fixed_ip = local.bandicoot_ip
+  # No network_id: Default LAN, same constraint as the kangaroo clients.
+}
+
 # Nathan's MacBook Air, by its wifi MAC. Pinned because the split-horizon
 # nb-macbook-air.pod.haus record and the Ansible connection in
 # ansible/inventory/host_vars/nb-macbook-air.yml both name this address; a

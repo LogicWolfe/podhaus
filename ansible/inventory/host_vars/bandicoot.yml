@@ -1,9 +1,16 @@
 # bandicoot — Apple Silicon MacBook Pro on Fedora Asahi Remix 44 (aarch64,
 # 16 KiB kernel pages). Runtime host and Nathan's development machine.
 ---
-# Bootstrap over Wi-Fi; replace with Terraform's split-horizon name after
-# Nathan connects the USB Ethernet adapter and its MAC is reserved.
-ansible_host: 10.0.0.237
+# The split-horizon name (podhaus terraform/dns_unifi_split_horizon.tf),
+# which on the LAN resolves to the USB Ethernet adapter's UniFi-reserved
+# address. Terraform is the only owner of the IP — Ansible rides the name,
+# so a re-address is a Terraform change alone. Off-LAN the name does not
+# resolve, so runs are LAN-only by construction, as fractal's are. The
+# adapter is a Realtek RTL8153 (1 GbE; Asahi has no Thunderbolt) named
+# enu1u4 after its USB port, so it must stay in that port. Wi-Fi is left
+# connected but is not a management path: its MAC is randomised and
+# nothing is reserved for it.
+ansible_host: bandicoot.pod.haus
 ansible_user: nathan
 podhaus_hostname: bandicoot
 
@@ -32,9 +39,15 @@ podhaus_docs_sources:
 # Outbound Periphery uses the fleet defaults and this inventory hostname.
 podhaus_periphery_dir: /opt/komodo-periphery
 
-# Temporary onboarding key, already granted on bilby. Replace with the
-# chezmoi-minted id_bandicoot public half at the development-identity step.
-# /home is currently unencrypted; minting awaits Nathan's explicit decision.
+# The machine identity: YubiKey 5C PIV slot 9a (ECCP256), hardware-resident
+# and served by machine-ssh-agent, exactly bilby's arrangement. There is no
+# TPM on Apple Silicon under Asahi, so without the YubiKey this would have
+# been a soft key on an unencrypted /home; with it, the only secret on disk
+# is the PIV PIN in ~/.config/machine-ssh/pin, which is inert without the
+# token. The management key is stored on the YubiKey, PIN-protected; the
+# firmware (5.2.4) predates AES management keys, so it is TDES. The
+# certificate in the slot is self-signed for one year (2027-09-09),
+# matching bilby's; opensc reads the key regardless of validity.
 podhaus_machine_key: >-
-  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMZ+qDyy0/btZnHSlv7d3ObC5xJx/UaVqjnSF04NeHRo
-  nathan
+  ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEcljMJnML/KqPHE0FFmzxgK0U7eRooK3GZH1/JeGFkR82EUx9cVoVQ88BO9SvbTfX+7CA3HAQvHPtCDuNbZTfs=
+  bandicoot machine key

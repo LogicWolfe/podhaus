@@ -8,6 +8,10 @@ locals {
   # into it. Reserved so the split-horizon fractal.pod.haus record and
   # every ssh config pointing at it stay truthful.
   fractal_windows_ip = "10.0.0.70"
+  # bandicoot's USB Ethernet adapter (Asahi has no Thunderbolt, so the 1 GbE
+  # link is a Realtek RTL8153 on USB). Reserved so the split-horizon
+  # bandicoot.pod.haus record and its Ansible connection stay truthful.
+  bandicoot_ip = "10.0.0.90"
   # The ESP32 bridging the burrow Turn Touch. Reserved because Alloy scrapes
   # its /metrics by IP — Docker's resolver has no mDNS, so the .local name is
   # unreachable from the container and a DHCP drift would end the scrape

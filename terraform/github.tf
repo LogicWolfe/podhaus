@@ -108,6 +108,17 @@ resource "github_user_ssh_key" "nb_macbook_air_machine" {
   ))
 }
 
+# bandicoot's machine key, on the same terms as nb-macbook-air's above:
+# authentication only, from the file that feeds the Forgejo claim; the
+# signing-key registration stays out-of-band.
+resource "github_user_ssh_key" "bandicoot_machine" {
+  title = "bandicoot machine key"
+  key = join(" ", slice(
+    split(" ", trimspace(file("${path.module}/../forgejo/keys/nathan/bandicoot-machine.pub"))),
+    0, 2,
+  ))
+}
+
 # Sibling webhook for the docs-server repo (the central docs.pod.haus
 # service). Same global secret + Pomerium machine exception (path-scoped
 # /listener/github app in access.tf). Fires docs-push-deploy
