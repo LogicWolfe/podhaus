@@ -21,6 +21,8 @@ resource "random_password" "pomerium_gateway_tokens" {
 
 resource "random_password" "numbat_rathole_tokens" {
   for_each = toset([
+    "bandicoot_http",
+    "bandicoot_ssh",
     "bilby_ssh",
     "forgejo_ssh",
     "fractal_http",
@@ -235,6 +237,34 @@ resource "tls_locally_signed_cert" "voltaire_log_client" {
   ]
 }
 
+resource "tls_private_key" "bandicoot_log_client" {
+  algorithm = "RSA"
+  rsa_bits  = 3072
+}
+
+resource "tls_cert_request" "bandicoot_log_client" {
+  private_key_pem = tls_private_key.bandicoot_log_client.private_key_pem
+  dns_names       = ["bandicoot.pod.haus"]
+
+  subject {
+    common_name  = "bandicoot.pod.haus"
+    organization = "podhaus"
+  }
+}
+
+resource "tls_locally_signed_cert" "bandicoot_log_client" {
+  cert_request_pem   = tls_cert_request.bandicoot_log_client.cert_request_pem
+  ca_private_key_pem = tls_private_key.log_ingest_ca.private_key_pem
+  ca_cert_pem        = tls_self_signed_cert.log_ingest_ca.cert_pem
+
+  validity_period_hours = 43800
+  allowed_uses = [
+    "client_auth",
+    "digital_signature",
+    "key_encipherment",
+  ]
+}
+
 resource "tls_private_key" "pinelake_log_client" {
   algorithm = "RSA"
   rsa_bits  = 3072
@@ -399,6 +429,14 @@ resource "onepassword_item" "log_ingest_pki" {
           type  = "CONCEALED"
           value = base64encode(tls_private_key.voltaire_log_client.private_key_pem)
         }
+        bandicoot_cert_b64 = {
+          type  = "CONCEALED"
+          value = base64encode(tls_locally_signed_cert.bandicoot_log_client.cert_pem)
+        }
+        bandicoot_key_b64 = {
+          type  = "CONCEALED"
+          value = base64encode(tls_private_key.bandicoot_log_client.private_key_pem)
+        }
         pinelake_cert_b64 = {
           type  = "CONCEALED"
           value = base64encode(tls_locally_signed_cert.pinelake_log_client.cert_pem)
@@ -552,6 +590,15 @@ resource "cloudflare_dns_record" "fractal_docs" {
 resource "cloudflare_dns_record" "voltaire_docs" {
   zone_id = local.zones["pod.haus"]
   name    = "voltaire.docs.pod.haus"
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
+}
+
+resource "cloudflare_dns_record" "bandicoot_docs" {
+  zone_id = local.zones["pod.haus"]
+  name    = "bandicoot.docs.pod.haus"
   type    = "A"
   content = local.numbat_application_ipv4
   proxied = false
