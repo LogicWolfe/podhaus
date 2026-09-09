@@ -67,6 +67,40 @@ a file named only with a YouTube title plus an explicit episode id came out as
 | Sonarr ingress | `sonarr.pod.haus`: DNS, Pomerium route on the Nathan-only policy the other admin tools use, bilby Caddy → 10.0.0.90:8989; Gatus `Sonarr` check; Backrest `sonarr` plan for `/var/lib/sonarr` | Admin tool, not family |
 | Plex | Library episode ordering set to TheTVDB (Nathan, once) | Plex's TMDB default has 15 paired Skillsville episodes |
 
+### Batch matching: the second pass
+
+**Built.** See the Ledger for the commits and end-to-end proof.
+
+The per-file rule above placed 38 of 42 Space Racers and 56 of 59
+Skillsville titles. Every miss was one word of slack ("Mars Canyon Race
+Space", "A Simple Re-Quest Space", "Above and Beyond Space", "The Sweet
+Spot") and a looser per-file rule is unsafe alone: "Quantum Plumber" would
+take "Plumber" before the real Plumber file arrives. A batch is many
+episodes of one show, and once the batch is complete the exact matches have
+consumed their episodes, so what is left can be matched loosely and safely.
+
+Deviation from the original design note above: it estimated five misses
+by eye; running the actual 42-title fixture through the actual strict-pass
+code (`select_episode`) found exactly four (`SpaceRacersBatchFixtureTest` in
+`metube/tests/test_plexify.py` pins this). All four are one word of slack
+over the real episode title, same pattern as guessed, just one fewer of them.
+
+| Concern | Decision | Why |
+|---|---|---|
+| First pass (built) | Unchanged rules (exact segment, then ratio ≥ 0.9 with margin). A miss no longer pages or exits non-zero: the file stays in its staging folder and the hook exits 0 after checking whether the batch is done | Strict placements are correct today; deferring the miss is what makes the loose pass safe |
+| Batch done (built) | The hook asks MeTube `GET /history`: the batch is done when `queue` is empty (nothing pending, preparing or downloading, for any show). MeTube is reachable from the hook as `http://localhost:8081` inside the container — confirmed by reading it from inside the running `metube` container | Queue entries carry no channel, so "done for this show" is not knowable; "done for everything" is, and is simpler |
+| Sweep (built) | When the batch is done, the hook (whichever invocation observed the empty queue, success or miss) sweeps every show folder under staging, and any loose file at the staging root is reported as a leftover. Per show: leftover files × episodes with no file in Sonarr. A file fits an episode by the first-pass rules or the token rule. Accept a pair only when the file fits exactly one episode and that episode is fitted by exactly one file; place it by the same `ManualImport` path. Everything else is a leftover | One-to-one assignment is the batch's whole leverage; ambiguity in either direction stays a human call |
+| Token rule (built) | Normalise both sides and split on whitespace. Fit when the episode's tokens are a contiguous run inside a title segment's tokens, or the segment's tokens are a contiguous run inside the episode's, with at most one token of slack. Segments are `title_segments` (delimited parts and remainders) | Covers every observed miss; bounded slack keeps "Plumber" from fitting "Quantum Plumber Deluxe Edition" style junk, and uniqueness covers the rest |
+| Leftover title (built) | The video title comes from the MeTube `done` history entry whose `filename` equals the staged file's name (a first-pass miss also writes nothing else). A leftover with no history entry is reported by filename | The hook only receives the title for its own file; history is the record for siblings |
+| Fail loudly (built) | After the sweep, one Gatus `success=false` naming the count and up to a few leftover titles per show, and exit 1; `success=true` when the sweep leaves staging empty (also when there was nothing to sweep, as today's per-file success). A single wrong download still pages immediately: it is its own batch | One message per batch instead of one per file |
+| Stalled batch (built) | Gatus HTTP check `MeTube staging` (group Media) against Sonarr `GET /api/v3/manualimport?folder=/kids/_incoming` (API key header from the existing Komodo variable, wired through `gatus/stack.toml` → `gatus/compose.yaml` → `${SONARR_API_KEY}` the same way as every other Gatus secret), condition `len([BODY]) == 0`, checked every 15m with an 8-strike failure threshold (~2h) so a long batch in flight never alerts | If the last download errors, no hook fires and the sweep never runs; files sitting in staging for hours is the observable symptom and Sonarr can already see them |
+| Manual placement | Unchanged: run the hook inside the container with the corrected title. The sweep skips nothing a human placed | |
+
+Rejected: playlist position as the episode number (YouTube playlists are
+not reliably in aired order); a lower ratio threshold (moves the false
+positive line rather than removing it); a periodic sweeper timer on the host
+(a new config type for a case Gatus can watch).
+
 Rejected: a per-show map (Skillsville only), IMDb datasets (2 of 12 shows),
 TVmaze (gaps), TheTVDB direct (subscription or dead queue), FileBot (closed,
 single developer), Radarr now (movies are a later plan on the same pattern).
@@ -90,6 +124,20 @@ single developer), Radarr now (movies are a later plan on the same pattern).
   numbered episodes after the ordering switch; first play on the LG CX checked.
 - Gatus `Sonarr` green, Komodo stacks healthy, Backrest lists `sonarr`,
   bandicoot `--tags storage` changed=0, Terraform plan adds one record.
+- Batch matching (`metube/tests/test_plexify.py`): the 42-title Space
+  Racers fixture through the strict pass leaves exactly the four known
+  misses; the sweep places all four to the right episode numbers against a
+  full-noise unplaced-episode pool (both seasons); the Quantum Plumber
+  batch places Plumber and leaves Quantum Plumber; two leftovers fitting
+  one episode leaves both; a leftover fitting two episodes stays; the
+  `.podhaus-share-mounted` staging-root sentinel is never swept up as a
+  leftover file.
+- Gatus `MeTube staging` (group Media): confirmed empty staging returns
+  `[]` from Sonarr's manual-import scan, and a file dropped into a show
+  folder under staging appears as one entry; the check went green after
+  the push deploy.
+- End-to-end: a real download batch queued with no folder chosen, watched
+  through to Plex. See the entry below for the actual titles/counts.
 
 ## Ledger
 
@@ -140,3 +188,28 @@ single developer), Radarr now (movies are a later plan on the same pattern).
   Sonarr's episode file count for the series went 42 → 43, Gatus
   `metube_plexify` stayed green, and Plex showed the new episode with no
   manual refresh needed.
+- ✅ Batch matching (the second pass): the hook rewritten with a strict
+  first pass that defers a title-matching miss instead of failing the
+  download, a `MeTubeClient` (mirrors `SonarrClient`) that asks MeTube's
+  own `/history` for whether the download queue is empty, a token-fit rule
+  and a two-round one-to-one `assign_batch` function (strict round, then
+  token round) as pure functions, and a batch sweep that walks every show
+  folder in staging, places what it safely can, and posts one Gatus result
+  for the whole batch. `metube/tests/test_plexify.py` grew from 19 to 29
+  tests. Real-data check against the actual code found the strict pass
+  misses four Space Racers season-1 titles, not the five a first
+  design guess assumed; the plan text above was corrected. A real bug
+  surfaced along the way: the `.podhaus-share-mounted` healthcheck
+  sentinel file living directly under the staging root would have been
+  swept up as a permanent "leftover" on every run; fixed by excluding
+  dotfiles from the staging scan, with a regression test.
+- ✅ Gatus `MeTube staging` (group Media) added against Sonarr's
+  `GET /api/v3/manualimport?folder=/kids/_incoming`, the same endpoint the
+  sweep's design already depends on. Verified directly: empty staging
+  returns `[]`; a temp file dropped into `_incoming/Space Racers` (removed
+  after) appears as one entry naming its `path`, `relativePath`, and
+  `folderName`. The key reaches Gatus the same way as every other Gatus
+  secret: `gatus/stack.toml` declares `SONARR_API_KEY` from the existing
+  `OP__KOMODO__SONARR_API__CREDENTIAL` Komodo variable, `gatus/compose.yaml`
+  maps it into the container, `gatus/conf/config.yaml` reads
+  `${SONARR_API_KEY}`.

@@ -234,6 +234,34 @@ endpoints:
     <<: *defaults
     group: Media
 
+  # Catches a stalled MeTube batch: if the last download in a batch errors,
+  # metube/scripts/plexify's Exec postprocessor never runs, so the batch
+  # sweep never runs either, and any file waiting its turn under
+  # Kids/_incoming sits there indefinitely with nothing to notice. Sonarr's
+  # own manual-import scan already recurses into every show folder under
+  # the staging root and reports what's sitting there unimported; an empty
+  # list is the same "nothing waiting" signal the sweep itself checks
+  # (docs/plans/metube.md, "Batch matching: the second pass"). Verified
+  # empty staging returns `[]`; a file dropped into a show folder appears
+  # as one entry with its `path`/`relativePath`/`folderName`. failure-
+  # threshold sized to ~2h at this interval so a long-running batch never
+  # alerts mid-flight — only a batch that's actually stalled.
+  - name: MeTube staging
+    url: http://10.0.0.90:8989/api/v3/manualimport?folder=%2Fkids%2F_incoming
+    group: Media
+    interval: 15m
+    headers:
+      X-Api-Key: ${SONARR_API_KEY}
+    conditions:
+      - "[STATUS] == 200"
+      - "len([BODY]) == 0"
+    alerts:
+      - type: custom
+        description: "Files have sat unimported under Kids/_incoming for 2+ hours. This means the last download in a MeTube batch errored (yt-dlp/MeTube shows it as failed), so the plexify hook's Exec postprocessor never ran and the batch sweep never triggered. Check `docker logs metube` for the failed download, then re-run the batch (or place the waiting files by hand via Sonarr, sonarr.pod.haus) so the sweep gets another chance to run."
+        failure-threshold: 8
+        success-threshold: 2
+        send-on-resolved: true
+
   # Syncthing lives on kangaroo (network_mode: host). gatus can't reach
   # it directly, so we use the same Komodo InspectDockerContainer pattern
   # as Backrest (kangaroo) below — asserts the container is `running`.

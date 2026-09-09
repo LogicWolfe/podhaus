@@ -16,18 +16,32 @@
 # loudly instead of silently sitting in staging forever.
 #
 # The episode number lives only in Sonarr's TheTVDB-backed episode list, not
-# in anything yt-dlp can see (see docs/plans/metube.md). Confidence rule is
-# ours: an episode title that exactly equals the whole video title or one of
+# in anything yt-dlp can see (see docs/plans/metube.md). The strict first
+# pass: an episode title that exactly equals the whole video title or one of
 # its "|"/"-"/":"-delimited segments, or else a difflib ratio match (scored
 # the same way, over the whole title and every segment) with a clear margin
-# over the runner-up — anything murkier fails loudly rather than risking a
+# over the runner-up — anything murkier is deferred rather than risking a
 # wrong episode number. Substring containment alone isn't enough: "Plumber"
 # must not match "Quantum Plumber" just because it's a substring of it.
 #
-# Every outcome is reported to Gatus's `metube_plexify` external endpoint
-# (success=true, or success=false&error=...) so a bad match reaches Nathan
-# instead of silently sitting in staging. yt-dlp/MeTube shows the download
-# as errored when this hook exits non-zero.
+# A strict miss no longer fails the download outright: the file stays put in
+# its staging folder and the hook exits 0. Instead, whichever invocation
+# (a placement or a miss) finds MeTube's own download queue empty sweeps
+# every show folder in staging: leftover files against that show's still-
+# unplaced Sonarr episodes, matched by the strict rule again or, failing
+# that, a looser token rule with one word of slack ("Mars Canyon Race Space"
+# fitting the episode "Mars Canyon Race"). A pair is only accepted when it's
+# the unique fit in both directions — one wrong download is still its own
+# batch and still fails on its own. See docs/plans/metube.md, "Batch
+# matching: the second pass", for the full design and why deferring the
+# loose match until the batch is complete is what makes it safe at all.
+#
+# Every placement, and the sweep as a whole, is reported to Gatus's
+# `metube_plexify` external endpoint (success=true, or
+# success=false&error=...) so a bad match reaches Nathan instead of silently
+# sitting in staging. yt-dlp/MeTube shows the triggering download as errored
+# when this hook exits non-zero — which, for a sweep failure, may be a
+# different file than the one that actually failed to match.
 
 from __future__ import annotations
 
@@ -54,6 +68,11 @@ LIBRARY_ROOT = "/kids/TV"
 NO_CHANNEL = "NA"  # yt-dlp's literal rendering of a missing %(channel)s
 IMPORT_POLL_INTERVAL_S = 2
 IMPORT_POLL_TIMEOUT_S = 60
+# This hook runs as a subprocess of MeTube itself (yt-dlp's Exec
+# postprocessor), so MeTube's own API is always its own container's
+# localhost — no env var, unlike SONARR_URL which crosses to another
+# container.
+METUBE_URL = "http://localhost:8081"
 TVDB_FOLDER_RE = re.compile(r"\{tvdb-(\d+)\}")
 NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 # Splits a raw (not yet normalised) video title into its junk-prefix and
@@ -68,6 +87,13 @@ TITLE_SEGMENT_RE = re.compile(r"[|｜\-–—:]")
 # this ratio, and beat the runner-up by this much, or the match is refused.
 RATIO_MATCH_THRESHOLD = 0.9
 RATIO_MATCH_MARGIN = 0.05
+
+# The batch sweep's token rule (see the module docstring): the shorter of
+# an episode title's and a title segment's word lists must appear
+# contiguously inside the longer, with no more than this many extra words
+# in the longer one — the slack that lets "Mars Canyon Race Space" fit the
+# episode "Mars Canyon Race" without also letting arbitrary junk in.
+TOKEN_FIT_MAX_SLACK = 1
 
 
 class PlexifyError(Exception):
@@ -87,6 +113,27 @@ class Episode:
     title: str
     season_number: int
     episode_number: int
+    has_file: bool = False
+
+
+@dataclass(frozen=True)
+class LeftoverFile:
+    """A file still sitting in a show's staging folder when the batch
+    sweep runs, with the video title MeTube's history recorded for it."""
+    name: str
+    title: str
+
+
+@dataclass(frozen=True)
+class Pair:
+    file: LeftoverFile
+    episode: Episode
+
+
+@dataclass(frozen=True)
+class BatchAssignment:
+    pairs: list[Pair]
+    leftover_files: list[LeftoverFile]
 
 
 def normalise(text: str) -> str:
@@ -169,7 +216,10 @@ class SonarrClient:
 
     def episodes_for(self, series_id: int) -> list[Episode]:
         rows = self._request("GET", "/api/v3/episode", params={"seriesId": series_id})
-        return [Episode(r["id"], r["title"], r["seasonNumber"], r["episodeNumber"]) for r in rows]
+        return [
+            Episode(r["id"], r["title"], r["seasonNumber"], r["episodeNumber"], r["hasFile"])
+            for r in rows
+        ]
 
     def webdl_1080p_quality(self) -> dict:
         for definition in self._request("GET", "/api/v3/qualitydefinition"):
@@ -211,6 +261,25 @@ class SonarrClient:
                 raise PlexifyError(f"Sonarr import command failed: {command.get('message', 'no message')}")
             time.sleep(IMPORT_POLL_INTERVAL_S)
         raise PlexifyError(f"Sonarr import command {command_id} did not finish within {IMPORT_POLL_TIMEOUT_S}s")
+
+
+class MeTubeClient:
+    """Thin wrapper over the one MeTube endpoint the batch sweep needs.
+    Reachable at localhost because this hook runs as a subprocess inside
+    MeTube's own container (see METUBE_URL above)."""
+
+    def __init__(self, base_url: str) -> None:
+        self._base_url = base_url.rstrip("/")
+
+    def history(self) -> dict:
+        request = urllib.request.Request(f"{self._base_url}/history", method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            raise PlexifyError(f"MeTube GET /history failed: HTTP {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            raise PlexifyError(f"MeTube GET /history unreachable: {exc.reason}") from exc
 
 
 def add_series_from_lookup(sonarr: SonarrClient, result: dict) -> Series:
@@ -306,20 +375,160 @@ def select_episode(video_title: str, episodes: list[Episode]) -> Episode:
     raise PlexifyError(f"no confident episode match for {video_title!r}; top candidates: {top}")
 
 
-def place_episode(path: Path, relative: Path, title: str, channel: str) -> None:
-    show_name = resolve_show_name(relative, channel)
-    sonarr = SonarrClient(required_env("SONARR_URL"), required_env("SONARR_API_KEY"))
-    series = resolve_series(sonarr, show_name)
-    episode = select_episode(title, sonarr.episodes_for(series.id))
+def import_episode(sonarr: SonarrClient, path: Path, relative: Path, series: Series, episode: Episode) -> None:
+    """Runs Sonarr's ManualImport for one file already known to belong to
+    one episode, and confirms it actually left staging — Sonarr reports
+    the command as successful even on a no-op import."""
     sonarr_path = f"{SONARR_VIEW_PREFIX}/{INCOMING_DIRNAME}/{relative.as_posix()}"
     command_id = sonarr.manual_import(
         sonarr_path, series.id, episode.id, sonarr.webdl_1080p_quality(), sonarr.english_language(),
     )
     sonarr.wait_for_command(command_id)
     if path.exists():
-        # Sonarr reports command success even on a no-op import; the file
-        # still sitting in staging means no episode actually moved.
         raise PlexifyError(f"Sonarr reported success but {path} is still in staging")
+
+
+def place_episode(path: Path, relative: Path, title: str, channel: str, sonarr: SonarrClient) -> bool:
+    """The strict first pass for one freshly downloaded file. Returns
+    False on a title-matching miss — the file is left in staging for a
+    later batch sweep to reconsider — and raises PlexifyError for
+    anything else (an unresolvable show, an unreachable Sonarr, or an
+    import that silently didn't move the file), which still fails the
+    download immediately."""
+    show_name = resolve_show_name(relative, channel)
+    series = resolve_series(sonarr, show_name)
+    try:
+        episode = select_episode(title, sonarr.episodes_for(series.id))
+    except PlexifyError:
+        return False
+    import_episode(sonarr, path, relative, series, episode)
+    return True
+
+
+def token_fit(video_title: str, episode_title: str) -> bool:
+    """The batch sweep's looser rule (see the module docstring): true
+    when one side's words appear, in order and unbroken, inside the
+    other, allowing up to TOKEN_FIT_MAX_SLACK extra words on the longer
+    side. Tried against every title_segments() candidate, the same way
+    the strict rule is."""
+    episode_tokens = normalise(episode_title).split()
+    if not episode_tokens:
+        return False
+    return any(
+        _contiguous_with_slack(episode_tokens, normalise(segment).split())
+        for segment in title_segments(video_title)
+    )
+
+
+def _contiguous_with_slack(a: list[str], b: list[str]) -> bool:
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    if not shorter or len(longer) - len(shorter) > TOKEN_FIT_MAX_SLACK:
+        return False
+    return any(longer[i:i + len(shorter)] == shorter for i in range(len(longer) - len(shorter) + 1))
+
+
+def _strict_candidates(file: LeftoverFile, episodes: list[Episode]) -> list[Episode]:
+    try:
+        return [select_episode(file.title, episodes)]
+    except PlexifyError:
+        return []
+
+
+def _token_candidates(file: LeftoverFile, episodes: list[Episode]) -> list[Episode]:
+    return [e for e in episodes if token_fit(file.title, e.title)]
+
+
+def _match_round(files, episodes, candidates_of):
+    """One one-to-one matching pass: a file is paired with an episode
+    only when that episode is the file's sole candidate AND the file is
+    that episode's sole claimant. Returns the accepted pairs plus
+    whatever files and episodes neither side consumed, for a further
+    (looser) round to try."""
+    candidates = {f: candidates_of(f, episodes) for f in files}
+    claimants: dict[int, list[LeftoverFile]] = {}
+    for f, cands in candidates.items():
+        if len(cands) == 1:
+            claimants.setdefault(cands[0].id, []).append(f)
+
+    pairs, matched_files, matched_episode_ids = [], set(), set()
+    for episode_id, claimers in claimants.items():
+        if len(claimers) == 1:
+            f = claimers[0]
+            pairs.append(Pair(f, candidates[f][0]))
+            matched_files.add(f)
+            matched_episode_ids.add(episode_id)
+
+    remaining_files = [f for f in files if f not in matched_files]
+    remaining_episodes = [e for e in episodes if e.id not in matched_episode_ids]
+    return pairs, remaining_files, remaining_episodes
+
+
+def assign_batch(files: list[LeftoverFile], episodes: list[Episode]) -> BatchAssignment:
+    """Matches one show's leftover staging files against its still-
+    unplaced Sonarr episodes: the strict first-pass rule first, then the
+    looser token rule over whatever neither side placed. See
+    docs/plans/metube.md, "Batch matching: the second pass"."""
+    strict_pairs, files, episodes = _match_round(files, episodes, _strict_candidates)
+    token_pairs, files, episodes = _match_round(files, episodes, _token_candidates)
+    return BatchAssignment(pairs=strict_pairs + token_pairs, leftover_files=files)
+
+
+def _staged_files(directory: Path) -> list[Path]:
+    """Real staged files directly in a staging directory — never a
+    dotfile: the `.podhaus-share-mounted` healthcheck sentinel lives at
+    STAGING_ROOT itself and must never be swept up as a leftover."""
+    return [p for p in sorted(directory.iterdir()) if p.is_file() and not p.name.startswith(".")]
+
+
+def sweep_show(show_dir: Path, done_titles: dict[str, str], sonarr: SonarrClient) -> list[str]:
+    """Sweeps one show's staging folder: places every safely-matched
+    leftover file, then returns a display name (title where known, else
+    filename) for each file still left over afterwards."""
+    disk_files = _staged_files(show_dir)
+    if not disk_files:
+        return []
+    titled = [LeftoverFile(p.name, done_titles[p.name]) for p in disk_files if p.name in done_titles]
+    untitled_names = [p.name for p in disk_files if p.name not in done_titles]
+
+    series = resolve_series(sonarr, show_dir.name)
+    unplaced = [e for e in sonarr.episodes_for(series.id) if not e.has_file]
+    assignment = assign_batch(titled, unplaced)
+
+    for pair in assignment.pairs:
+        relative = Path(show_dir.name) / pair.file.name
+        import_episode(sonarr, show_dir / pair.file.name, relative, series, pair.episode)
+
+    return untitled_names + [f.title for f in assignment.leftover_files]
+
+
+def run_sweep(sonarr: SonarrClient, done_entries: list[dict]) -> bool:
+    """Runs once MeTube's whole download queue is empty: sweeps every
+    show folder in staging (a loose file at the staging root can't be
+    show-resolved at all, and is always a leftover), places what it
+    safely can, and reports the whole sweep as one Gatus result.
+    Returns whether staging ended up empty."""
+    done_titles = {e["filename"]: e["title"] for e in done_entries}
+    failures: dict[str, list[str]] = {}
+
+    root_files = [p.name for p in _staged_files(STAGING_ROOT)]
+    if root_files:
+        failures["(staging root)"] = root_files
+    for show_dir in sorted(p for p in STAGING_ROOT.iterdir() if p.is_dir()):
+        leftover = sweep_show(show_dir, done_titles, sonarr)
+        if leftover:
+            failures[show_dir.name] = leftover
+
+    report_sweep(failures)
+    return not failures
+
+
+def report_sweep(failures: dict[str, list[str]]) -> None:
+    if not failures:
+        report_gatus(success=True, error=None)
+        return
+    total = sum(len(names) for names in failures.values())
+    per_show = "; ".join(f"{show}: {', '.join(names[:3])}" for show, names in failures.items())
+    report_gatus(success=False, error=f"batch sweep left {total} file(s) unplaced: {per_show}")
 
 
 def report_gatus(success: bool, error: str | None) -> None:
@@ -345,15 +554,29 @@ def main() -> int:
     path = Path(sys.argv[1])
     title = sys.argv[2]
     channel = sys.argv[3]
+    sonarr = SonarrClient(required_env("SONARR_URL"), required_env("SONARR_API_KEY"))
     try:
         relative = path.relative_to(STAGING_ROOT)
-        place_episode(path, relative, title, channel)
+        placed = place_episode(path, relative, title, channel, sonarr)
     except Exception as exc:  # noqa: BLE001 - top-level boundary, see module docstring
         print(f"plexify: {exc}", file=sys.stderr)
         report_gatus(success=False, error=str(exc))
         return 1
-    report_gatus(success=True, error=None)
-    return 0
+
+    if placed:
+        report_gatus(success=True, error=None)
+
+    # Either outcome checks whether the batch is now done — a miss is
+    # deferred to the sweep rather than failing here (see module docstring).
+    try:
+        history = MeTubeClient(METUBE_URL).history()
+    except PlexifyError as exc:
+        print(f"plexify: {exc}", file=sys.stderr)
+        report_gatus(success=False, error=str(exc))
+        return 1
+    if history["queue"]:
+        return 0
+    return 0 if run_sweep(sonarr, history["done"]) else 1
 
 
 if __name__ == "__main__":

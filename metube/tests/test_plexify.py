@@ -23,7 +23,10 @@ sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
 Episode = MODULE.Episode
+LeftoverFile = MODULE.LeftoverFile
 select_episode = MODULE.select_episode
+assign_batch = MODULE.assign_batch
+token_fit = MODULE.token_fit
 normalise = MODULE.normalise
 PlexifyError = MODULE.PlexifyError
 
@@ -55,6 +58,93 @@ def skillsville_episodes() -> list[Episode]:
         Episode(id=100 + n, title=title, season_number=1, episode_number=n)
         for n, title in enumerate(SKILLSVILLE_TITLES, start=1)
     ]
+
+
+# TheTVDB titles for Space Racers (series 282447), fetched from Sonarr's
+# skyhook proxy (docs/plans/metube.md, "Batch matching: the second pass").
+# Season 2 is included as noise the token rule must not collide with,
+# proving the strict-fail set below is stable even against a second
+# season's worth of unrelated titles.
+SPACE_RACERS_S1_TITLES = [
+    "Where Are We?", "Starling, D.S.V.", "Total Eclipse", "Fly Like an Eagle",
+    "Star Signs", "Vulture's Volcano", "Mars Canyon Race", "Election!",
+    "Ace Space Reporter", "Above and Beyond", "Eyes on the Prize",
+    "Mine, Mine, Mine!", "Asteroids, Platinum Edition", "Lunar Base Blackout",
+    "Cranberry Crater", "Dodo in Distress", "Sick Day", "Good Old Coot",
+    "Robyn's Winter Break", "Three's a Crowd", "Mars Map Mystery",
+    "Sweet Spot", "Careering off Course", "Drifting", "Hawk's Day",
+    "Satellite Starling", "Fearless Flyers", "Hawk's Valentine",
+    "Space Racer Storm Chaser", "(N)ice Work if You Can Get It",
+    "A Simple Re-Quest", "Hiding on Hyperion", "RoboCoach XL-5",
+    "Trail Blazers", "Dome Grown", "Dance Lessons", "Grounded",
+    "Here Comes the Sun", "Starling: Space Racer!", "Titanic Trip",
+    "Starling Discovers the Moon", "Three Racers and a Baby Robot",
+    "A Tight Squeeze", "AVA Retires", "Vulture's Statue", "Follow The Water",
+    "Watch this Space", "The Hawk Factor", "Hawk's On It",
+    "Communication Breakdown",
+]
+SPACE_RACERS_S2_TITLES = [
+    "The Haunted Asteroid", "Satellite Songs", "Different", "Paint Your Rocket",
+    "Cadet Dodo", "Great Balls of Fuel", "Loon on the Moon", "Dodo in Charge",
+    "To Tell The Truth", "Sneezy Does It", "When You Wish Upon a Comet",
+    "Sit, Rover, Sit", "Little Rocket Who Cried Aliens", "Goodbye",
+    "How the Grouch Stole Solstice", "Some Body for AVA", "Something Borrowed",
+    "Orange Outrage", "Return To Sender", "The Happiest Rocket In The World",
+    "Counter-Earth", "Star Power", "The Wizard Of Mars", "Them's The Brakes",
+    "Volunteer Day", "Remember The Past", "New Cadet On The Block",
+    "Dream Big", "It's A Mad, Mad, Mad, Mad Galaxy", "That'll Teach You",
+    "Double-O Dodo", "First Do No Harm", "Stardust Rhythm",
+    "M Is For Meteorite", "When the Envy Bug Bites", "Ships in a Bottle",
+    "The Rocket with Two Brains", "Hawk the Genius", "Space Girl Explorers",
+    "Polar Opposites",
+]
+
+# The 42 Space Racers season-1 YouTube titles as MeTube reported them.
+# Verified against the strict pass (select_episode): exactly these four
+# don't confidently resolve on their own — each is one word of slack over
+# the real episode title — and are what the batch sweep's token rule must
+# place. (An initial design note guessed five misses; running the actual
+# fixture through the actual code found four, and the plan text was
+# corrected to match.)
+SPACE_RACERS_STRICT_MISSES = [
+    "SPACE RACERS: Mars Canyon Race Space",
+    "SPACE RACERS: A Simple Re-Quest Space",
+    "SPACE RACERS: Above and Beyond Space",
+    "SPACE RACERS: The Sweet Spot",
+]
+SPACE_RACERS_S1_YOUTUBE_TITLES = [
+    "SPACE RACERS: Hawk's Day", "SPACE RACERS: Where Are We?", "SPACE RACERS: Election",
+    "SPACE RACERS: (N)ice Work if You Can Get It", "SPACE RACERS: Three's a Crowd",
+    "SPACE RACERS: Communication Breakdown", "SPACE RACERS: Mars Canyon Race Space",
+    "SPACE RACERS: Space Racer Storm Chaser", "SPACE RACERS: Fly Like an Eagle",
+    "SPACE RACERS: Mars Map Mystery", "SPACE RACERS: A Simple Re-Quest Space",
+    "SPACE RACERS: Grounded", "SPACE RACERS: Total Eclipse", "SPACE RACERS: Satellite Starling",
+    "SPACE RACERS: Vulture's Statue", "SPACE RACERS: Starling Discovers The Moon",
+    "SPACE RACERS: Asteroids, Platinum Edition", "SPACE RACERS: Above and Beyond Space",
+    "SPACE RACERS: Star Signs", "SPACE RACERS: Careering Off Course",
+    "SPACE RACERS: The Hawk Factor", "SPACE RACERS: Dome Grown", "SPACE RACERS: Trail Blazers",
+    "SPACE RACERS: Titanic Trip", "SPACE RACERS: The Sweet Spot", "SPACE RACERS: Vulture's Volcano",
+    "SPACE RACERS: Starling D.S.V.", "SPACE RACERS: Hiding on Hyperion",
+    "SPACE RACERS: Starling: Space Racer!", "SPACE RACERS: AVA Retires",
+    "SPACE RACERS: Cranberry Crater", "SPACE RACERS: Fearless Flyers",
+    "SPACE RACERS: Hawk's Valentine", "SPACE RACERS: Sick Day", "SPACE RACERS: Hawks On It",
+    "SPACE RACERS: Robyn's Winter Break", "SPACE RACERS: Good Old Coot",
+    "SPACE RACERS: Dodo in Distress", "SPACE RACERS: Drifting",
+    "SPACE RACERS: Here Comes the Sun", "SPACE RACERS: Follow the Water",
+    "SPACE RACERS: Watch This Space",
+]
+
+
+def space_racers_episodes() -> list[Episode]:
+    episodes = [
+        Episode(id=100 + n, title=t, season_number=1, episode_number=n)
+        for n, t in enumerate(SPACE_RACERS_S1_TITLES, start=1)
+    ]
+    episodes += [
+        Episode(id=200 + n, title=t, season_number=2, episode_number=n)
+        for n, t in enumerate(SPACE_RACERS_S2_TITLES, start=1)
+    ]
+    return episodes
 
 
 class NormaliseTest(unittest.TestCase):
@@ -216,6 +306,110 @@ class SkillsvilleFixtureTest(unittest.TestCase):
             match = select_episode(video_title, episodes)
             resolved_numbers.add(match.episode_number)
         self.assertEqual(len(resolved_numbers), 59)
+
+
+class StagedFilesTest(unittest.TestCase):
+    """Regression: the `.podhaus-share-mounted` healthcheck sentinel lives
+    directly at STAGING_ROOT (metube/compose.yaml's healthcheck), and an
+    earlier draft of the sweep's staging-root scan treated it as a
+    leftover file forever — permanently failing the sweep."""
+
+    def test_dotfiles_are_never_staged_files(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".podhaus-share-mounted").touch()
+            (root / "real-video.mp4").touch()
+            names = [p.name for p in MODULE._staged_files(root)]
+            self.assertEqual(names, ["real-video.mp4"])
+
+
+class TokenFitTest(unittest.TestCase):
+    def test_one_extra_trailing_word_fits(self) -> None:
+        self.assertTrue(token_fit("SPACE RACERS: Mars Canyon Race Space", "Mars Canyon Race"))
+
+    def test_one_extra_leading_word_fits(self) -> None:
+        self.assertTrue(token_fit("SPACE RACERS: The Sweet Spot", "Sweet Spot"))
+
+    def test_two_extra_words_does_not_fit(self) -> None:
+        self.assertFalse(token_fit("SPACE RACERS: Mars Canyon Race Space Rally", "Mars Canyon Race"))
+
+    def test_unrelated_title_does_not_fit(self) -> None:
+        self.assertFalse(token_fit("SPACE RACERS: Grounded", "Sweet Spot"))
+
+
+class SpaceRacersBatchFixtureTest(unittest.TestCase):
+    """The 42-title Space Racers season-1 fixture (docs/plans/metube.md,
+    "Batch matching: the second pass") run through the strict pass, then
+    the sweep, matching the real end-to-end behaviour: strict placements
+    consume their episodes first, and only the leftover four are left for
+    the token rule."""
+
+    def test_strict_pass_leaves_exactly_the_four_known_misses(self) -> None:
+        episodes = space_racers_episodes()
+        misses = []
+        for title in SPACE_RACERS_S1_YOUTUBE_TITLES:
+            try:
+                select_episode(title, episodes)
+            except PlexifyError:
+                misses.append(title)
+        self.assertEqual(sorted(misses), sorted(SPACE_RACERS_STRICT_MISSES))
+
+    def test_sweep_places_all_four_misses_to_the_right_numbers(self) -> None:
+        episodes = space_racers_episodes()
+        # Episodes the strict pass placed are no longer "unplaced" by the
+        # time the sweep runs; only the four misses' episodes remain, plus
+        # every episode never uploaded at all (the sweep's real-world noise).
+        strict_placed_numbers = {
+            select_episode(t, episodes).episode_number
+            for t in SPACE_RACERS_S1_YOUTUBE_TITLES
+            if t not in SPACE_RACERS_STRICT_MISSES
+        }
+        unplaced = [e for e in episodes if e.season_number != 1 or e.episode_number not in strict_placed_numbers]
+        files = [LeftoverFile(name=f"{t}.mp4", title=t) for t in SPACE_RACERS_STRICT_MISSES]
+
+        assignment = assign_batch(files, unplaced)
+
+        self.assertEqual(assignment.leftover_files, [])
+        placed = {p.file.title: p.episode.title for p in assignment.pairs}
+        self.assertEqual(placed["SPACE RACERS: Mars Canyon Race Space"], "Mars Canyon Race")
+        self.assertEqual(placed["SPACE RACERS: A Simple Re-Quest Space"], "A Simple Re-Quest")
+        self.assertEqual(placed["SPACE RACERS: Above and Beyond Space"], "Above and Beyond")
+        self.assertEqual(placed["SPACE RACERS: The Sweet Spot"], "Sweet Spot")
+
+
+class BatchAssignmentTest(unittest.TestCase):
+    def test_quantum_plumber_batch_places_plumber_and_leaves_quantum_plumber(self) -> None:
+        # "Plumber" is the real episode. By the time the sweep runs,
+        # "Skillsville FULL EPISODE | Plumber" would already have been
+        # placed by its own strict pass and dropped from both staging and
+        # the unplaced-episode list — this proves the assignment function
+        # itself resolves the ambiguity the same way, as a defence in depth.
+        plumber = Episode(1, "Plumber", 1, 28)
+        files = [
+            LeftoverFile("Quantum Plumber.mp4", "Skillsville FULL EPISODE | Quantum Plumber"),
+            LeftoverFile("Plumber.mp4", "Skillsville FULL EPISODE | Plumber"),
+        ]
+        assignment = assign_batch(files, [plumber])
+        self.assertEqual([(p.file.name, p.episode.title) for p in assignment.pairs], [("Plumber.mp4", "Plumber")])
+        self.assertEqual([f.name for f in assignment.leftover_files], ["Quantum Plumber.mp4"])
+
+    def test_two_leftovers_fitting_one_episode_leaves_both(self) -> None:
+        episode = Episode(1, "Mars Canyon Race", 1, 7)
+        files = [
+            LeftoverFile("a.mp4", "SPACE RACERS: Mars Canyon Race Space"),
+            LeftoverFile("b.mp4", "SPACE RACERS: Mars Canyon Race Extra"),
+        ]
+        assignment = assign_batch(files, [episode])
+        self.assertEqual(assignment.pairs, [])
+        self.assertEqual({f.name for f in assignment.leftover_files}, {"a.mp4", "b.mp4"})
+
+    def test_a_leftover_fitting_two_episodes_stays(self) -> None:
+        episodes = [Episode(1, "Mars Canyon Race", 1, 7), Episode(2, "Canyon Race Rally", 1, 8)]
+        files = [LeftoverFile("c.mp4", "SPACE RACERS: Mars Canyon Race Rally")]
+        assignment = assign_batch(files, episodes)
+        self.assertEqual(assignment.pairs, [])
+        self.assertEqual([f.name for f in assignment.leftover_files], ["c.mp4"])
 
 
 if __name__ == "__main__":
