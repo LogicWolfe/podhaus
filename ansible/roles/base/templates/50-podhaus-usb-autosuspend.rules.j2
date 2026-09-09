@@ -1,0 +1,10 @@
+# Installed by ansible/roles/base (podhaus_usb_autosuspend_exempt). Do not edit on the host.
+#
+# USB devices the host depends on for connectivity are pinned out of runtime
+# power management: a suspended hub or NIC that fails to resume is the same
+# as an unplugged one. Matched by vendor:product so the rule survives a
+# re-plug into a different port.
+{% for dev in podhaus_usb_autosuspend_exempt %}
+# {{ dev.comment }}
+ACTION=="add|bind", SUBSYSTEM=="usb", ATTR{idVendor}=="{{ dev.vendor }}", ATTR{idProduct}=="{{ dev.product }}", ATTR{power/control}="on"
+{% endfor %}

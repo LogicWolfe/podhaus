@@ -3,6 +3,12 @@
   ansible.builtin.systemd_service:
     daemon_reload: true
 
+- name: Reapply udev rules
+  # Reload the rule files and re-trigger the USB subsystem so already
+  # attached devices take the new power/control value without a re-plug.
+  ansible.builtin.shell: udevadm control --reload && udevadm trigger --subsystem-match=usb --action=add
+  changed_when: true
+
 - name: Reload logind
   # logind re-reads logind.conf.d on reload without dropping sessions.
   ansible.builtin.systemd_service:

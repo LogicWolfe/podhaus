@@ -21,6 +21,18 @@ podhaus_hostname: bandicoot
 # accepted cost of a laptop being a runtime host.
 podhaus_is_laptop: true
 
+# The USB Ethernet adapter and the dock hub it hangs off are pinned out of
+# USB runtime suspend; a suspended link is an unplugged one for a host
+# whose management path and fixed IP live on that adapter. Vendor/product
+# IDs from the USB tree, so the rule follows the device across ports.
+podhaus_usb_autosuspend_exempt:
+  - vendor: 0bda
+    product: "8153"
+    comment: Realtek RTL8153 USB gigabit Ethernet
+  - vendor: 05e3
+    product: "0626"
+    comment: Genesys Logic USB 3.1 hub in the dock
+
 # Fresh engine, live-restore from day one. SELinux remains enforcing;
 # the bind-mount stacks explicitly carry label:disable.
 podhaus_docker_engine_managed: true

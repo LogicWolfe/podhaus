@@ -1,25 +1,32 @@
 # Bandicoot onboarding
 
 Bandicoot is an Apple Silicon MacBook Pro running Fedora Asahi Remix 44 with
-16 KiB kernel pages. It joins as a runtime and development host. No existing
-services move in this work, and backup waits for the later stateful migration.
+16 KiB kernel pages. It joined on 2026-09-09 as a runtime and development host.
+No existing services move in this work, and backup waits for the later stateful
+migration. The steady-state description lives in `docs/hosts.html#bandicoot`.
 
-Done so far: hostname and bootstrap SSH established; Terraform created the
-log-ingest certificate, docs DNS and SSH/HTTP relay tokens. Komodo's secret
-sync confirmed all four new credential fields. Core trusts its new Periphery key.
+Done and verified:
+- Ansible: `playbooks/bandicoot.yml` applied over the split-horizon name, second
+  run `changed=0`. Base role laptop policy (lid/idle/sleep) and USB autosuspend
+  exemption for the dock NIC. firewalld on bilby's public zone.
+- Terraform: log-ingest certificate, rathole tokens, Pomerium routes, docs DNS,
+  UniFi reservation for the USB adapter (10.0.0.90), split-horizon
+  `bandicoot.pod.haus`, machine key to GitHub and the Pocket ID `ssh_keys` claim.
+- Komodo: server Ok; bandicoot-logging, -autoheal, -relay, -caddy and -docs
+  running. Logs in ClickStack with `host=bandicoot`.
+- chezmoi applied (headless, LAN routing auto); machine key on the YubiKey 5C
+  PIV slot 9a, served by machine-ssh-agent; fleet.toml entry pushed.
+- Bootstrap key retired: bilby-only grant removed, hand-written
+  authorized_keys files removed on both hosts.
 
 Remaining:
-- Converge Ansible and verify Core Ok, all five stacks, log ingestion and docs.
-- Connect the USB Ethernet adapter; reserve its MAC in UniFi and add SSH-only
-  split-horizon DNS. Wi-Fi 10.0.0.237 is the temporary Ansible transport.
-- Confirm the host_vars-gated laptop power policy with Nathan.
-- Apply chezmoi and register id_bandicoot across Forgejo, GitHub and fleet SSH.
-  /home is unencrypted; Nathan must decide encryption or a documented exception.
-  The bootstrap id_ed25519 grant remains bilby-only until the final identity lands.
-- Confirm Homelab read access and have Nathan enrol the development service account.
-- Verify LAN pinned SSH, off-LAN Pomerium SSH, unattended Git push and changed=0.
-- Fold completed state into the host documentation and remove this plan.
-
-Operational evidence and intermediate logs are in Nathan's home on bilby:
-`bandicoot-onboarding-notes.md`, `bandicoot-terraform-plan.log`,
-`bandicoot-terraform-apply.log`, and `bandicoot-ansible-*.log`.
+- `op-vault mint dev` needs the `my` service account (Dev read/write, Homelab
+  read); until then a full `chezmoi apply` stops at the first secret-derived
+  target (.claude.json) and the Forgejo CLI is not converged.
+- Forgejo learns the machine key from the Pocket ID claim on Nathan's next
+  Forgejo login; `git push` to git.pod.haus from bandicoot works after that.
+- The GitHub SSH *signing* key registration is out-of-band (as for every fleet
+  machine key).
+- Other homelab targets (fractal, voltaire, numbat, pinelake) admit bandicoot's
+  key on their next `--tags ssh` playbook run.
+- Remove this plan once the above is done.
