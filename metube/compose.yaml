@@ -19,8 +19,11 @@
 #     the highest resolution with an AAC track so the mp4 merge is a
 #     stream copy (format stays unset — YTDL_OPTIONS overrides the UI's
 #     format entirely, so the codec preference has to live in
-#     format_sort instead); FFmpegMetadata + writethumbnail +
-#     EmbedThumbnail put a thumbnail in the file with no sidecar. The
+#     format_sort instead); writethumbnail + EmbedThumbnail put a
+#     thumbnail in the file with no sidecar. No FFmpegMetadata: it writes
+#     the YouTube title into the MP4 title tag, and a Plex library with
+#     "Prefer local metadata" on shows that tag instead of the agent's
+#     episode title (docs/plex.html, the embedded title trap). The
 #     Exec postprocessor runs scripts/plexify after every move: it asks
 #     Sonarr (docs/plans/metube.md) to identify the episode from the
 #     staging show-folder name plus the video title, then imports the
@@ -58,7 +61,7 @@ services:
       CREATE_CUSTOM_DIRS: "true"
       OUTPUT_TEMPLATE: "%(title)s.%(ext)s"
       OUTPUT_TEMPLATE_PLAYLIST: "%(title)s.%(ext)s"
-      YTDL_OPTIONS: '{"remote_components":["ejs:github"],"format_sort":["res","vcodec:av01","acodec:m4a"],"merge_output_format":"mp4","writethumbnail":true,"postprocessors":[{"key":"FFmpegMetadata","add_metadata":true},{"key":"EmbedThumbnail","already_have_thumbnail":false},{"key":"Exec","when":"after_move","exec_cmd":"/scripts/plexify %(filepath)q %(title)q"}]}'
+      YTDL_OPTIONS: '{"remote_components":["ejs:github"],"format_sort":["res","vcodec:av01","acodec:m4a"],"merge_output_format":"mp4","writethumbnail":true,"postprocessors":[{"key":"EmbedThumbnail","already_have_thumbnail":false},{"key":"Exec","when":"after_move","exec_cmd":"/scripts/plexify %(filepath)q %(title)q"}]}'
       # scripts/plexify's own config — read directly from os.environ, no
       # defaults (see the script's docstring). Sonarr and Gatus are both
       # on bilby/bandicoot's LAN, not dockernet, from this bandicoot
