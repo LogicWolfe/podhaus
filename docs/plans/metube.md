@@ -31,41 +31,64 @@ it as a show with numbered episodes, with no hand renaming.
 
 ## Approach
 
+MeTube downloads; Sonarr numbers and files; Gatus tells Fenwick when a file
+could not be placed. Sonarr is chosen because its metadata proxy fronts the
+same TheTVDB list Plex's TheTVDB ordering reads, with no key and no
+subscription, and it is open source and team-maintained. The deep dive
+measured the alternatives across twelve segment-style kids' shows: IMDb's
+numbering matched TheTVDB for two, TVmaze for seven of eleven with no
+Skillsville, TheTVDB's free key is an unanswered sales queue, FileBot is a
+closed single-developer tool. Sonarr's manual import was proven on bandicoot:
+a file named only with a YouTube title plus an explicit episode id came out as
+`Season 1/Skillsville - S01E01 - Chef`.
+
+### MeTube (built)
+
 | Concern | Decision | Why |
 |---|---|---|
-| Host | bandicoot | Download + remux is CPU/scratch work; bandicoot has the cores and NVMe; bilby keeps Plex and only reads the result |
-| Stack | `metube/` — `stack.toml` (server bandicoot, `linked_repo = "podhaus-bandicoot"`, `run_directory = "metube"`), `compose.yaml`, `scripts/` | The ClickStack/Fenwick-on-bandicoot shape; scripts bound from the deploy clone like Plex's `/scripts` |
-| Downloads | `/mnt/pouch/Kids` at `/downloads` (`DOWNLOAD_DIR`); scratch `/var/lib/metube/tmp` (`TEMP_DIR`) on NVMe; queue state `/var/lib/metube/state` (`STATE_DIR`) | The folder picker (`CUSTOM_DIRS`) then offers `TV`, `Movies`, `Videos`; a half-finished file never sits on the NAS; Plex's Kids libraries scan the subfolders, not the root |
-| Naming | MeTube writes a flat staging name `<series> - <episode title>.<ext>` (`OUTPUT_TEMPLATE` and `_PLAYLIST`, `%(series|…)s - %(episode,title)s`); a yt-dlp `Exec` postprocessor (`after_move`) runs `/scripts/plexify <file> <series> <episode>` which moves a mapped show into `TV/<Plex folder>/Season NN/<series> - SNNENN - <title>.<ext>` | Plex needs `Show/Season NN/Show - SNNENN` and the number comes only from the per-show map. Literals `Season 01`/`S01` are hardcoded because parsed fields are strings and `%02d` padding silently fails |
-| Show maps | `metube/scripts/shows/<series>.json`: Plex folder name (`Skillsville (2025) {tvdb-460946}`) and title→`SxxEyy` map, keyed on YouTube's spelling, matched case- and punctuation-insensitively | Static, 59 rows, reviewable; TVDB spelling differences are irrelevant since Plex takes titles from TVDB |
-| Renamer behaviour | No map for the series (or no series parsed): leave the file where MeTube put it, exit 0. Map present but title unknown, or target exists: exit non-zero so MeTube shows the download as failed | An unmapped show is a valid generic download; an unmapped episode of a mapped show is an error someone must see |
-| Metadata | `MetadataFromField` `title:(?P<series>Skillsville) FULL EPISODE \| (?P<episode>.+)`; `FFmpegMetadata`; `EmbedThumbnail` with `already_have_thumbnail: false`; `writethumbnail` | Series/episode fields feed the template and the renamer; thumbnail in the MP4, sidecar removed |
-| Format | `format_sort: ["res","vcodec:av01","acodec:m4a"]`, `merge_output_format: mp4`; no `format` key | Best resolution first, AV1 over VP9/H.264 at that resolution, AAC audio so the merge is a stream copy; UI quality picker keeps working; leave the UI codec dropdown on Auto |
-| Ingress | `metube.pod.haus`: Terraform `services_pod_haus.tf` DNS entry, Pomerium family route, bilby Caddy `@metube` → `10.0.0.90:8081`, MeTube publishes `8081` on bandicoot's LAN | The moved-service pattern; family policy is the audience. `ALLOW_YTDL_OPTIONS_OVERRIDES` stays off (arbitrary-command surface) |
-| Monitoring | Gatus `MeTube` `http://10.0.0.90:8081/` 200, group Media; container healthcheck asserts the page and the Pouch sentinel `/downloads/.podhaus-share-mounted` | brinno's sentinel precedent; `/mnt/pouch/Kids` added to bandicoot's `storage_binds_extra_sentinels` |
-| Backup | `backup/bandicoot`: `/var/lib/metube/state:/userdata/metube:ro`, plan `metube` | Queue history only; media is not backed up |
-| Runtime | `security_opt: [label:disable]`, `mem_limit: 1g`, `cpus: 4`, `UID`/`GID` matching the Pouch owner | Enforcing SELinux with NFS binds; ffmpeg bursts capped |
+| Host | bandicoot | Download + remux is CPU/scratch work; bilby keeps Plex and only reads the result |
+| Stack | `metube/` linked-repo stack, `scripts/` bound from the deploy clone like Plex's | Fleet shape |
+| Downloads | `/mnt/pouch/Kids` at `/downloads`; NVMe `TEMP_DIR` and `STATE_DIR` under `/var/lib/metube` | Folder picker offers `TV`, `Movies`, `Videos` and the staging tree; nothing half-written on the NAS |
+| Format | `format_sort: ["res","vcodec:av01","acodec:m4a"]`, MP4 merge, thumbnail embedded, JS solver on; no `format` key | AV1 (Nathan's choice; bilby transcodes it at 9.9× if a client cannot), UI quality picker keeps working |
+| Ingress | `metube.pod.haus`: DNS, Pomerium family route, bilby Caddy → 10.0.0.90:8081 | Moved-service pattern |
+| Monitoring / backup | Gatus `MeTube` (Media); Backrest bandicoot `metube` plan for the queue state | Media itself is not backed up |
 
-Rejected: bilby as host (RAM-tight, Plex's host); a second Plex library or the
-Personal Media agent (no titles/artwork); `playlist_index` numbering (channel
-playlist is out of order); the one-off rename script (leaves every future
-episode to hand work; the Exec hook is one file and one bind).
+### Naming: Sonarr as the engine
+
+| Concern | Decision | Why |
+|---|---|---|
+| Staging | The family picks `_incoming/<Show>` in MeTube's folder picker. `_incoming` lives under `Kids` on Pouch, outside every Plex library root | The folder name is the show; the move into the library is a rename on the same filesystem |
+| Sonarr stack | `sonarr/` on bandicoot: `lscr.io/linuxserver/sonarr` pinned, `/var/lib/sonarr` config (managed dir, 1000:100), `/mnt/pouch/Kids:/kids`, root folder `/kids/TV`, LAN port 8989, `label:disable`, `mem_limit`, healthcheck `/ping` | Same shape as MeTube; Sonarr sees staging and library under one bind |
+| Sonarr auth | `SONARR__AUTH__METHOD=External`; API key set from the vault (`SONARR__AUTH__APIKEY`) | Pomerium is the front door and the LAN is trusted, as for MeTube; the key is shared with the hook |
+| Sonarr settings | Rename Episodes on; series folder `{Series TitleYear} {tvdb-{TvdbId}}`; season folder `Season {season:00}`; episode `{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle}`; no indexers, no download clients; series added unmonitored; Plex connection if a Plex token is in the vault | Plex's naming guide; Sonarr never searches for anything; Plex learns of new files on import |
+| Secret | 1Password item `Sonarr API` (Homelab) → komodo-op variable `OP__KOMODO__SONARR_API__CREDENTIAL`, used by both stacks | Existing secret pattern |
+| Hook | `metube/scripts/plexify FILE TITLE`, yt-dlp `Exec` postprocessor `after_move`, Python stdlib. Not under `_incoming/`: exit 0, untouched. Under `_incoming/` with no show folder: fail. Otherwise: find the series in Sonarr by folder name (a `{tvdb-N}` tag wins; else an exact normalised title match in Sonarr's lookup, added unmonitored if absent), fetch episodes, match the title (normalised episode title contained in the normalised video title, exactly one candidate; else difflib ratio ≥ 0.9 with a clear margin over the runner-up; else fail), then `ManualImport` with explicit `episodeIds`, quality WEBDL-1080p, poll the command, and confirm the file has left staging | The number is Sonarr's; the confidence rule is ours. Sonarr reports success on an import with no episode chosen, so the guard is in the hook before the call and the after-check catches a silent no-op |
+| Fail loudly | Gatus external endpoint `metube_plexify` (Media), brinno's heartbeat pattern: the hook posts `success=false&error=…` on any failure and `success=true` on each placement; Gatus alerts route to Fenwick → Signal | Nathan's requirement: a non-match must reach him |
+| Sonarr ingress | `sonarr.pod.haus`: DNS, Pomerium route on the Nathan-only policy the other admin tools use, bilby Caddy → 10.0.0.90:8989; Gatus `Sonarr` check; Backrest `sonarr` plan for `/var/lib/sonarr` | Admin tool, not family |
+| Plex | Library episode ordering set to TheTVDB (Nathan, once) | Plex's TMDB default has 15 paired Skillsville episodes |
+
+Rejected: a per-show map (Skillsville only), IMDb datasets (2 of 12 shows),
+TVmaze (gaps), TheTVDB direct (subscription or dead queue), FileBot (closed,
+single developer), Radarr now (movies are a later plan on the same pattern).
 
 ## Verification
 
-- Renamer: pytest in `metube/scripts/` — mapped title moves to the exact Plex
-  path; unmapped series untouched with exit 0; mapped series with unknown title
-  exits non-zero; existing target refuses. Run through `tools/pre-commit`.
-- Queue one Skillsville episode on `metube.pod.haus`: file appears as
-  `Kids/TV/Skillsville (2025) {tvdb-460946}/Season 01/Skillsville - S01Exx - <Career>.mp4`,
-  AV1 + AAC in MP4 (ffprobe), thumbnail embedded, no sidecar; then the channel
-  URL for the remaining 58.
-- Plex: library ordering set to TheTVDB (Nathan), show matches with 59 numbered
-  episodes; first play on the LG CX shows direct play or a cheap transcode in
-  the dashboard.
-- Gatus `MeTube` green; Komodo stack healthy; Backrest lists `metube`;
-  bandicoot `--tags storage` changed=0 after the sentinel; Terraform plan adds
-  exactly one record.
+- Hook unit tests (pytest, in the repo's test discovery): the 59 Skillsville
+  titles resolve to 59 distinct numbers; junk-prefixed YouTube titles match by
+  containment; two close candidates fail; a title with no candidate fails; a
+  path outside `_incoming` is a no-op.
+- Smoke file already in `Kids/_incoming` moved into `_incoming/Skillsville`
+  and the hook run by hand inside the container: lands as
+  `Kids/TV/Skillsville (2025) {tvdb-460946}/Season 01/Skillsville - S01Exx - Sound Effects Artist.mp4`,
+  Gatus `metube_plexify` green.
+- Negative test: a file with a made-up title under `_incoming/Skillsville`
+  stays put, the hook exits non-zero, Gatus goes red and Nathan gets the
+  Fenwick message; then a real placement turns it green again.
+- Then the remaining 58 episodes queued from the channel listing filtered to
+  `FULL EPISODE` titles, into `_incoming/Skillsville`; Plex shows 59
+  numbered episodes after the ordering switch; first play on the LG CX checked.
+- Gatus `Sonarr` green, Komodo stacks healthy, Backrest lists `sonarr`,
+  bandicoot `--tags storage` changed=0, Terraform plan adds one record.
 
 ## Ledger
 
@@ -86,8 +109,7 @@ episode to hand work; the Exec hook is one file and one bind).
 - ✅ Smoke test: one Skillsville episode queued into `Kids/_incoming` landed as
   AV1 1080p24 + AAC MP4 with the thumbnail embedded, 93 MB for 12.5 min;
   Gatus `MeTube` green, front door redirects to sign-in like every family route.
-- ⏳ Episode naming: the per-show map is dropped. Requirement: a general
-  show + episode-title → SxxEyy lookup for any show, no hand tables, no human
-  per download (FileBot / own TheTVDB hook / other — decision pending).
+- ⏳ Naming via Sonarr: stack, hook, Gatus external endpoint, ingress (approved
+  2026-09-09; building).
 - ⏳ Plex: TheTVDB episode ordering for Skillsville; first-play check on the
   LG CX.
