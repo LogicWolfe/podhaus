@@ -1,17 +1,10 @@
 # Host prerequisites for Komodo Core itself (not Periphery — see
 # komodo_periphery for that). Moved out of komodo-start so that script
-# needs no sudo and touches nothing but Komodo.
+# needs no sudo and touches nothing but Komodo. Creates only the PKI keys
+# dir now — bilby's /etc/komodo/ssl belongs to its own Periphery root and
+# already exists there; it was never this role's to create on any other
+# host.
 ---
-- name: Create Komodo Core's ssl directory
-  # komodo-periphery writes its self-signed certs here; the image does not
-  # mkdir the ssl subdir on its own.
-  ansible.builtin.file:
-    path: /etc/komodo/ssl
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-
 - name: Create the v2 PKI keys directory
   # Private keys for Core and every Periphery live here; pubkeys are
   # mirrored in komodo/keys/*.pub. Owned by the operator, not root: the

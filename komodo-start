@@ -8,10 +8,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # stack that interpolates [[PODHAUS_REPO]] points at this checkout.
 export COMPOSE_KOMODO_REPO_PATH="$PWD"
 
-# Host prerequisites — /etc/komodo/ssl, /opt/komodo/keys, dockernet and the
-# fenwick-* networks — are provisioned by ansible/playbooks/bilby.yml. This
-# script assumes them (the compose below attaches Core to dockernet and
-# fails loudly if it is missing) and needs no sudo.
+# Host prerequisites — /opt/komodo/keys and dockernet — are provisioned by
+# ansible/playbooks/bandicoot.yml (the komodo_core_host role creates
+# /opt/komodo/keys; the docker role creates dockernet). This script assumes
+# them (the compose below attaches Core to dockernet and fails loudly if it
+# is missing) and needs no sudo.
 
 # Render Komodo Core's extra config from 1Password into the gitignored
 # komodo/.runtime/ directory (bind-mounted into Core at
@@ -115,23 +116,39 @@ seed_variable "PODHAUS_CHECKOUT"  "$PWD"            false
 # is no longer needed; the directory can be cleaned up but is left in
 # place to avoid breaking any uncovered consumers.
 
-# This populates /etc/komodo/repos/podhaus-deploy — mounted into Core at
-# /syncs/podhaus — before the first RunSync reads it; without this, a cold
-# bootstrap syncs an empty tree (Docker auto-creates the missing bind
-# source as an empty dir). Exists-check first, mirroring the
-# CreateResourceSync pattern below; the later RunSync adopts/reconciles
-# the full repo definition (including on_pull) from komodo/sync/repos.toml.
-echo "Ensuring podhaus-deploy Repo exists..."
-if komodo_api read '{"type":"GetRepo","params":{"repo":"podhaus-deploy"}}' > /dev/null 2>&1; then
-  echo "  podhaus-deploy Repo already exists"
+# This populates bandicoot's Periphery clone of Repo "podhaus-bandicoot"
+# (COMPOSE_KOMODO_SYNC_TREE) — mounted into Core at /syncs/podhaus — before
+# the first RunSync reads it; without this, a cold bootstrap syncs an empty
+# tree (Docker auto-creates the missing bind source as an empty dir).
+# Exists-check first, mirroring the CreateResourceSync pattern below; the
+# later RunSync adopts/reconciles the full server + repo definitions
+# (including on_pull) from komodo/sync/servers.toml and repos.toml. The
+# server must exist before the Repo can name it.
+echo "Ensuring bandicoot Server exists..."
+if komodo_api read '{"type":"GetServer","params":{"server":"bandicoot"}}' > /dev/null 2>&1; then
+  echo "  bandicoot Server already exists"
 else
-  echo "  Creating podhaus-deploy Repo (first boot)..."
+  echo "  Creating bandicoot Server (first boot)..."
+  komodo_api write '{
+    "type": "CreateServer",
+    "params": {
+      "name": "bandicoot",
+      "config": {"address": ""}
+    }
+  }' > /dev/null
+fi
+
+echo "Ensuring podhaus-bandicoot Repo exists..."
+if komodo_api read '{"type":"GetRepo","params":{"repo":"podhaus-bandicoot"}}' > /dev/null 2>&1; then
+  echo "  podhaus-bandicoot Repo already exists"
+else
+  echo "  Creating podhaus-bandicoot Repo (first boot)..."
   komodo_api write '{
     "type": "CreateRepo",
     "params": {
-      "name": "podhaus-deploy",
+      "name": "podhaus-bandicoot",
       "config": {
-        "server": "podhaus",
+        "server": "bandicoot",
         "git_provider": "github.com",
         "git_account": "LogicWolfe",
         "repo": "LogicWolfe/podhaus",
@@ -141,10 +158,10 @@ else
   }' > /dev/null
 fi
 
-echo "Pulling podhaus-deploy..."
-pull_resp=$(komodo_api execute '{"type":"PullRepo","params":{"repo":"podhaus-deploy"}}')
+echo "Pulling podhaus-bandicoot..."
+pull_resp=$(komodo_api execute '{"type":"PullRepo","params":{"repo":"podhaus-bandicoot"}}')
 pull_update_id=$(echo "$pull_resp" | jq -r '._id."$oid"')
-poll_until_complete "$pull_update_id" "podhaus-deploy pull"
+poll_until_complete "$pull_update_id" "podhaus-bandicoot pull"
 
 # Bootstrap the podhaus ResourceSync resource. The CreateResourceSync
 # API errors on duplicate name (`Resource with name 'X' already exists`,
@@ -205,6 +222,37 @@ done
 
 echo "Second sync (env blocks now resolve to live OP vars)..."
 komodo_api execute '{"type":"RunSync","params":{"sync":"podhaus"}}' > /dev/null
+
+# Bilby's own deploy tree — populates /etc/komodo/repos/podhaus-deploy,
+# which bilby's outbound Periphery mounts at /etc/komodo/repo for its
+# files_on_host stacks. Server "podhaus" (= bilby) is created by
+# servers.toml during the sync above on a cold DB, so this can only run
+# after the first sync, unlike the bandicoot tree above, which the sync
+# itself depends on reading.
+echo "Ensuring podhaus-deploy Repo exists..."
+if komodo_api read '{"type":"GetRepo","params":{"repo":"podhaus-deploy"}}' > /dev/null 2>&1; then
+  echo "  podhaus-deploy Repo already exists"
+else
+  echo "  Creating podhaus-deploy Repo (first boot)..."
+  komodo_api write '{
+    "type": "CreateRepo",
+    "params": {
+      "name": "podhaus-deploy",
+      "config": {
+        "server": "podhaus",
+        "git_provider": "github.com",
+        "git_account": "LogicWolfe",
+        "repo": "LogicWolfe/podhaus",
+        "branch": "main"
+      }
+    }
+  }' > /dev/null
+fi
+
+echo "Pulling podhaus-deploy..."
+pull_resp=$(komodo_api execute '{"type":"PullRepo","params":{"repo":"podhaus-deploy"}}')
+pull_update_id=$(echo "$pull_resp" | jq -r '._id."$oid"')
+poll_until_complete "$pull_update_id" "podhaus-deploy pull"
 
 echo "Bootstrap complete. Use ./komodo-sync for local iteration; push to deploy."
 

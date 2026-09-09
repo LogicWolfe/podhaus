@@ -1,18 +1,29 @@
 # bandicoot — Apple Silicon MacBook Pro on Fedora Asahi Remix 44 (aarch64,
-# 16 KiB kernel pages). Runtime host and Nathan's development machine.
+# 16 KiB kernel pages). Runtime host, Nathan's development machine, the
+# Komodo Core host, and the Ansible/Terraform control node — it
+# provisions itself.
 ---
 # The split-horizon name (podhaus terraform/dns_unifi_split_horizon.tf),
 # which on the LAN resolves to the USB Ethernet adapter's UniFi-reserved
-# address. Terraform is the only owner of the IP — Ansible rides the name,
-# so a re-address is a Terraform change alone. Off-LAN the name does not
-# resolve, so runs are LAN-only by construction, as fractal's are. The
-# adapter is a Realtek RTL8153 (1 GbE; Asahi has no Thunderbolt) named
-# enu1u4 after its USB port, so it must stay in that port. Wi-Fi is left
-# connected but is not a management path: its MAC is randomised and
-# nothing is reserved for it.
-ansible_host: bandicoot.pod.haus
+# address. Terraform is the only owner of the IP — other hosts and the
+# Peripheries reach bandicoot by this name, so a re-address is a Terraform
+# change alone. Off-LAN the name does not resolve, so those connections
+# are LAN-only by construction, as fractal's are. The adapter is a
+# Realtek RTL8153 (1 GbE; Asahi has no Thunderbolt) named enu1u4 after
+# its USB port, so it must stay in that port. Wi-Fi is left connected but
+# is not a management path: its MAC is randomised and nothing is
+# reserved for it.
 ansible_user: nathan
 podhaus_hostname: bandicoot
+
+# With connection: local, modules would otherwise run under whatever
+# Python ansible itself runs from — the project's pipenv venv, which
+# doesn't carry the daemon-API bindings the docker role installs as a
+# SYSTEM package. Pinning the system interpreter makes local module
+# execution identical to every remote host, where discovery picks
+# /usr/bin/python3 anyway.
+ansible_connection: local
+ansible_python_interpreter: /usr/bin/python3
 
 # A MacBook, so the lid will be closed and nobody will be at the keyboard
 # for weeks. The base role ignores the lid switch, turns off idle action
@@ -90,7 +101,8 @@ storage_binds_rate_limit_dropin_dirs:
 # matches bilby, where Komodo builds the same images.
 podhaus_forgejo_internal_address: 10.0.0.119
 
-# Outbound Periphery uses the fleet defaults and this inventory hostname.
+# Core runs on this host; its own Periphery dials it on the LAN name
+# above rather than needing any inventory-hostname trick.
 podhaus_periphery_dir: /opt/komodo-periphery
 
 # The machine identity: YubiKey 5C PIV slot 9a (ECCP256), hardware-resident

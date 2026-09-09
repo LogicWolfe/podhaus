@@ -1,5 +1,6 @@
-# Provision bilby: primary podhaus host, Komodo control node — and the
-# Ansible control node, so it provisions itself (ansible_connection: local).
+# Provision bilby: primary podhaus host, an outbound Komodo Periphery.
+# No longer the Ansible control node — runs from bandicoot over the LAN
+# (ansible_host: bilby.pod.haus).
 #
 # In `provisioned`/`site.yml` since 2026-08-04 (live check-mode pass, real
 # run, and second-run changed=0 all confirmed). This file stays as a
@@ -26,9 +27,9 @@
       tags: [ssh]
     - role: sshd_pomerium_ca
       tags: [ssh]
+    - role: komodo_periphery
+      tags: [periphery]
     - role: storage_binds
       tags: [storage]
     - role: firewalld
       tags: [firewall]
-    - role: komodo_core_host
-      tags: [komodo]

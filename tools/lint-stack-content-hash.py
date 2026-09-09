@@ -61,6 +61,7 @@ def _interp_re(varname: str) -> re.Pattern[str]:
 # not Komodo-managed by the podhaus sync).
 SKIP_PATH_FRAGMENTS = (
     "bandicoot/periphery",
+    "bilby/periphery",
     "fractal/periphery",
     "kangaroo/periphery",
     "numbat/periphery",

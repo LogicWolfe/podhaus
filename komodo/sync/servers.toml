@@ -4,9 +4,10 @@ description = "Primary home server (Linux)"
 tags = ["podhaus"]
 
 [server.config]
-# bilby's Periphery is in the same compose as Core (komodo/ferretdb.compose.yaml).
-# Core dials it via docker DNS on the internal `default` network. Inbound mode.
-address = "https://periphery:8120"
+# bilby's Periphery is outbound (bilby/periphery/compose.yaml,
+# bootstrap-managed by the komodo_periphery role) and dials Core on
+# bandicoot over the LAN at ws://bandicoot.pod.haus:9120.
+address = ""
 enabled = true
 disk_warning = 85.0
 disk_critical = 95.0
@@ -19,7 +20,8 @@ tags = ["kangaroo"]
 [server.config]
 # Outbound mode (v2 PKI noise handshake). `address = ""` signals to Core
 # that this Server expects Periphery→Core direction — the kangaroo
-# Periphery dials Core at ws://10.0.0.119:9120 (its PERIPHERY_CORE_ADDRESSES).
+# Periphery dials Core at ws://10.0.0.90:9120, bandicoot's LAN address
+# (its PERIPHERY_CORE_ADDRESSES).
 # Auth is the X25519 keypair handshake (kangaroo-periphery.pub trusted by
 # Core's KOMODO_PERIPHERY_PUBLIC_KEYS list). Port 8120 is not published on
 # kangaroo; its internal listener exists only for the local healthcheck.
@@ -101,7 +103,7 @@ disk_critical = 95.0
 
 [[server]]
 name = "bandicoot"
-description = "Apple Silicon MacBook Pro, Fedora Asahi Remix. Runtime and development host with outbound Periphery."
+description = "Apple Silicon MacBook Pro, Fedora Asahi Remix. Runtime and development host with outbound Periphery, the Komodo Core host, and the Ansible/Terraform control node."
 tags = ["bandicoot", "podhaus"]
 
 [server.config]

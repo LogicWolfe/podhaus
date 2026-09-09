@@ -3,11 +3,13 @@
 # Bootstrap-managed (by ansible/roles/komodo_periphery), not Komodo-managed:
 # Core reaches this host only through the connection this container makes, so
 # a Komodo-driven redeploy of it would sever the path it runs on. Same reason
-# kangaroo's and fractal's Peripheries stay outside Komodo.
+# kangaroo's, fractal's and bilby's Peripheries stay outside Komodo.
 #
-# Dials core-connect.pod.haus directly over the internet — deliberately not
-# through bandicoot's own rathole client, which would make Periphery depend on
-# a stack Periphery is needed to deploy.
+# Core runs on this host, so Periphery dials the LAN name the published port
+# answers on instead of the internet relay every other Periphery uses — no
+# internet dependency for the connection to come up. extra_hosts below is
+# for linked repos on git.pod.haus (bilby's internal Caddy; the public name
+# is Pomerium and redirects Git).
 services:
   periphery:
     container_name: komodo-periphery
@@ -18,10 +20,12 @@ services:
     # docker.sock and the bind-mounted config dirs needs label:disable.
     security_opt:
       - label:disable
+    extra_hosts:
+      - "git.pod.haus:10.0.0.119"
     environment:
       PERIPHERY_PRIVATE_KEY: file:/config/keys/periphery.key
       PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub
-      PERIPHERY_CORE_ADDRESSES: wss://core-connect.pod.haus
+      PERIPHERY_CORE_ADDRESSES: ws://bandicoot.pod.haus:9120
       PERIPHERY_CONNECT_AS: bandicoot
       PERIPHERY_SERVER_ENABLED: "true"
       PERIPHERY_CONFIG_PATHS: /etc/komodo/periphery.config.toml

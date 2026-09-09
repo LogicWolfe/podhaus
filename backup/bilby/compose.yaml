@@ -104,12 +104,9 @@ services:
       - /var/lib/yiayia-stories:/userdata/yiayia-stories:ro
       #
       # Docker named volumes from stacks that still use them (NAS squash
-      # carve-out stacks + logging + onepassword). Referenced via
-      # `external: true` in the volumes block below so docker can share
-      # the live data with the owning container read-only.
-      - komodo_postgres-data:/userdata/komodo/postgres:ro
-      - komodo_ferretdb-state:/userdata/komodo/ferretdb:ro
-      - onepassword_op-connect-data:/userdata/onepassword:ro
+      # carve-out stacks + logging). Referenced via `external: true` in
+      # the volumes block below so docker can share the live data with
+      # the owning container read-only.
       - logging_alloy-data:/userdata/logging/alloy:ro
       # (grafana-data + victoria-logs binds removed — ClickStack
       # replaced both; ClickHouse telemetry is deliberately not backed
@@ -154,12 +151,6 @@ volumes:
   # read-only as backup sources. `external: true` tells compose to
   # reuse the existing volumes by name rather than creating
   # project-prefixed clones.
-  komodo_postgres-data:
-    external: true
-  komodo_ferretdb-state:
-    external: true
-  onepassword_op-connect-data:
-    external: true
   logging_alloy-data:
     external: true
   gatus_gatus-data:

@@ -9,7 +9,7 @@
 # the standard <stackname>/compose.yaml pattern and are deployed by Komodo
 # Core via the Linked Repo on this Periphery.
 #
-# v2 outbound mode: Periphery dials Core at ws://10.0.0.119:9120 (bilby's
+# v2 outbound mode: Periphery dials Core at ws://10.0.0.90:9120 (bandicoot's
 # LAN IP). No inbound :8120 listener exposed — kangaroo is no longer a TCP
 # server in the management plane. Auth is X25519 noise handshake; the
 # periphery.key + core.pub are SCPed in by the bootstrap script.
@@ -29,7 +29,7 @@ services:
       PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub
       # v2 outbound: Periphery dials Core (LAN). The noise handshake is
       # the auth gate (replaces v1's allowed_ips + passkey-list combo).
-      PERIPHERY_CORE_ADDRESSES: ws://10.0.0.119:9120
+      PERIPHERY_CORE_ADDRESSES: ws://10.0.0.90:9120
       PERIPHERY_CONNECT_AS: kangaroo
       # Since Periphery v2.2.0, setting core_addresses defaults
       # server_enabled to false — no :8120 listener at all, which fails

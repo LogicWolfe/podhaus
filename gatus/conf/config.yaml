@@ -148,11 +148,11 @@ endpoints:
     client:
       insecure: true
 
-  # Komodo Core's HTTP API is on dockernet. `/version` is auth-free and
-  # returns 200 when Core is up. The Periphery/Alerts checks below
-  # exercise the API more deeply.
+  # Komodo Core's HTTP API, reached over the LAN since Core moved to
+  # bandicoot. `/version` is auth-free and returns 200 when Core is up.
+  # The Periphery/Alerts checks below exercise the API more deeply.
   - name: Komodo
-    url: http://komodo-core:9120/version
+    url: http://10.0.0.90:9120/version
     <<: *defaults
     group: Komodo
 
@@ -225,7 +225,7 @@ endpoints:
   # it directly, so we use the same Komodo InspectDockerContainer pattern
   # as Backrest (kangaroo) below — asserts the container is `running`.
   - name: Syncthing (kangaroo, via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Syncthing
     interval: 60s
@@ -333,7 +333,7 @@ endpoints:
   # gatus on bilby may also be impaired — but Komodo Core can still answer
   # for as long as it's running, since Core polls Periphery independently.
   - name: Bilby Periphery (via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -348,7 +348,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Kangaroo Periphery (via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -363,7 +363,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Numbat Periphery (via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -378,7 +378,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Fractal Periphery (via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -393,7 +393,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Voltaire Periphery (via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -408,7 +408,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Pinelake Periphery (via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -423,7 +423,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Pinelake Plex (via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Plex
     interval: 60s
@@ -452,7 +452,7 @@ endpoints:
       - "[STATUS] == 200"
 
   - name: Docs (fractal, via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Docs
     interval: 60s
@@ -470,7 +470,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Docs (voltaire, via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Docs
     interval: 60s
@@ -509,7 +509,7 @@ endpoints:
       - "[BODY] == pat(*192.168.1.*)"
 
   - name: Pinelake Syncthing (via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Syncthing
     interval: 60s
@@ -525,7 +525,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Pinelake Flood (via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Torrents
     interval: 60s
@@ -552,7 +552,7 @@ endpoints:
   # alerter only POSTs JSON to a URL; it can't add the Authorization
   # header Gatus's external-endpoint API requires.
   - name: Komodo Alerts
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -706,7 +706,7 @@ endpoints:
   # the container and assert State.Status == running. Same auth pattern as
   # the Periphery checks above.
   - name: Backrest (kangaroo, via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Backup
     interval: 60s
@@ -721,7 +721,7 @@ endpoints:
       - "[BODY].State.Status == running"
 
   - name: Backrest (bandicoot, via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Backup
     interval: 60s
@@ -737,7 +737,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Backrest (pinelake, via Komodo)
-    url: http://komodo-core:9120/read
+    url: http://10.0.0.90:9120/read
     method: POST
     group: Backup
     interval: 60s

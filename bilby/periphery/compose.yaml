@@ -1,0 +1,60 @@
+# bilby Komodo Periphery — v2 outbound.
+#
+# Was the inbound service inside Core's compose (komodo/ferretdb.compose.yaml)
+# until Core moved to bandicoot; now outbound like every other host.
+#
+# Bootstrap-managed (by ansible/roles/komodo_periphery), not Komodo-managed:
+# Core reaches this host only through the connection this container makes, so
+# a Komodo-driven redeploy of it would sever the path it runs on. Same reason
+# kangaroo's, fractal's and bandicoot's Peripheries stay outside Komodo.
+services:
+  periphery:
+    container_name: komodo-periphery
+    image: ghcr.io/moghtech/komodo-periphery:${COMPOSE_KOMODO_IMAGE_TAG:-2}
+    restart: unless-stopped
+    init: true
+    # SELinux enforcing on Fedora Asahi denies cross-label writes to
+    # /var/run/docker.sock; label:disable exempts the periphery container
+    # from SELinux confinement so it can talk to the Docker daemon.
+    security_opt:
+      - label:disable
+    # Linked Repo HTTPS traffic must reach Forgejo directly. The public route
+    # is Pomerium's browser boundary and redirects Git's authenticated request.
+    # Preserve the hostname/TLS SNI while routing to this host's Caddy.
+    extra_hosts:
+      - "git.pod.haus:host-gateway"
+    environment:
+      PERIPHERY_PRIVATE_KEY: file:/config/keys/periphery.key
+      PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub
+      PERIPHERY_CORE_ADDRESSES: ws://bandicoot.pod.haus:9120
+      # The server has been named podhaus since the first boot; renaming
+      # it is a separate cleanup.
+      PERIPHERY_CONNECT_AS: podhaus
+      PERIPHERY_SERVER_ENABLED: "true"
+      PERIPHERY_CONFIG_PATHS: /etc/komodo/periphery.config.toml
+      TZ: ${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/proc
+      # The root stays /etc/komodo — bilby's Komodo-managed clones live in
+      # /etc/komodo/repos and every files_on_host stack's run_directory is
+      # /etc/komodo/repo/<stack>.
+      - /etc/komodo:/etc/komodo
+      # Deploy tree, same clone as before. This alias bind keeps
+      # /etc/komodo/repo as the in-container path so every stack.toml
+      # run_directory (/etc/komodo/repo/<name>) stays unchanged.
+      - /etc/komodo/repos/podhaus-deploy:/etc/komodo/repo
+      # Role-rendered git provider config; the role's directory layout is
+      # /opt/komodo-periphery like every host, only the Periphery root
+      # (/etc/komodo, not /opt/komodo-periphery/etc-komodo) differs.
+      - /opt/komodo-periphery/etc-komodo/periphery.config.toml:/etc/komodo/periphery.config.toml:ro
+      - /opt/komodo-periphery/keys:/config/keys
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sk --max-time 5 -o /dev/null https://localhost:8120/ || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      komodo.skip:
+      autoheal: "true"

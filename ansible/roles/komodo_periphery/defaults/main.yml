@@ -8,6 +8,12 @@ podhaus_periphery_dir: /opt/komodo-periphery
 podhaus_periphery_owner: root
 podhaus_periphery_group: root
 
+# The Komodo server this host connects as. Defaults to the inventory
+# hostname; bilby's server predates the convention and is named podhaus
+# (every stack.toml still says server = "podhaus"), so it overrides this
+# in host_vars/bilby.yml.
+podhaus_periphery_server_name: "{{ inventory_hostname }}"
+
 # Linux hosts use the engine's default socket as root. A user-owned macOS
 # engine instead sets HOME so the ordinary unqualified Docker CLI reads that
 # user's globally selected context.
@@ -16,8 +22,8 @@ podhaus_docker_cli: docker
 podhaus_docker_become: true
 
 # Core's API, reached from the control node. Loopback because the control
-# node today is bilby; a remote control node would point this at
-# https://komodo.pod.haus instead.
+# node today is bandicoot, Core's own host; a control node that wasn't
+# Core's host would point this at https://komodo.pod.haus instead.
 podhaus_komodo_core_url: http://localhost:9120
 podhaus_komodo_api_key: >-
   {{ lookup('community.general.onepassword',

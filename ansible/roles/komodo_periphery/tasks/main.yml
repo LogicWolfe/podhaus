@@ -154,7 +154,7 @@
   register: komodo_servers
   until: >-
     komodo_servers.json
-    | selectattr('name', 'equalto', inventory_hostname)
+    | selectattr('name', 'equalto', podhaus_periphery_server_name)
     | map(attribute='info.state')
     | first | default('') == 'Ok'
   retries: 30

@@ -34,6 +34,25 @@ services:
       # Ofelia job on clickstack-mongo writes. Quiescent gzip archives,
       # restic-safe. ClickHouse telemetry is deliberately not backed up.
       - /var/lib/clickstack/mongo-dumps:/userdata/clickstack/mongo:ro
+      # Docker named volumes owned by Komodo Core and onepassword, moved
+      # here from bilby. Referenced via `external: true` in the volumes
+      # block below so docker can share the live data with the owning
+      # container read-only.
+      - komodo_postgres-data:/userdata/komodo/postgres:ro
+      - komodo_ferretdb-state:/userdata/komodo/ferretdb:ro
+      - onepassword_op-connect-data:/userdata/onepassword:ro
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
       podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}
+
+volumes:
+  # External volumes owned by other stacks — Backrest mounts them
+  # read-only as backup sources. `external: true` tells compose to
+  # reuse the existing volumes by name rather than creating
+  # project-prefixed clones.
+  komodo_postgres-data:
+    external: true
+  komodo_ferretdb-state:
+    external: true
+  onepassword_op-connect-data:
+    external: true

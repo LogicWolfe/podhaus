@@ -7,10 +7,10 @@
 # Why this exists: Komodo's `files_on_host = true` mode requires the
 # compose file to physically exist on the Periphery host's filesystem.
 # Bilby has the repo bind-mounted into its Periphery container (see
-# komodo-start), so its stacks use files_on_host. Kangaroo (and any
-# future remote Periphery host) doesn't, so we declare a Linked Repo and
-# let Periphery do the clone. Auth via the github git_provider configured
-# in each Periphery's periphery.config.toml.
+# bilby/periphery/compose.yaml), so its stacks use files_on_host.
+# Kangaroo (and any future remote Periphery host) doesn't, so we declare
+# a Linked Repo and let Periphery do the clone. Auth via the github
+# git_provider configured in each Periphery's periphery.config.toml.
 
 [[repo]]
 name = "podhaus"
@@ -152,12 +152,12 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"
 branch = "main"
 
-# Bilby's deploy tree — the single tree every podhaus deploy decision
-# reads (Komodo Core's /syncs/podhaus bind, bilby Periphery's
-# /etc/komodo/repo bind, and every files_on_host stack's
-# run_directory). Bilby's own working checkout (~/repos/podhaus) is
-# never read by the pipeline; this Repo resource is the source of
-# truth instead, fed two ways: podhaus-push-deploy's Stage 0
+# Bilby's deploy tree — feeds bilby's outbound Periphery's
+# /etc/komodo/repo bind and every files_on_host stack's run_directory
+# there. Core no longer binds this tree (see podhaus-bandicoot above);
+# bilby's own working checkout (~/repos/podhaus) is never read by the
+# pipeline either way — this Repo resource is the source of truth
+# instead, fed two ways: podhaus-push-deploy's Stage 0
 # `PullRepo podhaus-deploy` forces it to origin/main on every webhook
 # push, and ./komodo-sync's `podhaus-load-local-tree` action overlays
 # it with the local checkout's current state (tracked + untracked)
@@ -201,9 +201,13 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/yiayia-stories"
 branch = "main"
 
+# Core's sync tree since the move to bandicoot — komodo-sync overlays it
+# the same way it overlays podhaus-deploy below, so on_pull needs the same
+# `git clean -fd` for the same reason (see the podhaus-deploy comment
+# above it).
 [[repo]]
 name = "podhaus-bandicoot"
-description = "Komodo-managed podhaus clone on bandicoot"
+description = "Komodo-managed podhaus clone on bandicoot — Core's sync tree"
 tags = ["podhaus", "bandicoot"]
 
 [repo.config]
@@ -212,6 +216,9 @@ git_provider = "github.com"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/podhaus"
 branch = "main"
+
+[repo.config.on_pull]
+command = "git clean -fd"
 
 [[repo]]
 name = "docs-server-bandicoot"

@@ -82,6 +82,42 @@
         }
       ],
       "skipIfUnchanged": true
+    },
+    {
+      "id": "komodo",
+      "repo": "podhaus-bandicoot",
+      "paths": ["/userdata/komodo"],
+      "schedule": {
+        "cron": "40 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "onepassword",
+      "repo": "podhaus-bandicoot",
+      "paths": ["/userdata/onepassword"],
+      "schedule": {
+        "cron": "50 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
     }
   ]
 }

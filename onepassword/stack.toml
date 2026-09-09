@@ -4,9 +4,11 @@ description = "1Password Connect + komodo-op secret sync"
 tags = ["podhaus"]
 
 [stack.config]
-server = "podhaus"
-files_on_host = true
-run_directory = "/etc/komodo/repo/onepassword"
+# Lives with Core on bandicoot so komodo-op reaches komodo-core:9120 on
+# dockernet and the Fenwick bot reaches op-connect-api there.
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "onepassword"
 # Komodo runs `docker compose build` before `up` so the locally-built
 # komodo-op image is always present without manual pre-build. auto_pull
 # disabled so Komodo doesn't try to fetch the local-only :local-arm64 tag

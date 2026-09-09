@@ -7,17 +7,18 @@
 # (komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main,
 # branch-filtered to main), and the procedure fans out internally.
 #
-# The deploy tree. Every stage below reads a single Komodo-managed clone
-# of this repo, the Repo resource `podhaus-deploy` (komodo/sync/repos.toml)
-# at /etc/komodo/repos/podhaus-deploy on bilby — Core mounts it at
-# /syncs/podhaus, bilby's Periphery mounts it at /etc/komodo/repo. Bilby's
-# own working checkout (~/repos/podhaus) is never read by either pipeline
-# path. The two entrypoints differ only in how they feed the deploy tree:
-# podhaus-push-deploy's first stage force-pulls it to origin/main (so a
-# push from any machine deploys main and never touches ~/repos/podhaus),
-# while ./komodo-sync instead overlays it with the local checkout's
-# current state and invokes podhaus-deploy directly, deliberately
-# skipping the pull stage.
+# The deploy trees. podhaus-deploy stages below read Core's Komodo-managed
+# clone, the Repo resource `podhaus-bandicoot` (komodo/sync/repos.toml) at
+# /opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot on bandicoot —
+# Core mounts it at /syncs/podhaus. bilby's own clone, Repo `podhaus-deploy`,
+# feeds bilby's outbound Periphery's /etc/komodo/repo mount and its
+# files_on_host stacks instead; neither host's own working checkout is ever
+# read by either pipeline path. The two entrypoints differ only in how they
+# feed the deploy trees: podhaus-push-deploy's first stage force-pulls both
+# to origin/main (so a push from any machine deploys main and never touches
+# a working checkout), while ./komodo-sync instead overlays bandicoot's tree
+# with the local checkout's current state and invokes podhaus-deploy
+# directly, deliberately skipping the pull stage.
 #
 # podhaus-deploy — deploys whatever the deploy tree currently holds.
 # Source-agnostic: it doesn't care whether the tree just got pulled to
@@ -122,7 +123,7 @@ executions = [
 
 [[procedure]]
 name = "podhaus-push-deploy"
-description = "Push-to-deploy entrypoint: force the deploy tree to origin/main, then run podhaus-deploy. Triggered by the single GitHub push webhook."
+description = "Push-to-deploy entrypoint: force both deploy trees (podhaus-bandicoot, podhaus-deploy) to origin/main, then run podhaus-deploy. Triggered by the single GitHub push webhook."
 tags = ["podhaus"]
 config.webhook_enabled = true
 # Webhook-only — no schedule. (schedule_enabled defaults true in
@@ -130,9 +131,10 @@ config.webhook_enabled = true
 config.schedule_enabled = false
 
 [[procedure.config.stage]]
-name = "Pull deploy tree to origin/main"
+name = "Pull both deploy trees to origin/main"
 enabled = true
 executions = [
+  { execution.type = "PullRepo", execution.params = { repo = "podhaus-bandicoot" }, enabled = true },
   { execution.type = "PullRepo", execution.params = { repo = "podhaus-deploy" }, enabled = true }
 ]
 

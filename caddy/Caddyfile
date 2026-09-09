@@ -64,7 +64,8 @@
 		reverse_proxy @fenwick fenwick:8088
 		reverse_proxy @kangaroo_backup 10.0.0.25:9898
 		reverse_proxy @kangaroo 10.0.0.25:8080
-		reverse_proxy @komodo komodo-core:9120
+		# Komodo Core lives on bandicoot; the front door stays here.
+		reverse_proxy @komodo 10.0.0.90:9120
 		reverse_proxy @torrent flood:3000
 		reverse_proxy @home 172.18.0.1:8123
 		reverse_proxy @plex 172.18.0.1:32400
@@ -82,15 +83,16 @@
 	}
 }
 
-# Numbat's outbound Periphery connection returns through the raw TLS relay.
-# Komodo's v2 Noise handshake remains the application-level boundary.
+# Outbound Peripheries off the LAN return through the raw TLS relay to
+# bilby, which forwards to Core on bandicoot. Komodo's v2 Noise handshake
+# remains the application-level boundary.
 core-connect.pod.haus, core-connect.pod.haus:4444 {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 	@periphery path /ws/periphery
 	handle @periphery {
-		reverse_proxy komodo-core:9120
+		reverse_proxy 10.0.0.90:9120
 	}
 	handle {
 		respond 404

@@ -1,4 +1,5 @@
-# Provision bandicoot from bilby under op-vault dev.
+# Provision bandicoot: runtime host, the Komodo Core host, and the
+# Ansible/Terraform control node — it provisions itself.
 # Review --check --diff, apply, then require a second run with changed=0.
 # chezmoi runs separately as nathan and is never invoked by this play.
 ---
@@ -22,6 +23,8 @@
       tags: [storage]
     - role: firewalld
       tags: [firewall]
+    - role: komodo_core_host
+      tags: [komodo]
     - role: komodo_periphery
       tags: [periphery]
     - role: forgejo_runner

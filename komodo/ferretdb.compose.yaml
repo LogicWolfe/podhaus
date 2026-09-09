@@ -5,9 +5,9 @@
 ## This compose file deploys:
 ##   1. Postgres + FerretDB Mongo adapter (https://www.ferretdb.com)
 ##   2. Komodo Core
-##   3. Komodo Periphery
 ##
-## All state lives on NFS under /Jump/komodo/ so bilby remains stateless.
+## Core runs on bandicoot; state lives in local named volumes (postgres-data,
+## ferretdb-state), not NFS — see the `volumes:` block below for why.
 ## These services are the orchestration layer — they're intentionally not
 ## labelled for autoheal (restart: unless-stopped handles crashes; autoheal
 ## loops here would risk interrupting in-flight deployments).
@@ -55,9 +55,12 @@ services:
       komodo.skip:
     restart: unless-stopped
     # ResourceSync clones happen in Core; use the direct Forgejo origin while
-    # preserving git.pod.haus for TLS and repository identity.
+    # preserving git.pod.haus for TLS and repository identity. Core runs on
+    # bandicoot now, so host-gateway would resolve to bandicoot's own
+    # gateway, not bilby's Caddy; 10.0.0.119 is bilby's internal Caddy, the
+    # address bandicoot's Forgejo runner already uses.
     extra_hosts:
-      - "git.pod.haus:host-gateway"
+      - "git.pod.haus:10.0.0.119"
     init: true
     # SELinux enforcing on Fedora Asahi denies the container from reading
     # the bind-mounted repo at /syncs/podhaus; label:disable lifts that
@@ -81,8 +84,6 @@ services:
       KOMODO_WEBHOOK_SECRET: ${KOMODO_WEBHOOK_SECRET}
       KOMODO_HOST: ${KOMODO_HOST}
       KOMODO_TITLE: ${KOMODO_TITLE}
-      KOMODO_FIRST_SERVER: ${KOMODO_FIRST_SERVER}
-      KOMODO_FIRST_SERVER_NAME: ${KOMODO_FIRST_SERVER_NAME}
       KOMODO_LOCAL_AUTH: ${KOMODO_LOCAL_AUTH}
       KOMODO_DISABLE_USER_REGISTRATION: ${KOMODO_DISABLE_USER_REGISTRATION}
       KOMODO_INIT_ADMIN_USERNAME: ${KOMODO_INIT_ADMIN_USERNAME}
@@ -97,22 +98,22 @@ services:
       TZ: ${TZ}
     volumes:
       - ${COMPOSE_KOMODO_BACKUPS_PATH}:/backups
-      # Deploy tree: a Komodo-managed clone (Repo resource "podhaus-deploy"),
-      # pulled to origin/main by the push webhook and overlaid with the
-      # local checkout by komodo-sync. ResourceSync and the hash-injection
-      # action both read this path.
-      - /etc/komodo/repos/podhaus-deploy:/syncs/podhaus
+      # Deploy tree: the Core host's Komodo-managed clone (Repo resource
+      # "podhaus-bandicoot"), pulled to origin/main by the push webhook and
+      # overlaid with the local checkout by komodo-sync. ResourceSync and
+      # the hash-injection action both read this path. bilby's own tree
+      # (Repo "podhaus-deploy") still feeds bilby's files_on_host stacks.
+      - ${COMPOSE_KOMODO_SYNC_TREE}:/syncs/podhaus
       # Working checkout, read-only. Consumed solely by the
       # podhaus-load-local-tree action, which overlays it onto the deploy
       # tree above during komodo-sync.
       - ${COMPOSE_KOMODO_REPO_PATH}:/syncs/podhaus-local:ro
-      # v2 PKI: X25519 keypairs for noise-handshake auth. Shared with the
-      # bilby periphery service below (same compose, same bind), so Core
-      # auto-trusts bilby's periphery via file:/config/keys/bilby-periphery.pub
-      # and bilby's periphery auto-trusts Core via file:/config/keys/core.pub.
-      # Remote peripheries have their own keys dirs on their
-      # respective hosts; their pubkeys live alongside in this dir so Core
-      # trusts them too.
+      # v2 PKI: X25519 keypairs for noise-handshake auth. Every fleet
+      # Periphery's pubkey lives here (file:/config/keys/<host>-periphery.pub)
+      # so Core trusts it; each Periphery has its own keys dir on its own
+      # host, trusting Core via file:/config/keys/core.pub there. bilby's
+      # own Periphery moved out of this compose — see
+      # bilby/periphery/compose.yaml.
       - ${COMPOSE_KOMODO_KEYS_PATH}:/config/keys
       # Rendered-at-startup extra config files (currently the central
       # [[git_providers]] block). Lives in komodo/.runtime/ on the
@@ -126,52 +127,6 @@ services:
       retries: 5
       start_period: 60s
 
-  periphery:
-    container_name: komodo-periphery
-    image: ghcr.io/moghtech/komodo-periphery:${COMPOSE_KOMODO_IMAGE_TAG:-2}
-    labels:
-      komodo.skip:
-      autoheal: "true"
-    restart: unless-stopped
-    init: true
-    # Linked Repo HTTPS traffic must reach Forgejo directly. The public route
-    # is Pomerium's browser boundary and redirects Git's authenticated request.
-    # Preserve the hostname/TLS SNI while routing to this host's Caddy.
-    extra_hosts:
-      - "git.pod.haus:host-gateway"
-    # SELinux enforcing on Fedora Asahi denies cross-label writes to
-    # /var/run/docker.sock; label:disable exempts the periphery container
-    # from SELinux confinement so it can talk to the Docker daemon.
-    security_opt:
-      - label:disable
-    environment:
-      # v2 PKI: noise-handshake mutual auth. Periphery loads its X25519
-      # private key + the list of Core public keys it accepts. Both files
-      # come from the shared keys bind (see Core service). Replaces the
-      # v1 PERIPHERY_PASSKEYS shared-secret model.
-      PERIPHERY_PRIVATE_KEY: ${PERIPHERY_PRIVATE_KEY}
-      PERIPHERY_CORE_PUBLIC_KEYS: ${PERIPHERY_CORE_PUBLIC_KEYS}
-      TZ: ${TZ}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /proc:/proc
-      - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
-      # Deploy tree, same clone as Core's /syncs/podhaus above. This alias
-      # bind keeps /etc/komodo/repo as the in-container path so every
-      # stack.toml run_directory (/etc/komodo/repo/<name>) stays unchanged.
-      - /etc/komodo/repos/podhaus-deploy:/etc/komodo/repo
-      - ${COMPOSE_KOMODO_KEYS_PATH}:/config/keys
-    # Periphery returns HTTP 405 on `GET /` when alive (it only accepts
-    # POST for its API). curl without -f exits 0 on any HTTP response,
-    # so 405 satisfies the probe — a hung Periphery (no response) fails.
-    # -k skips TLS verify (self-signed cert), --max-time bounds the wait.
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sk --max-time 5 -o /dev/null https://localhost:8120/ || exit 1"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
 networks:
   dockernet:
     external: true
@@ -181,8 +136,8 @@ volumes:
   # The /Jump export on kangaroo uses all_squash (writes land as 1000:100
   # regardless of container UID, chown is denied), which breaks the
   # postgres entrypoint's `chown -R postgres:postgres $PGDATA` step.
-  # Active database state belongs on bilby's local NVMe; Backrest protects
-  # these volumes. If the backup is also unavailable, Komodo can still be
-  # bootstrapped from the resource definitions in git.
+  # Active database state belongs on the Core host's local NVMe; Backrest
+  # protects these volumes. If the backup is also unavailable, Komodo can
+  # still be bootstrapped from the resource definitions in git.
   postgres-data:
   ferretdb-state:
