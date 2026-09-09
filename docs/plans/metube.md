@@ -136,8 +136,15 @@ single developer), Radarr now (movies are a later plan on the same pattern).
   `[]` from Sonarr's manual-import scan, and a file dropped into a show
   folder under staging appears as one entry; the check went green after
   the push deploy.
-- End-to-end: a real download batch queued with no folder chosen, watched
-  through to Plex. See the entry below for the actual titles/counts.
+- End-to-end: "SPACE RACERS: Satellite Songs", "SPACE RACERS: Different",
+  "SPACE RACERS: Paint Your Rocket" (S02E02-04) queued together with no
+  folder chosen. Checked every real Space Racers season-2 upload against
+  the strict rule first (see the entry below for why none of them needed
+  the token rule); all three placed on their own strict pass, staging
+  ended up empty, Sonarr's series-2 file count went 43 → 46, Gatus
+  `metube_plexify` posted three `success=true` with no failures, and Plex
+  listed all four season-2 episodes (S02E01-04) immediately, no manual
+  refresh.
 
 ## Ledger
 
@@ -213,3 +220,35 @@ single developer), Radarr now (movies are a later plan on the same pattern).
   `OP__KOMODO__SONARR_API__CREDENTIAL` Komodo variable, `gatus/compose.yaml`
   maps it into the container, `gatus/conf/config.yaml` reads
   `${SONARR_API_KEY}`.
+- ✅ Pushed (cb59fe4) and verified via Komodo: `podhaus-push-deploy` pulled
+  both deploy trees and ran the internal procedure; `gatus`'s compose text
+  changed (the new `SONARR_API_KEY` env line), so Stage 2's `IfChanged`
+  recreated the container directly — confirmed via `InspectDockerContainer`
+  (new `Created` timestamp, `SONARR_API_KEY` present, length 32) — and the
+  `MeTube staging` check went from one red 401 result (queried in the
+  ~90-second gap between the push and the container actually recreating)
+  to green once it came up. `metube`'s compose text didn't change, so it
+  wasn't redeployed, but its plexify script updated immediately anyway —
+  it's bind-mounted read-only straight from the Periphery repo clone that
+  `PullRepo` refreshes — confirmed with `docker exec metube head -45
+  /scripts/plexify` showing the new docstring.
+- ✅ End-to-end: searched essentially every real Space Racers season-2
+  upload on the official `Space Racers` YouTube channel (about 39 of 40)
+  against the actual strict-pass code. Unlike season 1, none of them
+  reproduce the "one extra word" pattern the token rule was built for —
+  YouTube's season-2 titles match TheTVDB's almost exactly, case and
+  punctuation aside (both already tolerated by normalisation). The one
+  real deviation found, "Remember the Past, Discover the Future" vs
+  TheTVDB's "Remember The Past", adds a whole clause — too much slack for
+  the token rule too (it would stay a genuine leftover), so it was
+  deliberately not queued. Per the task's own fallback, proved the sweep
+  path with a strict-only batch instead ("SPACE RACERS: Satellite Songs",
+  "SPACE RACERS: Different", "SPACE RACERS: Paint Your Rocket", queued
+  together with no folder chosen) plus the unit tests above for the token
+  rule itself. Result: all three placed as
+  `Space Racers (2014) - S02E02 - Satellite Songs.mp4` /
+  `S02E03 - Different.mp4` / `S02E04 - Paint Your Rocket.mp4` under
+  `Kids/TV/Space Racers (2014) {tvdb-282447}/Season 02/`, staging empty
+  afterwards, Sonarr's series-2 file count 43 → 46, Gatus `metube_plexify`
+  posted three `success=true` with no failures, and Plex's `allLeaves`
+  for the series listed S02E01-04 immediately with no manual refresh.
