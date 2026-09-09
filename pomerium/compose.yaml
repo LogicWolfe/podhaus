@@ -68,6 +68,7 @@ services:
       - pomerium-config:/pomerium:ro
       - pomerium-secrets:/run/pomerium-secrets:ro
       - pomerium-autocert:/data/autocert
+      - pomerium-databroker:/data/databroker
     labels:
       podhaus.depends-on-pomerium-secrets-init: ${BUILD_HASH_POMERIUM_SECRETS_INIT:-unset}
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -104,3 +105,4 @@ volumes:
   pomerium-config:
   pomerium-secrets:
   pomerium-autocert:
+  pomerium-databroker:

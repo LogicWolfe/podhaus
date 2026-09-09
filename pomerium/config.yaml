@@ -10,15 +10,18 @@ idp_scopes: [openid, email, profile, offline_access]
 
 # 30-day sessions instead of the 14-hour default. Personal deployment:
 # the threat model does not include an already-authorized machine
-# retaining access, and daily re-auth was the real cost. Sessions still
-# die on every Pomerium restart (databroker_storage_type: memory), so
-# this is an upper bound, not a guarantee.
+# retaining access, and daily re-auth was the real cost.
 cookie_expire: 720h
 
 autocert: true
 autocert_dir: /data/autocert
 autocert_email: nathan@nathanbaxter.com
-databroker_storage_type: memory
+# Sessions, SSH key bindings and parked SSH sign-ins live in the databroker.
+# The file backend keeps them across container recreates; with the in-memory
+# default every deploy of this stack logged out every browser and killed
+# every SSH sign-in waiting for a tap. The path is a named volume.
+databroker_storage_type: file
+databroker_storage_connection_string: file:///data/databroker
 # debug (not info) so the "ssh keyboard-interactive auth request" line exists:
 # it is the only place the target route appears for a pending SSH auth, and
 # ssh-auth-notify joins it against the databroker record by key fingerprint.
