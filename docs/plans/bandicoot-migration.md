@@ -239,8 +239,9 @@ stable — none of the stack moves depend on it.
   brinno-downloader, promote) went green on the `bandicoot` runner and
   advanced the `deploy` branch.
 - ✅ Paperless re-homed (44b34cc): state copied stopped, stack, Caddy, Gatus
-  and Backrest plan moved; deploy in progress at the time of writing —
-  verify `paperless.pod.haus` and the Gatus check once the build lands.
+  and Backrest plan moved; healthy on bandicoot, documents on Jump visible,
+  mail-init converged, `paperless.pod.haus` answers through Pomerium, Gatus
+  green.
 - ⛔ Fenwick family: **blocked on a decision.** The bot reaches
   1Password Connect (`op-connect-api`) and Bugsink by dockernet name and
   neither publishes a LAN port, so a move needs one of: bilby publishing
