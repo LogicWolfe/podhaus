@@ -1,0 +1,26 @@
+[[stack]]
+name = "bandicoot-backup"
+description = "Backrest snapshots of bandicoot service state to Jump"
+tags = ["bandicoot", "podhaus"]
+
+[stack.config]
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "backup/bandicoot"
+# Shared first so this overlay's healthcheck override wins (see
+# backup/bilby/stack.toml). Local-only like pinelake: no OneDrive leg yet.
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
+run_build = true
+ignore_services = ["backrest-init"]
+
+# Same variable names as every other host's backup stack (the contract
+# in backup/compose.shared.yaml). The Gatus push rides the shared Ofelia
+# token, as pinelake's does, to bilby's LAN-published Gatus.
+environment = """
+TZ=[[TZ]]
+RESTIC_REPO_PASSWORD=[[OP__KOMODO__RESTIC_REPO_PASSWORD__CREDENTIAL]]
+GATUS_BACKREST_PUSH_TOKEN=[[OP__KOMODO__GATUS_OFELIA_PUSH_TOKEN__TOKEN]]
+GATUS_BASE_URL=http://10.0.0.119:8080
+GATUS_BACKREST_ENDPOINT_ID=backup_backrest-bandicoot-nightly
+BACKREST_INSTANCE=bandicoot
+"""

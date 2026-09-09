@@ -219,6 +219,21 @@ stable — none of the stack moves depend on it.
 
 ## What was done
 
-Filled in as each item lands, as statements of what is now true; the plan is
-deleted when everything above is folded into `docs/hosts.html`,
+- ✅ NAS path: `storage_binds` renders the NFS fstab entries and installs the
+  client; bilby adopted its hand-written lines (`changed=0` after); bandicoot
+  mounts Jump and Pouch with sentinels, tripwire and the recovery timer.
+  `ofelia/bandicoot` runs. (8e7909b)
+- ✅ Runner: `bandicoot` registered idle in Forgejo; fractal's runner torn
+  down and deregistered; fractal runs docs/caddy/relay/logging/autoheal/
+  Periphery only. (2534886)
+- ✅ ClickStack on bandicoot: 830 M rows carried over by a stopped-state
+  rsync; fresh rows from every host within minutes; `watch.pod.haus` and
+  `logs-ingest.pod.haus` proxied from bilby; Gatus heartbeats query
+  `10.0.0.90:8123`; Ofelia registered the mongo-dump job. bilby keeps its
+  pre-move copy under `/var/lib/clickstack` until the move has proven
+  itself. (7c90fa7)
+- ✅ `backup/bandicoot`: restic repo on `/mnt/jump/backups-bandicoot`,
+  the mongo dumps as its first plan, Gatus heartbeat and container probe.
+
+The plan is deleted when everything above is folded into `docs/hosts.html`,
 `docs/monitoring.html` and `docs/host-provisioning.md`.

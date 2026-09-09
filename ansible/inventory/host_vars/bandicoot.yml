@@ -64,6 +64,16 @@ storage_binds_mounts:
     fstypes: [nfs, nfs4]
     fstab_options: nfsvers=4.1,rw,nolock,soft,timeo=600,retrans=5,noatime,_netdev,nofail,x-systemd.automount
 
+# bandicoot's restic repository on Jump, beside bilby's and kangaroo's;
+# the sentinel is what backup/bandicoot's healthcheck proves before it
+# will write there. Ownership is Jump's all_squash mapping.
+storage_binds_extra_sentinels:
+  - /mnt/jump/backups-bandicoot
+storage_binds_managed_dirs:
+  - path: /mnt/jump/backups-bandicoot
+    owner: "1000"
+    group: "100"
+
 # Both halves of both automount pairs, as on bilby.
 storage_binds_rate_limit_dropin_dirs:
   - mnt-pouch.mount.d

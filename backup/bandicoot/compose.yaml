@@ -1,0 +1,39 @@
+# bandicoot's backrest overlay. Extends backup/compose.shared.yaml with
+# the linked-repo template binds, the SELinux opt, the restic repo on
+# Jump and the source-data binds for stacks that live on bandicoot.
+# Grows a bind per service as each one moves here.
+
+services:
+  backrest-init:
+    build:
+      context: ../init-tools
+      dockerfile: Dockerfile
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_BACKREST_INIT:-unset}
+    volumes:
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot/backup:/tmpl/shared:ro,z
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot/backup/bandicoot:/tmpl/host:ro,z
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+  backrest:
+    security_opt:
+      - label:disable
+    # Overrides the shared healthcheck with the Jump sentinel check, as
+    # bilby's does: the repo bind must be the real NFS share, never a stub.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9898/ > /dev/null && [ -e /repos/podhaus-bandicoot/.podhaus-share-mounted ]"]
+      interval: 60s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+    volumes:
+      # Restic repository on Jump (NAS SSD), its own directory beside
+      # bilby's and kangaroo's; provisioned by the storage_binds role.
+      - /mnt/jump/backups-bandicoot:/repos/podhaus-bandicoot
+      # ClickStack HyperDX app-state: the nightly mongodump archives the
+      # Ofelia job on clickstack-mongo writes. Quiescent gzip archives,
+      # restic-safe. ClickHouse telemetry is deliberately not backed up.
+      - /var/lib/clickstack/mongo-dumps:/userdata/clickstack/mongo:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}

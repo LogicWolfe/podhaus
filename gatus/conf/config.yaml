@@ -720,6 +720,22 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].State.Status == running"
 
+  - name: Backrest (bandicoot, via Komodo)
+    url: http://komodo-core:9120/read
+    method: POST
+    group: Backup
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"bandicoot","container":"backrest"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
   - name: Backrest (pinelake, via Komodo)
     url: http://komodo-core:9120/read
     method: POST
@@ -855,6 +871,20 @@ external-endpoints:
     alerts:
       - type: custom
         description: "Backrest's nightly backup pipeline didn't check in. Either no snapshots ran tonight, or the post-plan rclone sync to OneDrive failed. Investigate: `docker logs backrest`, or query in HyperDX (watch.pod.haus), and check /mnt/pouch/backups for the expected repository state."
+        failure-threshold: 3
+        success-threshold: 2
+        send-on-resolved: true
+
+  # bandicoot's nightly pipeline: the backrest-state plan pushes success
+  # after the clickstack-mongo plan has run; any repo error pushes failure.
+  - name: Backrest Nightly (bandicoot)
+    group: Backup
+    token: ${GATUS_OFELIA_PUSH_TOKEN}
+    heartbeat:
+      interval: 25h
+    alerts:
+      - type: custom
+        description: "bandicoot's Backrest nightly didn't check in: no snapshot of the ClickStack mongo dumps ran, or the repo on /mnt/jump/backups-bandicoot errored. Investigate: `docker logs backrest` on bandicoot, and the bind's sentinel (`ls /mnt/jump/backups-bandicoot/.podhaus-share-mounted`)."
         failure-threshold: 3
         success-threshold: 2
         send-on-resolved: true

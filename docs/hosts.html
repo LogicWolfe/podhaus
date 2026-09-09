@@ -378,8 +378,11 @@
         podman: Docker is the single container engine.
       </p>
       <p>
-        <strong>bandicoot has no backup stack yet.</strong> Nothing stateful lives here;
-        a Backrest overlay arrives with the first migrated service.
+        <strong>Backup:</strong> <code>bandicoot-backup</code> (<code>backup/bandicoot</code>)
+        snapshots the state of services that live here to a restic repository on Jump
+        (<code>/mnt/jump/backups-bandicoot</code>), Jump-sentinel-gated like bilby's;
+        today that is the ClickStack mongo dumps. Local-only, as pinelake's is: no
+        OneDrive leg yet.
       </p>
 
       <h2 id="pinelake">pinelake</h2>
