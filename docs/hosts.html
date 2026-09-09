@@ -367,8 +367,10 @@
       </p>
       <p>
         Its machine key is hardware-resident on a YubiKey PIV slot, exactly as bilby's is;
-        <code>/home</code> is an unencrypted Btrfs subvolume, also as on bilby, so the only
-        secret material on disk is the <code>op-vault</code> token file. SELinux is enforcing
+        <code>/home</code> is an unencrypted Btrfs subvolume, also as on bilby, so the secret
+        material on disk is the <code>op-vault</code> token file and the PIV PIN in
+        <code>~/.config/machine-ssh/pin</code> — the PIN's only copy anywhere, inert without
+        the token, and replaceable by minting a new key if lost. SELinux is enforcing
         (Fedora Workstation default), so every bind-mounting service carries
         <code>security_opt: [label:disable]</code>. Fedora's preinstalled Toolbox went with
         podman: Docker is the single container engine.
