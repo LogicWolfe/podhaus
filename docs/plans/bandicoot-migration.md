@@ -129,16 +129,18 @@ Core is unavailable from step 4 to step 8: no deploys, no Komodo alerts,
 Connect down (the Fenwick bot's email tools fail for the window). Running
 stacks are unaffected. Approved.
 
-1. **Prepare bandicoot, no downtime.** Commit the code changes above but do
-   not push yet. On bandicoot: clone `~/repos/podhaus`, Pipenv toolchain,
-   pre-commit hook; run `playbooks/bandicoot.yml --tags komodo` from bilby
-   (the last Ansible run from bilby) to create `/opt/komodo/keys`; rsync
-   `/opt/komodo/keys` and `/opt/komodo/backups` from bilby; pre-create the
-   three named volumes on bandicoot (`komodo_postgres-data`,
-   `komodo_ferretdb-state`, `onepassword_op-connect-data`).
-2. **Re-point bandicoot's Periphery** to `ws://bandicoot.pod.haus:9120`
-   (`playbooks/bandicoot.yml --tags periphery` from bilby). It disconnects
-   until step 6 — bandicoot's stacks keep running.
+1. **Prepare bandicoot, no downtime.** Commit the code changes above on
+   bilby's checkout but do not push yet; fetch them into bandicoot's
+   `~/repos/podhaus` over SSH (a `bilby` git remote), because the new
+   inventory makes bandicoot the local control node and bilby an SSH
+   target — every Ansible run from here on is from bandicoot. On bandicoot:
+   `playbooks/bandicoot.yml --tags komodo` creates `/opt/komodo/keys`;
+   rsync `/opt/komodo/keys` and `/opt/komodo/backups` from bilby; pre-create
+   the three named volumes (`komodo_postgres-data`, `komodo_ferretdb-state`,
+   `onepassword_op-connect-data`).
+2. **bandicoot's Periphery keeps dialling `core-connect`** until step 6 —
+   re-pointing it earlier would leave the role's readiness check with no
+   Core to ask.
 3. **Snapshot for rollback**: on bilby, note `docker volume` sizes and keep
    the three volumes and `/opt/komodo/keys` untouched until step 10.
 4. **Stop on bilby** by name: komodo-core, komodo-op, op-connect-api,
@@ -146,9 +148,15 @@ stacks are unaffected. Approved.
 5. **Copy state**: the three volumes' `_data` directories from bilby into
    bandicoot's pre-created volumes (rsync as root, ownership preserved).
 6. **Push** the prepared commits (the webhook lands on a dead Core and is
-   simply lost). On bandicoot: `op-vault dev -- ./komodo-start`. Core comes
-   up on the copied DB; bandicoot's Periphery connects; the script ensures
-   the tree repo and pulls it, then runs the double sync.
+   simply lost). On bandicoot, in order: (a) bring Core up by hand with the
+   compose command `komodo-start` uses (`op run --env-file komodo/compose.env
+   -- docker compose -p komodo -f komodo/ferretdb.compose.yaml ... up -d`)
+   so Core is answering on the copied DB; (b) `playbooks/bandicoot.yml
+   --tags periphery` re-points bandicoot's Periphery to
+   `ws://bandicoot.pod.haus:9120` and waits for Core to report it Ok;
+   (c) `op-vault dev -- ./komodo-start` (idempotent: compose is a no-op)
+   seeds the variables, ensures the tree repo, pulls it and runs the double
+   sync.
 7. **bilby's Periphery**: from bandicoot, `playbooks/bilby.yml --tags periphery`
    (first Ansible run from the new control node) installs the outbound
    Periphery and waits for Core to report `podhaus` Ok. Remove the stopped
