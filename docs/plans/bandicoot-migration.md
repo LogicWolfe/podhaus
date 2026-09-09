@@ -2,10 +2,12 @@
 
 ## Goal
 
-bilby runs only what needs its LAN devices, its NAS path or its role as
-primary; fractal runs no active jobs; bandicoot carries the CPU- and
-disk-heavy services plus, in its own phase, the Komodo control plane — with
-memory headroom left on both bilby and bandicoot.
+bilby runs only what needs its LAN devices, its NAS path or its role as the
+public front door; fractal runs no active jobs; bandicoot carries the CPU-
+and disk-heavy services **and the control plane** (Komodo Core, 1Password
+Connect, komodo-op), so that a mains outage — the gateway and the NAS are on
+a UPS, bandicoot has a battery — leaves the fleet manageable. Memory
+headroom stays on both bilby and bandicoot.
 
 ## Why bandicoot, and what it is not for
 
@@ -15,207 +17,255 @@ memory headroom left on both bilby and bandicoot.
 | 839 GB free NVMe (bilby 34 GB free of 160) | Same 15 GiB RAM as bilby — headroom must be planned, not assumed |
 | Battery; gateway and kangaroo are on a UPS, so it stays *useful* through a power blip | A laptop: lid, sleep and USB autosuspend are pinned by Ansible, but the USB NIC is the one part with no redundancy |
 
-So: CPU/disk-heavy and NAS-light work moves; LAN-device, host-network and
-NAS-bandwidth-heavy work stays on bilby.
+So: CPU/disk-heavy, NAS-light work and the control plane move; LAN-device,
+host-network and NAS-bandwidth-heavy work stays on bilby. GNOME stays on
+bandicoot by decision (Nathan uses it as a laptop); it is culled only when
+a move does not fit.
 
-## Measured state (2026-09-09)
+## Where everything lands
 
-| Host | CPU | RAM in use | Disk | Containers |
-|---|---|---|---|---|
-| bilby | 8 | 7 of 15 GiB, load 1.0 | 160 GB at 79% | 47 |
-| fractal | 32 vCPU | 1 of 15 GiB, idle | 1 TB + 251 GB LUKS home, 2% | 7 (docs, caddy, relay, logging, autoheal, Periphery, Forgejo runner) |
-| bandicoot | 10 | 8 of 15 GiB (≈3 is GNOME + an agent session) | 857 GB at 3% | 7 (host stacks) |
+| Service | Host | Status |
+|---|---|---|
+| Forgejo Actions runner | bandicoot | ✅ moved from fractal (2534886) |
+| ClickStack (clickhouse, hyperdx, otel, mongo) | bandicoot | ✅ moved (7c90fa7); front door stays on bilby's Caddy |
+| Backrest overlay `backup/bandicoot`, Ofelia `ofelia/bandicoot`, NAS path | bandicoot | ✅ (0bc718e, 8e7909b) |
+| Paperless (+ tika, gotenberg, postgres, redis) | **bilby** | ⏳ was moved to bandicoot (44b34cc); moves back — Nathan's decision, to keep bandicoot's RAM for the control plane and Fenwick |
+| Komodo Core (+ postgres, ferretdb) | **bandicoot** | ⏳ |
+| `onepassword` (op-connect-api, op-connect-sync, komodo-op) | **bandicoot** | ⏳ with the existing credentials — no new Connect server |
+| Fenwick family (fenwick, signal-cli, web-agent, brinno-downloader) | **bandicoot** | ⏳ after the control plane, so `op-connect-api` resolves on bandicoot's dockernet again |
+| Plex, Music Assistant, Home Assistant, ESPHome, Flood, StreamFab, MinIO, Forgejo, Pocket ID, Gatus, Caddy, Backrest, Ofelia, the relay, Bugsink, Umami, pets, yiayia-stories, nathanbaxter-dev | bilby | stay |
 
-bilby memory, peak since start (cgroup `memory.peak`, MiB): flood 6933, plex
-5548, clickhouse 4096 (its cap), backrest 3167, brinno-downloader 2869 (cap
-3072), paperless 2061, komodo-postgres 1844, music-assistant 1009,
-home-assistant 793, fenwick-web-agent 755 (cap 2048), minio 701, hyperdx 683
-(cap 1024), nathanbaxter-dev 666, fenwick 642. Steady CPU: clickhouse 17.6%,
-everything else idle.
-
-bilby disk: `docker system df` reports 88 GB of images and 45 GB of build
-cache, all reclaimable. The disk pressure is a prune, not a migration.
-
-## The remapping
-
-| Service | From → To | Why | Hard dependencies to carry |
-|---|---|---|---|
-| Forgejo Actions runner | fractal → bandicoot | fractal keeps no active jobs; runner only needs Docker and cores | registration token fetched just-in-time from Forgejo by the role; Docker socket group |
-| ClickStack (clickhouse, hyperdx, otel, mongo) | bilby → bandicoot | 21 GB local state and growing; ~6.5 GB of capped RAM; the only sustained CPU load; lives on with the UPS'd network during a blip | `/var/lib/clickstack` (rsync); mongo-dump cron (needs an Ofelia on bandicoot); Backrest overlay; ingest and UI upstreams (below) |
-| Fenwick family (fenwick, signal-cli, web-agent, brinno-downloader) | bilby → bandicoot | the only burst-CPU work (HEVC, YOLO; 3 CPU + 3 GB, plus a 2 GB browser sandbox); state 25 MB | `fenwick-net`/`fenwick-webagent-net` (host_vars networks); `/var/lib/fenwick`, `/var/lib/signal-cli`, `/var/lib/brinno-downloader`; `/mnt/pouch` for the archive; the `fenwick` linked repo re-homed; Backrest |
-| Paperless (+ tika, gotenberg, postgres, redis) | bilby → bandicoot | OCR is CPU-bound; 2 GB peak; 180 MB local state | `/var/lib/paperless-*`; `/mnt/jump/paperless` (documents, consume); Backrest; the `paperless-mail-init` build |
-| Komodo Core (+ postgres, ferretdb, komodo-op) | bilby → bandicoot | control plane off the biggest worker; UPS'd network makes the battery a real availability win; Core beside the working checkout again, on the machine Nathan develops on | see "Control plane" — this is a control-node move, not a stack move |
-| Small dev-shaped extras (nathanbaxter-dev, bugsink, umami, yiayia-stories, pets) | bilby → bandicoot, **only if** bilby still wants room after the above | individually negligible | local state dirs; Backrest |
-
-**Stays on bilby, deliberately:** Plex, Music Assistant, Home Assistant,
-ESPHome (host networking, mDNS, LAN devices, dbus); Flood and StreamFab
-(Pouch-heavy, want bilby's NAS path; Flood's 6.9 GB is torrent page cache);
-MinIO (holds Terraform state — moving it makes bandicoot a bootstrap
-dependency of Terraform); Forgejo (small, but its backup-recover job is
-coupled to Jump and bilby's Backrest); Pocket ID, 1Password Connect, Gatus,
-Caddy, Backrest, Ofelia, the relay.
-
-**Memory after the move.** bilby sheds ≈14 GB of peaks and keeps its three
-spiky consumers (flood, plex, backrest ≈ 15.6 GB of peaks between them — the
-shape behind the 2026-08-08 OOM). bandicoot takes ≈14 GB of peaks on 15 GiB:
-fine in practice (clickhouse idles at 1.4 GB, Fenwick bursts are short and
-rarely coincide with OCR), and every moved service keeps or gains a
-`mem_limit`, GNOME stays resident by decision, so re-measure before the Fenwick
-family commits.
+**Memory after the moves.** bandicoot today: 9.9 GB used of 15.4 with
+Paperless resident (≈2 GB peak) and GNOME (≈1.4 GB shmem). Paperless leaves;
+Core + Postgres (1.8 GB peak) + FerretDB, Connect + komodo-op (≈0.5 GB) and
+the Fenwick family (≈1 GB idle; bursts capped at 3 GB brinno + 2 GB
+web-agent) arrive. Idle lands near 12 GB; the worst case — a ClickHouse
+query at its 4 GB cap during a Brinno transcode and a browser session — is
+above physical RAM and lands in swap (8 GB). Mitigations: every moved
+service keeps or gains a `mem_limit` (the bot gets one), and each step
+re-measures before the next commits. GNOME is the reserve lever and is
+Nathan's call. bilby drops to ≈4 GB idle with Paperless back.
 
 ## Ingress: moved services keep bilby's front door
 
 The documented pattern for a moved service (docs/hosts.html, "Adding another
 host") is one published LAN port on the new host and one Caddyfile upstream
-on bilby. That is what this plan does; no Pomerium, rathole or DNS change is
-needed for ClickStack, Fenwick or Paperless.
+on bilby. Both hosts' firewalld `public` zone accepts `10.0.0.0/24`, so
+published ports are reachable LAN-wide without a zone edit. The control
+plane follows the same pattern first (stage 1); moving its front door onto
+bandicoot's own relay (stage 2) is a separate decision below.
 
-| Front door (unchanged) | Today | After |
+---
+
+## Step 1 — Paperless back to bilby
+
+The exact reverse of 44b34cc; nothing new.
+
+| Where | Change |
+|---|---|
+| `paperless/stack.toml` | `server = "podhaus"`, `files_on_host = true`, `run_directory = "/etc/komodo/repo/paperless"`, env `PODHAUS_REPO=[[PODHAUS_REPO]]`; drop the bandicoot comment |
+| `paperless/compose.yaml` | drop the published `8000:8000` (Caddy and Gatus reach it by name on dockernet again) |
+| `caddy/Caddyfile` | `@paperless` → `paperless:8000`; `paperless-api.pod.haus:4444` → `paperless:8000` |
+| `gatus/conf/config.yaml` | Paperless check → `http://paperless:8000/` |
+| `backup/bilby/{compose.yaml,config.json.tmpl}` | the three paperless binds and the `paperless` plan return; removed from `backup/bandicoot` |
+| `ansible/inventory/host_vars/bandicoot.yml` | drop the two `/mnt/jump/paperless*` sentinels (bilby still declares them; the files on Jump stay) |
+| docs | `docs/runbooks/paperless.html`, `docs/hosts.html` (bandicoot's stack list), `AGENTS.md` mention |
+
+**State.** bilby's copies were pruned after the move, so the data comes back
+from bandicoot: stop the six paperless containers on bandicoot by name, rsync
+`/var/lib/paperless-pgdata` and `/var/lib/paperless-data` (≈180 MB) to bilby
+as root with ownership preserved (the fleet rsync pattern, pulled from
+bilby), then commit + push; `podhaus-push-deploy` deploys on bilby. After
+verification, `docker rm` the six on bandicoot and delete its two state
+dirs; bandicoot's Backrest overlay redeploys without the binds.
+
+**Verify.** Login through `paperless.pod.haus`; document count unchanged;
+a document dropped in the Jump consume folder is consumed; Gatus
+"Paperless" green; bilby Backrest shows the `paperless` plan; bandicoot's
+container list has no paperless-*.
+
+---
+
+## Step 2 — Control plane to bandicoot
+
+Bigger than a stack move: Core, the deploy tree it syncs from, the fleet's
+Periphery private keys, `komodo-start`/`komodo-sync`, Ansible's control
+node and Terraform's runner are one unit, and all of it moves together.
+bilby becomes an ordinary outbound-Periphery host with files_on_host stacks.
+
+### 2a. Design
+
+| Concern | Today (bilby) | After (bandicoot) |
 |---|---|---|
-| `logs-ingest.pod.haus` (mTLS, bilby Caddy) | `reverse_proxy clickstack-otel:4318` on dockernet | `reverse_proxy 10.0.0.90:4318` |
-| `hyperdx.pod.haus` (bilby Caddy) | `hyperdx:8080` on dockernet | `10.0.0.90:8080` |
-| kangaroo's Alloy | OTLP straight to `10.0.0.119:4318` | `10.0.0.90:4318` (logging/kangaroo config) |
-| bilby's Alloy | `clickstack-otel:4318` on dockernet | `10.0.0.90:4318` (logging/bilby config) |
-| Fenwick, Paperless web | bilby Caddy → dockernet names | bilby Caddy → `10.0.0.90:<port>` |
+| Core compose | `komodo/ferretdb.compose.yaml`: postgres, ferretdb, core **and bilby's inbound Periphery** | the same file minus the `periphery` service; `extra_hosts: git.pod.haus:10.0.0.119` (bilby's internal Caddy, the address bandicoot's runner already uses) instead of `host-gateway` |
+| Core's sync tree `/syncs/podhaus` | bilby's Komodo-managed clone `/etc/komodo/repos/podhaus-deploy` (Repo `podhaus-deploy`, server `podhaus`) | bandicoot's existing Komodo-managed clone `/opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot` (Repo `podhaus-bandicoot`), which gains `on_pull = "git clean -fd"` like `podhaus-deploy` has. `podhaus-push-deploy` Stage 0 pulls **both** repos: bilby's tree still feeds bilby's files_on_host stacks (`PODHAUS_REPO` stays `/etc/komodo/repos/podhaus-deploy`); bandicoot's feeds the sync and bandicoot's linked-repo stacks |
+| Working checkout `/syncs/podhaus-local` | `~/repos/podhaus` on bilby | `~/repos/podhaus` on bandicoot (cloned with the machine key, with the Pipenv toolchain from README so pre-commit and Ansible run there) |
+| `komodo-start` | creates Repo `podhaus-deploy` on server `podhaus`; `KOMODO_FIRST_SERVER=https://periphery:8120` creates that server on a cold DB | creates the Core host's server (`bandicoot`, `address = ""`) and its tree repo (`podhaus-bandicoot`) if missing, then pulls it; `KOMODO_FIRST_SERVER*` dropped (there is no in-compose Periphery). Cold bootstrap on bandicoot is reasoned, not rehearsed — listed as a follow-up |
+| Keys `/opt/komodo/keys` | bilby (every Periphery's private key) | bandicoot, same path and mode; **removed from bilby** — bilby keeps only its own `periphery.key` + `core.pub` under `/opt/komodo-periphery/keys` like every other host |
+| `komodo_core_host` role | `komodo_core_hosts: [bilby]`; creates `/etc/komodo/ssl` and `/opt/komodo/keys` | `komodo_core_hosts: [bandicoot]`; the ssl task goes (it served bilby's in-compose Periphery, whose dir already exists) |
+| bilby's Periphery | inbound, in Core's compose, address `https://periphery:8120` | outbound, bootstrap-managed by the `komodo_periphery` role from a new `bilby/periphery/compose.yaml`: root stays `/etc/komodo` with the `/etc/komodo/repos/podhaus-deploy:/etc/komodo/repo` alias bind so every `run_directory = /etc/komodo/repo/<stack>` is untouched; keys from `/opt/komodo-periphery/keys`; `PERIPHERY_CORE_ADDRESSES: ws://bandicoot.pod.haus:9120` (LAN, direct, like kangaroo); `PERIPHERY_CONNECT_AS: podhaus`. servers.toml `podhaus` → `address = ""`. The role's readiness check looks for a server named after the inventory host, so it gains `podhaus_periphery_server_name` (default `inventory_hostname`; bilby sets `podhaus`) |
+| bandicoot's Periphery | dials `wss://core-connect.pod.haus` | dials `ws://bandicoot.pod.haus:9120` — Core is on the same host, so the internet path is no longer a dependency; gains `extra_hosts: git.pod.haus:10.0.0.119` for the Fenwick linked repo (step 3) |
+| kangaroo's Periphery | `ws://10.0.0.119:9120` | `ws://10.0.0.90:9120` (`kangaroo/periphery/compose.yaml`, applied the way `kangaroo_bootstrap` applies it) |
+| fractal, voltaire, pinelake, numbat | `wss://core-connect.pod.haus` | unchanged; the front door re-points (below) |
+| Front door, stage 1 | bilby Caddy `@komodo komodo-core:9120`; `core-connect.pod.haus` → `komodo-core:9120`; Pomerium routes and the GitHub webhook URL | bilby Caddy → `10.0.0.90:9120` for both; Core publishes 9120 on bandicoot's LAN address; nothing else changes |
+| Gatus | 17 checks POST `http://komodo-core:9120/read` | `http://10.0.0.90:9120/read` |
+| `onepassword` stack | files_on_host on bilby | `server = "bandicoot"`, `linked_repo = "podhaus-bandicoot"`, `run_directory = "onepassword"`; same env (the credentials file and Connect token Komodo variables move with the DB); komodo-op reaches `komodo-core:9120` on bandicoot's dockernet; the arm64 image builds locally there as it did on bilby |
+| Backrest | `backup/bilby` binds `komodo_postgres-data`, `komodo_ferretdb-state`, `onepassword_op-connect-data` + plans `komodo`, `onepassword` | move to `backup/bandicoot` |
+| Komodo's own nightly DB dumps `/opt/komodo/backups` | bilby, 169 MB | copied to bandicoot's `/opt/komodo/backups` |
+| Ansible control node | bilby (`ansible_connection: local`) | bandicoot (`ansible_connection: local`, `ansible_python_interpreter: /usr/bin/python3`); bilby becomes an SSH target (`ansible_host: bilby.pod.haus`). `podhaus_komodo_core_url` stays loopback |
+| Terraform | run from bilby | run from bandicoot (state is in MinIO via `storage.pod.haus`; nothing host-pinned) |
+| Logging | bilby's Alloy parsers for komodo-core/op/postgres/ferretdb, op-connect-* | bandicoot's Alloy carries the same parser files already; verify the chain in its `config.alloy` |
+| Docs | | `docs/komodo.html`, `docs/hosts.html` (bilby and bandicoot sections, control-node statement), `docs/host-provisioning.md`, `docs/disaster-recovery.html`, `docs/secrets.html`, `AGENTS.md` (komodo-start/komodo-sync/deploy-tree paragraphs, the ansible row), `README.md` ("Bootstrap the remote hosts from bilby") |
 
-bilby's firewalld `public` zone already accepts everything from
-`10.0.0.0/24`, and bandicoot runs the same zone, so published ports are
-reachable LAN-wide without a zone edit. Gatus checks that go through the
-front door are unchanged; checks that name a dockernet container move with
-the stack.
+Rejected: a second Repo resource on bandicoot solely for Core's tree
+(one more clone of the same branch for no gain); renaming server `podhaus`
+to `bilby` now (25 stack.toml files, Gatus bodies, docs — a later cleanup,
+listed below); keeping Core's sync tree on bilby (Core cannot bind a remote
+path, and it would pin the control plane to the host it is leaving).
 
-## Bandicoot prerequisites (all Ansible/Komodo, no manual step)
+### 2b. Cutover sequence
 
-- **NAS path, identical to bilby.** `storage_binds` gains ownership of the
-  NFS fstab entries: each `storage_binds_mounts` entry renders its fstab line
-  with bilby's exact options (`nfsvers=4.1,rw,nolock,soft,timeo=600,retrans=5,noatime,_netdev,nofail,x-systemd.automount`)
-  and the role installs `nfs-utils`. bilby's hand-written lines (from the
-  2026-05-23 incident) become role-owned as a no-op diff; bandicoot declares
-  `/mnt/jump` and `/mnt/pouch`, the four rate-limit drop-in dirs, and joins
-  `storage_binds_hosts`. Monitoring stays what bilby has: the recovery
-  timer, sentinels and the immutable-bit tripwire — no new Gatus check
-  (Nathan's decision). kangaroo exports both shares to `*`, verified from
-  bandicoot.
-- **Ofelia on bandicoot** (`ofelia/bandicoot`, the pinelake pattern) so
-  label-driven jobs on moved containers keep running.
-- **Backrest overlay** (`backup/bandicoot`) on bilby's pattern: restic repo
-  on `/mnt/jump/backups`, per-service read-only binds added as each service
-  arrives, Gatus push endpoint per host.
-- Docker networks for Fenwick declared in `host_vars/bandicoot.yml`
-  (`podhaus_extra_networks`, copied from bilby's), removed from bilby's when
-  the family has moved.
-- SELinux is enforcing here: every bind-mounting service carries
-  `security_opt: [label:disable]` in its bandicoot form (the pattern every
-  bandicoot overlay already follows).
+Core is unavailable from step 4 to step 8: no deploys, no Komodo alerts,
+Connect down (the Fenwick bot's email tools fail for the window). Running
+stacks are unaffected. Approved.
 
-## Per-service moves
+1. **Prepare bandicoot, no downtime.** Commit the code changes above but do
+   not push yet. On bandicoot: clone `~/repos/podhaus`, Pipenv toolchain,
+   pre-commit hook; run `playbooks/bandicoot.yml --tags komodo` from bilby
+   (the last Ansible run from bilby) to create `/opt/komodo/keys`; rsync
+   `/opt/komodo/keys` and `/opt/komodo/backups` from bilby; pre-create the
+   three named volumes on bandicoot (`komodo_postgres-data`,
+   `komodo_ferretdb-state`, `onepassword_op-connect-data`).
+2. **Re-point bandicoot's Periphery** to `ws://bandicoot.pod.haus:9120`
+   (`playbooks/bandicoot.yml --tags periphery` from bilby). It disconnects
+   until step 6 — bandicoot's stacks keep running.
+3. **Snapshot for rollback**: on bilby, note `docker volume` sizes and keep
+   the three volumes and `/opt/komodo/keys` untouched until step 10.
+4. **Stop on bilby** by name: komodo-core, komodo-op, op-connect-api,
+   op-connect-sync, komodo-ferretdb, komodo-postgres, komodo-periphery.
+5. **Copy state**: the three volumes' `_data` directories from bilby into
+   bandicoot's pre-created volumes (rsync as root, ownership preserved).
+6. **Push** the prepared commits (the webhook lands on a dead Core and is
+   simply lost). On bandicoot: `op-vault dev -- ./komodo-start`. Core comes
+   up on the copied DB; bandicoot's Periphery connects; the script ensures
+   the tree repo and pulls it, then runs the double sync.
+7. **bilby's Periphery**: from bandicoot, `playbooks/bilby.yml --tags periphery`
+   (first Ansible run from the new control node) installs the outbound
+   Periphery and waits for Core to report `podhaus` Ok. Remove the stopped
+   old periphery container first so the name is free.
+8. **Reconcile**: `RunProcedure podhaus-push-deploy` from bandicoot. It
+   pulls both trees, syncs (servers.toml, repos.toml, the `onepassword`
+   server change), injects hashes, and deploys: bilby's Caddy and Gatus with
+   the new upstreams, both Backrest overlays, `onepassword` on bandicoot.
+   Remote Peripheries reconnect through the re-pointed `core-connect`.
+   Then kangaroo's Periphery re-point.
+9. **Verify** (below). Only then:
+10. **Retire on bilby**: `docker rm` the stopped Core/onepassword containers,
+    delete the three volumes and `/opt/komodo/keys` (private keys must not
+    linger on a non-control node), `docker image rm` komodo-op:local-arm64.
 
-### Forgejo runner (fractal → bandicoot)
+**Rollback** (any point before 10): stop what is on bandicoot, start the
+old containers on bilby (`docker start` by name, or `komodo-start` from
+bilby's checkout at the pre-move commit), revert the Caddy/Gatus upstreams.
+bilby's volumes are untouched until step 10.
 
-- `playbooks/bandicoot.yml` gains `forgejo_runner` (tag `forgejo-runner`);
-  `playbooks/fractal.yml` loses it. `podhaus_forgejo_internal_address` moves
-  to bandicoot's host_vars.
-- fractal: stop and remove the runner container and `/opt/forgejo-runner`,
-  delete the fractal runner in Forgejo (repository runners API, same
-  1Password token the role uses). This is the one imperative teardown; it is
-  a one-way removal, so no role code.
-- Verify: Forgejo lists a `bandicoot` runner idle; a push to fenwick runs on
-  it; fractal's container list is docs/caddy/relay/logging/autoheal/Periphery
-  only.
+### 2c. Verification
 
-### ClickStack (bilby → bandicoot)
+- Komodo: every server Ok (`ListServers`), including `podhaus` outbound and
+  `bandicoot`; `ListStacks` all running; `onepassword` healthy on bandicoot
+  and `OP__KOMODO__*` variables still refreshing (komodo-op log).
+- A trivial push to podhaus deploys through the GitHub webhook (GitHub's
+  recent-deliveries page shows 200); `./komodo-sync` from bandicoot's
+  checkout overlays and syncs; `fenwick-push-deploy` still builds on bilby
+  (until step 3).
+- Gatus: all 17 Komodo-backed checks green; "Komodo" and "Komodo Alerts"
+  green; Backrest (bilby, bandicoot) green.
+- Ansible from bandicoot: `playbooks/bandicoot.yml` and `playbooks/bilby.yml`
+  `--check --diff` clean and second run `changed=0`. Terraform from
+  bandicoot: `plan` shows no diff.
+- Core's nightly backup lands in bandicoot's `/opt/komodo/backups`;
+  Backrest's `komodo` and `onepassword` plans run from bandicoot.
+- bilby: no komodo-core/postgres/ferretdb/op-connect containers; no
+  `/opt/komodo/keys`; disk and RAM re-measured.
 
-- Stack config: `server = "bandicoot"`, `linked_repo = "podhaus-bandicoot"`,
-  `run_directory = "clickstack"`; `PODHAUS_REPO` pinned in the stack's
-  environment to the linked-repo path on bandicoot
-  (`/opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot`) so the
-  config.d and scripts binds resolve. `hyperdx` publishes `8080` on the LAN
-  beside otel's `4318`. `label:disable` on the bind-mounting services.
-- Data: stop the stack on bilby, `rsync -aHAX /var/lib/clickstack/` to
-  bandicoot (21 GB at 1 GbE), keep ownership, deploy on bandicoot. Downtime
-  is the copy; Alloy on every host retries, so the gap is a delay, not loss
-  (approved).
-- Upstreams: the four rows in the ingress table.
-- Cron: `clickstack-mongo-dump` label is on the mongo container; bandicoot's
-  Ofelia runs it. Backrest overlay carries `/var/lib/clickstack/mongo-dumps`.
-- Verify: `logs-ingest.pod.haus` accepts a shipped record from bandicoot,
-  bilby and kangaroo (rows with `host` = each, after the move); HyperDX UI
-  through `hyperdx.pod.haus`; the mongo dump appears on bandicoot's schedule;
-  ClickHouse row count before/after the copy matches.
+---
 
-### Fenwick family (bilby → bandicoot)
+## Step 3 — Fenwick family to bandicoot
 
-- Networks first (host_vars, docker role, run both playbooks).
-- `fenwick` linked repo: `server = "bandicoot"` (the clone re-homes on
-  bandicoot's Periphery); the four stack.toml files in the fenwick repo:
-  `server = "bandicoot"`. Brinno keeps `/mnt/pouch` (NAS path prerequisite)
-  and gains the Pouch sentinel in `storage_binds_extra_sentinels`.
-- Data: `/var/lib/fenwick`, `/var/lib/signal-cli`,
-  `/var/lib/brinno-downloader` rsync'd with ownership. signal-cli's identity
-  is in that state dir, so this is a stop-copy-start, not a parallel run —
-  two live registrations of one Signal number is the failure to avoid.
-- Backrest: the three dirs move from `backup/bilby` to `backup/bandicoot`.
-- Verify: the bot answers on Signal; a Brinno archive lands on Pouch; Gatus
-  `timelapse_brinno` heartbeat keeps arriving; the runner (now on the same
-  host) builds the images.
+After step 2: the bot reaches `op-connect-api` by dockernet name, which now
+exists only on bandicoot.
 
-### Paperless (bilby → bandicoot)
+| Where | Change |
+|---|---|
+| `ansible/inventory/host_vars/bandicoot.yml` | `podhaus_extra_networks` (fenwick-net, fenwick-webagent-net, bilby's labels); `/mnt/pouch` root sentinel already exists; run `--tags docker`. Remove from bilby's host_vars after the move (networks removed by hand on bilby: the role only creates) |
+| `komodo/sync/repos.toml` | Repo `fenwick` → `server = "bandicoot"` (fresh clone on bandicoot's Periphery; the Forgejo token comes from Core's central git_providers, and `git.pod.haus` resolves via the Periphery's `extra_hosts` from step 2) |
+| fenwick repo: `stack.toml`, `brinno-downloader/stack.toml`, `web-agent/stack.toml` | `server = "bandicoot"`; tags `bilby` → `bandicoot`; comments |
+| fenwick `compose.yaml` | bot publishes `8088:8088` (bilby's Caddy `@fenwick`, `fenwick-events.pod.haus:4444`, and Gatus reach it); `OTEL_EXPORTER_OTLP_ENDPOINT` back to `http://clickstack-otel:4318` (same dockernet again); `mem_limit: 1g` on the bot (peak 642 MB); comment fixes ("on bilby") |
+| fenwick `brinno-downloader/stack.toml` | `BRINNO_GATUS_HEARTBEAT_URL=http://10.0.0.119:8080/...` (Gatus's LAN-published port, as ClickStack's mongo-dump uses) |
+| Bugsink | stays on bilby (pets uses it). Its DSN names `bugsink:8000` on dockernet; from bandicoot the bot needs a LAN path: `bugsink/compose.yaml` publishes `8000` on bilby and `ALLOWED_HOSTS` gains `10.0.0.119`; the 1Password item `Bugsink Fenwick DSN` credential becomes `http://<key>@10.0.0.119:8000/1` (edited with the dev service account; komodo-op re-syncs within a minute). This is the published-LAN-port pattern every other cross-host hop uses — the alternative, an unauthenticated public Pomerium ingest route on `bugs.pod.haus`, is a new exposure class and is not taken |
+| `caddy/Caddyfile` | `@fenwick` and `fenwick-events.pod.haus:4444` → `10.0.0.90:8088` |
+| `gatus/conf/config.yaml` | `http://fenwick:8088/health` and the `/events/async` alert URL → `10.0.0.90:8088` |
+| Backrest | `/var/lib/fenwick`, `/var/lib/signal-cli` binds + plan `fenwick` → `backup/bandicoot`; out of `backup/bilby` |
+| Logging | bandicoot's Alloy must drop the bot's stdout as bilby's does (the bot self-reports OTLP); confirm `parsers.fenwick` is in bandicoot's chain |
+| Docs | fenwick `docs/networking.html` ("pre-created on bilby"), `AGENTS.md`; podhaus `docs/hosts.html`, `docs/monitoring.html` |
 
-- Stack config as for ClickStack (`files_on_host` → linked repo, path pin,
-  `label:disable`); `/mnt/jump/paperless` sentinels and the
-  `.podhaus-share-mounted` marker check the compose already does.
-- Data: `/var/lib/paperless-pgdata` and `/var/lib/paperless-data` rsync'd
-  stopped; documents stay on Jump.
-- Backrest: paperless binds move to `backup/bandicoot`.
-- Verify: login, a document consumed from the Jump consume folder, the
-  nightly Backrest snapshot from bandicoot.
+**Sequence.** Networks first (host_vars + `--tags docker` on bandicoot).
+Commit the podhaus changes and the fenwick changes; push podhaus first
+(Caddy/Gatus now point at an empty 8088 — brief red, approved; the `fenwick`
+Repo re-homes). Stop the four containers on bilby by name (signal-cli last
+stopped, first copied: **one Signal registration only**); rsync
+`/var/lib/fenwick`, `/var/lib/signal-cli`, `/var/lib/brinno-downloader`
+(25 MB) to bandicoot; push fenwick `main` → CI on the bandicoot runner →
+`deploy` advances → `fenwick-push-deploy` clones on bandicoot, builds the
+three images there (the first build is a cold cache) and brings the family
+up. Edit the Bugsink DSN item and redeploy `bugsink` (its compose changed)
+in the podhaus push. Then `docker rm` the four on bilby, remove its two
+fenwick networks and the `fenwick:local` / brinno / web-agent images, delete
+the three state dirs; drop `podhaus_extra_networks` from bilby's host_vars.
 
-### Control plane (Komodo Core → bandicoot)
+**Verify.** The bot answers on Signal and its web UI loads through
+`fenwick.pod.haus`; a Gatus alert test reaches Signal (the `/events/async`
+path); an email tool call succeeds (Connect reachable); a Bugsink event from
+the bot appears in `bugs.pod.haus`; `timelapse_brinno` heartbeat arrives;
+web-agent healthy; Gatus "Fenwick" checks green; traces in HyperDX with
+`ServiceName = fenwick` after the move; bandicoot RAM re-measured; bilby's
+container list has no fenwick-*, signal-cli or brinno.
 
-Bigger than a stack move: the repo binds Core, the Ansible/Terraform control
-node (`/opt/komodo/keys` with every Periphery private key,
-`podhaus_komodo_core_url` on loopback) and Nathan's working checkout to one
-host, and `komodo-sync` overlays that checkout into Core's deploy tree.
-Moving Core means bandicoot becomes the control node; splitting them breaks
-`komodo-sync`.
+---
 
-- What moves: `komodo_core_host` role membership, `komodo/ferretdb.compose.yaml`
-  stack via `komodo-start`, the deploy tree, `komodo-op`, `/opt/komodo/keys`,
-  the `podhaus-deploy` repo resource, Postgres data (3.4 GB) and FerretDB.
-  Ansible and Terraform then run from bandicoot.
-- Ingress: `komodo.pod.haus`, `core-connect.pod.haus` (every outbound
-  Periphery dials it) and the GitHub webhook listener re-point — either bilby
-  Caddy upstreams to `10.0.0.90` as for ClickStack (keeps the front door on
-  bilby, so a bilby outage still takes the control plane's door with it), or
-  routes moved to bandicoot's own rathole/Caddy (the front door survives
-  bilby). The second is the one that delivers the availability goal.
-- bilby's Periphery becomes an outbound one like every other host.
-- bandicoot becomes a bootstrap dependency of the fleet; the USB NIC is the
-  named risk, mitigated by the autosuspend pin and the UniFi reservation.
+## Step 4 — Fold in and delete this plan
 
-Done last, as its own phase, after the stack moves have proven bandicoot
-stable — none of the stack moves depend on it.
+`docs/hosts.html`, `docs/monitoring.html`, `docs/komodo.html`,
+`docs/host-provisioning.md`, `docs/disaster-recovery.html` state the new
+layout; the "What was done" ledger below is folded into them and this file
+is deleted.
 
-## Order, by dependency
-
-1. Prerequisites: NAS path (storage_binds extension, both hosts), Ofelia on
-   bandicoot, Backrest overlay skeleton.
-2. Runner off fractal (no state; fastest fractal win).
-3. ClickStack (biggest bilby win). Measure bandicoot.
-4. Fenwick family. Measure.
-5. Paperless.
-6. bilby `docker system prune` (images + build cache).
-7. Control plane — after Nathan's decisions below.
-8. Extras only if the measurements ask for them.
+---
 
 ## Decisions that are Nathan's
 
 | Decision | Recommendation | Trade-off |
 |---|---|---|
-| bandicoot to `multi-user.target` (no GNOME/GDM) | **Decided: keep GNOME.** Nathan wants the laptop usable as one; cull only when a move needs the 1–2 GB | No local GUI on the laptop; SSH only |
-| Control-plane front door | Routes on bandicoot's own relay (survives bilby) | More Terraform/relay work than bilby upstreams |
-| bilby's Periphery after Core moves | Outbound, like every other host | None material; it is the fleet pattern |
-| Move the small extras | No, unless bilby measures tight after 3–5 | Extra moves for negligible gain |
+| **Control-plane front door, stage 2** — move `komodo.pod.haus` (family route + the public `/listener/github` route) onto bandicoot's own relay (`bandicoot_http`, port 8447) with `komodo.pod.haus` and `core-connect.pod.haus` sites in bandicoot's Caddy; `core-connect.pod.haus` becomes a public **unauthenticated websocket** Pomerium route (prefix `/ws/periphery`, `allow_websockets`, `idle_timeout: 0s`) and its DNS moves from the relay address to Pomerium's | Do it after stage 1 has been stable for a while: it is what makes the control plane survive bilby | New route class (public websocket to Core; the Noise handshake remains the real boundary); Periphery connections traverse Pomerium, so a Pomerium restart drops and reconnects every remote Periphery. Terraform (`services_pod_haus.tf`, Pomerium config), `caddy/bandicoot`, bilby Caddyfile cleanup |
+| Rename Komodo server `podhaus` → `bilby` | Later, as its own change | 25 stack.toml files, Gatus bodies, repos.toml, docs; no functional gain now |
+| bilby `docker system prune` (build cache) | Nathan's call | Next fenwick/pets push rebuilds instead of no-op |
+| GNOME on bandicoot | **Decided: keep** | Reserve RAM lever only |
+| Bugsink reachability | Applied: LAN-published port on bilby (existing pattern) | Say so if you want the Pomerium ingest route instead |
+
+## Risks
+
+- **USB NIC on bandicoot** is now the control plane's only link; the
+  autosuspend exemption and the UniFi reservation are the mitigations, and
+  the stage-1 front door on bilby means a bandicoot outage takes deploys
+  and Connect down but not ingress.
+- **Cold bootstrap on bandicoot** (`komodo-start` on an empty DB) is
+  reasoned through, not rehearsed. Follow-up: rehearse it on a throwaway
+  Core project.
+- **Fenwick image builds on bandicoot** start from a cold layer cache; the
+  first `fenwick-push-deploy` is slow, not broken.
+- **RAM** on bandicoot in the worst-case coincidence exceeds physical
+  memory (above); swap absorbs it, `mem_limit`s bound it, GNOME is the
+  reserve.
 
 ## What was done
 
@@ -225,7 +275,8 @@ stable — none of the stack moves depend on it.
   `ofelia/bandicoot` runs. (8e7909b)
 - ✅ Runner: `bandicoot` registered idle in Forgejo; fractal's runner torn
   down and deregistered; fractal runs docs/caddy/relay/logging/autoheal/
-  Periphery only. (2534886)
+  Periphery only. (2534886) Proven by fenwick CI run 26 on the bandicoot
+  runner.
 - ✅ ClickStack on bandicoot: 830 M rows carried over by a stopped-state
   rsync; fresh rows from every host within minutes; `watch.pod.haus` and
   `logs-ingest.pod.haus` proxied from bilby; Gatus heartbeats query
@@ -235,24 +286,10 @@ stable — none of the stack moves depend on it.
 - ✅ `backup/bandicoot`: restic repo on `/mnt/jump/backups-bandicoot`,
   the mongo dumps as its first plan, Gatus heartbeat and container probe;
   container healthy, Gatus green. (0bc718e)
-- ✅ Runner proven: fenwick CI run 26 (deno, webui, web-agent,
-  brinno-downloader, promote) went green on the `bandicoot` runner and
-  advanced the `deploy` branch.
-- ✅ Paperless re-homed (44b34cc): state copied stopped, stack, Caddy, Gatus
-  and Backrest plan moved; healthy on bandicoot, documents on Jump visible,
-  mail-init converged, `paperless.pod.haus` answers through Pomerium, Gatus
-  green.
-- ⛔ Fenwick family: **blocked on a decision.** The bot reaches
-  1Password Connect (`op-connect-api`) and Bugsink by dockernet name and
-  neither publishes a LAN port, so a move needs one of: bilby publishing
-  Connect (token-authenticated) and Bugsink on the LAN, on the same
-  published-port pattern as Gatus's `:8080`; or the Fenwick family staying
-  on bilby. Exposing a secrets API on the LAN is Nathan's call. Interim:
-  the bot's own telemetry export was re-pointed at `10.0.0.90:4318`
-  (fenwick 46fdc1f) because the collector left bilby's dockernet.
-- Not done, deliberately: bilby's `docker system prune`. Pruning the build
-  cache changes the next fenwick/pets push from a container-level no-op to
-  a rebuild; that trade-off is Nathan's.
-
-The plan is deleted when everything above is folded into `docs/hosts.html`,
-`docs/monitoring.html` and `docs/host-provisioning.md`.
+- ✅ Paperless re-homed to bandicoot (44b34cc) and verified — superseded by
+  Nathan's decision to keep it on bilby; step 1 reverses it.
+- Interim: the bot's telemetry export was re-pointed at `10.0.0.90:4318`
+  (fenwick 46fdc1f) because the collector left bilby's dockernet; step 3
+  puts it back on the dockernet name.
+- Not done, deliberately: bilby's `docker system prune` (Nathan's call,
+  above).
