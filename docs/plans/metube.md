@@ -130,3 +130,13 @@ single developer), Radarr now (movies are a later plan on the same pattern).
   rewritten in place without container tags; after a refresh Plex shows
   TheTVDB titles for all 59.
 - ⏳ Nathan: first-play check on the LG CX (direct play vs transcode).
+- ✅ Fixed the no-folder gap the 42-episode Space Racers season 1 queue hit:
+  MeTube's `/downloads` bind moved to `Kids/_incoming` itself (everything it
+  writes is now staging), and the hook falls back to yt-dlp's `%(channel)s`
+  (the show name, for these channels) when the family picks no folder.
+  Verified end to end: "SPACE RACERS: The Haunted Asteroid" queued with no
+  folder chosen landed as
+  `Kids/TV/Space Racers (2014) {tvdb-282447}/Season 02/Space Racers (2014) - S02E01 - The Haunted Asteroid.mp4`,
+  Sonarr's episode file count for the series went 42 → 43, Gatus
+  `metube_plexify` stayed green, and Plex showed the new episode with no
+  manual refresh needed.
