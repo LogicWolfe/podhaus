@@ -13,8 +13,23 @@
 // HyperDX line still shows which subsystem logged it.
 //
 // Early-boot / framework lines that aren't `[COMP] {json}` (plain
-// text, no JSON object) don't match the regex and fall straight
-// through this component untouched — Body/timestamp left as ingested.
+// text, no JSON object) don't match the regex and are meant to fall
+// straight through this component untouched.
+//
+// Bug fixed here: that passthrough claim was wrong. When the outer
+// regex doesn't match at all, `comp`/`json`/`lvl`/`t`/`msg` are never
+// extracted (not even as empty strings), and Loki's template stage
+// prints the literal text "<no value>" for a referenced-but-never-set
+// variable — not "". The old single stage.match ran the level template
+// and the Body template unconditionally, so every early-boot line got
+// detected_level="<no value>" (a bogus label, worse than unset) and
+// Body="[<no value>] <no value>" (the original line destroyed).
+// Reproduced against a real hyperdx startup line via the local harness
+// before this fix. Fixed by nesting the JSON-handling stages inside a
+// second stage.match gated on a line filter that the `[COMP] {json}`
+// shape is actually present — lines that don't match skip the nested
+// block entirely and are untouched by any of these stages, which is
+// what "passes through clean" actually requires.
 
 declare "hyperdx" {
 	argument "forward_to" { }
@@ -25,46 +40,49 @@ declare "hyperdx" {
 		stage.match {
 			selector = "{service=\"hyperdx\"}"
 
-			// Split "[COMP] {json}". Non-matching lines (no bracket prefix
-			// or no trailing JSON object) leave all groups empty and the
-			// later stages no-op, so plain boot lines pass through clean.
-			stage.regex {
-				expression = "^\\[(?P<comp>[^\\]]+)\\]\\s+(?P<json>\\{.*\\})$"
-			}
+			stage.match {
+				selector = "{service=\"hyperdx\"} |~ \"^\\\\[[^\\\\]]+\\\\] \\\\{\""
 
-			stage.json {
-				source      = "json"
-				expressions = {lvl = "level", t = "time", msg = "msg"}
-			}
+				// Split "[COMP] {json}" — the line filter above already
+				// guarantees this shape, so the capture groups always land.
+				stage.regex {
+					expression = "^\\[(?P<comp>[^\\]]+)\\]\\s+(?P<json>\\{.*\\})$"
+				}
 
-			// pino numeric level -> canonical UPPERCASE severity. OTTL
-			// downstream maps detected_level to OTLP SeverityNumber.
-			stage.template {
-				source   = "lvl"
-				template = "{{ if eq .Value \"10\" }}TRACE{{ else if eq .Value \"20\" }}DEBUG{{ else if eq .Value \"30\" }}INFO{{ else if eq .Value \"40\" }}WARN{{ else if eq .Value \"50\" }}ERROR{{ else if eq .Value \"60\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
-			}
+				stage.json {
+					source      = "json"
+					expressions = {lvl = "level", t = "time", msg = "msg"}
+				}
 
-			stage.labels {
-				values = {detected_level = "lvl"}
-			}
+				// pino numeric level -> canonical UPPERCASE severity. OTTL
+				// downstream maps detected_level to OTLP SeverityNumber.
+				stage.template {
+					source   = "lvl"
+					template = "{{ if eq .Value \"10\" }}TRACE{{ else if eq .Value \"20\" }}DEBUG{{ else if eq .Value \"30\" }}INFO{{ else if eq .Value \"40\" }}WARN{{ else if eq .Value \"50\" }}ERROR{{ else if eq .Value \"60\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
+				}
 
-			// pino `time` is epoch milliseconds; "UnixMs" is the documented
-			// Alloy/Loki predefined token for ms-since-epoch (peers: Unix,
-			// UnixUs, UnixNs). The 13-digit string parses directly.
-			stage.timestamp {
-				source = "t"
-				format = "UnixMs"
-			}
+				stage.labels {
+					values = {detected_level = "lvl"}
+				}
 
-			// Body = pino msg, re-prefixed with the component tag so the
-			// subsystem (API / ALERT-TASK / ...) stays visible in HyperDX.
-			stage.template {
-				source   = "line"
-				template = "[{{ .comp }}] {{ .msg }}"
-			}
+				// pino `time` is epoch milliseconds; "UnixMs" is the documented
+				// Alloy/Loki predefined token for ms-since-epoch (peers: Unix,
+				// UnixUs, UnixNs). The 13-digit string parses directly.
+				stage.timestamp {
+					source = "t"
+					format = "UnixMs"
+				}
 
-			stage.output {
-				source = "line"
+				// Body = pino msg, re-prefixed with the component tag so the
+				// subsystem (API / ALERT-TASK / ...) stays visible in HyperDX.
+				stage.template {
+					source   = "line"
+					template = "[{{ .comp }}] {{ .msg }}"
+				}
+
+				stage.output {
+					source = "line"
+				}
 			}
 		}
 	}

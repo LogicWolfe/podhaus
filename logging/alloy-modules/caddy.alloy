@@ -1,0 +1,75 @@
+// Per-service log parser — caddy
+//
+// See komodo-op.alloy for the pattern/rationale. Same zap-JSON shape and
+// float-epoch-seconds timestamp as clickstack-otel; see that file for
+// the "why Unix, not UnixMs" rationale.
+//
+// Caddy emits one zap JSON object per line, admin API and access logs
+// both:
+//   {"level":"info","ts":1788960526.0307655,"logger":"admin.api","msg":"received request","method":"GET","host":"127.0.0.1:2019","uri":"/config/", ...}
+//
+// `ts` is a float epoch in fractional SECONDS (zap's default encoder,
+// same as clickstack-otel) — Alloy's "Unix" timestamp token consumes
+// float seconds directly. `level` is a lowercase zap word; uppercase it
+// and fold dpanic/panic onto FATAL so it lands on the canonical
+// TRACE|DEBUG|INFO|WARN|ERROR|FATAL set before OTTL maps it to OTLP
+// severity. Body is reduced to `logger: msg` — the `logger` field (e.g.
+// admin.api, http.log.access) is the useful at-a-glance context; the
+// rest (headers, request IDs) stays in the raw line but out of the
+// shaped Body. Non-JSON lines (Caddy's own startup banner) are kept out
+// of the JSON stages entirely by a nested line-filtered stage.match, so
+// they pass through untouched — see the inner stage.match comment below
+// for why that gate is load-bearing, not just tidy.
+
+declare "caddy" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{service=\"caddy\"}"
+
+      // Gate on a JSON-shaped line filter, same reasoning as pomerium.alloy:
+      // without it, Caddy's own plain-text startup banner would leave every
+      // extracted var unset, and the two stage.template calls below would
+      // print the literal text "<no value>" into detected_level and Body
+      // instead of leaving the line alone. See hyperdx.alloy for the
+      // harness-confirmed failure mode this avoids.
+      stage.match {
+        selector = "{service=\"caddy\"} |~ \"^\\\\{\""
+
+        stage.json {
+          expressions = {lvl = "level", ts = "ts", msg = "msg", logger = "logger"}
+        }
+
+        stage.template {
+          source   = "lvl"
+          template = "{{ $u := ToUpper .Value }}{{ if or (eq $u \"DPANIC\") (eq $u \"PANIC\") }}FATAL{{ else }}{{ $u }}{{ end }}"
+        }
+
+        stage.timestamp {
+          source = "ts"
+          format = "Unix"
+        }
+
+        stage.labels {
+          values = {detected_level = "lvl"}
+        }
+
+        stage.template {
+          source   = "line"
+          template = "{{ if .logger }}{{ .logger }}: {{ end }}{{ .msg }}"
+        }
+
+        stage.output {
+          source = "line"
+        }
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

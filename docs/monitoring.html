@@ -375,8 +375,10 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         checks query. The severity mapping is authoritative; for lines with no parsed level
         there's a body-keyword fallback (anchored to the first ~60 chars so e.g. "Total
         errors encountered: 0" isn't mislabelled ERROR). Services without a parser —
-        <code>docs</code>, <code>ofelia</code>, <code>pomerium</code>, <code>caddy</code> —
-        still flow with the generic fallback.
+        <code>docs</code>, <code>ofelia</code>, <code>sonarr</code>, <code>mumble</code> —
+        still flow with the generic fallback, and when that finds no level either, the
+        ClickStack collector guesses one from the first level-like word in the body. That
+        guess is the baseline; a service whose lines it mislabels gets its own module.
       </p>
       <p>
         To parse a new service: add <code>logging/alloy-modules/&lt;service&gt;.alloy</code>

@@ -4,8 +4,13 @@
 //
 // Backrest (zap) log format: RFC3339 with millis and a +0800 numeric
 // offset (no colon — NOT standard RFC3339), level word, message, then
-// an optional trailing JSON detail object:
-//   2026-05-16T04:20:39.162+0800 INFO running task {"task": "forget ...
+// an optional trailing JSON detail object. The field separator differs
+// by host/version — kangaroo's backrest uses a space, bandicoot's uses
+// a literal tab — so the regex accepts either (`\s+`, not a literal
+// `" "`; the original space-only pattern silently passed every
+// bandicoot line straight through, unparsed):
+//   2026-05-16T04:20:39.162+0800 INFO running task {"task": "forget ...   (kangaroo)
+//   2026-09-09T21:08:03.190+0800	INFO	running task	{"task": "forget ...  (bandicoot)
 //
 // Level words (INFO/WARN/ERROR/DEBUG) map directly. Body keeps the
 // message + any trailing JSON (useful context). Non-matching lines
@@ -21,7 +26,7 @@ declare "backrest" {
       selector = "{service=\"backrest\"}"
 
       stage.regex {
-        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+[+-]\\d{4}) (?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+[+-]\\d{4})\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
       }
 
       stage.timestamp {

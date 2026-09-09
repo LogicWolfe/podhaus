@@ -20,7 +20,8 @@ declare "chain" {
 	komodo_core "run" { forward_to = [komodo_periphery.run.receiver] }
 	komodo_periphery "run" { forward_to = [komodo_ferretdb.run.receiver] }
 	komodo_ferretdb "run" { forward_to = [komodo_postgres.run.receiver] }
-	komodo_postgres "run" { forward_to = [paperless_postgres.run.receiver] }
+	komodo_postgres "run" { forward_to = [umami_postgres.run.receiver] }
+	umami_postgres "run" { forward_to = [paperless_postgres.run.receiver] }
 	paperless_postgres "run" { forward_to = [op_connect_api.run.receiver] }
 	op_connect_api "run" { forward_to = [op_connect_sync.run.receiver] }
 	op_connect_sync "run" { forward_to = [clickstack_mongo.run.receiver] }
@@ -34,7 +35,11 @@ declare "chain" {
 	home_assistant "run" { forward_to = [autoheal.run.receiver] }
 	autoheal "run" { forward_to = [syncthing.run.receiver] }
 	syncthing "run" { forward_to = [backrest.run.receiver] }
-	backrest "run" { forward_to = [flood.run.receiver] }
+	backrest "run" { forward_to = [pomerium.run.receiver] }
+	pomerium "run" { forward_to = [caddy.run.receiver] }
+	caddy "run" { forward_to = [forgejo.run.receiver] }
+	forgejo "run" { forward_to = [rathole.run.receiver] }
+	rathole "run" { forward_to = [flood.run.receiver] }
 	flood "run" { forward_to = argument.forward_to.value }
 
 	export "receiver" {

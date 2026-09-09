@@ -1,0 +1,91 @@
+// Per-service log parser — pomerium
+//
+// See komodo-op.alloy for the pattern/rationale.
+//
+// Pomerium (zap) emits one JSON object per line from several internal
+// sub-loggers (envoy, authorize, autocert, identity_manager, the proxy
+// itself, ...); the sub-logger name — when present — is its own
+// "service" field, distinct from the `service` Loki label this whole
+// pipeline keys parsers on:
+//   {"level":"info","service":"envoy","...","time":"2026-09-09T21:27:56+08:00","message":"http-request"}
+//   {"level":"debug","server-name":"all","...","time":"2026-09-09T21:27:55+08:00","message":"no session handle from request"}
+//   {"level":"info","component":"idp-token-session-creator","...","time":"2026-09-09T21:27:55+08:00","message":"idp-token-session-creator.CreateSession succeeded"}
+//
+// `time` is RFC3339 with a numeric offset (+08:00, Pomerium's own local
+// wall clock) — Alloy's RFC3339Nano token parses the offset directly, no
+// location= needed. `message` (not `msg`) carries the human text.
+//
+// Why a parser despite ClickStack's own JSON-body promotion already
+// getting most of these right: that promotion is undocumented-to-us
+// downstream behaviour keyed on the body having a literal "level" field,
+// not a guarantee. Pomerium is the fleet's auth front door and among the
+// highest-volume unparsed sources (~2500+ rows/day); the concrete wins
+// here are (1) the real event timestamp — every one of these rows
+// currently lands at ingest time, not the time Pomerium logged it, and
+// (2) a `detected_level` that survives a non-JSON line (a panic/crash
+// dump) still falling through to the enrich.alloy heuristic instead of
+// silently depending on collector-side JSON promotion. Body is reduced
+// to the sub-logger (when present) + message, dropping the large
+// per-request JSON (route ids, headers, OAuth state blobs) that makes
+// these lines hard to scan in HyperDX.
+
+declare "pomerium" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{service=\"pomerium\"}"
+
+      // Gate the JSON handling on a line filter that the body actually
+      // looks like a JSON object. Without this, a non-JSON line (the
+      // startup banner) leaves every extracted var unset, and Loki's
+      // template stage prints the literal text "<no value>" for a
+      // referenced-but-never-set variable rather than "" — corrupting
+      // both detected_level and Body instead of leaving the line alone.
+      // Confirmed via the local harness before adding this filter (same
+      // failure mode fixed in hyperdx.alloy).
+      stage.match {
+        selector = "{service=\"pomerium\"} |~ \"^\\\\{\""
+
+        stage.json {
+          expressions = {
+            lvl = "level",
+            ts  = "time",
+            msg = "message",
+            svc = "service",
+            cmp = "component",
+          }
+        }
+
+        stage.timestamp {
+          source = "ts"
+          format = "RFC3339Nano"
+        }
+
+        stage.template {
+          source   = "lvl"
+          template = "{{ ToUpper .Value }}"
+        }
+
+        stage.labels {
+          values = { detected_level = "lvl" }
+        }
+
+        stage.template {
+          source   = "line"
+          template = "{{ if .svc }}[{{ .svc }}] {{ end }}{{ if .cmp }}[{{ .cmp }}] {{ end }}{{ .msg }}"
+        }
+
+        stage.output {
+          source = "line"
+        }
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

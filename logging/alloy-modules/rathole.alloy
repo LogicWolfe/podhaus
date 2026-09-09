@@ -1,0 +1,54 @@
+// Per-service log parser — rathole-client / rathole-server
+//
+// See komodo-op.alloy for the pattern/rationale. rathole (Rust tracing)
+// uses the same whitespace-separated, RFC3339-nanosecond UTC format as
+// komodo-core/komodo-periphery:
+//   2026-09-09T11:02:25.303752Z  WARN handle{service=pinelake_ssh}:run: rathole::client: Failed to run the data channel: Failed to read cmd: early eof
+//
+// Every host's rathole client (and Numbat's rathole server) already gets
+// a mostly-correct guess today because the level word sits right after
+// the timestamp, matching enrich.alloy's generic top-of-line heuristic —
+// so this parser's real value is the event timestamp (currently ingest
+// time) rather than a severity fix. Reconnect churn on a flaky WAN link
+// (pinelake, voltaire) is exactly the case where knowing *when* each
+// "early eof" happened, not just when Alloy happened to ship it, matters
+// for correlating with the client-side network event.
+//
+// One file for both container flavours: docker-logs.alloy strips the
+// host prefix from the container name, so bilby-rathole-client,
+// voltaire-rathole-client, pinelake-rathole-client etc. all collapse to
+// service="rathole-client", and numbat-rathole-server to
+// service="rathole-server".
+
+declare "rathole" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{service=~\"rathole-client|rathole-server\"}"
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source = "ts"
+        format = "RFC3339Nano"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

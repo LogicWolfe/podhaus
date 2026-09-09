@@ -1,0 +1,63 @@
+// Per-service log parser — forgejo
+//
+// See komodo-op.alloy for the pattern/rationale.
+//
+// Forgejo (Go, its own gitea-style logger) log format, LOCAL time (the
+// container runs TZ=Australia/Perth like the rest of the fleet — same
+// convention as gatus), caller info, then a single-letter bracketed
+// level:
+//   2026/09/09 21:29:12 ...eb/routing/logger.go:102:func1() [I] router: completed GET /api/healthz for 127.0.0.1:56144, 200 OK in 0.1ms @ healthcheck/check.go:67(healthcheck.Check)
+//   2026/09/09 09:28:39 ...eful/manager_unix.go:142:handleSignals() [W] PID 7. Received SIGTERM. Shutting down...
+//
+// Without this parser every line falls to the generic OTTL fallback,
+// which only recognises the words trace/debug/info/warn/error/fatal —
+// not Forgejo's single-letter tag — so a real [W]/[E]/[F] line (a
+// shutdown, a git-hook failure, a DB error) is silently reported as
+// INFO forever. The caller-info segment (`...eb/routing/logger.go:102:
+// func1()`) is dropped from Body along with the tag — it's the file
+// path, not part of the message.
+//
+// Levels: T(race)/D(ebug)/I(nfo)/W(arn)/E(rror)/F(atal)/C(ritical) —
+// Forgejo's own gitea logger vocabulary; C(ritical) folds to FATAL.
+// The stages are gated on a line filter for that exact shape, so a
+// line without a level tag (the startup banner) is never touched —
+// without the gate the level template's fallthrough would stamp it.
+
+declare "forgejo" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{service=\"forgejo\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} .*\\\\[[TDIWEFC]\\\\] \""
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}) .*?\\[(?P<lvl>[TDIWEFC])\\]\\s+(?P<msg>.*)$"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "2006/01/02 15:04:05"
+        location = "Australia/Perth"
+      }
+
+      stage.template {
+        source   = "lvl"
+        template = "{{ if eq .Value \"T\" }}TRACE{{ else if eq .Value \"D\" }}DEBUG{{ else if eq .Value \"I\" }}INFO{{ else if eq .Value \"W\" }}WARN{{ else if eq .Value \"E\" }}ERROR{{ else }}FATAL{{ end }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}
