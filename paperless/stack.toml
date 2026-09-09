@@ -4,9 +4,13 @@ description = "Paperless-ngx document management system"
 tags = ["podhaus"]
 
 [stack.config]
-server = "podhaus"
-files_on_host = true
-run_directory = "/etc/komodo/repo/paperless"
+# Lives on bandicoot (docs/plans/bandicoot-migration.md): OCR is CPU work
+# and the stack is self-contained apart from its documents on Jump, which
+# bandicoot mounts on bilby's terms. Linked repo, like every stack that is
+# not on bilby; the front door stays on bilby's Caddy.
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "paperless"
 # Custom paperless image (Dockerfile + toweosp mail parser) + init-tools
 # image for paperless-mail-init both build inline.
 run_build = true
@@ -15,7 +19,8 @@ run_build = true
 ignore_services = ["paperless-mail-init"]
 
 environment = """
-PODHAUS_REPO=[[PODHAUS_REPO]]
+# The linked-repo checkout on bandicoot, for the mail-init script bind.
+PODHAUS_REPO=/opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot
 PAPERLESS_SECRET_KEY=[[OP__KOMODO__PAPERLESS_SECRET_KEY__PASSWORD]]
 PAPERLESS_POSTGRES_PASSWORD=[[OP__KOMODO__PAPERLESS_POSTGRES_PASSWORD__PASSWORD]]
 PAPERLESS_ADMIN_PASSWORD=[[OP__KOMODO__PAPERLESS_ADMIN_PASSWORD__PASSWORD]]

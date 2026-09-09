@@ -74,7 +74,7 @@
 		reverse_proxy @docs docs:8000
 		reverse_proxy @minio_console minio:9001
 		reverse_proxy @sync 10.0.0.25:8384
-		reverse_proxy @paperless paperless:8000
+		reverse_proxy @paperless 10.0.0.90:8000
 		reverse_proxy @stats umami:3000
 		reverse_proxy @git forgejo:3000
 		reverse_proxy @dev nathanbaxter-dev:4321
@@ -501,7 +501,7 @@ paperless-api.pod.haus:4444 {
 		header X-Podhaus-Gateway-Token {env.PAPERLESS_API_GATEWAY_TOKEN}
 	}
 	handle @api {
-		reverse_proxy paperless:8000 {
+		reverse_proxy 10.0.0.90:8000 {
 			header_up Host paperless.pod.haus
 		}
 	}

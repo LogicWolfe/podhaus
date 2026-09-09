@@ -208,7 +208,7 @@ endpoints:
   # configured public hostname with a 400, so the gatus probe spoofs it.
   # paperless redirects to /accounts/login/ (302) when the app is healthy.
   - name: Paperless
-    url: http://paperless:8000/
+    url: http://10.0.0.90:8000/
     <<: *defaults
     group: Paperless
     headers:

@@ -90,8 +90,9 @@ Docker container infrastructure for **seven** active hosts:
   `bandicoot.docs.pod.haus`, Alloy to `logs-ingest.pod.haus`; direct LAN
   SSH via split-horizon `bandicoot.pod.haus`. Provisioned by Ansible
   (`playbooks/bandicoot.yml`), with the `base` role's laptop policy so the
-  lid never takes it offline. Designated successor for ClickStack, the
-  Fenwick stacks and Paperless; nothing has moved yet.
+  lid never takes it offline. Runs ClickStack, Paperless, the Forgejo
+  Actions runner and its own Backrest; the Fenwick stacks are next
+  (docs/plans/bandicoot-migration.md).
 - **pinelake** (Apple M1 Mac mini, macOS, second household) is a dedicated
   media appliance. OrbStack is its sole container runtime; Plex, Flood,
   Syncthing, backup, ingress, logging, scheduling, and Autoheal follow the

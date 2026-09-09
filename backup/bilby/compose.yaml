@@ -76,9 +76,6 @@ services:
       - /var/lib/plex-local:/userdata/plex:ro
       - /var/lib/flood-db:/userdata/flood:ro
       - /var/lib/home-assistant:/userdata/home-assistant:ro
-      - /var/lib/paperless-pgdata:/userdata/paperless/pgdata:ro
-      - /var/lib/paperless-data:/userdata/paperless/data:ro
-      - /mnt/jump/paperless/documents:/userdata/paperless/documents:ro
       # Umami analytics Postgres — live datadir snapshot (same crash-
       # consistent restic-on-pgdata pattern as paperless/komodo above;
       # Postgres WAL-replays on restore). Local NVMe, not reproducible.
