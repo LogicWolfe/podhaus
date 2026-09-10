@@ -93,6 +93,23 @@
         <code>10.0.0.119</code>, so the server-to-server websocket stays local and does not
         need a Pomerium session.
       </p>
+      <p>
+        In Music Assistant's Settings → System → Streams, the advanced
+        <strong>Published IP address</strong> is explicitly
+        <code>10.0.0.119</code>. Speakers fetch audio from this address on
+        port <code>8097</code>; automatic address selection can choose one of
+        Bilby's Docker bridges, which the speakers cannot reach.
+      </p>
+
+      <h2 id="health">Service health</h2>
+      <p>
+        The container health check requires a valid JSON response from
+        <code>http://127.0.0.1:8095/info</code> within five seconds.
+        A listening socket alone is insufficient: a discovery failure during
+        startup can leave the port open while the application stops responding.
+        Three failed checks at one-minute intervals mark it unhealthy, allowing
+        Autoheal to restart it. The startup grace period is 90 seconds.
+      </p>
 
       <h2 id="firewall">Firewall (AirPlay)</h2>
       <p>
@@ -122,8 +139,9 @@
         repo</strong> — same config-as-code gap as every HA integration:
       </p>
       <ul>
-        <li>MA's <code>base_url = https://music.pod.haus</code> and the AirPlay
-          provider live in MA's <code>/data</code> (settings) — backed up, so
+        <li>MA's <code>base_url = https://music.pod.haus</code>, stream
+          <code>publish_ip = 10.0.0.119</code>, and the AirPlay provider
+          live in MA's <code>/data</code> (settings) — backed up, so
           DR restores them.</li>
         <li>The HA-side UniFi Protect + Music Assistant integrations live in
           <code>/var/lib/home-assistant/.storage</code> (UI-configured). The
@@ -133,7 +151,8 @@
       </ul>
       <p>
         On a from-scratch rebuild: restore both volumes, then re-confirm MA's
-        <code>base_url</code> and the AirPlay provider, and that HA's
+        <code>base_url</code>, the stream's published address, the AirPlay provider,
+        and that HA's
         integration reconnects (MA logs <code>WebSocket client authenticated</code>
         and <code>media_player.living_room</code> leaves <code>unavailable</code>).
       </p>
