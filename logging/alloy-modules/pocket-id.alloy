@@ -1,0 +1,88 @@
+// Per-service log parser — pocket-id
+//
+// See komodo-op.alloy for the pattern/rationale; follows pomerium.alloy's
+// gated-JSON shape most closely.
+//
+// Pocket ID (the identity provider container `pocket-id`, on numbat
+// today) emits one JSON object per line, RFC3339Nano local time with a
+// numeric offset baked into the string:
+//   {"time":"2026-09-10T10:19:55.159018574+08:00","level":"INFO","msg":"Request","app":"pocket-id","version":"2.9.0","status":200,"method":"GET","path":"/api/oidc/userinfo","query":"","route":"/api/oidc/userinfo","ip":"172.18.0.16","latency":3264818,"referer":"","user_agent":"Go-http-client/1.1","body_size":1683}
+//   {"time":"2026-09-09T18:25:37.05433691+08:00","level":"WARN","msg":"Request with errors: Error #01: You are not signed in\n","app":"pocket-id","version":"2.9.0","status":401,"method":"GET","path":"/api/users/me", ...}
+//   {"time":"2026-09-10T10:19:25.772180111+08:00","level":"INFO","msg":"Starting job","app":"pocket-id","version":"2.9.0","name":"SyncScim","id":"7d01f760-4793-4c59-93f3-73bbfac6145c"}
+//
+// `time` carries its own offset (+08:00, the container's local wall
+// clock — Australia/Perth on bilby, the only host running pocket-id
+// today), so RFC3339Nano parses it directly with no `location=`, same
+// as pomerium.alloy, and stays correct if the container moves host.
+// Fractional-second digit count varies (9 down to 8 seen above); Go's
+// RFC3339Nano layout tolerates that.
+//
+// Why a parser despite ClickStack's own JSON `level`-field promotion
+// already getting these right today: that promotion is undocumented
+// downstream behaviour, not a guarantee, and every row currently lands
+// at ingest time rather than the time Pocket ID logged it. Severity is
+// the JSON `level` field, upper-cased (already upper-case in practice,
+// but ToUpper guards a future lower-case build). Body is reduced to a
+// trimmed `msg` — some messages (the WARN example above) carry a
+// trailing "\n" that would otherwise split the row into two visual
+// lines in HyperDX — with the scheduler job `name` (present only on
+// job events like "Starting job"/"Job run successfully", absent on
+// ordinary request logs) kept as a bracketed prefix.
+
+declare "pocket_id" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{service=\"pocket-id\"}"
+
+      // Gate the JSON handling on the line actually looking like a JSON
+      // object — see pomerium.alloy for why this is required: without
+      // it, a non-JSON line (a startup banner) leaves every extracted
+      // var unset and the template stages below print the literal text
+      // "<no value>" into detected_level/Body instead of leaving the
+      // line alone.
+      stage.match {
+        selector = "{service=\"pocket-id\"} |~ \"^\\\\{\""
+
+        stage.json {
+          expressions = {
+            lvl = "level",
+            ts  = "time",
+            msg = "msg",
+            job = "name",
+          }
+        }
+
+        stage.timestamp {
+          source = "ts"
+          format = "RFC3339Nano"
+        }
+
+        stage.template {
+          source   = "lvl"
+          template = "{{ ToUpper .Value }}"
+        }
+
+        stage.labels {
+          values = { detected_level = "lvl" }
+        }
+
+        stage.template {
+          source   = "line"
+          template = "{{ if .job }}[{{ .job }}] {{ end }}{{ TrimSpace .msg }}"
+        }
+
+        stage.output {
+          source = "line"
+        }
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

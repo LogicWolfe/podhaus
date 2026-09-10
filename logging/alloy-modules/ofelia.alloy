@@ -1,0 +1,93 @@
+// Per-service log parser — ofelia
+//
+// See komodo-op.alloy for the pattern/rationale.
+//
+// Ofelia (the cron scheduler container: `ofelia` on bilby, `bandicoot-
+// ofelia`, `pinelake-ofelia` — all normalised to service="ofelia" by
+// docker-logs.alloy's prefix-stripping) logs three-letter level tags
+// with NO year and NO timezone in the line itself:
+//   Sep 10 10:22:00.312 INF Job stop job=search-index execution=66c3c9c597f2 stdout="[search-index] no HTML changes; skip\n" duration=297.394487ms failed=false skipped=false
+//   Sep  9 16:56:03.726 ERR Job stop job=sky-cache-invalidate execution=9f9b9facaa3e error="error non-zero exit code: 6" stderr="curl: (6) Could not resolve host: gatus (Domain name not found)\n" duration=3.717301811s failed=true skipped=false
+//   Sep  9 10:26:11.801 WRN Shutting down the process signal=terminated
+//
+// Timestamp: no year, so stage.timestamp is given a layout without one
+// and Alloy assumes the current year — acceptable, since these lines
+// are tailed live within the same year they're printed.
+//
+// Timezone: pulled from HyperDX by comparing a printed line time against
+// that same row's ingest Timestamp (both in UTC) for one bilby row and
+// one pinelake row:
+//   bilby:    printed "Sep 10 10:22:00.312" vs ingest 2026-09-10T02:22:00.312668659Z
+//             -> 10:22 local = 02:22 UTC + 8h  => Australia/Perth (UTC+8)
+//   pinelake: printed "Sep  9 20:22:00.080"  vs ingest 2026-09-10T02:22:00.080973066Z
+//             -> 20:22 local = 02:22 UTC - 6h  => America/Edmonton (UTC-6, MDT)
+// So Ofelia prints each container's own local wall clock (from its TZ
+// env var), not UTC, and bilby/pinelake genuinely differ — a single
+// `location` can't be correct for both. The timestamp stage is gated
+// per host: `host="pinelake"` gets America/Edmonton, everything else
+// (bilby, bandicoot — both on the fleet's Perth default) gets
+// Australia/Perth.
+//
+// Severity: the zerolog console short levels TRC/DBG/INF/WRN/ERR/FTL/PNC
+// map to TRACE/DEBUG/INFO/WARN/ERROR/FATAL/FATAL (only INF, WRN and ERR
+// have appeared in real output; the rest are mapped so they never land
+// as a bare tag). Without this parser, today's ERROR labels
+// on real job failures are an accident of the ClickStack collector's
+// keyword scan matching the word "error" inside the job's own
+// `error="..."` field — not the ERR tag — so a real failure with no
+// literal "error" substring (a bare non-zero exit with no message)
+// would go unflagged. Body is reduced to the message; the level tag and
+// timestamp are dropped from it since both are now structured.
+
+declare "ofelia" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{service=\"ofelia\"} |~ \"^[A-Za-z]{3}\\\\s+\\\\d{1,2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d{3} [A-Z]{3} \""
+
+      stage.regex {
+        expression = "^(?P<ts>[A-Za-z]{3}\\s+\\d{1,2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) (?P<lvl>[A-Z]{3}) (?P<msg>.*)$"
+      }
+
+      stage.match {
+        selector = "{service=\"ofelia\", host=\"pinelake\"}"
+
+        stage.timestamp {
+          source   = "ts"
+          format   = "Jan _2 15:04:05.000"
+          location = "America/Edmonton"
+        }
+      }
+
+      stage.match {
+        selector = "{service=\"ofelia\", host!=\"pinelake\"}"
+
+        stage.timestamp {
+          source   = "ts"
+          format   = "Jan _2 15:04:05.000"
+          location = "Australia/Perth"
+        }
+      }
+
+      stage.template {
+        source   = "lvl"
+        template = "{{ if eq .Value \"TRC\" }}TRACE{{ else if eq .Value \"DBG\" }}DEBUG{{ else if eq .Value \"INF\" }}INFO{{ else if eq .Value \"WRN\" }}WARN{{ else if eq .Value \"ERR\" }}ERROR{{ else if or (eq .Value \"FTL\") (eq .Value \"PNC\") }}FATAL{{ else }}{{ .Value }}{{ end }}"
+      }
+
+      stage.labels {
+        values = { detected_level = "lvl" }
+      }
+
+      stage.output {
+        source = "msg"
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

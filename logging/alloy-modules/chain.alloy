@@ -40,7 +40,9 @@ declare "chain" {
 	caddy "run" { forward_to = [forgejo.run.receiver] }
 	forgejo "run" { forward_to = [rathole.run.receiver] }
 	rathole "run" { forward_to = [flood.run.receiver] }
-	flood "run" { forward_to = argument.forward_to.value }
+	flood "run" { forward_to = [ofelia.run.receiver] }
+	ofelia "run" { forward_to = [pocket_id.run.receiver] }
+	pocket_id "run" { forward_to = argument.forward_to.value }
 
 	export "receiver" {
 		value = fenwick.run.receiver
