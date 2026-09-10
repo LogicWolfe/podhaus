@@ -118,6 +118,7 @@ ansible/
     devbox/                the root-requiring half of a developer machine
     forgejo_runner/        Fractal's container-isolated Forgejo Actions runner
     docs_sources/          Read-only repository source slots for docs-server
+    gnome_on_demand/       GDM only while a display is attached (bandicoot)
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
     storage_binds/         Late-arriving-volume hardening (bilby, fractal)

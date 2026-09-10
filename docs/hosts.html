@@ -390,6 +390,22 @@
         Power draw with the lid shut is the accepted cost.
       </p>
       <p>
+        <strong>GNOME runs only while there is a display to show it on.</strong> The
+        <code>gnome_on_demand</code> role boots the host to <code>multi-user.target</code>
+        with <code>gdm.service</code> disabled, and a policy script
+        (<code>podhaus-desktop-policy</code>) is GDM's only starter. A display is present
+        when the lid is open or any non-panel DRM connector is connected. A lid watcher
+        subscribes to logind's <code>LidClosed</code> property and a udev rule on
+        <code>drm</code> change events both re-run the policy; when a display appears it
+        starts GDM (greeter, no autologin) and disarms the stop timer, and when the last
+        display goes it arms <code>podhaus-desktop-stop.timer</code>
+        (<code>gnome_on_demand_stop_after</code>, default one hour). When the timer fires
+        the policy re-checks, stops GDM and terminates any remaining seat0 graphical
+        session. Anything left open in the desktop dies with it; there is no warning.
+        SSH sessions, the user manager and the machine SSH agent are unaffected because the
+        user lingers. Measured 2026-09-10, the resident desktop cost about 1.9 GB.
+      </p>
+      <p>
         Its machine key is hardware-resident on a YubiKey PIV slot, exactly as bilby's is;
         <code>/home</code> is an unencrypted Btrfs subvolume, also as on bilby, so the secret
         material on disk is the <code>op-vault</code> token file and the PIV PIN in

@@ -1,0 +1,15 @@
+---
+- name: Reload systemd units
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Reload udev rules for the desktop policy
+  # Named distinctly from the base role's "Reapply udev rules" handler,
+  # which also re-triggers the USB subsystem -- same name with different
+  # actions would mean only the last-loaded one ever runs, silently
+  # dropping the other's behaviour on a full playbook run. Unlike that USB
+  # rule, no --action=add re-trigger is needed here: this rule only matters
+  # on a *future* drm "change" event (a monitor plug/unplug), so making the
+  # new/changed rule file visible to udevd is the whole job.
+  ansible.builtin.command: udevadm control --reload
+  changed_when: true

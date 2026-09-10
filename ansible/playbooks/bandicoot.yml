@@ -11,6 +11,8 @@
       tags: [base]
     - role: docs_sources
       tags: [docs-sources]
+    - role: gnome_on_demand
+      tags: [gnome-on-demand]
     - role: docker
       tags: [docker]
     - role: devbox

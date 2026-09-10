@@ -1,0 +1,5 @@
+[Unit]
+Description=Tear the GNOME desktop down after no display for {{ gnome_on_demand_stop_after }}
+
+[Timer]
+OnActiveSec={{ gnome_on_demand_stop_after }}

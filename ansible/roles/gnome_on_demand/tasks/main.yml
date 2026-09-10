@@ -1,0 +1,101 @@
+# Run GNOME on bandicoot only while a display is attached, and tear it down
+# an hour after the last one goes away. See docs/plans/gnome-on-demand.md.
+---
+- name: Install the desktop policy script
+  # The one place that decides whether a display is present (lid open, or a
+  # non-panel DRM connector reading "connected") and starts GDM, arms the
+  # stop timer, or disarms it. Every trigger below just asks it to re-run.
+  ansible.builtin.copy:
+    src: podhaus-desktop-policy
+    dest: /usr/local/sbin/podhaus-desktop-policy
+    mode: "0755"
+
+- name: Install the lid watcher
+  # A small Gio program, not `gdbus monitor | while read ...`: gdbus
+  # block-buffers its stdout when piped, so a shell pipeline would silently
+  # lag behind real lid events instead of reacting to them.
+  ansible.builtin.copy:
+    src: podhaus-desktop-lid-watch
+    dest: /usr/local/sbin/podhaus-desktop-lid-watch
+    mode: "0755"
+
+- name: Install the desktop policy units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - podhaus-desktop-policy.service
+    - podhaus-desktop-lid-watch.service
+    - podhaus-desktop-stop.service
+  notify: Reload systemd units
+
+- name: Install the desktop stop timer
+  # Templated so gnome_on_demand_stop_after can be shortened for
+  # verification, or retuned permanently for Nathan's taste, without
+  # touching the unit file itself.
+  ansible.builtin.template:
+    src: podhaus-desktop-stop.timer.j2
+    dest: /etc/systemd/system/podhaus-desktop-stop.timer
+    mode: "0644"
+  notify: Reload systemd units
+
+- name: Install the DRM hotplug udev rule
+  # A monitor plug/unplug is an ordinary udev "change" event on the drm
+  # subsystem; tagging it SYSTEMD_WANTS is the systemd-prescribed way to
+  # turn that into a unit start -- udev RUN= is documented as the wrong
+  # tool, meant for short synchronous commands only.
+  ansible.builtin.copy:
+    src: 70-podhaus-desktop-policy.rules
+    dest: /etc/udev/rules.d/70-podhaus-desktop-policy.rules
+    mode: "0644"
+  notify: Reload udev rules for the desktop policy
+
+- name: Check the current default boot target
+  # Read-only, and needed in check mode too so the next task's diff is
+  # accurate under --check --diff, not just on a real run.
+  ansible.builtin.command: systemctl get-default
+  register: gnome_on_demand_current_target
+  changed_when: false
+  check_mode: false
+
+- name: Boot to multi-user.target, not graphical.target
+  # graphical.target depends on gdm.service directly, so leaving it as the
+  # default would pull the desktop up unconditionally on every boot
+  # regardless of lid state. From here the policy unit is GDM's only
+  # starter.
+  ansible.builtin.command: systemctl set-default multi-user.target
+  when: gnome_on_demand_current_target.stdout != "multi-user.target"
+
+- name: Disable gdm.service
+  # enabled: false only. GDM must stay startable -- the policy script starts
+  # it directly -- and must keep running right now if it already is; this
+  # only removes its graphical.target auto-start for the *next* boot.
+  ansible.builtin.systemd_service:
+    name: gdm.service
+    enabled: false
+
+- name: Flush handlers before enabling the desktop policy units
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the lid watcher
+  ansible.builtin.systemd_service:
+    name: podhaus-desktop-lid-watch.service
+    enabled: true
+    state: started
+
+- name: Enable the desktop policy unit to run at boot
+  ansible.builtin.systemd_service:
+    name: podhaus-desktop-policy.service
+    enabled: true
+
+- name: Run the desktop policy once now
+  # A oneshot with no RemainAfterExit goes back to inactive as soon as it
+  # finishes, so `state: started` above would never be idempotent -- this is
+  # the same one-time action every trigger performs, not a persistent
+  # resource. Expected to arm the stop timer immediately today: the lid is
+  # closed and GDM is already running from before this role's default-target
+  # change takes effect.
+  ansible.builtin.command: systemctl start podhaus-desktop-policy.service
+  changed_when: false
+  when: not ansible_check_mode
