@@ -21,6 +21,9 @@ services:
     environment:
       APP_URL: https://id.pod.haus
       ENCRYPTION_KEY: ${POCKET_ID_ENCRYPTION_KEY}
+      # Pocket ID's own login must last as long as Pomerium's 30-day session.
+      UI_CONFIG_DISABLED: "true"
+      SESSION_DURATION: "43200"
       # v2.9 accepts only a boolean here. Pocket ID is reachable solely on
       # dockernet, so trust the reverse proxy's forwarding headers.
       TRUST_PROXY: "true"
