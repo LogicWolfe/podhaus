@@ -75,23 +75,25 @@ key reconciliation does not happen in a custom script.
 
 Forgejo Actions is the CI control plane. Runners are outbound clients on
 separate hosts; Forgejo and Bilby's production Docker daemon never execute CI
-jobs. The initial capability is a repository-scoped runner on Fractal,
+jobs. Bandicoot runs one shared runner for repositories owned by LogicWolfe,
 provisioned by `ansible/roles/forgejo_runner`:
 
 - `podhaus-ci-x64` runs ordinary Node/Deno container jobs;
 - `podhaus-browser-x64` uses the pinned Playwright image;
 - the daemon waits persistently while each job container and network is
   disposable;
-- jobs have a one-hour timeout and may otherwise consume Fractal's available
+- jobs have a one-hour timeout and may otherwise consume Bandicoot's available
   host capacity;
-- no Bilby runner exists. A future ARM64 job must justify adding one explicitly.
+- no Bilby runner exists.
 
-If Fractal is unavailable, work queues until it returns; there is no transparent
-Voltaire fallback. The runner's repository registration is durable under
+If Bandicoot is unavailable, work queues until it returns; there is no transparent
+Voltaire fallback. The runner's user registration is durable under
 `/opt/forgejo-runner/data`, while Ansible fetches a short-lived registration
-token only for first registration. Job containers do not receive Fractal's
-Docker socket. The runner removes disposable job resources on completion and
-its cache lives under `/opt/forgejo-runner/data/cache`.
+token from the LogicWolfe account only for first registration. Repository
+workflows select the existing labels; adding a repository needs no new runner.
+All repositories share host capacity and the runner cache. Job containers do
+not receive Bandicoot's Docker socket. The runner removes disposable job
+resources on completion and its cache lives under `/opt/forgejo-runner/data/cache`.
 
 Fenwick is the reference release shape. Pull requests and `main` run the same
 three checks. A dependent promotion job advances the repository's `deploy`

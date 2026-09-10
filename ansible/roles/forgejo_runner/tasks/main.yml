@@ -75,10 +75,10 @@
     path: "{{ podhaus_forgejo_runner_dir }}/data/.runner"
   register: forgejo_runner_registration
 
-- name: Fetch a repository-scoped runner registration token
+- name: Fetch a user-scoped runner registration token
   ansible.builtin.uri:
     url: >-
-      https://git.pod.haus/api/v1/repos/{{ podhaus_forgejo_runner_repository }}/actions/runners/registration-token
+      https://git.pod.haus/api/v1/user/actions/runners/registration-token
     method: GET
     headers:
       Authorization: >-
@@ -92,7 +92,7 @@
   register: forgejo_runner_token
   when: not forgejo_runner_registration.stat.exists
 
-- name: Register the runner at repository scope
+- name: Register the runner at user scope
   ansible.builtin.command:
     argv:
       - docker
@@ -133,7 +133,7 @@
 - name: Wait for the runner to report idle or active
   ansible.builtin.uri:
     url: >-
-      https://git.pod.haus/api/v1/repos/{{ podhaus_forgejo_runner_repository }}/actions/runners
+      https://git.pod.haus/api/v1/user/actions/runners
     method: GET
     headers:
       Authorization: >-
