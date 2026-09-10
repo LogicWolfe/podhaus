@@ -7,6 +7,8 @@
   hosts: bandicoot
   gather_facts: true
   roles:
+    - role: disk_tmp
+      tags: [disk-tmp]
     - role: base
       tags: [base]
     - role: docs_sources

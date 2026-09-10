@@ -113,6 +113,7 @@ ansible/
     nb-macbook-air.yml     macOS development-client SSH policy entry point
   roles/
     base/                  timezone, baseline packages, dirs, laptop power policy
+    disk_tmp/              Root-filesystem /tmp policy, activated at host restart
     wsl/                   /etc/wsl.conf, hostname
     docker/                engine (where managed), daemon.json, host networks
     devbox/                the root-requiring half of a developer machine
@@ -154,7 +155,7 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
   repository directory and canonical chezmoi checkout that `docs_sources`
   exposes through stable root-owned slots.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes`, `edge_hosts`,
-  `komodo_core_hosts`, `storage_binds_hosts`, `firewalld_hosts` — role
+  `komodo_core_hosts`, `storage_binds_hosts`, `firewalld_hosts`, `disk_tmp_hosts` — role
   groups. `site.yml` gates each role on membership.
 
 ## Running it
@@ -198,6 +199,23 @@ established, `sshd -T`), never "the container is healthy": a container
 being up proves it started, not that it is doing its job.
 
 ## Roles worth knowing about
+
+**`disk_tmp`** configures Bilby, Bandicoot, and Fractal to keep `/tmp` on their
+root filesystem by masking `tmp.mount`. Bilby and Bandicoot use local NVMe;
+Fractal uses its WSL root virtual disk. Temporary files share the root
+filesystem's free space and retain the distribution's temporary-file cleanup
+policy. Apply with `op-vault dev -- ansible-playbook playbooks/site.yml
+--tags disk-tmp --limit bilby,bandicoot,fractal` from `ansible/` on Bandicoot,
+after reviewing the same command with `--check --diff`.
+
+The role leaves an active RAM mount in place because live processes hold files
+and sockets there. A host restart activates the disk-backed directory. On
+Fractal, `systemctl reboot` restarts the distribution while the shared WSL
+kernel can remain running. An interactive login invokes `unlock-home` to restore
+`/home`; it prompts for the passphrase only when the encrypted mapping is closed,
+as after a full WSL shutdown. `systemctl show tmp.mount -p LoadState` verifies the persistent mask;
+`findmnt -T /tmp` verifies the active backing filesystem. A masked unit with
+`tmpfs` still mounted means the cutover needs a restart.
 
 **`base`** opens with a `raw` task that installs `python3-libdnf5` if
 missing. This is the one deliberate `check_mode: false` in the layer:

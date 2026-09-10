@@ -1,0 +1,8 @@
+---
+- name: Keep /tmp on the root filesystem at boot
+  # Existing sessions hold sockets and files on /tmp; unmounting it here
+  # would break them. The mask takes effect on the next host restart.
+  ansible.builtin.systemd_service:
+    name: tmp.mount
+    masked: true
+    daemon_reload: true

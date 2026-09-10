@@ -10,6 +10,9 @@
   gather_facts: true
 
   roles:
+    - role: disk_tmp
+      when: inventory_hostname in groups['disk_tmp_hosts']
+      tags: [disk-tmp]
     - role: wsl
       when: podhaus_is_wsl | default(false)
       tags: [wsl]
