@@ -136,6 +136,12 @@ following five idle minutes, private process memory was about 15 MB; about 0.6 G
 remained charged including reclaimable file cache. Ollama's standard image adds
 approximately 3.7 GB of disk, the model 323 MB, plus growing persistent indexes.
 Concurrent sessions and other hosts may use more memory. The rollout benchmark
-created an identical 27-file worktree with zero new embeddings: dependency setup
-and launcher startup completed in 5.6 seconds, and indexing was ready after
-6.3 seconds total. Initial indexing of those files took 35.8 seconds.
+created an identical 27-file worktree with zero new embeddings. In the quieter
+test it was ready in 6.3 seconds. The final shared-helper version, tested during
+a background cold sweep, was ready in 15.9 seconds: 14.4 seconds for dependency
+setup and launcher startup, then 1.4 seconds to finish. The index pass itself
+took 25 milliseconds. Initial indexing of those files took 35.8 seconds.
+Cold indexing uses most available CPU cores; the sweep runs sequentially and
+subsequent unchanged worktrees reuse its embeddings. Bilby and Bandicoot active
+indexing snapshots used about 0.72 and 0.76 GB respectively, including the
+separate indexing process.
