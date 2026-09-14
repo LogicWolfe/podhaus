@@ -410,6 +410,66 @@ sshd_pomerium_ca, komodo_periphery — reached through Pomerium like any
 managed host, and the thing check-mode equivalence proves against the
 live gateway.
 
+## Repository search
+
+Lumen provides local semantic code search on Voltaire, Fractal, Bilby and
+Bandicoot. The Komodo stacks under `lumen/` own one Ollama embedding service per
+host, its Jina code model, and the `lumen:local` tools image. The `lumen-models`
+and `lumen-data` Docker volumes keep downloaded models and repository indexes
+on that machine. Agent sessions share the index volume and embedding service;
+each session runs its Lumen process in a separate container. macOS has no
+Lumen deployment.
+
+Ansible's `/etc/podhaus/docs-sources.json` is the repository declaration for
+both docs-server and Lumen. The `docs_sources` role exposes its sources through
+read-only mounts. Lumen discovers repositories beneath those sources and asks
+Git for their linked worktrees, preserving original absolute paths inside its
+containers so worktree metadata resolves to the same shared repository index.
+Missing storage remains visible as an unavailable source; a sweep reports a
+failure after processing the available repositories.
+
+Chezmoi owns `~/.local/bin/lumen`, global Model Context Protocol (MCP) exposure
+for Codex and both Claude profiles, and `worktree-setup-common <worktree-path>`.
+Every participating repository calls that common command at the end of its
+Linux `.worktree-setup`. New shared setup actions belong in the common helper;
+repository scripts carry only the invocation. The helper starts background
+indexing and prints its container name. Repeated calls reuse an active job for
+the same worktree. Content hashing reuses existing embeddings, but a new
+worktree still needs scanning and index membership updates.
+
+The stack starts a full sweep on deployment. Ofelia starts the same
+`lumen-sweep` container every ten minutes without overlapping scheduled runs;
+the sweep indexes worktrees sequentially. This enrolls repositories whose setup
+script has no common-helper invocation. Independently requested warm jobs can
+run alongside the sweep. Stopping a sweep also stops its active index process.
+See [Scheduling](scheduling.html) for the scheduler configuration.
+
+A successful `lumen warm` invocation means a background job started or is
+already running. Check the reported container's logs and exit status, then use the
+MCP `index_status` tool and a relevant search. For foreground completion, run
+`lumen index "$(git rev-parse --show-toplevel)"` from the intended worktree.
+An existing MCP connection sees new worktrees beneath its mounted source roots;
+a worktree created outside those roots after connection startup needs a fresh
+Lumen MCP connection, because warming cannot add mounts to an existing container.
+Semantic results cover supported indexed content; exact and exhaustive checks
+still require ordinary search tools.
+
+There is no fixed memory reservation or CPU or memory quota. Cold indexing can
+use most available CPU cores; CPU saturation alone is not treated as a failure
+on these development hosts. Ollama unloads its model after five idle minutes,
+while reclaimable file cache can remain charged to the container. Concurrent
+sessions and indexing add variable memory use. Inspect `docker stats` and
+container exit status when diagnosing resource pressure; do not infer a peak
+from an idle sample or treat cached memory as a permanently loaded model.
+
+The shared agent skills give the operational procedures:
+[Lumen diagnostics](https://git.pod.haus/LogicWolfe/dotfiles/src/branch/main/dot_agents/skills/lumen-doctor/SKILL.md)
+separates unavailable tooling, incomplete indexes and valid empty results;
+[Lumen reindexing](https://git.pod.haus/LogicWolfe/dotfiles/src/branch/main/dot_agents/skills/lumen-reindex/SKILL.md)
+warms a selected worktree and verifies completion. They are available to both
+Claude and Codex. Docker access is required for the launcher and the embedding
+service must be available locally for indexing and semantic queries.
+
 ## Adding a host
 
 See [Hosts → Adding another host](hosts.html#adding-host) for the

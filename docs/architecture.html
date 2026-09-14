@@ -84,6 +84,14 @@
         <a href="/host-provisioning.md">Host provisioning</a>, and alert coverage in
         <a href="/monitoring.html">Monitoring</a>.
       </p>
+      <p>
+        Lumen uses that same repository declaration for local semantic search on the
+        four Linux development hosts. Komodo owns the embedding service and tooling
+        image, Ofelia refreshes indexes, and chezmoi connects Claude, Codex and the
+        shared worktree setup command. See
+        <a href="/host-provisioning.md#repository-search">Repository search</a> for
+        readiness, worktree mount behavior and resource use.
+      </p>
 
       <h2 id="design-principles">Design principles</h2>
       <p>These four principles trump local convenience whenever they conflict:</p>
