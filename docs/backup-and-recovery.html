@@ -226,7 +226,14 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
           interval window — if no successful ping arrives, the dead-man's-switch fires. Catches
           the case where Backrest itself is down.</li>
       </ul>
-      <p>See <a href="/monitoring.html">Monitoring</a> for the Gatus side.</p>
+      <p>
+        Each backup stack declares its heartbeat endpoint in <code>stack.toml</code>.
+        Endpoint identifiers must match Gatus's generated group/name keys, including
+        punctuation: Bandicoot uses <code>backup_backrest-nightly-(bandicoot)</code>.
+        The pre-commit checks compare all backup heartbeat identifiers with the external
+        endpoints in <code>gatus/conf/config.yaml</code>. See
+        <a href="/monitoring.html">Monitoring</a> for the Gatus side.
+      </p>
 
       <h2 id="add-plan">Adding a plan for a new stack</h2>
       <ol>
