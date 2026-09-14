@@ -1,6 +1,6 @@
 [[stack]]
 name = "ofelia"
-description = "Label-based docker job scheduler — runs `docker exec` jobs declared as labels on target containers"
+description = "Label-based scheduler for container jobs on bilby"
 tags = ["podhaus"]
 
 [stack.config]

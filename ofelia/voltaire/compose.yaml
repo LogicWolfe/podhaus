@@ -2,11 +2,11 @@ x-podhaus-content-paths:
   - ../jobs
 
 services:
-  bandicoot-ofelia:
+  voltaire-ofelia:
     extends:
       file: ../jobs/compose.yaml
       service: scheduler
-    container_name: bandicoot-ofelia
+    container_name: voltaire-ofelia
     image: mcuadros/ofelia:0.4.0-beta.5
     restart: unless-stopped
     command: daemon --docker
@@ -15,7 +15,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     security_opt:
-      # SELinux is enforcing on Fedora Asahi Remix; the socket is cross-label.
       - label:disable
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

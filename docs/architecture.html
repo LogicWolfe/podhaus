@@ -73,10 +73,12 @@
         <a href="/komodo.html#operating-models">Komodo → operating models</a>.
       </p>
       <p>
-        Docs-server runs on Bilby, Fractal, and Voltaire. The Ansible
+        Docs-server runs on Bilby, Fractal, Voltaire, and Bandicoot. The Ansible
         <code>docs_sources</code> role exposes each host's aggregate repository directory
         and canonical chezmoi checkout through stable read-only slots under
-        <code>/opt/podhaus/docs-sources</code>. The container mounts that slot root once;
+        <code>/opt/podhaus/docs-sources</code>. The role writes one typed repository
+        manifest at <code>/etc/podhaus/docs-sources.json</code>, shared by docs-server
+        and Lumen. The docs container mounts the slot root once;
         an unavailable checkout makes docs health red without taking repositories from
         other slots offline. Host ownership and operating commands are documented in
         <a href="/host-provisioning.md">Host provisioning</a>, and alert coverage in

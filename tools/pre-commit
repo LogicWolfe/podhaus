@@ -59,3 +59,6 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/docs_sources/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/metube/tests"
+
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/lumen/tests"

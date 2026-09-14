@@ -1,0 +1,8 @@
+services:
+  scheduler:
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      ofelia.enabled: "true"
+      ofelia.job-run.lumen-sweep.schedule: "@every 10m"
+      ofelia.job-run.lumen-sweep.container: lumen-sweep
+      ofelia.job-run.lumen-sweep.no-overlap: "true"

@@ -8,7 +8,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Literal
 
 SLOT_ROOT = Path("/opt/podhaus/docs-sources")
 STATE_ROOT = Path("/run/podhaus/docs-sources")
@@ -16,7 +16,7 @@ UNAVAILABLE_MARKER = ".podhaus-source-unavailable"
 COMMAND_TIMEOUT_SECONDS = 20
 
 
-def _name(value: Any) -> str:
+def _name(value: object) -> str:
     if not isinstance(value, str) or not value or value.startswith("."):
         raise RuntimeError(f"invalid source name: {value!r}")
     if "/" in value or "\\" in value:
@@ -24,19 +24,29 @@ def _name(value: Any) -> str:
     return value
 
 
-def _absolute_path(value: Any) -> Path:
+def _absolute_path(value: object) -> Path:
     if not isinstance(value, str) or not PurePosixPath(value).is_absolute():
         raise RuntimeError(f"source path must be absolute: {value!r}")
     return Path(value)
 
 
-def _required_path(value: Any) -> PurePosixPath:
-    if not isinstance(value, str):
-        raise TypeError("required_path must be a string")
+def _required_path(value: object) -> PurePosixPath:
+    if not isinstance(value, str) or not value:
+        raise TypeError("required_path must be a non-empty string")
     path = PurePosixPath(value)
     if path.is_absolute() or ".." in path.parts:
         raise RuntimeError(f"required_path must stay within its source: {value!r}")
     return path
+
+
+def _source_type(value: object) -> Literal["directory", "repository"]:
+    match value:
+        case "directory":
+            return "directory"
+        case "repository":
+            return "repository"
+        case _:
+            raise RuntimeError(f"unknown repository source type: {value!r}")
 
 
 @dataclass(frozen=True)
@@ -44,15 +54,20 @@ class SourceSlot:
     name: str
     source: Path
     required_path: PurePosixPath
+    type: Literal["directory", "repository"]
 
     @classmethod
-    def from_document(cls, value: Any) -> SourceSlot:
-        if not isinstance(value, dict) or set(value) != {"name", "source", "required_path"}:
-            raise RuntimeError("each docs source requires exactly name, source, and required_path")
+    def from_document(cls, value: object) -> SourceSlot:
+        fields = {"name", "type", "source", "required_path"}
+        if not isinstance(value, dict) or set(value) != fields:
+            raise RuntimeError(
+                "each repository source requires exactly name, type, source, and required_path"
+            )
         return cls(
-            _name(value["name"]),
-            _absolute_path(value["source"]),
-            _required_path(value["required_path"]),
+            name=_name(value["name"]),
+            source=_absolute_path(value["source"]),
+            required_path=_required_path(value["required_path"]),
+            type=_source_type(value["type"]),
         )
 
     @property

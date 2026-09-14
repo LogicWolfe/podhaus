@@ -107,3 +107,35 @@ DNSControl has been retired.
 | `bilby/`, `kangaroo/`, `numbat/`, `fractal/`, `voltaire/`, `bandicoot/`, `pinelake/` | Host bootstrap and host-level configuration |
 | `docs/` | Current-state documentation and live plans |
 | `<service>/compose.yaml` | A single-host service stack |
+
+## Code search on Linux
+
+Lumen runs locally on Voltaire, Fractal, Bilby and Bandicoot. The `lumen/`
+stack deploys Ollama, the code embedding model and the Lumen tools image. A
+stopped `lumen-sweep` container scans registered repositories and Git worktrees;
+Ofelia starts it every ten minutes and prevents overlapping scheduled runs.
+The initial sweep runs when the stack deploys. Cold indexing can take substantial
+CPU time; new worktrees reuse existing embeddings for unchanged content.
+
+Repository locations come from the same `/etc/podhaus/docs-sources.json`
+manifest as docs. Ansible owns that declaration and its read-only source slots.
+Chezmoi installs the `lumen` launcher, global Claude/Codex MCP configuration,
+and `worktree-setup-common <worktree-path>`. Repository `.worktree-setup` scripts
+call the common helper after dependency setup succeeds. New shared setup actions
+belong in that helper. It starts a background index and reports its container
+name; `docker logs` and `docker inspect` expose completion and failures.
+
+Each MCP session runs its own small Lumen process; all processes on a host share
+the index volume and one Ollama service. Source mounts preserve host paths so
+Git worktrees share the same collection. An existing MCP connection needs restarting
+to see a newly created worktree outside the already-mounted source roots.
+
+No fixed 2.5 GB memory reservation or hard limit is configured. Voltaire's first
+cold-index sample peaked at 1.31 GB including file cache. After the model unloaded
+following five idle minutes, private process memory was about 15 MB; about 0.6 GB
+remained charged including reclaimable file cache. Ollama's standard image adds
+approximately 3.7 GB of disk, the model 323 MB, plus growing persistent indexes.
+Concurrent sessions and other hosts may use more memory. The rollout benchmark
+created an identical 27-file worktree with zero new embeddings: dependency setup
+and launcher startup completed in 5.6 seconds, and indexing was ready after
+6.3 seconds total. Initial indexing of those files took 35.8 seconds.

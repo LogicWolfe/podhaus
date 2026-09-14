@@ -274,8 +274,26 @@ header carries the incident history; the postmortems are the full record.
 
 **`docs_sources`** separates Docker's stable mount contract from user-owned
 checkout availability. It creates `/opt/podhaus/docs-sources` as a shared host
-mountpoint and one slot per `podhaus_docs_sources` entry. The recurring
-`podhaus-docs-source-reconcile` service bind-mounts an available checkout
+mountpoint and one slot per `podhaus_docs_sources` entry. These per-host
+inventory declarations produce `/etc/podhaus/docs-sources.json`, the shared
+repository manifest consumed by docs-server and Lumen. Each entry requires
+exactly `name`, `type` (`directory` or `repository`), the absolute host `source`,
+and a non-empty relative `required_path` contained within that source. The
+aggregate repository directory uses `type: directory` and `required_path: .`;
+canonical chezmoi uses `type: repository` and `required_path: .git`. Consumers
+must not maintain separate repository lists. Docs maps source names to its
+container slots; Lumen reads the original host paths.
+
+Apply the shared source configuration and reconciler together with
+`op-vault dev -- ansible-playbook playbooks/voltaire.yml --tags docs-sources`
+from `ansible/` on Bandicoot, after auditing the same command with
+`--check --diff`. When either file changes, the role stops the existing
+reconciliation timer and waits for its service to stop before writing either
+file, then prepares the mounts, reconciles, and starts the timer. An unchanged
+run leaves the timer running. Restart docs-server after adding or removing a
+declaration, because its catalog configuration is read at startup.
+
+The recurring `podhaus-docs-source-reconcile` service bind-mounts an available checkout
 read-only over its slot; when the declared source or `required_path` is absent,
 it withdraws the bind and reveals `.podhaus-source-unavailable`. Docs-server
 mounts the slot root once with `rslave` propagation, so source transitions reach

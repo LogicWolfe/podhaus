@@ -18,6 +18,48 @@
     - /opt/podhaus
     - /etc/systemd/system/docker.service.d
 
+- name: Check whether the repository manifest needs updating
+  ansible.builtin.copy:
+    content: "{{ podhaus_docs_sources | to_nice_json }}\n"
+    dest: "{{ docs_sources_config }}"
+    mode: "0644"
+  check_mode: true
+  register: docs_sources_manifest_update
+
+- name: Check whether the source reconciler needs updating
+  ansible.builtin.copy:
+    src: reconcile-docs-sources
+    dest: /usr/local/sbin/reconcile-docs-sources
+    mode: "0755"
+  check_mode: true
+  register: docs_sources_reconciler_update
+
+- name: Gather installed units before changing the source contract
+  ansible.builtin.service_facts:
+  when: docs_sources_manifest_update.changed or docs_sources_reconciler_update.changed
+
+- name: Inspect the installed reconciliation timer
+  ansible.builtin.stat:
+    path: /etc/systemd/system/podhaus-docs-source-reconcile.timer
+  register: docs_sources_timer_unit
+  when: docs_sources_manifest_update.changed or docs_sources_reconciler_update.changed
+
+- name: Stop the source timer before updating the source contract
+  ansible.builtin.systemd_service:
+    name: podhaus-docs-source-reconcile.timer
+    state: stopped
+  when:
+    - docs_sources_manifest_update.changed or docs_sources_reconciler_update.changed
+    - docs_sources_timer_unit.stat.exists
+
+- name: Quiesce the source service before updating its script and manifest
+  ansible.builtin.systemd_service:
+    name: podhaus-docs-source-reconcile.service
+    state: stopped
+  when:
+    - docs_sources_manifest_update.changed or docs_sources_reconciler_update.changed
+    - "'podhaus-docs-source-reconcile.service' in ansible_facts.services"
+
 - name: Declare host repository source locations
   ansible.builtin.copy:
     content: "{{ podhaus_docs_sources | to_nice_json }}\n"

@@ -1,0 +1,12 @@
+[[stack]]
+name = "voltaire-ofelia"
+description = "Label-based scheduler for container jobs on voltaire"
+tags = ["voltaire", "podhaus"]
+
+[stack.config]
+server = "voltaire"
+linked_repo = "podhaus-voltaire"
+run_directory = "ofelia/voltaire"
+environment = """
+TZ=[[TZ]]
+"""
