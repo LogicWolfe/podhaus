@@ -54,6 +54,7 @@ services:
     image: lumen:local
     pull_policy: never
     container_name: lumen-sweep
+    init: true
     restart: "no"
     command: [sweep]
     security_opt: [label:disable]

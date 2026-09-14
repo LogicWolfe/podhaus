@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -143,6 +144,34 @@ class Catalog:
         return mounts
 
 
+class ForegroundCommand:
+    def __init__(self, command: list[str]) -> None:
+        self.command = command
+        self.process: subprocess.Popen | None = None
+        self.termination_signal: int | None = None
+
+    def forward_signal(self, signum: int, frame: object) -> None:
+        self.termination_signal = signum
+        if self.process is not None:
+            self.process.send_signal(signum)
+
+    def run(self) -> int:
+        previous = {signum: signal.signal(signum, self.forward_signal)
+                    for signum in (signal.SIGTERM, signal.SIGINT)}
+        try:
+            with subprocess.Popen(self.command, stdin=subprocess.DEVNULL) as process:
+                self.process = process
+                if self.termination_signal is not None:
+                    process.send_signal(self.termination_signal)
+                returncode = process.wait()
+        finally:
+            for signum, handler in previous.items():
+                signal.signal(signum, handler)
+        if self.termination_signal is not None:
+            raise SystemExit(128 + self.termination_signal)
+        return returncode
+
+
 class Runtime:
     def __init__(self, catalog: Catalog) -> None:
         self.catalog = catalog
@@ -192,10 +221,22 @@ class Runtime:
         print(f"Lumen indexing started: {name} ({result.strip()[:12]})", file=sys.stderr)
 
     def sweep(self) -> None:
+        previous = {signum: signal.signal(signum, self.stop_sweep)
+                    for signum in (signal.SIGTERM, signal.SIGINT)}
+        try:
+            self.index_registered_worktrees()
+        finally:
+            for signum, handler in previous.items():
+                signal.signal(signum, handler)
+
+    def stop_sweep(self, signum: int, frame: object) -> None:
+        raise SystemExit(128 + signum)
+
+    def index_registered_worktrees(self) -> None:
         failures = list(self.catalog.unavailable)
         for path in self.catalog.worktrees():
-            result = subprocess.run(self.command(["index", str(path)], path), stdin=subprocess.DEVNULL)
-            if result.returncode:
+            returncode = ForegroundCommand(self.command(["index", str(path)], path)).run()
+            if returncode:
                 failures.append(str(path))
         if failures:
             raise RuntimeError("Lumen indexing failed: " + ", ".join(failures))
