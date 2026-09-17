@@ -50,8 +50,8 @@ next deploy replaces it.
   token.
 - `indy-board-music-assistant` (Homelab) → `INDY_MA_TOKEN`.
 - `clickstack-ingestion-key` (Homelab) → `INDY_OTLP_AUTHORIZATION`.
-- Entity, provider and player IDs and the URLs are `[[variable]]` blocks in
-  the repo's `stack.toml`.
+- The service's other settings belong to the indy-board repo, whose README
+  says where they live.
 
 ## Logs and alerts
 
