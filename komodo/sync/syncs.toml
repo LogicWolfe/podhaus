@@ -71,3 +71,19 @@ include_variables = true
 include_resources = true
 delete = false
 managed = false
+
+# The indy-board sync walks the indy-board repo for its [[stack]] and
+# [[variable]] blocks (stack.toml at the repo root). Stage 1 of
+# indy-board-push-deploy runs it explicitly.
+[[resource_sync]]
+name = "indy-board"
+description = "ResourceSync for the stack def that lives in the indy-board repo."
+tags = ["indy-board", "podhaus"]
+
+[resource_sync.config]
+linked_repo = "indy-board"
+resource_path = ["./"]
+include_variables = true
+include_resources = true
+delete = false
+managed = false

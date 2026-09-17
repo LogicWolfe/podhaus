@@ -367,6 +367,30 @@ endpoints:
     <<: *defaults
     group: Pets
 
+  # Indigo's room controller and display panel each send a status record
+  # through indy-service every supervisor tick (20-30 s), which the service
+  # exports to ClickStack. Either board missing from 15 minutes of records
+  # means it is off, off the WiFi or stuck in a boot loop, or the service is
+  # down. Same direct-ClickHouse pattern as the ingest checks.
+  - name: Indy Board devices reporting
+    url: http://10.0.0.90:8123/
+    method: POST
+    group: Indy Board
+    interval: 5m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: "SELECT toUInt8(uniqExact(LogAttributes['device']) = 2) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 15 MINUTE AND ServiceName = 'indy-service' AND Body = 'device alive'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: custom
+        description: "The controller or the display panel in Indigo's room hasn't reported in 15+ min. Check `docker logs indy-service` on bilby and the service's error records in ClickStack (service indy-service, filter by device); a board that stays away needs a visit."
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
   # Surfaces "Komodo Core can't reach <Periphery>" as a Gatus alert.
   # Periphery's :8120 isn't on dockernet so we check via Komodo Core's API:
   # POST GetServerState, assert status == Ok. Headers carry Komodo's API
