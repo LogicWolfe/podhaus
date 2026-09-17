@@ -202,7 +202,7 @@
 <tr><td>5</td><td>tmux service</td><td>chezmoi: <code>~/.config/systemd/user/tmux.service</code></td><td class="num">3</td></tr>
 <tr><td>6</td><td>Pane group policy (a name-prefix override that applies to every tmux pane group)</td><td>chezmoi: <code>~/.config/systemd/user/tmux-spawn-.scope.d/oom.conf</code></td><td class="num">1</td></tr>
 <tr><td>7</td><td>Shells rank above tmux, and their bash commands above them. Unconditional, so it also covers plain SSH shells, desktop terminals and agents started outside tmux.</td><td>chezmoi: <code>~/.config/fish/conf.d/oom.fish</code>: write 600 to <code>/proc/self/oom_score_adj</code>, export <code>BASH_ENV</code></td><td class="num">2 lines</td></tr>
-<tr><td>8</td><td>The file bash reads: write 900 to <code>/proc/self/oom_score_adj</code>. Raising a score never needs privilege, so the write can't fail.</td><td>chezmoi: <code>~/.config/oom/bash_env</code></td><td class="num">1 line</td></tr>
+<tr><td>8</td><td>The file bash reads: a non-interactive bash writes 900 to <code>/proc/self/oom_score_adj</code>. Bash ignores <code>BASH_ENV</code> and reads <code>~/.bashrc</code> instead when <code>SSH_CLIENT</code> is set or stdin is a socket and <code>SHLVL</code> is unset, which is how an agent started over SSH or in an agent-team pane runs commands. Fedora's <code>~/.bashrc</code> loads <code>~/.bashrc.d</code>, so one file there serves both paths. Found during rollout on bilby.</td><td>chezmoi: <code>~/.bashrc.d/oom.sh</code></td><td class="num">1 line</td></tr>
 <tr><td>9</td><td>Install step: reload the user manager and enable the socket. Refuses, with instructions, while a tmux server is running outside the service.</td><td>chezmoi: <code>run_onchange_</code> script</td><td class="num">~10 lines</td></tr>
 </tbody></table></div>
 <p>That's about 10 settings and 13 lines of script, one packaged daemon, nothing that names a build tool and nothing that names an agent.</p>
@@ -232,10 +232,10 @@ OOMPolicy=continue
 
 # ~/.config/fish/conf.d/oom.fish
 echo 600 > /proc/self/oom_score_adj
-set -gx BASH_ENV ~/.config/oom/bash_env
+set -gx BASH_ENV ~/.bashrc.d/oom.sh
 
-# ~/.config/oom/bash_env
-echo 900 > /proc/self/oom_score_adj</code></pre>
+# ~/.bashrc.d/oom.sh (also read through ~/.bashrc)
+[[ $- == *i* ]] || echo 900 > /proc/self/oom_score_adj</code></pre>
 </details>
 
 <h2>Per host</h2>
@@ -290,6 +290,7 @@ echo 900 > /proc/self/oom_score_adj</code></pre>
 <tr><td>earlyoom settings in effect</td><td>The production arguments parse and report <code>SIGTERM when mem avail &lt;= 10.00% and swap free &lt;= 10.00%</code>, <code>SIGKILL</code> at 5%. <span class="tag">Arguments checked on bandicoot, 2026-09-17</span> After rollout, <code>journalctl -u earlyoom</code> start-up lines show the 10% memory and 10% swap thresholds; <code>systemctl is-enabled systemd-oomd</code> prints <code>enabled</code> on all three.</td></tr>
 <tr><td>voltaire <code>/tmp</code> on disk</td><td>After restart, <code>findmnt -T /tmp</code> shows the root filesystem, not tmpfs; <code>systemctl show tmp.mount -p LoadState</code> is <code>masked</code>.</td></tr>
 <tr><td>Scores in place</td><td>In a pane: fish reads 600, the tmux server reads 300, <code>bash -c 'cat /proc/self/oom_score_adj'</code> reads 900, and a bash command started by a non-bash child of fish (standing in for an agent) reads 900 while that child reads 600. The same from a plain and a login fish. <span class="tag">Passed on bandicoot with a throwaway socket-activated tmux service and the proposed fish file, 2026-09-17</span> After rollout, repeat in a real pane and a plain SSH shell on each host.</td></tr>
+<tr><td>Agent commands outside an interactive shell</td><td>A Node-spawned bash (how both agents run commands) reads 900 with no <code>SHLVL</code>, with and without <code>SSH_CLIENT</code>; interactive bash reads 600. <span class="tag">Covered by tests/test_oom_order.py; passed on bilby over SSH, 2026-09-17</span></td></tr>
 <tr><td>Both agents' commands rank above the agent</td><td>A Claude Code command and a Codex command each read 900, while the <code>claude</code> and <code>codex</code> processes read 600. <span class="tag">BASH_ENV passed in headless Claude and Codex runs, including with SHELL=fish, 2026-09-17</span></td></tr>
 <tr><td>tmux runs as the service</td><td>Connecting a client starts the service; its panes land beside it in <code>app.slice</code>; <code>systemctl --user stop</code> is refused. <span class="tag">Passed on bandicoot with a throwaway unit, 2026-09-17</span> After rollout: a new pane's group shows <code>OOMPolicy=continue</code>, and after a reboot <code>mux</code> attaches to a server under the service.</td></tr>
 <tr><td>Install step fails loudly</td><td>With a tmux server running outside the service, the install script exits non-zero and says what to do.</td></tr>
@@ -312,7 +313,7 @@ echo 900 > /proc/self/oom_score_adj</code></pre>
 <tbody>
 <tr><td>A ✅</td><td>The podhaus <code>earlyoom</code> role (group <code>earlyoom_hosts</code>) installed earlyoom with the 10% settings and enabled systemd-oomd on bilby, bandicoot and voltaire; voltaire joined <code>disk_tmp_hosts</code>. Bilby's inventory now pins <code>/usr/bin/python3</code>, because interpreter discovery had started picking a mise shim that root can't run. Applied 2026-09-17; a second run reported changed=0.</td><td>nothing</td><td>"earlyoom settings in effect" passed on all three.</td></tr>
 <tr><td>B ✅</td><td>chezmoi gained the fish file, the bash file, the tmux socket and service, the pane override and <code>tmux-service-install</code>, gated by <code>oom_order</code> in <code>fleet.toml</code>. <code>tests/test_oom_order.py</code> covers host gating, unit validity, the scores, and the installer's refusal.</td><td>nothing (A and B are independent)</td><td>The chezmoi suite passed (30 tests), 2026-09-17.</td></tr>
-<tr><td>C</td><td>Per host: save work, <code>tmux kill-server</code>, <code>chezmoi apply</code>, reconnect with <code>mux</code>.</td><td>B</td><td>"Scores in place" and "tmux runs as the service" pass on that host.</td></tr>
+<tr><td>C</td><td>Per host: save work, <code>tmux kill-server</code>, <code>chezmoi apply</code>, reconnect with <code>mux</code>. ✅ Bilby switched on 2026-09-17: server +300 in <code>tmux.service</code>, pane fish +600 with <code>OOMPolicy=continue</code>, bash commands +900, manual stop refused. Bandicoot and voltaire have every file applied; their tmux switch is still pending, and the installer refused while their login-started servers ran, as intended.</td><td>B</td><td>"Scores in place" and "tmux runs as the service" pass on that host.</td></tr>
 <tr><td>D</td><td>Restart voltaire.</td><td>A</td><td>"voltaire /tmp on disk" passes.</td></tr>
 <tr><td>E</td><td>Re-run the bilby test suite that caused the crunches.</td><td>A and C on bilby</td><td>"The real workload on bilby" passes.</td></tr>
 </tbody></table></div>
