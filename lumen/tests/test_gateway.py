@@ -40,7 +40,10 @@ class CatalogTests(unittest.TestCase):
         patch.dict(os.environ, LUMEN_UID='1000', LUMEN_GID='1000', LUMEN_IMAGE='lumen:local').start()
 
     def git(self, *args):
-        return subprocess.run(['git', *args], check=True, capture_output=True, text=True)
+        # A git hook exports its own repository's GIT_DIR and GIT_INDEX_FILE;
+        # these temporary repositories must not inherit them.
+        env = {name: value for name, value in os.environ.items() if not name.startswith('GIT_')}
+        return subprocess.run(['git', *args], check=True, capture_output=True, text=True, env=env)
 
     def test_main_and_linked_worktree_keep_original_paths(self):
         self.assertEqual(set(gateway.Catalog(self.config).worktrees()), {self.repo, self.worktree})

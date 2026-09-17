@@ -11,6 +11,8 @@
       tags: [disk-tmp]
     - role: base
       tags: [base]
+    - role: earlyoom
+      tags: [earlyoom]
     - role: docs_sources
       tags: [docs-sources]
     - role: gnome_on_demand

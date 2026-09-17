@@ -13,6 +13,9 @@
     - role: disk_tmp
       when: inventory_hostname in groups['disk_tmp_hosts']
       tags: [disk-tmp]
+    - role: earlyoom
+      when: inventory_hostname in groups['earlyoom_hosts']
+      tags: [earlyoom]
     - role: wsl
       when: podhaus_is_wsl | default(false)
       tags: [wsl]

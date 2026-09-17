@@ -6,6 +6,9 @@
 # Terraform-owned like bandicoot's.
 ansible_host: bilby.pod.haus
 ansible_user: nathan
+# Discovery finds nathan's mise shim first on PATH, and root cannot run it
+# (mise refuses the user-owned global config under sudo).
+ansible_python_interpreter: /usr/bin/python3
 
 # The server has been named podhaus since the first boot; every
 # stack.toml still says server = "podhaus" — renaming it is a separate

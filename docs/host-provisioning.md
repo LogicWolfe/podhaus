@@ -200,12 +200,12 @@ being up proves it started, not that it is doing its job.
 
 ## Roles worth knowing about
 
-**`disk_tmp`** configures Bilby, Bandicoot, and Fractal to keep `/tmp` on their
-root filesystem by masking `tmp.mount`. Bilby and Bandicoot use local NVMe;
-Fractal uses its WSL root virtual disk. Temporary files share the root
+**`disk_tmp`** configures Bilby, Bandicoot, Voltaire, and Fractal to keep `/tmp`
+on their root filesystem by masking `tmp.mount`. Bilby, Bandicoot, and Voltaire
+use their local root disk; Fractal uses its WSL root virtual disk. Temporary files share the root
 filesystem's free space and retain the distribution's temporary-file cleanup
 policy. Apply with `op-vault dev -- ansible-playbook playbooks/site.yml
---tags disk-tmp --limit bilby,bandicoot,fractal` from `ansible/` on Bandicoot,
+--tags disk-tmp --limit bilby,bandicoot,voltaire,fractal` from `ansible/` on Bandicoot,
 after reviewing the same command with `--check --diff`.
 
 The role leaves an active RAM mount in place because live processes hold files
@@ -216,6 +216,17 @@ kernel can remain running. An interactive login invokes `unlock-home` to restore
 as after a full WSL shutdown. `systemctl show tmp.mount -p LoadState` verifies the persistent mask;
 `findmnt -T /tmp` verifies the active backing filesystem. A masked unit with
 `tmpfs` still mounted means the cutover needs a restart.
+
+**`earlyoom`** runs Fedora's earlyoom on the development hosts Bilby,
+Bandicoot, and Voltaire. When available memory and free swap both fall to 10%,
+it signals the process with the highest out-of-memory score, before the host
+stalls in swap. Chezmoi sets those scores for dev work, so the order is bash
+commands (+900), then shells and agents (+600), then the tmux server (+300),
+then services (0 or below). The avoid list is Fedora's, covering the user
+manager, `dbus-broker`, and desktop sessions. systemd-oomd stays at Fedora's
+default and acts only after a sustained stall. `journalctl -u earlyoom` shows
+the thresholds at start-up and names each process it signals. Apply with
+`--tags earlyoom`.
 
 **`base`** opens with a `raw` task that installs `python3-libdnf5` if
 missing. This is the one deliberate `check_mode: false` in the layer:
