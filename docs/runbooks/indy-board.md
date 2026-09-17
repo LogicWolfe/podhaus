@@ -37,6 +37,9 @@ included. Its caches (Docker cache mounts `indy-*`) make later builds
 incremental. The compile steps share one locked cache so they run one at a
 time, which keeps the build within bilby's memory.
 
+On a Komodo that has never deployed the stack, run `CloneRepo indy-board`
+once first: the procedure's pull stage fails on a clone that does not exist.
+
 `tools/ship.sh service|controller|panel`, run from any indy-board checkout,
 builds that target on bilby and copies it into the running container. The
 next deploy replaces it.
