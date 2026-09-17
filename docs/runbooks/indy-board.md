@@ -40,8 +40,9 @@ time, which keeps the build within bilby's memory.
 On a Komodo that has never deployed the stack, run `CloneRepo indy-board`
 once first: the procedure's pull stage fails on a clone that does not exist.
 
-`tools/ship.sh service|controller|panel`, run from any indy-board checkout,
-builds that target on bilby and copies it into the running container. The
+`tools/ship.sh service|controller|panel`, run from any indy-board checkout
+(with `DOCKER_HOST=ssh://bilby.pod.haus` when not on bilby), builds that
+target with bilby's Docker and copies it into the running container. The
 next deploy replaces it.
 
 ## Secrets and settings
