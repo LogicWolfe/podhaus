@@ -1,0 +1,69 @@
+# Radarr — movie metadata lookups + poster art for Fenwick, nothing else.
+# Fenwick (the family Signal bot, also on bandicoot's dockernet) calls
+# `GET /api/v3/movie/lookup?term=...` to resolve a title the household
+# mentions to real movie metadata (title, year, overview, ratings) and
+# fetches poster images through Radarr's `/MediaCoverProxy/...` paths,
+# both with an `X-Api-Key` header. Design lives in the fenwick repo's
+# docs/movie-suggestions plan and docs/feeds.html (the feed listener that
+# drives the recommendation).
+#
+# Deliberate omissions — this is a read-only metadata proxy, not a media
+# manager:
+#   - No indexers, no download client: Radarr never searches for or
+#     fetches a movie file. It only answers "what movie is this" and
+#     proxies TMDB poster art.
+#   - No /movies or any Pouch/Jump bind: there is no library for Radarr
+#     to manage, so no media mount, no NFS sentinel healthcheck, and
+#     nothing for it to import or rename.
+#   - Config lives in a named Docker volume, not a host bind or an
+#     ansible-managed directory: there's no state here worth a backup
+#     plan (an API key and cached TMDB metadata, both trivially
+#     re-derived — the API key from 1Password, the cache from TMDB on
+#     next lookup), so it's absent from backup/bandicoot's plan by
+#     design, not oversight.
+#   - No published port, no Caddy/Pomerium route, no DNS entry: nothing
+#     outside dockernet ever calls Radarr directly. Fenwick reaches it by
+#     container name only.
+#   - Auth: RADARR__AUTH__METHOD=External matches Sonarr's stance, but
+#     here there's no front door for Pomerium to sit behind at all — it
+#     just disables Radarr's own login screen since only Fenwick, a
+#     trusted dockernet peer, ever calls it.
+#   - PUID/PGID kept at 1000:100 for parity with every other linuxserver
+#     image on this host, though there's no shared-ownership filesystem
+#     here for it to matter.
+
+services:
+  radarr:
+    container_name: radarr
+    image: lscr.io/linuxserver/radarr:6.4.4.10685-ls317
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      PUID: "1000"
+      PGID: "100"
+      RADARR__AUTH__METHOD: External
+      RADARR__AUTH__APIKEY: ${RADARR_API_KEY}
+    volumes:
+      - radarr-config:/config
+    networks:
+      - dockernet
+    mem_limit: 1g
+    cpus: 2
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:7878/ping
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  radarr-config:
