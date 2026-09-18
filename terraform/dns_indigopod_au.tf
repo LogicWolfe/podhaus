@@ -32,3 +32,57 @@ resource "cloudflare_dns_record" "pets_indigopod" {
   proxied = true
   ttl     = 1
 }
+
+# Fastmail for indigo@indigopod.au, same shape as pod.haus: the three DKIM
+# CNAMEs, both messagingengine exchangers, and a neutral SPF record. The
+# mailbox itself is a Fastmail-side rename of her pod.haus user, which keeps
+# the old address as an alias.
+locals {
+  indigopod_au_dkim_selectors = toset(["fm1", "fm2", "fm3"])
+}
+
+resource "cloudflare_dns_record" "indigopod_au_dkim" {
+  for_each = local.indigopod_au_dkim_selectors
+  zone_id  = local.zones["indigopod.au"]
+  name     = "${each.key}._domainkey.indigopod.au"
+  type     = "CNAME"
+  content  = "${each.key}.indigopod.au.dkim.fmhosted.com"
+  proxied  = false
+  ttl      = 300
+  settings = {
+    flatten_cname = false
+    ipv4_only     = false
+    ipv6_only     = false
+  }
+}
+
+resource "cloudflare_dns_record" "indigopod_au_mx" {
+  for_each = {
+    "10" = "in1-smtp.messagingengine.com"
+    "20" = "in2-smtp.messagingengine.com"
+  }
+  zone_id  = local.zones["indigopod.au"]
+  name     = "indigopod.au"
+  type     = "MX"
+  content  = each.value
+  priority = tonumber(each.key)
+  ttl      = 300
+}
+
+resource "cloudflare_dns_record" "indigopod_au_txt_spf" {
+  zone_id = local.zones["indigopod.au"]
+  name    = "indigopod.au"
+  type    = "TXT"
+  content = "\"v=spf1 include:spf.messagingengine.com ?all\""
+  ttl     = 300
+}
+
+# Monitoring-only DMARC, the record Fastmail's own setup asks for. It cannot
+# fail delivery at p=none; tightening it is a later decision.
+resource "cloudflare_dns_record" "indigopod_au_txt_dmarc" {
+  zone_id = local.zones["indigopod.au"]
+  name    = "_dmarc.indigopod.au"
+  type    = "TXT"
+  content = "\"v=DMARC1; p=none;\""
+  ttl     = 300
+}

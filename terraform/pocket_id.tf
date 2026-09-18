@@ -92,6 +92,25 @@ resource "pocketid_user" "sky" {
   }
 }
 
+# Indigo's identity exists for the family Pomerium routes and nothing else:
+# no Forgejo account, so no `ssh_keys` claim and no forgejo-users membership.
+# `last_name` is set because Pocket ID answers with an empty string for an
+# unset surname, which the provider reports as an inconsistent apply result
+# when the attribute is absent from config.
+resource "pocketid_user" "indigo" {
+  username       = "indigo"
+  email          = "indigo@indigopod.au"
+  first_name     = "Indigo"
+  last_name      = ""
+  is_admin       = false
+  disabled       = false
+  email_verified = false
+
+  groups = [
+    pocketid_group.pomerium_users.id,
+  ]
+}
+
 resource "pocketid_client" "forgejo" {
   name      = "Forgejo"
   client_id = "forgejo"

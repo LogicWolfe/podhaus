@@ -54,6 +54,8 @@ routes:
                 is: nathan@nathanbaxter.com
             - email:
                 is: scroeser@gmail.com
+            - email:
+                is: indigo@indigopod.au
 
   - <<: *family_route
     from: https://bugs.pod.haus
