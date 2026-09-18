@@ -58,6 +58,24 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "indy-board",
+      "repo": "podhaus",
+      "paths": ["/userdata/indy-board"],
+      "schedule": {
+        "cron": "5 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "flood",
       "repo": "podhaus",
       "paths": ["/userdata/flood"],
