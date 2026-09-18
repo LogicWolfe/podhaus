@@ -19,8 +19,15 @@ their WiFi links. The code, its stack files and its own docs live in the
 - **Home Assistant and Music Assistant** use host networking, so the
   service reaches them through the dockernet gateway, `172.18.0.1:8123` and
   `:8095`.
-- **No state.** The image carries the service and both boards' firmware;
-  nothing is bind-mounted and nothing needs backing up.
+- **State.** `/var/lib/indy-board/game.sqlite`, bind-mounted into the
+  container at the same path, with its `-wal` and `-shm` companions (SQLite
+  in WAL mode): one row per finished game of the dial's catch game, from
+  which the panel shows the high score and its rally's drawing. It is the
+  service's only state; the image carries the service and both boards'
+  firmware. Backrest snapshots the directory nightly under the `indy-board`
+  plan as a live-file copy, crash-consistent, the same acceptance as every
+  other SQLite stack on the fleet: SQLite recovers from the db and wal pair
+  at open.
 
 ## Deploys
 
@@ -79,3 +86,9 @@ evidence and the manual recovery step.
   image being offered again, revert it on `main`, or ship a working build.
 - **The container won't start.** `docker logs indy-service` names the
   missing or invalid setting.
+- **A rebuilt host.** Restore the game log before deploying the stack:
+  `restic -r /mnt/jump/backups restore latest --target / --include
+  /userdata/indy-board`, then move `/userdata/indy-board` to
+  `/var/lib/indy-board`. Deploying without a restore is also fine: the
+  service creates the table, so a fresh deploy simply starts with no high
+  score.

@@ -44,6 +44,7 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
         <tbody>
           <tr><td><code>forgejo</code></td><td>Local SQLite/config + Jump repositories, LFS, attachments, and archives; Forgejo is stopped around the snapshot so the two filesystems share one consistency point</td><td>03:45</td></tr>
           <tr><td><code>plex</code></td><td><code>/var/lib/plex-local</code></td><td>04:00</td></tr>
+          <tr><td><code>indy-board</code></td><td><code>/var/lib/indy-board</code> (the catch game's SQLite log behind the panel's high score)</td><td>04:05</td></tr>
           <tr><td><code>flood</code></td><td><code>/var/lib/flood-db</code></td><td>04:10</td></tr>
           <tr><td><code>fenwick</code></td><td><code>/var/lib/fenwick</code> (the bot's SQLite: identity, activity log, guidance, schedules) + <code>/var/lib/signal-cli</code> (the Signal device link — irrecoverable; loss means human-only re-registration)</td><td>04:15</td></tr>
           <tr><td><code>home-assistant</code></td><td><code>/var/lib/home-assistant</code></td><td>04:20</td></tr>
@@ -238,8 +239,8 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
       <h2 id="add-plan">Adding a plan for a new stack</h2>
       <ol>
         <li>Bind-mount the stack's state directory into Backrest read-only as
-          <code>/userdata/&lt;stack&gt;/</code> — edit
-          <code>backup/compose.shared.yaml</code>.</li>
+          <code>/userdata/&lt;stack&gt;/</code> — edit the host's overlay,
+          <code>backup/&lt;host&gt;/compose.yaml</code>.</li>
         <li>Add a plan block to <code>backup/&lt;host&gt;/config.json.tmpl</code> with a
           schedule slotted into the dead-time window (04:00–05:20 AWST), the standard 14d/4w/6m
           retention, and <code>paths: ["/userdata/&lt;stack&gt;"]</code>.</li>

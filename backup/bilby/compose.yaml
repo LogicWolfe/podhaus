@@ -93,6 +93,9 @@ services:
       # Yiayia's stories: SQLite (Sky's months of transcription) and the
       # irreplaceable audio originals, one root so a snapshot is consistent.
       - /var/lib/yiayia-stories:/userdata/yiayia-stories:ro
+      # Indy Board: the SQLite game log behind the panel's high score, the
+      # service's only state.
+      - /var/lib/indy-board:/userdata/indy-board:ro
       #
       # Docker named volumes from stacks that still use them (NAS squash
       # carve-out stacks + logging). Referenced via `external: true` in
