@@ -33,10 +33,14 @@ resource "cloudflare_dns_record" "pets_indigopod" {
   ttl     = 1
 }
 
-# Fastmail for indigo@indigopod.au, same shape as pod.haus: the three DKIM
-# CNAMEs, both messagingengine exchangers, and a neutral SPF record. The
-# mailbox itself is a Fastmail-side rename of her pod.haus user, which keeps
-# the old address as an alias.
+# Fastmail for indigo@indigopod.au: the three DKIM CNAMEs, both exchangers,
+# and a neutral SPF record. The mailbox itself is a Fastmail-side rename of
+# her pod.haus user, which keeps the old address as an alias.
+#
+# The exchangers are the us1/us2 hostnames Fastmail's own setup screen gives
+# for a domain added now. pod.haus and nathanbaxter.com still name the older
+# in1/in2 pair, which Fastmail continues to accept; do not align the zones on
+# one pair without checking what Fastmail asks for each domain.
 locals {
   indigopod_au_dkim_selectors = toset(["fm1", "fm2", "fm3"])
 }
@@ -58,8 +62,8 @@ resource "cloudflare_dns_record" "indigopod_au_dkim" {
 
 resource "cloudflare_dns_record" "indigopod_au_mx" {
   for_each = {
-    "10" = "in1-smtp.messagingengine.com"
-    "20" = "in2-smtp.messagingengine.com"
+    "10" = "us1-smtp.messagingengine.com"
+    "20" = "us2-smtp.messagingengine.com"
   }
   zone_id  = local.zones["indigopod.au"]
   name     = "indigopod.au"
