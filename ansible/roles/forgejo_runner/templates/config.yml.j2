@@ -5,7 +5,7 @@ log:
 runner:
   file: /data/.runner
   # A finite value is required by the runner. Sixteen is deliberately above
-  # the expected job fan-out; Fractal is allowed to use its available host
+  # the expected job fan-out; the runner host is allowed to use its available
   # capacity rather than serialising CI.
   capacity: 16
   timeout: {{ podhaus_forgejo_runner_timeout }}

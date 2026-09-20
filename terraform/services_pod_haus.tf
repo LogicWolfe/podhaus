@@ -1,34 +1,6 @@
 # DNS for Pomerium-protected pod.haus services. Pomerium and Caddy own the
 # route policy; Terraform only publishes each name to the correct Numbat role.
 locals {
-  # UniFi reservations still need both physical Kangaroo addresses.
-  kangaroo_ip_1g  = "10.0.0.232"
-  kangaroo_ip_10g = "10.0.0.25"
-  # The Windows desktop hosting the fractal WSL guest; forwards only :22
-  # into it. Reserved so the split-horizon fractal.pod.haus record and
-  # every ssh config pointing at it stay truthful.
-  fractal_windows_ip = "10.0.0.70"
-  # bandicoot's USB Ethernet adapter (Asahi has no Thunderbolt, so the 1 GbE
-  # link is a Realtek RTL8153 on USB). Reserved so the split-horizon
-  # bandicoot.pod.haus record and its Ansible connection stay truthful.
-  bandicoot_ip = "10.0.0.90"
-  # The ESP32 bridging the burrow Turn Touch. Reserved because Alloy scrapes
-  # its /metrics by IP — Docker's resolver has no mDNS, so the .local name is
-  # unreachable from the container and a DHCP drift would end the scrape
-  # silently.
-  turn_touch_burrow_ip = "10.0.0.238"
-  # The Pi Zero bridging the Flic buttons. Reserved because Home Assistant's
-  # flic integration dials flicd at a fixed host:port and HA runs in a
-  # container with no mDNS, so pizero.local is unreachable from it. A DHCP
-  # drift would silently stop every button working.
-  pizero_ip = "10.0.0.77"
-  # The ESP32 switching the grasshopper LED strip. Reserved for the same
-  # reason as the Turn Touch: Alloy scrapes its /metrics by IP.
-  led_strip_grasshopper_ip = "10.0.0.44"
-  # Nathan's MacBook Air (wifi). Reserved so the split-horizon
-  # nb-macbook-air.pod.haus record and its Ansible connection stay truthful.
-  nb_macbook_air_ip = "10.0.0.202"
-
   pod_haus_service_dns = {
     backup          = local.numbat_application_ipv4
     bugs            = local.numbat_application_ipv4

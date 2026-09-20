@@ -116,7 +116,7 @@ ansible/
     wsl/                   /etc/wsl.conf, hostname
     docker/                engine (where managed), daemon.json, host networks
     devbox/                the root-requiring half of a developer machine
-    forgejo_runner/        Fractal's container-isolated Forgejo Actions runner
+    forgejo_runner/        Bandicoot's container-isolated Forgejo Actions runner
     docs_sources/          Read-only repository source slots for docs-server
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA

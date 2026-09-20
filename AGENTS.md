@@ -191,6 +191,17 @@ hosted JetKVM is Pinelake's independent recovery path.
   by static IP.
 - Static IPs are for LAN devices (e.g. UniFi gateway at `10.0.0.1`) or
   host-network services.
+- **Every pinned LAN address has exactly ONE definition:
+  `terraform/lan_addresses.tf`.** The `unifi_client` reservations pin the
+  lease, the split-horizon records name it, and Terraform publishes the
+  consumed subset to the 1Password item `Podhaus LAN Addresses`. Ansible
+  reads it through `ansible/inventory/group_vars/all.yml`; komodo-op turns
+  each field into an `OP__KOMODO__PODHAUS_LAN_ADDRESSES__*` Variable that a
+  `stack.toml` `environment` line passes into compose. **Never write a
+  `10.0.0.x` host address into a compose file, `stack.toml`,
+  `caddy/Caddyfile`, `gatus/conf/config.yaml`, an Alloy config, inventory,
+  or a script** — add a field to the published item and reference the
+  variable. Same contract Numbat's public addresses already use.
 - Services needing device access (Home Assistant, Plex, Syncthing) use
   `network_mode: host`. Caddy reaches them via the dockernet
   bridge gateway at `172.18.0.1:<port>`.
@@ -253,6 +264,7 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
 | `ansible/playbooks/numbat-bootstrap.yml` + `ansible/playbooks/numbat.yml` | Numbat's two plays. The bootstrap play (fresh VM only, run from bandicoot) pins Terraform's 1P-published host key for first contact, connects on first-boot port 2222, stages the `numbat_edge` firewall without activating it, starts rathole before outbound Periphery, enrolls the userspace SSH recovery daemon, then loads the final ruleset and closes 2222 last. The steady-state play (base, docker, numbat_edge, sshd_pomerium_ca, komodo_periphery) reaches the host through Pomerium and is what check-mode equivalence proves. Numbat application stacks are Komodo-managed. |
 | `tailscale-recovery-bootstrap` | Host-native, userspace-mode Tailscale recovery bootstrap for bilby, numbat, and kangaroo. It publishes only loopback OpenSSH through Tailscale Serve on TCP 22; no host route, DNS override, TUN, or container socket/state exposure. |
+| `terraform/lan_addresses.tf` | **The fleet's one definition of every pinned home-LAN address.** A `locals` block (bilby, bandicoot, both kangaroo NICs, the fractal Windows host, both ESP32s, the Pi Zero, the MacBook Air) plus `onepassword_item.podhaus_lan_addresses`, which publishes the addresses read outside Terraform. `unifi.tf`'s reservations and `dns_unifi_split_horizon.tf`'s records consume the locals; Ansible and Komodo consume the 1Password item. See the Networking rule above. |
 | `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS/CDN/AOP, UniFi DNS, GitHub deploy webhooks, the SSH-only Tailscale recovery plane, MinIO IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in MinIO via public `https://storage.pod.haus`; run stock `terraform` directly. |
 | `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (per-site static hosting) via `storage.pod.haus`. |
 | `caddy/` | Bilby's split origin: private mTLS `:4443` for Pomerium, public-only `:4444` for Numbat raw/CDN endpoints, and `:443` for LAN routes. |

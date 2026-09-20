@@ -11,4 +11,5 @@ run_directory = "/etc/komodo/repo/home-assistant"
 environment = """
 TZ=[[TZ]]
 PODHAUS_CHECKOUT=[[PODHAUS_CHECKOUT]]
+BILBY_LAN_IPV4=[[OP__KOMODO__PODHAUS_LAN_ADDRESSES__BILBY_IPV4]]
 """

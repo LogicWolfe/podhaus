@@ -157,8 +157,10 @@ otelcol.processor.transform "svc_alloy" {
 //
 // Scraped by IP because Alloy resolves through Docker's DNS, which has no
 // mDNS, so `turn-touch-burrow.local` is unreachable from in here. Both
-// addresses are pinned by UniFi reservations (terraform/unifi.tf) — without
-// them a DHCP drift would silently end the scrape.
+// addresses are pinned by UniFi reservations and reach this file as
+// environment variables from logging/bilby/stack.toml — Terraform owns them
+// (terraform/lan_addresses.tf); without the pin a DHCP drift would silently
+// end the scrape.
 //
 // Deliberately narrow: one target per device, ~10 series each. bilby's
 // ClickHouse runs under a 4g cap, so the tempting alternative — scraping Home
@@ -166,11 +168,11 @@ otelcol.processor.transform "svc_alloy" {
 // like-for-like swap.
 prometheus.scrape "esphome" {
   targets = [{
-    __address__      = "10.0.0.238",
+    __address__      = sys.env("TURN_TOUCH_BURROW_IPV4"),
     __metrics_path__ = "/metrics",
     instance         = "turn-touch-burrow",
   }, {
-    __address__      = "10.0.0.44",
+    __address__      = sys.env("LED_STRIP_GRASSHOPPER_IPV4"),
     __metrics_path__ = "/metrics",
     instance         = "led-strip-grasshopper",
   }]
@@ -215,7 +217,8 @@ otelcol.processor.batch "clickstack" {
 otelcol.exporter.otlphttp "clickstack" {
   client {
     // ClickStack lives on bandicoot: cross-LAN to its published :4318.
-    endpoint = "http://10.0.0.90:4318"
+    // The address comes from logging/bilby/stack.toml; Terraform owns it.
+    endpoint = "http://" + sys.env("BANDICOOT_LAN_IPV4") + ":4318"
     // Same reasoning as kangaroo's exporter: a fixed IP behind a published
     // port + NAT keeps a kept-alive connection mapped to a dead collector
     // after a recreate, so every batch opens a fresh connection.

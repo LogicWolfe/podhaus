@@ -81,7 +81,10 @@
   notify: Restart periphery
 
 - name: Render the Periphery .env
-  # TZ only — outbound auth is the X25519 keypair, not a shared secret.
+  # No secret here — outbound auth is the X25519 keypair. BILBY_LAN_IPV4 is
+  # bandicoot/periphery/compose.yaml's extra_hosts pin for git.pod.haus,
+  # read from the 1Password item Terraform publishes; every other host's
+  # compose ignores it.
   ansible.builtin.copy:
     dest: "{{ podhaus_periphery_dir }}/.env"
     owner: "{{ podhaus_periphery_owner }}"
@@ -89,6 +92,7 @@
     mode: "0600"
     content: |
       TZ={{ podhaus_timezone }}
+      BILBY_LAN_IPV4={{ podhaus_bilby_ipv4 }}
   notify: Restart periphery
 
 - name: Bring Periphery up through system Docker

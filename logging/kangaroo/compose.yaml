@@ -4,6 +4,10 @@
 
 services:
   alloy:
+    environment:
+      # The ClickStack collector's host, read by alloy-conf/config.alloy
+      # through sys.env(). Terraform owns it; see terraform/lan_addresses.tf.
+      BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
     volumes:
       # Absolute host path because Periphery's container-side relative-
       # path resolution doesn't match the QNAP host's view of the cloned

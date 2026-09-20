@@ -25,7 +25,7 @@ resource "unifi_port_forward" "mumble_udp" {
   }
 
   forward = {
-    ip   = "10.0.0.119"
+    ip   = local.bilby_ip
     port = "64738"
   }
 }
@@ -39,17 +39,22 @@ resource "unifi_port_forward" "mumble_tcp" {
   }
 
   forward = {
-    ip   = "10.0.0.119"
+    ip   = local.bilby_ip
     port = "64738"
   }
 }
 
+# DHCP reservations. Every fixed_ip below reads local.<device>_ip from
+# lan_addresses.tf, which is the fleet's one definition of each address —
+# these resources are what make that definition true on the wire.
+#
 # DHCP reservations pinning kangaroo (the QNAP). Both NICs are cabled and
 # both reserved, so neither can drift off the address consumers expect:
 #   - eth0 1GbE (…78:bf) → kangaroo_ip_1g  (.232), the spare path
 #   - eth1 10GbE (…78:c0) → kangaroo_ip_10g (.25), the active path
-# Consumers follow local.kangaroo_active_ip (currently the 10GbE link).
-# Both stay live; QTS's arp_ignore/announce keep the two same-subnet IPs
+# Every consumer follows the 10GbE link: it is the address lan_addresses.tf
+# publishes as kangaroo_ipv4, so the spare NIC's reservation exists only to
+# keep the address free. Both stay live; QTS's arp_ignore/announce keep the two same-subnet IPs
 # from flapping. Import (existing clients):
 #   terraform import unifi_client.kangaroo     6a1d392d4f9fa3fc2042ea93
 #   terraform import unifi_client.kangaroo_10g 645c8c7f91871e0fa7119fec
@@ -69,6 +74,25 @@ resource "unifi_client" "kangaroo_10g" {
   # a redundant Default-LAN virtual-network override, which UniFi rejects
   # setting on the default network. SSH selects this active address locally;
   # DNS stays on Pomerium so the HTTPS identity boundary remains consistent.
+}
+
+# bilby, the primary host, by its end0 MAC. Pinned because more of the fleet
+# depends on this address than on any other: the split-horizon records for
+# bilby / unifi / storage / pouch / music / voice (dns_unifi_split_horizon.tf),
+# the Mumble WAN forwards above, Gatus's LAN-published heartbeat listener,
+# Bugsink's ingest, and the git.pod.haus origin that Komodo Core and the
+# Forgejo Actions runner pin past Pomerium. A DHCP drift would strand all of
+# them at once. No import step: bilby already exists in the controller as an
+# observed DHCP lease, and v0.53's `allow_existing` defaults to true, so the
+# create takes control of that client rather than colliding with it (the plan
+# shows `allow_existing = true` as a known value). If an apply ever does
+# report a conflict, adopt it by MAC instead:
+#   terraform import unifi_client.bilby 14:98:77:67:e0:b8
+resource "unifi_client" "bilby" {
+  mac      = "14:98:77:67:e0:b8"
+  name     = "Bilby"
+  fixed_ip = local.bilby_ip
+  # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
 
 # The Windows desktop hosting the fractal WSL guest. Pinned because the
@@ -123,11 +147,11 @@ resource "unifi_client" "turn_touch_burrow" {
 }
 
 # The Pi Zero W running flicd, bridging the Flic buttons into Home
-# Assistant. Pinned because HA's flic integration holds a fixed host:port
-# (home-assistant/config/packages/flic.yaml) and cannot resolve mDNS from
-# its container, so a DHCP drift would take every button offline silently.
-# This client already exists in the controller as a DHCP lease, so import
-# before the first apply:
+# Assistant. Nothing dials it — flic-pusher on the Pi POSTs each press to an
+# HA webhook — but it is a headless host with no mDNS name reachable from
+# the tools that administer it, so the lease stays pinned for SSH and the
+# pairing wizard (docs/runbooks/pizero.md). This client already exists in
+# the controller as a DHCP lease, so import before the first apply:
 #   terraform import unifi_client.pizero b8:27:eb:68:65:04
 resource "unifi_client" "pizero" {
   mac      = "b8:27:eb:68:65:04"

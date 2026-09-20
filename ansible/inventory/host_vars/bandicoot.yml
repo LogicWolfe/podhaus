@@ -67,11 +67,11 @@ podhaus_docs_sources:
 # arrives; the volume roots get a sentinel automatically.
 storage_binds_mounts:
   - root: /mnt/jump
-    source: "10.0.0.25:/Jump"
+    source: "{{ podhaus_kangaroo_ipv4 }}:/Jump"
     fstypes: [nfs, nfs4]
     fstab_options: nfsvers=4.1,rw,nolock,soft,timeo=600,retrans=5,noatime,_netdev,nofail,x-systemd.automount
   - root: /mnt/pouch
-    source: "10.0.0.25:/Pouch"
+    source: "{{ podhaus_kangaroo_ipv4 }}:/Pouch"
     fstypes: [nfs, nfs4]
     fstab_options: nfsvers=4.1,rw,nolock,soft,timeo=600,retrans=5,noatime,_netdev,nofail,x-systemd.automount
 
@@ -127,13 +127,12 @@ podhaus_extra_networks:
       managed-by: fenwick-repo
 
 # Forgejo Actions runner ------------------------------------------------
-# The fleet's one runner lives here (moved from fractal, which now carries
-# no active jobs). Registration keeps git.pod.haus as TLS SNI but resolves
-# it to bilby's internal Caddy; this address is Terraform-owned in UniFi.
-# Labels are the fleet's existing ones so workflows need no change; the
-# images behind them are multi-arch and run natively on aarch64, which
-# matches bilby, where Komodo builds the same images.
-podhaus_forgejo_internal_address: 10.0.0.119
+# The fleet's one runner lives here. Registration keeps git.pod.haus as TLS
+# SNI but resolves it to bilby's internal Caddy, past Pomerium's browser
+# login route. Labels are the fleet's existing ones so workflows need no
+# change; the images behind them are multi-arch and run natively on aarch64,
+# which matches bilby, where Komodo builds the same images.
+podhaus_forgejo_internal_address: "{{ podhaus_bilby_ipv4 }}"
 
 # Core runs on this host; its own Periphery dials it on the LAN name
 # above rather than needing any inventory-hostname trick.

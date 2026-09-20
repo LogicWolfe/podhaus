@@ -14,7 +14,7 @@ resource "unifi_dns_record" "unifi_pod_haus" {
   name        = "unifi.pod.haus"
   record_type = "A"
   # Keep Terraform's public API URL on a valid Caddy certificate on-LAN too.
-  value   = "10.0.0.119"
+  value   = local.bilby_ip
   ttl     = "5m0s"
   enabled = true
 }
@@ -22,7 +22,7 @@ resource "unifi_dns_record" "unifi_pod_haus" {
 resource "unifi_dns_record" "bilby_pod_haus" {
   name        = "bilby.pod.haus"
   record_type = "A"
-  value       = "10.0.0.119"
+  value       = local.bilby_ip
   ttl         = "5m0s"
   enabled     = true
 }
@@ -36,7 +36,7 @@ resource "unifi_dns_record" "bilby_pod_haus" {
 resource "unifi_dns_record" "storage_pod_haus" {
   name        = "storage.pod.haus"
   record_type = "A"
-  value       = "10.0.0.119"
+  value       = local.bilby_ip
   ttl         = "5m0s"
   enabled     = true
 }
@@ -46,7 +46,7 @@ resource "unifi_dns_record" "storage_pod_haus" {
 resource "unifi_dns_record" "pouch_pod_haus" {
   name        = "pouch.pod.haus"
   record_type = "A"
-  value       = "10.0.0.119"
+  value       = local.bilby_ip
   ttl         = "5m0s"
   enabled     = true
 }
@@ -57,7 +57,7 @@ resource "unifi_dns_record" "pouch_pod_haus" {
 resource "unifi_dns_record" "nathanbaxter_com_storage" {
   name        = "nathanbaxter-com.storage.pod.haus"
   record_type = "A"
-  value       = "10.0.0.119"
+  value       = local.bilby_ip
   ttl         = "5m0s"
   enabled     = true
 }
@@ -69,7 +69,7 @@ resource "unifi_dns_record" "nathanbaxter_com_storage" {
 resource "unifi_dns_record" "voice_pod_haus" {
   name        = "voice.pod.haus"
   record_type = "A"
-  value       = "10.0.0.119"
+  value       = local.bilby_ip
   ttl         = "5m0s"
   enabled     = true
 }
@@ -127,7 +127,7 @@ resource "unifi_dns_record" "nb_macbook_air_pod_haus" {
 resource "unifi_dns_record" "music_pod_haus" {
   name        = "music.pod.haus"
   record_type = "A"
-  value       = "10.0.0.119"
+  value       = local.bilby_ip
   ttl         = "5m0s"
   enabled     = true
 }

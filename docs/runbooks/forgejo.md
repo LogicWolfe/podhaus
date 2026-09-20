@@ -75,23 +75,31 @@ key reconciliation does not happen in a custom script.
 
 Forgejo Actions is the CI control plane. Runners are outbound clients on
 separate hosts; Forgejo and Bilby's production Docker daemon never execute CI
-jobs. The initial capability is a repository-scoped runner on Fractal,
-provisioned by `ansible/roles/forgejo_runner`:
+jobs. The fleet has one runner, on Bandicoot, registered as `bandicoot` and
+scoped to a single repository. It is provisioned by
+`ansible/roles/forgejo_runner` through `ansible/playbooks/bandicoot.yml`:
 
 - `podhaus-ci-x64` runs ordinary Node/Deno container jobs;
 - `podhaus-browser-x64` uses the pinned Playwright image;
+- both label images are multi-arch and run natively on Bandicoot's aarch64,
+  which matches the architecture Komodo builds on Bilby;
 - the daemon waits persistently while each job container and network is
   disposable;
-- jobs have a one-hour timeout and may otherwise consume Fractal's available
+- jobs have a one-hour timeout and may otherwise consume Bandicoot's available
   host capacity;
-- no Bilby runner exists. A future ARM64 job must justify adding one explicitly.
+- no Bilby runner exists. A future runner elsewhere must justify itself
+  explicitly.
 
-If Fractal is unavailable, work queues until it returns; there is no transparent
-Voltaire fallback. The runner's repository registration is durable under
-`/opt/forgejo-runner/data`, while Ansible fetches a short-lived registration
-token only for first registration. Job containers do not receive Fractal's
-Docker socket. The runner removes disposable job resources on completion and
-its cache lives under `/opt/forgejo-runner/data/cache`.
+If Bandicoot is unavailable, work queues until it returns; there is no
+fallback runner. The daemon reaches Forgejo by pinning `git.pod.haus` to
+Bilby's LAN address inside the runner container and its job containers, which
+keeps the public hostname for TLS while bypassing Pomerium's browser login
+route; the address comes from Terraform, never from a literal in this repo
+(`terraform/lan_addresses.tf`). The runner's repository registration is durable
+under `/opt/forgejo-runner/data`, while Ansible fetches a short-lived
+registration token only for first registration. Job containers do not receive
+Bandicoot's Docker socket. The runner removes disposable job resources on
+completion and its cache lives under `/opt/forgejo-runner/data/cache`.
 
 Fenwick is the reference release shape. Pull requests and `main` run the same
 three checks. A dependent promotion job advances the repository's `deploy`

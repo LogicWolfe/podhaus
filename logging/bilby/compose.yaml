@@ -9,6 +9,13 @@
 
 services:
   alloy:
+    environment:
+      # Read by alloy-conf/config.alloy through sys.env(): the ClickStack
+      # collector's host and the two ESPHome scrape targets. Terraform owns
+      # every value; see terraform/lan_addresses.tf.
+      BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
+      TURN_TOUCH_BURROW_IPV4: ${TURN_TOUCH_BURROW_IPV4}
+      LED_STRIP_GRASSHOPPER_IPV4: ${LED_STRIP_GRASSHOPPER_IPV4}
     # SELinux enforcing on Fedora Asahi denies both cross-label writes
     # to /var/run/docker.sock and cross-label reads into bind-mounted
     # config files; label:disable covers both.

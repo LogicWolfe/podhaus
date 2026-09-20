@@ -6,6 +6,14 @@
 	}
 }
 
+# Cross-host upstreams name a host by variable, never by address:
+# {$BANDICOOT_LAN_IPV4} and {$KANGAROO_LAN_IPV4} are substituted into this
+# file when Caddy parses it, from the stack environment (caddy/stack.toml ←
+# the 1Password item Terraform publishes; see terraform/lan_addresses.tf).
+# Parse-time {$VAR} rather than runtime {env.VAR} because an upstream
+# address is not one of the fields that expand runtime placeholders — the
+# {env.…} form above is for header and TLS values, which do.
+
 # Public TLS front for MinIO's S3 API. Owns its own Let's Encrypt
 # wildcard so the S3 data path never touches Cloudflare's proxy (which
 # rewrites the SigV4-signed Accept-Encoding header and only has a
@@ -64,24 +72,24 @@
 		reverse_proxy @bugs bugsink:8000
 		reverse_proxy @backup backrest:9898
 		# The bot lives on bandicoot; the front door stays here.
-		reverse_proxy @fenwick 10.0.0.90:8088
-		reverse_proxy @kangaroo_backup 10.0.0.25:9898
-		reverse_proxy @kangaroo 10.0.0.25:8080
+		reverse_proxy @fenwick {$BANDICOOT_LAN_IPV4}:8088
+		reverse_proxy @kangaroo_backup {$KANGAROO_LAN_IPV4}:9898
+		reverse_proxy @kangaroo {$KANGAROO_LAN_IPV4}:8080
 		# Komodo Core lives on bandicoot; the front door stays here.
-		reverse_proxy @komodo 10.0.0.90:9120
+		reverse_proxy @komodo {$BANDICOOT_LAN_IPV4}:9120
 		reverse_proxy @torrent flood:3000
 		reverse_proxy @home 172.18.0.1:8123
 		reverse_proxy @plex 172.18.0.1:32400
 		reverse_proxy @music 172.18.0.1:8095
 		# MeTube lives on bandicoot; the front door stays here.
-		reverse_proxy @metube 10.0.0.90:8081
+		reverse_proxy @metube {$BANDICOOT_LAN_IPV4}:8081
 		# Sonarr lives on bandicoot; the front door stays here.
-		reverse_proxy @sonarr 10.0.0.90:8989
+		reverse_proxy @sonarr {$BANDICOOT_LAN_IPV4}:8989
 		# HyperDX lives on bandicoot; the front door stays here.
-		reverse_proxy @watch 10.0.0.90:8080
+		reverse_proxy @watch {$BANDICOOT_LAN_IPV4}:8080
 		reverse_proxy @docs docs:8000
 		reverse_proxy @minio_console minio:9001
-		reverse_proxy @sync 10.0.0.25:8384
+		reverse_proxy @sync {$KANGAROO_LAN_IPV4}:8384
 		reverse_proxy @paperless paperless:8000
 		reverse_proxy @stats umami:3000
 		reverse_proxy @git forgejo:3000
@@ -99,7 +107,7 @@ core-connect.pod.haus, core-connect.pod.haus:4444 {
 	}
 	@periphery path /ws/periphery
 	handle @periphery {
-		reverse_proxy 10.0.0.90:9120
+		reverse_proxy {$BANDICOOT_LAN_IPV4}:9120
 	}
 	handle {
 		respond 404
@@ -115,7 +123,7 @@ logs-ingest.pod.haus, logs-ingest.pod.haus:4444 {
 	}
 	# The collector lives on bandicoot; mTLS still terminates here, so every
 	# remote host's client certificate is checked before the LAN hop.
-	reverse_proxy 10.0.0.90:4318
+	reverse_proxy {$BANDICOOT_LAN_IPV4}:4318
 }
 
 storage.pod.haus, *.storage.pod.haus, storage.pod.haus:4444, *.storage.pod.haus:4444 {
@@ -141,7 +149,7 @@ pouch.pod.haus, pouch.pod.haus:4444 {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 
-	reverse_proxy 10.0.0.25:9000
+	reverse_proxy {$KANGAROO_LAN_IPV4}:9000
 }
 
 # This :443 Forgejo site remains for LAN access and Kookaburra rollback.
@@ -529,7 +537,7 @@ fenwick-events.pod.haus:4444 {
 	}
 	handle @events {
 		# The bot lives on bandicoot; the front door stays here.
-		reverse_proxy 10.0.0.90:8088
+		reverse_proxy {$BANDICOOT_LAN_IPV4}:8088
 	}
 	handle {
 		respond 404

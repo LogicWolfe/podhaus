@@ -69,14 +69,14 @@ services:
       OUTPUT_TEMPLATE_PLAYLIST: "%(title)s.%(ext)s"
       YTDL_OPTIONS: '{"remote_components":["ejs:github"],"format_sort":["res","vcodec:av01","acodec:m4a"],"merge_output_format":"mp4","writethumbnail":true,"postprocessors":[{"key":"EmbedThumbnail","already_have_thumbnail":false},{"key":"Exec","when":"after_move","exec_cmd":"/scripts/plexify %(filepath)q %(title)q %(channel)q"}]}'
       # scripts/plexify's own config — read directly from os.environ, no
-      # defaults (see the script's docstring). Sonarr and Gatus are both
-      # on bilby/bandicoot's LAN, not dockernet, from this bandicoot
-      # container's point of view for Gatus (10.0.0.119, bilby's LAN
-      # address — same pattern as backup/bandicoot/stack.toml); Sonarr is
-      # dockernet-reachable by name since it runs on bandicoot too.
+      # defaults (see the script's docstring). Gatus runs on bilby, so from
+      # this bandicoot container it is reached on bilby's LAN-published port
+      # — the URL is assembled in stack.toml, same pattern as
+      # backup/bandicoot/stack.toml. Sonarr is dockernet-reachable by name
+      # since it runs on bandicoot too.
       SONARR_URL: http://sonarr:8989
       SONARR_API_KEY: ${SONARR_API_KEY}
-      GATUS_BASE_URL: http://10.0.0.119:8080
+      GATUS_BASE_URL: ${GATUS_BASE_URL}
       GATUS_PLEXIFY_ENDPOINT_ID: metube_plexify
       GATUS_HEARTBEAT_PUSH_TOKEN: ${GATUS_HEARTBEAT_PUSH_TOKEN}
     volumes:
@@ -88,7 +88,8 @@ services:
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot/metube/scripts:/scripts:ro
     ports:
       # LAN only: the front door stays on bilby (Caddy metube.pod.haus
-      # → 10.0.0.90:8081, the moved-service pattern in docs/hosts.html).
+      # → bandicoot's LAN address, the moved-service pattern in
+      # docs/hosts.html).
       - "8081:8081"
     networks:
       - dockernet

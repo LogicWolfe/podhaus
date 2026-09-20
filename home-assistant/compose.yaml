@@ -13,9 +13,12 @@ services:
     # the AAAA. Pairs with the UniFi split-horizon A record
     # (terraform/dns_unifi_split_horizon.tf) + MA base_url=https://music.pod.haus.
     extra_hosts:
-      - "music.pod.haus:10.0.0.119"
+      - "music.pod.haus:${BILBY_LAN_IPV4}"
     environment:
       TZ: ${TZ}
+      # Read by config/packages/homekit.yaml's advertise_ip through YAML's
+      # !env_var tag, so the bridge announces bilby's LAN interface.
+      BILBY_LAN_IPV4: ${BILBY_LAN_IPV4}
     volumes:
       # HA config + recorder SQLite DB (~85 MB). Local NVMe per the
       # post-phase-6 sizing rule. Host bind mount so the container

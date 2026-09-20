@@ -14,6 +14,21 @@
         for LAN devices (e.g. the UniFi gateway at <code>10.0.0.1</code>) and host-network
         services.
       </p>
+      <p id="lan-addresses">
+        <strong>Every pinned LAN address has exactly one definition:</strong> the
+        <code>locals</code> block in <code>terraform/lan_addresses.tf</code>. The
+        <code>unifi_client</code> reservations beside it pin each DHCP lease to a
+        MAC, the split-horizon records give each address a name, and Terraform
+        publishes the addresses something outside Terraform actually reads to the
+        1Password item <strong>Podhaus LAN Addresses</strong>. Ansible reads that
+        item through the lookups in <code>ansible/inventory/group_vars/all.yml</code>;
+        komodo-op turns each field into an
+        <code>OP__KOMODO__PODHAUS_LAN_ADDRESSES__*</code> Komodo Variable that a
+        <code>stack.toml</code> environment block passes into compose. Addresses in
+        prose on these pages are for the reader; the file above is the truth. Do not
+        write an address into a compose file, Caddyfile, Gatus config, Alloy config,
+        inventory entry, or script — read the variable instead.
+      </p>
       <p>
         Each consumer compose file declares:
       </p>
@@ -239,7 +254,9 @@ networks:
           the public CDN sites. Pine Lake's <code>home</code>, <code>torrent</code>, and
           <code>sync</code> records point to Numbat's application address.</li>
         <li><strong>UniFi</strong> LAN-side split-horizon. <code>unifi.pod.haus</code> and
-          <code>bilby.pod.haus</code> resolve to Bilby at <code>10.0.0.119</code>.
+          <code>bilby.pod.haus</code> resolve to Bilby at <code>10.0.0.119</code>
+          (from <code>local.bilby_ip</code>; see
+          <a href="#lan-addresses">LAN addresses</a>).
           Kangaroo stays on public DNS so its browser path remains behind Pomerium.</li>
       </ul>
       <p>

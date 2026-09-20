@@ -9,7 +9,9 @@
 # answers on instead of the internet relay every other Periphery uses — no
 # internet dependency for the connection to come up. extra_hosts below is
 # for linked repos on git.pod.haus (bilby's internal Caddy; the public name
-# is Pomerium and redirects Git).
+# is Pomerium and redirects Git). BILBY_LAN_IPV4 is written into this
+# stack's .env by ansible/roles/komodo_periphery, which reads the address
+# from the 1Password item Terraform publishes.
 services:
   periphery:
     container_name: komodo-periphery
@@ -21,7 +23,7 @@ services:
     security_opt:
       - label:disable
     extra_hosts:
-      - "git.pod.haus:10.0.0.119"
+      - "git.pod.haus:${BILBY_LAN_IPV4}"
     environment:
       PERIPHERY_PRIVATE_KEY: file:/config/keys/periphery.key
       PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub

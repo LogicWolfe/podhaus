@@ -8,7 +8,7 @@
 
   8095/tcp - web UI / websocket API. Open on the LAN because the Home
              Assistant Music Assistant integration discovers the server
-             at its LAN address (10.0.0.119:8095) and drives the login
+             at bilby's LAN address on :8095 and drives the login
              OAuth redirect through the *browser* to that address — which
              the browser must reach directly. The Cloudflare tunnel
              (music.pod.haus) only covers remote human access, not the

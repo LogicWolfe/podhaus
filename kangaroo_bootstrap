@@ -13,16 +13,27 @@
 #      Pomerium SSH CA trust start.sh it invokes at every boot.
 #   7. Verify the committed kangaroo Server definition.
 #
-# v2 PKI + outbound: Periphery dials Core at ws://10.0.0.119:9120; auth is
-# X25519 noise handshake. periphery.key (kangaroo-periphery.key on bilby)
+# v2 PKI + outbound: Periphery dials Core on bandicoot's LAN address; auth
+# is X25519 noise handshake. periphery.key (kangaroo-periphery.key on bilby)
 # is SCPed in; core.pub is copied from bilby's keys volume. Pubkey is
 # committed to komodo/keys/kangaroo-periphery.pub for Core's trust list.
+#
+# Every LAN address this script needs — kangaroo's own, for SSH, and
+# bandicoot's, for the Periphery .env — is read from the 1Password item
+# Terraform publishes (podhaus terraform/lan_addresses.tf). Nothing here
+# spells one out.
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+# 1Password is read before anything else here: the LAN addresses below come
+# from it, so an unauthenticated run must say so rather than fail inside a
+# command substitution.
+: "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./kangaroo_bootstrap}"
+
 # --- Config ---
-KANGAROO_SSH="${KANGAROO_SSH:-admin@10.0.0.25}"
+op_lan_address() { op read "op://Homelab/Podhaus LAN Addresses/LAN/$1"; }
+KANGAROO_SSH="${KANGAROO_SSH:-admin@$(op_lan_address kangaroo_ipv4)}"
 # Container state lives on CACHEDEV2 (Jump, the backed-up volume) per the
 # placement rule in docs/storage.html — never CACHEDEV1/Pouch.
 KANGAROO_DIR="/share/CACHEDEV2_DATA/Container/komodo-periphery"
@@ -31,8 +42,6 @@ KANGAROO_DIR="/share/CACHEDEV2_DATA/Container/komodo-periphery"
 KANGAROO_DOCKER="${KANGAROO_DOCKER:-/share/CACHEDEV2_DATA/.qpkg/container-station/usr/bin/docker}"
 PERIPHERY_HEALTH_TIMEOUT="${PERIPHERY_HEALTH_TIMEOUT:-120}"
 BILBY_KEYS_DIR="${BILBY_KEYS_DIR:-/opt/komodo/keys}"
-
-: "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./kangaroo_bootstrap}"
 
 log()  { printf '\e[1;34m▸\e[0m %s\n' "$*"; }
 warn() { printf '\e[1;33m!\e[0m %s\n' "$*" >&2; }
@@ -99,10 +108,13 @@ ssh_kangaroo "cat > '$KANGAROO_DIR/keys/core.pub'      && chmod 644 '$KANGAROO_D
 ok "periphery.key + core.pub staged"
 
 # --- 3b. Render and ship .env ---
-log "Rendering .env (TZ only — outbound auth is keypair-based)"
+# No secret here — outbound auth is keypair-based. BANDICOOT_LAN_IPV4 is the
+# Core address kangaroo/periphery/compose.yaml dials.
+log "Rendering .env (TZ + Core's LAN address)"
 TZ_VALUE="Australia/Perth"
 {
     printf 'TZ=%s\n' "$TZ_VALUE"
+    printf 'BANDICOOT_LAN_IPV4=%s\n' "$(op_lan_address bandicoot_ipv4)"
 } | ssh_kangaroo "cat > '$KANGAROO_DIR/.env' && chmod 600 '$KANGAROO_DIR/.env'"
 ok ".env staged on kangaroo"
 

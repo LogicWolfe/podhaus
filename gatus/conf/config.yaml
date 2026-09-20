@@ -61,7 +61,7 @@ alerting:
   # ignores it.)
   custom:
     # The bot lives on bandicoot; Gatus reaches it across the LAN.
-    url: "http://10.0.0.90:8088/events/async"
+    url: "http://${BANDICOOT_LAN_IPV4}:8088/events/async"
     method: POST
     headers:
       Content-Type: application/json
@@ -127,7 +127,7 @@ _defaults: &defaults
 
 endpoints:
   - name: HyperDX (ClickStack)
-    url: http://10.0.0.90:8080/
+    url: http://${BANDICOOT_LAN_IPV4}:8080/
     <<: *defaults
     group: Observability
 
@@ -141,9 +141,10 @@ endpoints:
 
   # Probe the QNAP web UI directly on the LAN — gatus is on dockernet,
   # which NATs out to the LAN gateway. Self-signed cert, hence insecure.
-  # .25 is the active 10GbE link (.232 is the 1GbE live spare).
+  # KANGAROO_LAN_IPV4 is the active 10GbE link; the 1GbE NIC is a live
+  # spare with a reservation but no consumers.
   - name: Kangaroo (NAS)
-    url: https://10.0.0.25/
+    url: https://${KANGAROO_LAN_IPV4}/
     <<: *defaults
     group: Kangaroo
     client:
@@ -153,7 +154,7 @@ endpoints:
   # bandicoot. `/version` is auth-free and returns 200 when Core is up.
   # The Periphery/Alerts checks below exercise the API more deeply.
   - name: Komodo
-    url: http://10.0.0.90:9120/version
+    url: http://${BANDICOOT_LAN_IPV4}:9120/version
     <<: *defaults
     group: Komodo
 
@@ -224,13 +225,13 @@ endpoints:
 
   # MeTube lives on bandicoot; the front door stays on bilby's Caddy.
   - name: MeTube
-    url: http://10.0.0.90:8081/
+    url: http://${BANDICOOT_LAN_IPV4}:8081/
     <<: *defaults
     group: Media
 
   # Sonarr lives on bandicoot; the front door stays on bilby's Caddy.
   - name: Sonarr
-    url: http://10.0.0.90:8989/ping
+    url: http://${BANDICOOT_LAN_IPV4}:8989/ping
     <<: *defaults
     group: Media
 
@@ -247,7 +248,7 @@ endpoints:
   # threshold sized to ~2h at this interval so a long-running batch never
   # alerts mid-flight — only a batch that's actually stalled.
   - name: MeTube staging
-    url: http://10.0.0.90:8989/api/v3/manualimport?folder=%2Fkids%2F_incoming
+    url: http://${BANDICOOT_LAN_IPV4}:8989/api/v3/manualimport?folder=%2Fkids%2F_incoming
     group: Media
     interval: 15m
     headers:
@@ -266,7 +267,7 @@ endpoints:
   # it directly, so we use the same Komodo InspectDockerContainer pattern
   # as Backrest (kangaroo) below — asserts the container is `running`.
   - name: Syncthing (kangaroo, via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Syncthing
     interval: 60s
@@ -374,7 +375,7 @@ endpoints:
   # gatus on bilby may also be impaired — but Komodo Core can still answer
   # for as long as it's running, since Core polls Periphery independently.
   - name: Bilby Periphery (via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -389,7 +390,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Kangaroo Periphery (via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -404,7 +405,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Numbat Periphery (via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -419,7 +420,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Fractal Periphery (via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -434,7 +435,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Voltaire Periphery (via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -449,7 +450,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Pinelake Periphery (via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -464,7 +465,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Pinelake Plex (via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Plex
     interval: 60s
@@ -493,7 +494,7 @@ endpoints:
       - "[STATUS] == 200"
 
   - name: Docs (fractal, via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Docs
     interval: 60s
@@ -511,7 +512,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Docs (voltaire, via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Docs
     interval: 60s
@@ -550,7 +551,7 @@ endpoints:
       - "[BODY] == pat(*192.168.1.*)"
 
   - name: Pinelake Syncthing (via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Syncthing
     interval: 60s
@@ -566,7 +567,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Pinelake Flood (via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Torrents
     interval: 60s
@@ -593,7 +594,7 @@ endpoints:
   # alerter only POSTs JSON to a URL; it can't add the Authorization
   # header Gatus's external-endpoint API requires.
   - name: Komodo Alerts
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Komodo
     interval: 60s
@@ -625,7 +626,7 @@ endpoints:
   # (that's "Pipeline Log Ingest (bilby / total)" below, which counts
   # otel_logs rows); named for what they measure.
   - name: Kangaroo Telemetry Pipeline (heartbeat)
-    url: http://10.0.0.90:8123/
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
     method: POST
     group: Observability
     interval: 5m
@@ -668,7 +669,7 @@ endpoints:
         send-on-resolved: true
 
   - name: Numbat Telemetry Pipeline (heartbeat)
-    url: http://10.0.0.90:8123/
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
     method: POST
     group: Observability
     interval: 5m
@@ -687,7 +688,7 @@ endpoints:
         send-on-resolved: true
 
   - name: Pinelake Telemetry Pipeline (heartbeat)
-    url: http://10.0.0.90:8123/
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
     method: POST
     group: Observability
     interval: 5m
@@ -706,7 +707,7 @@ endpoints:
         send-on-resolved: true
 
   - name: Pipeline Log Ingest (bilby / total)
-    url: http://10.0.0.90:8123/
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
     method: POST
     group: Observability
     interval: 5m
@@ -751,7 +752,7 @@ endpoints:
   # the container and assert State.Status == running. Same auth pattern as
   # the Periphery checks above.
   - name: Backrest (kangaroo, via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Backup
     interval: 60s
@@ -766,7 +767,7 @@ endpoints:
       - "[BODY].State.Status == running"
 
   - name: Backrest (bandicoot, via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Backup
     interval: 60s
@@ -782,7 +783,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Backrest (pinelake, via Komodo)
-    url: http://10.0.0.90:9120/read
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Backup
     interval: 60s
@@ -808,7 +809,7 @@ endpoints:
   # deploy — the case where alerts vanish entirely.
   - name: Fenwick
     # The bot lives on bandicoot; Gatus reaches it across the LAN.
-    url: http://10.0.0.90:8088/health
+    url: http://${BANDICOOT_LAN_IPV4}:8088/health
     group: Fenwick
     interval: 1m
     conditions:
@@ -831,7 +832,7 @@ endpoints:
   # the log-ingest staleness checks; the Map predicate is bounded by the
   # 24h Timestamp filter so the scan stays well under the 10s budget.
   - name: Signal Delivery (Fenwick)
-    url: http://10.0.0.90:8123/
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
     method: POST
     group: Fenwick
     interval: 15m
@@ -1033,8 +1034,7 @@ external-endpoints:
 
   # Kangaroo's Backrest. Separate from bilby's because it's a separate
   # restic repo on a separate host. Hooks fire success/failure POSTs to
-  # this endpoint via http://10.0.0.119:8080 (gatus published on bilby's
-  # LAN). The kangaroo Backrest pipeline schedules at 06:00 — 25h interval
+  # this endpoint via bilby's LAN-published :8080. The kangaroo Backrest pipeline schedules at 06:00 — 25h interval
   # tolerates one missed firing before alerting.
   - name: Backrest Kangaroo Nightly
     group: Backup

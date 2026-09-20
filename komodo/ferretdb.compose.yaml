@@ -57,10 +57,10 @@ services:
     # ResourceSync clones happen in Core; use the direct Forgejo origin while
     # preserving git.pod.haus for TLS and repository identity. Core runs on
     # bandicoot now, so host-gateway would resolve to bandicoot's own
-    # gateway, not bilby's Caddy; 10.0.0.119 is bilby's internal Caddy, the
-    # address bandicoot's Forgejo runner already uses.
+    # gateway, not bilby's Caddy. BILBY_LAN_IPV4 comes from compose.env's
+    # 1Password reference — the same address bandicoot's Forgejo runner uses.
     extra_hosts:
-      - "git.pod.haus:10.0.0.119"
+      - "git.pod.haus:${BILBY_LAN_IPV4}"
     init: true
     # SELinux enforcing on Fedora Asahi denies the container from reading
     # the bind-mounted repo at /syncs/podhaus; label:disable lifts that

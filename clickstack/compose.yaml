@@ -96,8 +96,8 @@ services:
       # observability_clickstack-mongo-dump. Shared ofelia push token.
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
       # Gatus stays on bilby; its :8080 is published on the LAN for exactly
-      # this kind of cross-host heartbeat.
-      GATUS_HOST: 10.0.0.119:8080
+      # this kind of cross-host heartbeat. host:port assembled in stack.toml.
+      GATUS_HOST: ${GATUS_HOST}
     volumes:
       # Local NVMe. Holds HyperDX app state only (dashboards, alerts,
       # users, source defs, ingestion key) — tiny but irreplaceable;
@@ -151,8 +151,8 @@ services:
       OPAMP_SERVER_URL: "http://hyperdx:4320"
       HYPERDX_OTEL_EXPORTER_CREATE_LEGACY_SCHEMA: "true"
     ports:
-      # OTLP/HTTP. bilby's and kangaroo's Alloy ship cross-LAN to
-      # 10.0.0.90:4318, and bilby's Caddy forwards logs-ingest.pod.haus
+      # OTLP/HTTP. bilby's and kangaroo's Alloy ship cross-LAN to this
+      # host's LAN address, and bilby's Caddy forwards logs-ingest.pod.haus
       # here for every other host. gRPC 4317, Fluentd 24225, health 13133,
       # self-metrics 8888 stay dockernet-internal — not published.
       - "4318:4318"

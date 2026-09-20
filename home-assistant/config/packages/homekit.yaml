@@ -5,8 +5,10 @@
 #
 # Publishes selected HA entities to Apple Home so Siri can control them. HA
 # stays the controller: Siri -> Apple Home -> this bridge -> HA -> device.
-# advertise_ip pins bilby's LAN address so the bridge is announced on end0
-# (10.0.0.119), not a docker interface. Pairing state lives in host .storage.
+# advertise_ip pins bilby's LAN address so the bridge is announced on end0,
+# not a docker interface. The address arrives as BILBY_LAN_IPV4 from the
+# stack environment (Terraform owns it; see terraform/lan_addresses.tf), so
+# it is never written down here. Pairing state lives in host .storage.
 #
 # Exposed:
 #   - Hue INDIVIDUAL bulbs only. The Hue Room/Zone group lights
@@ -26,7 +28,7 @@
 homekit:
   - name: Home Assistant Bridge
     port: 21063
-    advertise_ip: 10.0.0.119
+    advertise_ip: !env_var BILBY_LAN_IPV4
     filter:
       include_entities:
         # --- Hue bulbs (individual, no room groups) ---

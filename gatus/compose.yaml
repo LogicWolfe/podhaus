@@ -9,6 +9,11 @@ services:
       - label:disable
     environment:
       TZ: ${TZ}
+      # LAN addresses of the hosts probed directly (bandicoot's published
+      # service ports, the QNAP web UI). Substituted into conf/config.yaml.
+      # Terraform owns the values; see terraform/lan_addresses.tf.
+      BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
+      KANGAROO_LAN_IPV4: ${KANGAROO_LAN_IPV4}
       # Postmark SMTP credential — now used only by the `email` alerter
       # (the Fenwick-health backstop), not the default `custom` alerter.
       POSTMARK_SERVER_TOKEN: ${POSTMARK_SERVER_TOKEN}

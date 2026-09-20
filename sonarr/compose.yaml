@@ -41,7 +41,8 @@ services:
       - /mnt/pouch/Kids:/kids
     ports:
       # LAN only: the front door stays on bilby (Caddy sonarr.pod.haus
-      # → 10.0.0.90:8989), the moved-service pattern in docs/hosts.html.
+      # → bandicoot's LAN address), the moved-service pattern in
+      # docs/hosts.html.
       - "8989:8989"
     networks:
       - dockernet

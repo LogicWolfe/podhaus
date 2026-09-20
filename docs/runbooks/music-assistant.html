@@ -63,7 +63,10 @@
       <p>
         The chime is <code>/var/lib/home-assistant/www/doorbell.wav</code>
         (served unauthenticated at <code>/local/doorbell.wav</code>, which MA
-        fetches at <code>http://10.0.0.119:8123/local/doorbell.wav</code>). It
+        fetches at <code>http://bilby.pod.haus:8123/local/doorbell.wav</code> — the
+        split-horizon name rather than an address, because Home Assistant's UI
+        automation editor rewrites <code>automations.yaml</code> wholesale and would
+        resolve an <code>!env_var</code> tag away). It
         carries a deliberate <strong>~4.5s of leading silence</strong> — AirPlay
         clips audio while it establishes the stream, and the Formation waking
         from deep sleep (after a long idle) takes a couple of seconds, so the

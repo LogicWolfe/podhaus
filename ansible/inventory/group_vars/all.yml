@@ -32,6 +32,29 @@ ansible_ssh_common_args: >-
   -o IdentityAgent={{ lookup('env', 'SSH_AUTH_SOCK') }}
   -o ConnectTimeout=15
 
+# ---- Fleet LAN addresses --------------------------------------------
+# Terraform is the only place a home-LAN address is written down: the
+# locals in podhaus terraform/lan_addresses.tf define each one, the
+# unifi_client reservations beside them pin the DHCP lease that makes it
+# true, and Terraform publishes the consumed subset to the 1Password item
+# "Podhaus LAN Addresses". Read it back here rather than restating it, so a
+# re-address is a Terraform change alone.
+#
+# Same channel numbat's public addresses use (host_vars/numbat.yml), and
+# deliberately not DNS-derived for the same reason: the split-horizon
+# records are consumers of these values, so resolving them would be
+# circular. Ansible evaluates a lookup only when something references the
+# variable, so a host that needs none of these pays nothing.
+podhaus_bilby_ipv4: >-
+  {{ lookup('community.general.onepassword', 'Podhaus LAN Addresses',
+            section='LAN', field='bilby_ipv4', vault='Homelab') }}
+podhaus_bandicoot_ipv4: >-
+  {{ lookup('community.general.onepassword', 'Podhaus LAN Addresses',
+            section='LAN', field='bandicoot_ipv4', vault='Homelab') }}
+podhaus_kangaroo_ipv4: >-
+  {{ lookup('community.general.onepassword', 'Podhaus LAN Addresses',
+            section='LAN', field='kangaroo_ipv4', vault='Homelab') }}
+
 # ---- SSH identities -------------------------------------------------
 # Public halves live here because inventory IS Ansible's configuration
 # store, and host-provisioning.md's one-producer rule already says a host
