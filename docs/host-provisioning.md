@@ -113,13 +113,11 @@ ansible/
     nb-macbook-air.yml     macOS development-client SSH policy entry point
   roles/
     base/                  timezone, baseline packages, dirs, laptop power policy
-    disk_tmp/              Root-filesystem /tmp policy, activated at host restart
     wsl/                   /etc/wsl.conf, hostname
     docker/                engine (where managed), daemon.json, host networks
     devbox/                the root-requiring half of a developer machine
     forgejo_runner/        Fractal's container-isolated Forgejo Actions runner
     docs_sources/          Read-only repository source slots for docs-server
-    gnome_on_demand/       GDM only while a display is attached (bandicoot)
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
     storage_binds/         Late-arriving-volume hardening (bilby, fractal)
@@ -155,7 +153,7 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
   repository directory and canonical chezmoi checkout that `docs_sources`
   exposes through stable root-owned slots.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes`, `edge_hosts`,
-  `komodo_core_hosts`, `storage_binds_hosts`, `firewalld_hosts`, `disk_tmp_hosts` — role
+  `komodo_core_hosts`, `storage_binds_hosts`, `firewalld_hosts` — role
   groups. `site.yml` gates each role on membership.
 
 ## Running it
@@ -199,34 +197,6 @@ established, `sshd -T`), never "the container is healthy": a container
 being up proves it started, not that it is doing its job.
 
 ## Roles worth knowing about
-
-**`disk_tmp`** configures Bilby, Bandicoot, Voltaire, and Fractal to keep `/tmp`
-on their root filesystem by masking `tmp.mount`. Bilby, Bandicoot, and Voltaire
-use their local root disk; Fractal uses its WSL root virtual disk. Temporary files share the root
-filesystem's free space and retain the distribution's temporary-file cleanup
-policy. Apply with `op-vault dev -- ansible-playbook playbooks/site.yml
---tags disk-tmp --limit bilby,bandicoot,voltaire,fractal` from `ansible/` on Bandicoot,
-after reviewing the same command with `--check --diff`.
-
-The role leaves an active RAM mount in place because live processes hold files
-and sockets there. A host restart activates the disk-backed directory. On
-Fractal, `systemctl reboot` restarts the distribution while the shared WSL
-kernel can remain running. An interactive login invokes `unlock-home` to restore
-`/home`; it prompts for the passphrase only when the encrypted mapping is closed,
-as after a full WSL shutdown. `systemctl show tmp.mount -p LoadState` verifies the persistent mask;
-`findmnt -T /tmp` verifies the active backing filesystem. A masked unit with
-`tmpfs` still mounted means the cutover needs a restart.
-
-**`earlyoom`** runs Fedora's earlyoom on the development hosts Bilby,
-Bandicoot, and Voltaire. When available memory and free swap both fall to 10%,
-it signals the process with the highest out-of-memory score, before the host
-stalls in swap. Chezmoi sets those scores for dev work, so the order is bash
-commands (+900), then shells and agents (+600), then the tmux server (+300),
-then services (0 or below). The avoid list is Fedora's, covering the user
-manager, `dbus-broker`, and desktop sessions. systemd-oomd stays at Fedora's
-default and acts only after a sustained stall. `journalctl -u earlyoom` shows
-the thresholds at start-up and names each process it signals. Apply with
-`--tags earlyoom`.
 
 **`base`** opens with a `raw` task that installs `python3-libdnf5` if
 missing. This is the one deliberate `check_mode: false` in the layer:
@@ -285,26 +255,8 @@ header carries the incident history; the postmortems are the full record.
 
 **`docs_sources`** separates Docker's stable mount contract from user-owned
 checkout availability. It creates `/opt/podhaus/docs-sources` as a shared host
-mountpoint and one slot per `podhaus_docs_sources` entry. These per-host
-inventory declarations produce `/etc/podhaus/docs-sources.json`, the shared
-repository manifest consumed by docs-server and Lumen. Each entry requires
-exactly `name`, `type` (`directory` or `repository`), the absolute host `source`,
-and a non-empty relative `required_path` contained within that source. The
-aggregate repository directory uses `type: directory` and `required_path: .`;
-canonical chezmoi uses `type: repository` and `required_path: .git`. Consumers
-must not maintain separate repository lists. Docs maps source names to its
-container slots; Lumen reads the original host paths.
-
-Apply the shared source configuration and reconciler together with
-`op-vault dev -- ansible-playbook playbooks/voltaire.yml --tags docs-sources`
-from `ansible/` on Bandicoot, after auditing the same command with
-`--check --diff`. When either file changes, the role stops the existing
-reconciliation timer and waits for its service to stop before writing either
-file, then prepares the mounts, reconciles, and starts the timer. An unchanged
-run leaves the timer running. Restart docs-server after adding or removing a
-declaration, because its catalog configuration is read at startup.
-
-The recurring `podhaus-docs-source-reconcile` service bind-mounts an available checkout
+mountpoint and one slot per `podhaus_docs_sources` entry. The recurring
+`podhaus-docs-source-reconcile` service bind-mounts an available checkout
 read-only over its slot; when the declared source or `required_path` is absent,
 it withdraws the bind and reveals `.podhaus-source-unavailable`. Docs-server
 mounts the slot root once with `rslave` propagation, so source transitions reach
@@ -420,66 +372,6 @@ rebuilding; the runbook for that is
 sshd_pomerium_ca, komodo_periphery — reached through Pomerium like any
 managed host, and the thing check-mode equivalence proves against the
 live gateway.
-
-## Repository search
-
-Lumen provides local semantic code search on Voltaire, Fractal, Bilby and
-Bandicoot. The Komodo stacks under `lumen/` own one Ollama embedding service per
-host, its Jina code model, and the `lumen:local` tools image. The `lumen-models`
-and `lumen-data` Docker volumes keep downloaded models and repository indexes
-on that machine. Agent sessions share the index volume and embedding service;
-each session runs its Lumen process in a separate container. macOS has no
-Lumen deployment.
-
-Ansible's `/etc/podhaus/docs-sources.json` is the repository declaration for
-both docs-server and Lumen. The `docs_sources` role exposes its sources through
-read-only mounts. Lumen discovers repositories beneath those sources and asks
-Git for their linked worktrees, preserving original absolute paths inside its
-containers so worktree metadata resolves to the same shared repository index.
-Missing storage remains visible as an unavailable source; a sweep reports a
-failure after processing the available repositories.
-
-Chezmoi owns `~/.local/bin/lumen`, global Model Context Protocol (MCP) exposure
-for Codex and both Claude profiles, and `worktree-setup-common <worktree-path>`.
-Every participating repository calls that common command at the end of its
-Linux `.worktree-setup`. New shared setup actions belong in the common helper;
-repository scripts carry only the invocation. The helper starts background
-indexing and prints its container name. Repeated calls reuse an active job for
-the same worktree. Content hashing reuses existing embeddings, but a new
-worktree still needs scanning and index membership updates.
-
-The stack starts a full sweep on deployment. Ofelia starts the same
-`lumen-sweep` container every ten minutes without overlapping scheduled runs;
-the sweep indexes worktrees sequentially. This enrolls repositories whose setup
-script has no common-helper invocation. Independently requested warm jobs can
-run alongside the sweep. Stopping a sweep also stops its active index process.
-See [Scheduling](scheduling.html) for the scheduler configuration.
-
-A successful `lumen warm` invocation means a background job started or is
-already running. Check the reported container's logs and exit status, then use the
-MCP `index_status` tool and a relevant search. For foreground completion, run
-`lumen index "$(git rev-parse --show-toplevel)"` from the intended worktree.
-An existing MCP connection sees new worktrees beneath its mounted source roots;
-a worktree created outside those roots after connection startup needs a fresh
-Lumen MCP connection, because warming cannot add mounts to an existing container.
-Semantic results cover supported indexed content; exact and exhaustive checks
-still require ordinary search tools.
-
-There is no fixed memory reservation or CPU or memory quota. Cold indexing can
-use most available CPU cores; CPU saturation alone is not treated as a failure
-on these development hosts. Ollama unloads its model after five idle minutes,
-while reclaimable file cache can remain charged to the container. Concurrent
-sessions and indexing add variable memory use. Inspect `docker stats` and
-container exit status when diagnosing resource pressure; do not infer a peak
-from an idle sample or treat cached memory as a permanently loaded model.
-
-The shared agent skills give the operational procedures:
-[Lumen diagnostics](https://git.pod.haus/LogicWolfe/dotfiles/src/branch/main/dot_agents/skills/lumen-doctor/SKILL.md)
-separates unavailable tooling, incomplete indexes and valid empty results;
-[Lumen reindexing](https://git.pod.haus/LogicWolfe/dotfiles/src/branch/main/dot_agents/skills/lumen-reindex/SKILL.md)
-warms a selected worktree and verifies completion. They are available to both
-Claude and Codex. Docker access is required for the launcher and the embedding
-service must be available locally for indexing and semantic queries.
 
 ## Adding a host
 

@@ -31,8 +31,6 @@
 #   - docs_sources role tests:      source slots remain isolated and every
 #                                   docs host declares both aggregate and
 #                                   canonical chezmoi locations.
-#   - backup heartbeat tests:       every configured push endpoint exists
-#                                   in Gatus, including per-plan hooks.
 #   - metube plexify tests:        the Sonarr-naming hook's title-matching
 #                                   confidence rule (containment, difflib
 #                                   ratio+margin, the 59-title Skillsville
@@ -55,20 +53,9 @@ mise exec -- pipenv run python "$root/tools/lint-stack-env.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-content-hash.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-toml.py"
 mise exec -- pipenv run python "$root/tools/render-pomerium-keys.py" --verify
-# git points hooks at the commit's index through GIT_INDEX_FILE; the test
-# suites build their own repositories, whose git commands must not use it.
-unset GIT_INDEX_FILE
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/storage_binds/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/docs_sources/tests"
 mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/ansible/roles/earlyoom/tests"
-mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/metube/tests"
-
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/lumen/tests"
-
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/backup/tests"

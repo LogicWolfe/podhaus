@@ -60,11 +60,9 @@ podhaus_repos_dir: /home/nathan/repos
 # repositories beneath $HOME.
 podhaus_docs_sources:
   - name: home
-    type: directory
     source: /home/nathan/repos
     required_path: .
   - name: chezmoi
-    type: repository
     source: /home/nathan/.local/share/chezmoi
     required_path: .git
 

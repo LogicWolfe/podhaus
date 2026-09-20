@@ -1,8 +1,5 @@
 services:
   ofelia:
-    extends:
-      file: jobs/compose.yaml
-      service: scheduler
     container_name: ofelia
     image: mcuadros/ofelia:0.4.0-beta.5
     restart: unless-stopped
@@ -14,7 +11,9 @@ services:
       # time. Set TZ so "0 3 * * 0" means 3 AM Australia/Perth, not UTC.
       TZ: ${TZ}
     volumes:
-      # The socket grants Docker API access, including starting scheduled jobs.
+      # Read-only socket access — ofelia only needs to list containers,
+      # read labels, and exec commands. It doesn't need to start/stop
+      # containers or manage their lifecycle.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     # SELinux enforcing on Fedora Asahi denies cross-label access to the
     # docker socket from the container's default context. label:disable

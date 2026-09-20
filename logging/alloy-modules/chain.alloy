@@ -5,9 +5,8 @@
 // every other stream through untouched, so the same chain runs on all
 // hosts regardless of which containers a host has. That is the point: a
 // service moving between hosts takes its parsing with it, with no logging
-// change at all. Order is functionally irrelevant except indy_service and
-// fenwick, whose modules DROP the stream (each self-reports OTLP) and so run
-// first.
+// change at all. Order is functionally irrelevant except fenwick, whose
+// module DROPS the stream (it self-reports OTLP) and so runs first.
 //
 // To parse a new service: add `<service>.alloy` here and insert one link
 // below. Anything not in the chain still ships and gets the generic OTTL
@@ -16,7 +15,6 @@
 declare "chain" {
 	argument "forward_to" { }
 
-	indy_service "run" { forward_to = [fenwick.run.receiver] }
 	fenwick "run" { forward_to = [komodo_op.run.receiver] }
 	komodo_op "run" { forward_to = [komodo_core.run.receiver] }
 	komodo_core "run" { forward_to = [komodo_periphery.run.receiver] }
@@ -47,6 +45,6 @@ declare "chain" {
 	pocket_id "run" { forward_to = argument.forward_to.value }
 
 	export "receiver" {
-		value = indy_service.run.receiver
+		value = fenwick.run.receiver
 	}
 }

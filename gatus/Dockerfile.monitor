@@ -1,4 +1,4 @@
-FROM quay.io/minio/mc:latest AS mc
+FROM minio/mc:latest AS mc
 
 FROM alpine:latest
 

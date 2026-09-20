@@ -234,29 +234,6 @@ endpoints:
     <<: *defaults
     group: Media
 
-  # Radarr (bandicoot, lookup-only for Fenwick's movie suggestions) has
-  # no published port and no front door — nothing outside dockernet ever
-  # calls it directly, so there's no LAN address for gatus to probe the
-  # way it probes Sonarr above. Same Komodo InspectDockerContainer
-  # pattern as the Backrest (bandicoot) check below: asserts the
-  # container is running and its own healthcheck (curl against /ping)
-  # reports healthy.
-  - name: Radarr (bandicoot, via Komodo)
-    url: http://10.0.0.90:9120/read
-    method: POST
-    group: Media
-    interval: 60s
-    alerts: *alerts
-    headers:
-      X-Api-Key: ${KOMODO_API_KEY}
-      X-Api-Secret: ${KOMODO_API_SECRET}
-      Content-Type: application/json
-    body: '{"type":"InspectDockerContainer","params":{"server":"bandicoot","container":"radarr"}}'
-    conditions:
-      - "[STATUS] == 200"
-      - "[BODY].State.Status == running"
-      - "[BODY].State.Health.Status == healthy"
-
   # Catches a stalled MeTube batch: if the last download in a batch errors,
   # metube/scripts/plexify's Exec postprocessor never runs, so the batch
   # sweep never runs either, and any file waiting its turn under
@@ -389,30 +366,6 @@ endpoints:
     url: https://pets.indigopod.au/api/content
     <<: *defaults
     group: Pets
-
-  # Indigo's room controller and display panel each send a status record
-  # through indy-service every supervisor tick (20-30 s), which the service
-  # exports to ClickStack. Either board missing from 15 minutes of records
-  # means it is off, off the WiFi or stuck in a boot loop, or the service is
-  # down. Same direct-ClickHouse pattern as the ingest checks.
-  - name: Indy Board devices reporting
-    url: http://10.0.0.90:8123/
-    method: POST
-    group: Indy Board
-    interval: 5m
-    headers:
-      X-ClickHouse-User: default
-      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    body: "SELECT toUInt8(uniqExact(LogAttributes['device']) = 2) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 15 MINUTE AND ServiceName = 'indy-service' AND Body = 'device alive'"
-    conditions:
-      - "[STATUS] == 200"
-      - "[BODY] == 1"
-    alerts:
-      - type: custom
-        description: "The controller or the display panel in Indigo's room hasn't reported in 15+ min. Check `docker logs indy-service` on bilby and the service's error records in ClickStack (service indy-service, filter by device); a board that stays away needs a visit."
-        failure-threshold: 2
-        success-threshold: 2
-        send-on-resolved: true
 
   # Surfaces "Komodo Core can't reach <Periphery>" as a Gatus alert.
   # Periphery's :8120 isn't on dockernet so we check via Komodo Core's API:

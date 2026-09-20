@@ -71,20 +71,3 @@ include_variables = true
 include_resources = true
 delete = false
 managed = false
-
-# The indy-board sync reads the [[stack]] and [[variable]] blocks in the
-# indy-board repo's root stack.toml. Only that file: the repo's Cargo and
-# toolchain TOML files are not Komodo resources and fail the sync. Stage 1
-# of indy-board-push-deploy runs it explicitly.
-[[resource_sync]]
-name = "indy-board"
-description = "ResourceSync for the stack def that lives in the indy-board repo."
-tags = ["indy-board", "podhaus"]
-
-[resource_sync.config]
-linked_repo = "indy-board"
-resource_path = ["stack.toml"]
-include_variables = true
-include_resources = true
-delete = false
-managed = false

@@ -38,11 +38,6 @@ data "forgejo_repository" "yiayia_stories" {
   name  = "yiayia-stories"
 }
 
-data "forgejo_repository" "indy_board" {
-  owner = "LogicWolfe"
-  name  = "indy-board"
-}
-
 # Push webhook → Komodo's yiayia-stories-push-deploy procedure (linked-repo
 # stack defined in that repository; see komodo/sync/procedures.toml).
 resource "forgejo_repository_webhook" "yiayia_stories_deploy" {
@@ -52,23 +47,6 @@ resource "forgejo_repository_webhook" "yiayia_stories_deploy" {
   content_type  = "json"
   secret        = var.komodo_webhook_secret
   branch_filter = "main"
-  active        = true
-
-  events {
-    push = true
-  }
-}
-
-# `deploy` push webhook → Komodo's indy-board-push-deploy procedure. Green CI
-# on main is the only writer of `deploy` (the repo's promote job), so a merge
-# deploys only once its checks pass.
-resource "forgejo_repository_webhook" "indy_board_deploy" {
-  repository    = data.forgejo_repository.indy_board.full_name
-  type          = "forgejo"
-  url           = "https://komodo.pod.haus/listener/github/procedure/indy-board-push-deploy/deploy"
-  content_type  = "json"
-  secret        = var.komodo_webhook_secret
-  branch_filter = "deploy"
   active        = true
 
   events {

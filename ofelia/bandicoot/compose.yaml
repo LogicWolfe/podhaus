@@ -1,11 +1,9 @@
-x-podhaus-content-paths:
-  - ../jobs
-
+# bandicoot's Ofelia. Runs the job-exec labels on containers that live here
+# (the ClickStack Mongo dump first), the way bilby's Ofelia does for bilby's
+# and pinelake's for pinelake's: jobs exec into local containers, so every
+# host with scheduled work carries its own scheduler.
 services:
   bandicoot-ofelia:
-    extends:
-      file: ../jobs/compose.yaml
-      service: scheduler
     container_name: bandicoot-ofelia
     image: mcuadros/ofelia:0.4.0-beta.5
     restart: unless-stopped

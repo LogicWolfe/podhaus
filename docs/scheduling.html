@@ -3,8 +3,8 @@
       <h1>Scheduling</h1>
       <p class="lead text-lg text-text-muted">
         Ofelia handles all docker-side cron in podhaus. Schedules are declared as labels on
-        containers — Ofelia discovers them via the Docker socket and either executes a
-        command in a running container or starts a stopped job container.
+        target containers — ofelia discovers them via the Docker socket and runs jobs as
+        <code>docker exec</code> against the labeled container. No central config file.
       </p>
 
       <h2 id="model">How ofelia works here</h2>
@@ -17,24 +17,14 @@
       <ul>
         <li><strong><code>job-exec</code></strong> — runs a command inside the target container
           via <code>docker exec</code>.</li>
-        <li><strong><code>job-run</code></strong> — starts a stopped container or creates
-          a one-shot container from an image. These labels belong on the scheduler.</li>
+        <li><strong><code>job-run</code></strong> (rarely) — runs a one-shot ephemeral container
+          from a given image.</li>
       </ul>
       <p>
         Cron schedules are interpreted in the scheduler container's local time. Bilby's
         scheduler uses <code>Australia/Perth</code>; Pinelake's uses
         <code>America/Edmonton</code>. A label such as <code>"0 4 * * *"</code> therefore
         means 04:00 at the host whose Ofelia executes it.
-      </p>
-
-      <p>
-        Bilby, Bandicoot, Voltaire, and Fractal share the Lumen schedule in
-        <code>ofelia/jobs/compose.yaml</code> through Compose service inheritance.
-        The scheduler starts the existing <code>lumen-sweep</code> container;
-        the Lumen stack owns its command, mounts, and security settings. The
-        scheduler's labels set <code>no-overlap</code> so a long indexing run
-        finishes before another scheduled run starts. The per-host content paths
-        include the shared job directory, so a schedule edit redeploys the schedulers.
       </p>
 
       <h2 id="dead-time">04:00 local dead-time window</h2>
@@ -57,7 +47,6 @@
           <tr><td><code>sky-backups-monitor</code></td><td>sky-backups-monitor</td><td>hourly at :15</td><td>Lists committed Restic snapshot objects in Pouch MinIO and alerts through Gatus when none was written within seven days.</td></tr>
           <tr><td><code>clickstack-mongo-dump</code></td><td>clickstack-mongo</td><td>03:50 daily</td><td>Dumps ClickStack's MongoDB metadata into the backed-up host path.</td></tr>
           <tr><td><code>forgejo-backup-recover</code></td><td>backrest</td><td>every 5 min (:03, :08, &hellip;)</td><td>Restarts Forgejo when a Backrest quiesce died between its stop and end hooks. Acts only on a quiesce lock older than 15 minutes with no <code>restic</code> running, so a healthy snapshot's own stop phase is never read as an interruption; the offset keeps the tick clear of the 03:45 snapshot entirely. See <a href="/runbooks/forgejo">Forgejo runbook</a>.</td></tr>
-          <tr><td><code>lumen-sweep</code></td><td>lumen-sweep on each Linux development host</td><td>every 10 min</td><td>Discovers repositories and linked worktrees from the shared repository sources and refreshes their semantic indexes. Overlapping scheduled runs are skipped.</td></tr>
           <tr><td><code>search-index</code></td><td>search-indexer</td><td>every minute</td><td>Refreshes the cross-repository documentation search index.</td></tr>
           <tr><td><code>streamfab-publish</code></td><td>streamfab-publish</td><td>every minute</td><td>Publishes completed StreamFab output into the media library.</td></tr>
           <tr><td><code>sky-cache-invalidate</code></td><td>caddy</td><td>every minute</td><td>Purges Sky's Cloudflare cache tag when MinIO reports a new version of Publii's completed <code>files.publii.json</code> manifest. See <a href="/caching.md">Public site caching</a>.</td></tr>
