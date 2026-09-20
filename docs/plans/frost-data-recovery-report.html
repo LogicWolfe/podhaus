@@ -1,0 +1,221 @@
+<main>
+
+<h1>F.R.O.S.T. Data Recovery Certificate</h1>
+<p class="lead text-lg text-text-muted">
+  Recovery of a failed 2.5in SATA drive, case 0689-EC, 17 September 2026. Presented as a service
+  certificate for printing. The figures are real; the letterhead is not. A print-ready PDF and the
+  standalone A4 sheet live outside this repo at <code>~/Rescue/</code>.
+</p>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+/* Scoped to .frost-report so nothing leaks into the docs shell. */
+.frost-report{
+  --ink:#241C12; --rule:#241C12; --orange:#C2531C; --ochre:#D79A2B;
+  --avocado:#6E7C36; --teal:#2F6B6B; --rust:#8C3A18; --faint:#E6DECF; --tint:#FBF5EA;
+  font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color:var(--ink); background:#fff;
+  font-size:13px; line-height:1.3;
+  max-width:820px; margin:1.5rem 0; padding:26px 30px 20px;
+  border:1px solid rgba(0,0,0,.2);
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+.frost-report *{ box-sizing:border-box; }
+
+.frost-report .top{ display:flex; gap:22px; align-items:flex-start; border-bottom:3px solid var(--rule); padding-bottom:10px; }
+.frost-report .brand h2.hero{
+  font-family:"Archivo Black",Impact,sans-serif; font-size:50px; line-height:.9; letter-spacing:.04em;
+  margin:0; text-transform:uppercase; color:var(--orange); border:0; padding:0; background:none;
+}
+.frost-report .expand{ font-size:14px; letter-spacing:.055em; text-transform:uppercase; font-weight:600; margin-top:5px; }
+.frost-report .company{ font-family:"Archivo Black",sans-serif; font-size:19px; line-height:1;
+  letter-spacing:-.01em; text-transform:uppercase; margin-top:10px; }
+.frost-report .company .amp{ color:var(--orange); }
+.frost-report .tagline{ font-size:11px; letter-spacing:.20em; text-transform:uppercase; font-weight:600; color:#6b5842; margin-top:5px; }
+.frost-report .tagline b{ color:var(--rust); }
+.frost-report .stamp{ margin-left:auto; text-align:right; flex:0 0 auto; border:2px solid var(--rust); padding:8px 11px; transform:rotate(-1.6deg); }
+.frost-report .stamp .big{ font-family:"Archivo Black",sans-serif; font-size:20px; color:var(--rust); line-height:1; }
+.frost-report .stamp .sm{ font-size:10px; letter-spacing:.14em; margin-top:4px; }
+
+.frost-report h3.sec{ font-family:"Archivo Black",sans-serif; font-size:12px; text-transform:uppercase;
+  letter-spacing:.09em; margin:15px 0 7px; padding:4px 9px; color:#fff; border:0; }
+.frost-report h3.sec .n{ opacity:.62; margin-right:9px; }
+.frost-report .h-orange{ background:var(--orange); }
+.frost-report .h-avocado{ background:var(--avocado); }
+.frost-report .h-teal{ background:var(--teal); }
+.frost-report .h-ochre{ background:var(--ochre); color:var(--ink); }
+
+.frost-report .cols{ display:grid; grid-template-columns:1fr 1fr; gap:26px; }
+
+.frost-report table{ width:100%; border-collapse:collapse; font-size:12px; margin:0; background:none; }
+.frost-report th{ text-align:left; font-weight:700; border-bottom:2px solid var(--rule); padding:3px 5px;
+  letter-spacing:.05em; text-transform:uppercase; font-size:10px; background:none; color:var(--ink); }
+.frost-report td{ padding:2px 5px; border-bottom:1px solid var(--faint); background:none; color:var(--ink); }
+.frost-report td.r, .frost-report th.r{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.frost-report tr.total td{ border-top:2px solid var(--rule); border-bottom:none; font-weight:700; padding-top:5px; }
+.frost-report .keyval td:first-child{ color:#6b5842; }
+.frost-report .sw{ display:inline-block; width:9px; height:9px; margin-right:6px; }
+
+.frost-report .bar-row{ display:grid; grid-template-columns:100px 1fr 60px; align-items:center; gap:7px; margin-bottom:4px; }
+.frost-report .bar-label{ font-size:11px; }
+.frost-report .bar-track{ height:13px; background:var(--faint); }
+.frost-report .bar-fill{ height:100%; }
+.frost-report .bar-val{ font-size:11px; text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+
+.frost-report .gauge .num{ font-family:"Archivo Black",sans-serif; font-size:41px; line-height:.86; color:var(--avocado); }
+.frost-report .gauge .num small{ font-size:17px; }
+.frost-report .gauge .cap{ font-size:11px; line-height:1.35; margin-top:6px; }
+
+.frost-report .note{ border:2px solid var(--rule); padding:9px 11px; background:var(--tint); }
+.frost-report .note p{ margin:0 0 6px; font-size:12px; }
+.frost-report .note p:last-of-type{ margin-bottom:0; }
+.frost-report .sig{ margin-top:9px; display:flex; justify-content:space-between; align-items:flex-end; gap:18px; }
+.frost-report .sig .name{ font-family:"Archivo Black",sans-serif; font-size:13px; }
+.frost-report .sig .line{ border-top:2px solid var(--rule); padding-top:4px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; flex:1; }
+.frost-report .foot{ margin-top:11px; border-top:3px solid var(--rule); padding-top:7px; display:flex;
+  justify-content:space-between; gap:18px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+.frost-report .tiny{ font-size:10px; color:#6b5842; margin-top:5px; }
+
+@media (max-width:700px){
+  .frost-report .cols{ grid-template-columns:1fr !important; gap:12px; }
+  .frost-report .top{ flex-wrap:wrap; }
+  .frost-report .stamp{ margin-left:0; }
+  .frost-report .brand h2.hero{ font-size:38px; }
+}
+</style>
+
+<div class="frost-report">
+
+  <div class="top">
+    <div>
+      <svg width="74" height="74" viewBox="0 0 100 100" aria-label="N and G mark">
+        <g fill="#241C12">
+          <circle cx="50" cy="12" r="3.4"/><circle cx="69" cy="17.1" r="3.4"/>
+          <circle cx="82.9" cy="31" r="3.4"/><circle cx="88" cy="50" r="3.4"/>
+          <circle cx="82.9" cy="69" r="3.4"/><circle cx="69" cy="82.9" r="3.4"/>
+          <circle cx="50" cy="88" r="3.4"/><circle cx="31" cy="82.9" r="3.4"/>
+          <circle cx="17.1" cy="69" r="3.4"/><circle cx="12" cy="50" r="3.4"/>
+          <circle cx="17.1" cy="31" r="3.4"/>
+        </g>
+        <circle cx="31" cy="17.1" r="3.4" fill="#C2531C"/>
+        <circle cx="50" cy="50" r="7.6" fill="none" stroke="#241C12" stroke-width="2.2"/>
+        <circle cx="50" cy="50" r="2.6" fill="#C2531C"/>
+      </svg>
+    </div>
+    <div class="brand">
+      <h2 class="hero">F.R.O.S.T.</h2>
+      <div class="expand">Freezer Retrieval Of Sectors &amp; Tracks</div>
+      <div class="company">Nathan <span class="amp">&amp;</span> Grant Data Recovery Services</div>
+      <div class="tagline">Subzero Media Division <b>&middot;</b> Est. 2026 <b>&middot;</b> Case 0689-EC</div>
+    </div>
+    <div class="stamp">
+      <div class="big">RECOVERED</div>
+      <div class="sm">17 SEP 2026</div>
+    </div>
+  </div>
+
+  <h3 class="sec h-orange"><span class="n">1.0</span>Intake &amp; Condition On Arrival</h3>
+  <div class="cols">
+    <table class="keyval">
+      <tr><td>Case reference</td><td class="r"><b>0689-EC</b></td></tr>
+      <tr><td>Media</td><td class="r">2.5in SATA HDD, 500.1 GB</td></tr>
+      <tr><td>Filesystem</td><td class="r">APFS, unencrypted</td></tr>
+      <tr><td>Presenting fault</td><td class="r">Mechanical, terminal</td></tr>
+      <tr><td>Prior treatment</td><td class="r">Domestic freezer</td></tr>
+    </table>
+    <table class="keyval">
+      <tr><td>Operating temperature</td><td class="r">-18 &deg;C</td></tr>
+      <tr><td>Duty cycle (nominal)</td><td class="r">10 min</td></tr>
+      <tr><td>Duty cycle (achieved)</td><td class="r"><b>7 h 20 min</b></td></tr>
+      <tr><td>Read rate, best</td><td class="r">88.1 MB/s</td></tr>
+      <tr><td>Read rate, worst</td><td class="r">0.002 MB/s</td></tr>
+    </table>
+  </div>
+
+  <h3 class="sec h-avocado"><span class="n">2.0</span>Recovery Yield By Volume</h3>
+  <div class="cols" style="grid-template-columns:190px 1fr; align-items:center;">
+    <div class="gauge">
+      <div class="num">99.9999<small>%</small></div>
+      <div class="cap">
+        <b>105.2 GiB</b> recovered<br>
+        <b>20,540</b> files<br>
+        <span style="color:#8C3A18">114,688 bytes unrecoverable</span>
+      </div>
+    </div>
+    <div>
+      <div class="bar-row"><div class="bar-label">Desktop</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:#6E7C36"></div></div><div class="bar-val">102 GB</div></div>
+      <div class="bar-row"><div class="bar-label">Downloads</div><div class="bar-track"><div class="bar-fill" style="width:2.3%;background:#2F6B6B"></div></div><div class="bar-val">2.3 GB</div></div>
+      <div class="bar-row"><div class="bar-label">Library</div><div class="bar-track"><div class="bar-fill" style="width:1%;background:#D79A2B"></div></div><div class="bar-val">951 MB</div></div>
+      <div class="bar-row"><div class="bar-label">Deleted items</div><div class="bar-track"><div class="bar-fill" style="width:.4%;background:#C2531C"></div></div><div class="bar-val">11 MB</div></div>
+      <div class="bar-row"><div class="bar-label">Unrecoverable</div><div class="bar-track"><div class="bar-fill" style="width:.35%;background:#8C3A18"></div></div><div class="bar-val">0.11 MB</div></div>
+      <div class="tiny">Bars to scale. The unrecoverable bar is drawn at minimum visible width; at true scale it would be 1/900,000th of the Desktop bar.</div>
+    </div>
+  </div>
+
+  <h3 class="sec h-teal"><span class="n">3.0</span>Recovered Files By Type</h3>
+  <div class="cols" style="grid-template-columns:190px 1fr; align-items:center;">
+    <div style="text-align:center">
+      <svg width="170" height="170" viewBox="0 0 160 160" aria-label="Recovered files by type">
+        <circle r="54" cx="80" cy="80" fill="none" stroke="#2F6B6B" stroke-width="30" stroke-dasharray="242.16 97.14" stroke-dashoffset="0" transform="rotate(-90 80 80)"/>
+        <circle r="54" cx="80" cy="80" fill="none" stroke="#6E7C36" stroke-width="30" stroke-dasharray="68.11 271.19" stroke-dashoffset="-242.16" transform="rotate(-90 80 80)"/>
+        <circle r="54" cx="80" cy="80" fill="none" stroke="#D79A2B" stroke-width="30" stroke-dasharray="11.45 327.85" stroke-dashoffset="-310.27" transform="rotate(-90 80 80)"/>
+        <circle r="54" cx="80" cy="80" fill="none" stroke="#C2531C" stroke-width="30" stroke-dasharray="9.62 329.68" stroke-dashoffset="-321.72" transform="rotate(-90 80 80)"/>
+        <circle r="54" cx="80" cy="80" fill="none" stroke="#8C3A18" stroke-width="30" stroke-dasharray="7.85 331.45" stroke-dashoffset="-331.34" transform="rotate(-90 80 80)"/>
+        <circle r="54" cx="80" cy="80" fill="none" stroke="#241C12" stroke-width="30" stroke-dasharray="0.17 339.13" stroke-dashoffset="-339.19" transform="rotate(-90 80 80)"/>
+        <text x="80" y="77" text-anchor="middle" font-family="Archivo Black,sans-serif" font-size="17" fill="#241C12">20,540</text>
+        <text x="80" y="91" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#6b5842" letter-spacing="1.2">FILES</text>
+      </svg>
+    </div>
+    <table>
+      <tr><th>Type</th><th class="r">Files</th><th class="r">Share</th><th class="r">Complete</th><th class="r">Rebuilt</th></tr>
+      <tr><td><span class="sw" style="background:#2F6B6B"></span>Email messages</td><td class="r">14,658</td><td class="r">71.4%</td><td class="r">14,658</td><td class="r">&mdash;</td></tr>
+      <tr><td><span class="sw" style="background:#6E7C36"></span>Photographs</td><td class="r">4,122</td><td class="r">20.1%</td><td class="r">4,121</td><td class="r">1</td></tr>
+      <tr><td><span class="sw" style="background:#D79A2B"></span>PDF documents</td><td class="r">693</td><td class="r">3.4%</td><td class="r">693</td><td class="r">&mdash;</td></tr>
+      <tr><td><span class="sw" style="background:#C2531C"></span>Video files</td><td class="r">582</td><td class="r">2.8%</td><td class="r">581</td><td class="r">1</td></tr>
+      <tr><td><span class="sw" style="background:#8C3A18"></span>Other files</td><td class="r">475</td><td class="r">2.3%</td><td class="r">475</td><td class="r">&mdash;</td></tr>
+      <tr><td><span class="sw" style="background:#241C12"></span>Audio recordings</td><td class="r">10</td><td class="r">0.05%</td><td class="r">10</td><td class="r">&mdash;</td></tr>
+      <tr class="total"><td>Total</td><td class="r">20,540</td><td class="r">100%</td><td class="r">20,538</td><td class="r">2</td></tr>
+    </table>
+  </div>
+
+  <h3 class="sec h-ochre"><span class="n">4.0</span>Reconstruction Log</h3>
+  <table>
+    <tr><th>File</th><th class="r">Size</th><th class="r">Recovered</th><th class="r">Unrecoverable</th><th>What was lost</th></tr>
+    <tr>
+      <td>SAM_0689.JPG</td><td class="r">3,194,527 B</td><td class="r"><b>97.9%</b></td><td class="r">65,536 B</td>
+      <td>Three narrow vertical bands, together 63 pixels of an image 3,000 pixels wide</td>
+    </tr>
+    <tr>
+      <td>Methana documentary .MP4</td><td class="r">285,489,054 B</td><td class="r"><b>99.98%</b></td><td class="r">49,152 B</td>
+      <td>Approximately 0.1 seconds of a running time of 9 minutes 29 seconds</td>
+    </tr>
+  </table>
+
+  <h3 class="sec h-orange"><span class="n">5.0</span>Certification</h3>
+  <div class="note">
+    <p>The media described in section 1.0 was presented in a failed mechanical state and processed under the
+      F.R.O.S.T. procedure. Recovery was performed read-only throughout. No write operation of any kind was
+      issued to the source media.</p>
+    <p><b>20,540 files totalling 105.2 GiB were recovered and verified</b> against the source by file count and
+      byte length. Two files required reconstruction and are itemised in section 4.0. A total of 114,688 bytes
+      across three regions proved unrecoverable, being 0.0001 percent of the data presented. The source media
+      was subsequently ejected and retired.</p>
+    <p>No further recovery is achievable from the media in its present condition.</p>
+    <div class="sig">
+      <div>
+        <div class="name">N. BAXTER &amp; G. PEACE</div>
+        <div class="tiny" style="margin-top:2px">Certified F.R.O.S.T. Practitioners</div>
+      </div>
+      <div class="line">Signed on completion of works</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div>N&amp;G Data Recovery Services &middot; Subzero Media Division</div>
+    <div>Case 0689-EC &middot; Sheet 1 of 1 &middot; No warranty expressed or implied re: freezer</div>
+  </div>
+
+</div>
+
+</main>
