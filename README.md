@@ -110,7 +110,7 @@ DNSControl has been retired.
 
 ## Code search on Linux
 
-Lumen runs locally on Voltaire, Fractal, Bilby and Bandicoot. The `lumen/`
+Lumen runs locally on Voltaire, Fractal and Bilby. The `lumen/`
 stack deploys Ollama, the code embedding model and the Lumen tools image. A
 stopped `lumen-sweep` container scans registered repositories and Git worktrees;
 Ofelia starts it every ten minutes and prevents overlapping scheduled runs.
