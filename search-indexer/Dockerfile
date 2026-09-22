@@ -6,6 +6,8 @@
 # bundles the prebuilt WASM/UI assets (include_dir, build=false), so this is
 # a plain CLI compile — no wasm-pack/nightly/node. LTO off + capped jobs keep
 # the build-time memory bounded (see docs).
+FROM quay.io/minio/mc:latest AS mc
+
 FROM rust:bookworm AS build
 ARG PAGEFIND_VERSION=1.5.2
 ENV CARGO_BUILD_JOBS=2 \
@@ -16,9 +18,8 @@ FROM debian:bookworm-slim
 ARG STACK_CONTENT_HASH=unset
 ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl bash \
- && curl -fsSL https://dl.min.io/client/mc/release/linux-arm64/mc -o /usr/local/bin/mc \
- && chmod +x /usr/local/bin/mc \
  && rm -rf /var/lib/apt/lists/*
+COPY --from=mc /usr/bin/mc /usr/local/bin/mc
 COPY --from=build /opt/pf/bin/pagefind /usr/local/bin/pagefind
 # Executes the freshly-built binary on bilby (16k pages) — fails the build
 # loudly if jemalloc ever sneaks back in.

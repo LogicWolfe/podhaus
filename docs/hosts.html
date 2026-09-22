@@ -66,7 +66,7 @@
           <tr><td><code>op</code></td><td>1Password CLI — secret reads, item edits</td><td><code>dnf</code> (1P upstream repo)</td></tr>
           <tr><td><code>gh</code></td><td>GitHub PR / issue interaction</td><td><code>dnf</code></td></tr>
           <tr><td><code>jq</code></td><td>JSON munging (Komodo API, mc output, etc.)</td><td><code>dnf</code></td></tr>
-          <tr><td><code>mcli</code></td><td>MinIO admin (buckets, users, policies)</td><td><code>sudo dnf install https://dl.min.io/client/mc/release/linux-arm64/mc.rpm</code> — RPM-tracked, upstream-signed releases</td></tr>
+          <tr><td><code>mcli</code></td><td>MinIO admin (buckets, users, policies)</td><td>Extract <code>/usr/bin/mc</code> from <code>quay.io/minio/mc:latest</code> for the host architecture and install locally as <code>mcli</code>.</td></tr>
           <tr><td><code>terraform</code></td><td>Stock HashiCorp Terraform. Run it directly in <code>terraform/</code> (no wrapper; backend = public <code>storage.pod.haus</code>; creds loaded through <code>op inject</code> by the PWD-scoped chezmoi fish hook). Any chezmoi-managed machine gets it. See <a href="/terraform.html">Terraform</a>.</td><td>chezmoi-managed (official HashiCorp dnf repo, Fedora branch of the packages script)</td></tr>
           <tr><td><code>zellij</code></td><td>Terminal multiplexer (user preference)</td><td>Cargo / upstream</td></tr>
         </tbody>
@@ -76,7 +76,7 @@
         Fedora's MinIO RPM ships the binary as <code>mcli</code> to avoid colliding with
         the Midnight Commander package, which also installs <code>/usr/bin/mc</code>.
         Upstream MinIO docs uniformly use <code>mc</code>; mentally substitute when
-        copy-pasting. The Docker image <code>minio/mc:latest</code> still uses the
+        copy-pasting. The Docker image <code>quay.io/minio/mc:latest</code> uses the
         <code>mc</code> binary name internally.
       </blockquote>
       <p>

@@ -4,16 +4,17 @@
 # content-hash mechanism in AGENTS.md).
 
 ARG STACK_CONTENT_HASH=unset
+FROM quay.io/minio/mc:latest AS mc
+
 FROM node:lts
 ARG STACK_CONTENT_HASH
 ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates git curl openssh-client && \
-    rm -rf /var/lib/apt/lists/* && \
-    curl -fsSL https://dl.min.io/client/mc/release/linux-arm64/mc \
-      -o /usr/local/bin/mcli && \
-    chmod +x /usr/local/bin/mcli
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=mc /usr/bin/mc /usr/local/bin/mcli
 
 COPY build.sh /usr/local/bin/build.sh
 RUN chmod +x /usr/local/bin/build.sh
