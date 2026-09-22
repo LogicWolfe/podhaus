@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Re-run the desktop policy whenever logind reports the lid's open/closed state changed.
+
+Subscribes to logind's PropertiesChanged signal directly via Gio rather than
+piping `gdbus monitor` through a shell loop, because gdbus block-buffers its
+stdout when piped and a pipeline would silently lag behind real lid events.
+"""
+
+from __future__ import annotations
+
+import subprocess
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib
+
+LOGIND_BUS_NAME = "org.freedesktop.login1"
+LOGIND_OBJECT_PATH = "/org/freedesktop/login1"
+LOGIND_MANAGER_INTERFACE = "org.freedesktop.login1.Manager"
+PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
+
+
+def run_desktop_policy() -> None:
+    subprocess.run(["systemctl", "start", "podhaus-desktop-policy.service"], check=True)
+
+
+def on_properties_changed(
+    connection: Gio.DBusConnection,
+    sender_name: str,
+    object_path: str,
+    interface_name: str,
+    signal_name: str,
+    parameters: GLib.Variant,
+) -> None:
+    changed_interface, changed_properties, _invalidated = parameters.unpack()
+    if changed_interface == LOGIND_MANAGER_INTERFACE and "LidClosed" in changed_properties:
+        run_desktop_policy()
+
+
+def main() -> int:
+    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    bus.signal_subscribe(
+        LOGIND_BUS_NAME,
+        PROPERTIES_INTERFACE,
+        "PropertiesChanged",
+        LOGIND_OBJECT_PATH,
+        None,
+        Gio.DBusSignalFlags.NONE,
+        on_properties_changed,
+    )
+    GLib.MainLoop().run()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

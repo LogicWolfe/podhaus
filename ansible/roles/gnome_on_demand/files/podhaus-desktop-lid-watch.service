@@ -1,0 +1,17 @@
+[Unit]
+Description=Re-run the desktop policy whenever logind's LidClosed property changes
+After=systemd-logind.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/podhaus-desktop-lid-watch
+# always, not on-failure: systemd treats a clean SIGTERM exit (including one
+# from `systemctl kill`, the recovery drill in the plan's verification) as
+# success under on-failure and would not restart it -- verified empirically.
+# `systemctl stop` still suppresses the restart either way, so this does not
+# make the unit unstoppable.
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

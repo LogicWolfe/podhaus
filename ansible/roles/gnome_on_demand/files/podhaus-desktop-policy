@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Start or stop bandicoot's GNOME desktop based on whether a display is attached.
+
+A display is present when the lid is open or any non-panel DRM connector
+reads "connected". Every trigger (boot, a lid change, a DRM hotplug event, or
+the stop timer) re-runs this script rather than reacting to the trigger's own
+payload, so a missed or reordered event is harmless -- the next run re-derives
+the right state from scratch.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+DRM_ROOT = Path("/sys/class/drm")
+INTERNAL_PANEL_MARKERS = ("eDP", "LVDS")
+GDM_UNIT = "gdm.service"
+STOP_TIMER = "podhaus-desktop-stop.timer"
+
+
+def lid_closed() -> bool:
+    output = subprocess.run(
+        [
+            "busctl", "get-property",
+            "org.freedesktop.login1", "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager", "LidClosed",
+        ],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    kind, value = output.split(maxsplit=1)
+    if kind != "b" or value not in ("true", "false"):
+        raise RuntimeError(f"unexpected LidClosed property: {output!r}")
+    return value == "true"
+
+
+def external_display_connected() -> bool:
+    for status_file in DRM_ROOT.glob("card*-*/status"):
+        connector = status_file.parent.name
+        if any(marker in connector for marker in INTERNAL_PANEL_MARKERS):
+            continue
+        if status_file.read_text().strip() == "connected":
+            return True
+    return False
+
+
+def display_present() -> bool:
+    return not lid_closed() or external_display_connected()
+
+
+def unit_active(unit: str) -> bool:
+    return subprocess.run(["systemctl", "is-active", "--quiet", unit]).returncode == 0
+
+
+def systemctl(action: str, unit: str) -> None:
+    subprocess.run(["systemctl", action, unit], check=True)
+
+
+def start_desktop() -> bool:
+    """Ensure GDM is running and the stop timer is disarmed. Returns whether either changed."""
+    acted = False
+    if unit_active(STOP_TIMER):
+        systemctl("stop", STOP_TIMER)
+        acted = True
+    if not unit_active(GDM_UNIT):
+        systemctl("start", GDM_UNIT)
+        acted = True
+    return acted
+
+
+def arm_stop_timer_if_idle() -> bool:
+    if unit_active(GDM_UNIT) and not unit_active(STOP_TIMER):
+        systemctl("start", STOP_TIMER)
+        return True
+    return False
+
+
+def seat0_session_ids() -> list[str]:
+    listing = subprocess.run(
+        ["loginctl", "list-sessions", "--no-legend"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    return [line.split()[0] for line in listing.splitlines() if line.split()]
+
+
+def is_seat0_user_graphical_session(session_id: str) -> bool:
+    fields = subprocess.run(
+        ["loginctl", "show-session", session_id, "-p", "Seat", "-p", "Class", "-p", "Type"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    values = dict(line.split("=", 1) for line in fields.splitlines())
+    return (
+        values["Seat"] == "seat0"
+        and values["Class"] == "user"
+        and values["Type"] in ("wayland", "x11")
+    )
+
+
+def terminate_seat0_desktop_sessions() -> None:
+    # Only seat0 Class=user wayland/x11 sessions -- never another seat, and
+    # never an SSH session (Class=user but Seat is unset, Type=tty).
+    for session_id in seat0_session_ids():
+        if is_seat0_user_graphical_session(session_id):
+            subprocess.run(["loginctl", "terminate-session", session_id], check=True)
+
+
+def stop_desktop_if_still_idle() -> bool:
+    # Re-check rather than trusting the timer's own firing: the lid or an
+    # external display may have returned between arming and expiry, and a
+    # stale disarm is otherwise unrecoverable until the next trigger.
+    if display_present():
+        return False
+    systemctl("stop", GDM_UNIT)
+    terminate_seat0_desktop_sessions()
+    return True
+
+
+def main(argv: list[str]) -> int:
+    # Each branch prints exactly what it decided, so the journal for this
+    # service is a legible record of the policy's decisions, not just
+    # "started, finished" boilerplate.
+    if "--stop" in argv:
+        stopped = stop_desktop_if_still_idle()
+        print("DESKTOP-STOPPED" if stopped else "DISPLAY-PRESENT-NO-ACTION")
+    elif display_present():
+        acted = start_desktop()
+        print("DESKTOP-STARTED" if acted else "DESKTOP-ALREADY-RUNNING")
+    else:
+        armed = arm_stop_timer_if_idle()
+        print("STOP-TIMER-ARMED" if armed else "NO-DISPLAY-NO-ACTION")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

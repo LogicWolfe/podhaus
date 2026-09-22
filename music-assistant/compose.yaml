@@ -1,3 +1,4 @@
+# Runs the Music Assistant media bridge; account and player settings live in its data volume.
 services:
   music-assistant:
     container_name: music-assistant
@@ -22,10 +23,8 @@ services:
       autoheal: "true"
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
-      # MA is a Python app, so python3 is always on PATH — don't assume
-      # wget/curl are in the image. A TCP connect to the web port proves
-      # the server is up without coupling to any HTTP status of `/`.
-      test: ["CMD-SHELL", "python3 -c \"import socket; socket.create_connection(('127.0.0.1', 8095), 5)\""]
+      # A failed startup can leave the socket open without an HTTP event loop.
+      test: ["CMD", "python3", "-c", "import json, urllib.request; json.load(urllib.request.urlopen('http://127.0.0.1:8095/info', timeout=5))"]
       interval: 60s
       timeout: 10s
       retries: 3

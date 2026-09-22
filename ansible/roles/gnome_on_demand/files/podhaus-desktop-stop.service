@@ -1,0 +1,7 @@
+[Unit]
+Description=Tear bandicoot's GNOME desktop down if still no display is attached
+After=systemd-logind.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/podhaus-desktop-policy --stop
