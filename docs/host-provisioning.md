@@ -386,7 +386,7 @@ end-to-end sequence including the Komodo-side resources.
 
 ## Repository search
 
-Lumen supplies local semantic code search on Fractal, Voltaire, Bandicoot and
+Lumen supplies local semantic code search on Fractal, Voltaire and
 Bilby. Komodo manages each host's Ollama embedding service, code model and
 `lumen:local` image through `lumen/<host>/stack.toml`. The `lumen-models` and
 `lumen-data` volumes retain models and indexes. Ofelia starts the local

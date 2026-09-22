@@ -1,11 +1,5 @@
-x-podhaus-content-paths:
-  - ../jobs
-
 services:
   bandicoot-ofelia:
-    extends:
-      file: ../jobs/compose.yaml
-      service: scheduler
     container_name: bandicoot-ofelia
     image: mcuadros/ofelia:0.4.0-beta.5
     restart: unless-stopped
