@@ -693,6 +693,7 @@ The full set of pages on `docs.pod.haus`:
 - [Forgejo](docs/runbooks/forgejo.md)
 - [Grasshopper LED strip](docs/runbooks/led-strip-grasshopper.md)
 - [Home Assistant](docs/runbooks/home-assistant.md)
+- [Indy Board](docs/runbooks/indy-board.md)
 - [Mumble](docs/runbooks/mumble.md)
 - [Music Assistant + doorbell](docs/runbooks/music-assistant.html)
 - [pizero](docs/runbooks/pizero.md)

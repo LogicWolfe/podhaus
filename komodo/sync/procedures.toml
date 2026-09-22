@@ -201,6 +201,43 @@ executions = [
 ]
 
 
+# indy-board-push-deploy — push-to-deploy for the indy-board stack on bilby.
+#
+# Bound to the Forgejo `deploy` branch webhook, like fenwick-push-deploy, and
+# the same three stages. The image carries the service and both boards'
+# firmware; the stack's `--force-recreate` makes every deploy a fresh
+# container, so a custom build shipped into the running one by the repo's
+# tools/ship.sh never outlives a deploy.
+
+[[procedure]]
+name = "indy-board-push-deploy"
+description = "Push-to-deploy for the indy-board stack."
+tags = ["indy-board", "podhaus"]
+config.webhook_enabled = true
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Pull green indy-board release"
+enabled = true
+executions = [
+  { execution.type = "PullRepo", execution.params = { repo = "indy-board" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Reconcile indy-board stack definition (sync TOML -> Komodo)"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params = { sync = "indy-board" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy indy-board (build + recreate)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "indy-board" }, enabled = true },
+]
+
+
 # nathanbaxter-deploy — push-to-deploy for nathanbaxter.com.
 #
 # Bound to the nathanbaxter Forgejo push webhook — the repo lives on

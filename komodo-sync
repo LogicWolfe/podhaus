@@ -115,3 +115,4 @@ run_procedure podhaus-deploy
 run_procedure fenwick-push-deploy
 run_procedure pets-push-deploy
 run_procedure docs-push-deploy
+run_procedure indy-board-push-deploy

@@ -82,12 +82,7 @@ resource "unifi_client" "kangaroo_10g" {
 # the Mumble WAN forwards above, Gatus's LAN-published heartbeat listener,
 # Bugsink's ingest, and the git.pod.haus origin that Komodo Core and the
 # Forgejo Actions runner pin past Pomerium. A DHCP drift would strand all of
-# them at once. No import step: bilby already exists in the controller as an
-# observed DHCP lease, and v0.53's `allow_existing` defaults to true, so the
-# create takes control of that client rather than colliding with it (the plan
-# shows `allow_existing = true` as a known value). If an apply ever does
-# report a conflict, adopt it by MAC instead:
-#   terraform import unifi_client.bilby 14:98:77:67:e0:b8
+# them at once. The existing controller client is managed by its end0 MAC.
 resource "unifi_client" "bilby" {
   mac      = "14:98:77:67:e0:b8"
   name     = "Bilby"

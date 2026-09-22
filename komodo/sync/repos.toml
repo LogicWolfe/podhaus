@@ -202,6 +202,23 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/yiayia-stories"
 branch = "main"
 
+# Bilby clone of the indy-board repo (Indigo's room controller and display
+# panel). Same linked_repo + run_build pattern as fenwick: Komodo builds the
+# image, service and both boards' firmware, on bilby, where the boards
+# connect. It follows the Forgejo `deploy` branch, which only green CI on
+# main advances.
+[[repo]]
+name = "indy-board"
+description = "Komodo-managed clone of the indy-board repo on bilby's Periphery"
+tags = ["podhaus", "bilby", "indy-board"]
+
+[repo.config]
+server = "podhaus"             # = bilby
+git_provider = "git.pod.haus"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/indy-board"
+branch = "deploy"
+
 # Core's sync tree since the move to bandicoot — komodo-sync overlays it
 # the same way it overlays podhaus-deploy below, so on_pull needs the same
 # `git clean -fd` for the same reason (see the podhaus-deploy comment
