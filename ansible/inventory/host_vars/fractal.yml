@@ -6,8 +6,8 @@
 # The split-horizon name (podhaus terraform/dns_unifi_split_horizon.tf),
 # which on the LAN resolves to the WINDOWS host; Windows forwards only :22
 # into the guest. The guest's own address (172.19.x/20) is WSL NAT and
-# unreachable from the LAN. Terraform is the only owner of the IP — Ansible
-# rides the name, so a re-address is a Terraform change alone. Runs are
+# unreachable from the LAN. Terraform reads config/lan-addresses.json for
+# the Windows reservation and DNS record; Ansible rides the name. Runs are
 # LAN-only by construction: off-LAN the name does not resolve at all.
 ansible_host: fractal.pod.haus
 ansible_user: nathan

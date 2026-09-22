@@ -7,7 +7,7 @@
 # stays the controller: Siri -> Apple Home -> this bridge -> HA -> device.
 # advertise_ip pins bilby's LAN address so the bridge is announced on end0,
 # not a docker interface. The address arrives as BILBY_LAN_IPV4 from the
-# stack environment (Terraform owns it; see terraform/lan_addresses.tf), so
+# stack environment (from config/lan-addresses.json through Komodo), so
 # it is never written down here. Pairing state lives in host .storage.
 #
 # Exposed:

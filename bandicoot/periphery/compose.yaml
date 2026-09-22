@@ -11,7 +11,7 @@
 # for linked repos on git.pod.haus (bilby's internal Caddy; the public name
 # is Pomerium and redirects Git). BILBY_LAN_IPV4 is written into this
 # stack's .env by ansible/roles/komodo_periphery, which reads the address
-# from the 1Password item Terraform publishes.
+# from config/lan-addresses.json.
 services:
   periphery:
     container_name: komodo-periphery

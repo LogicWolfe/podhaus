@@ -7,6 +7,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # podhaus portable: clone anywhere, run ./komodo-start, and Komodo + every
 # stack that interpolates [[PODHAUS_REPO]] points at this checkout.
 export COMPOSE_KOMODO_REPO_PATH="$PWD"
+BILBY_LAN_IPV4="$(jq -er '.bilby_ipv4' config/lan-addresses.json)"
+export BILBY_LAN_IPV4
 
 # Host prerequisites — /opt/komodo/keys and dockernet — are provisioned by
 # ansible/playbooks/bandicoot.yml (the komodo_core_host role creates

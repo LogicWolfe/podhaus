@@ -1,0 +1,11 @@
+{
+  "bilby_ipv4": "10.0.0.119",
+  "bandicoot_ipv4": "10.0.0.90",
+  "kangaroo_ipv4": "10.0.0.25",
+  "kangaroo_1g_ipv4": "10.0.0.232",
+  "fractal_windows_ipv4": "10.0.0.70",
+  "turn_touch_burrow_ipv4": "10.0.0.238",
+  "led_strip_grasshopper_ipv4": "10.0.0.44",
+  "pizero_ipv4": "10.0.0.77",
+  "nb_macbook_air_ipv4": "10.0.0.202"
+}

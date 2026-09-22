@@ -1,3 +1,6 @@
+x-podhaus-content-paths:
+  - ../../config
+
 # Kangaroo's backrest overlay. Extends backup/compose.shared.yaml with
 # kangaroo-specific bits: absolute QNAP paths for templates and source
 # data binds (no ${PODHAUS_REPO} on QNAP), no SELinux opt (QTS doesn't

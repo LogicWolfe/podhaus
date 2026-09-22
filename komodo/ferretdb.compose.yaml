@@ -57,8 +57,8 @@ services:
     # ResourceSync clones happen in Core; use the direct Forgejo origin while
     # preserving git.pod.haus for TLS and repository identity. Core runs on
     # bandicoot now, so host-gateway would resolve to bandicoot's own
-    # gateway, not bilby's Caddy. BILBY_LAN_IPV4 comes from compose.env's
-    # 1Password reference — the same address bandicoot's Forgejo runner uses.
+    # gateway, not bilby's Caddy. Startup commands read BILBY_LAN_IPV4 from
+    # config/lan-addresses.json, the source bandicoot's Forgejo runner uses.
     extra_hosts:
       - "git.pod.haus:${BILBY_LAN_IPV4}"
     init: true

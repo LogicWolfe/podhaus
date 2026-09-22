@@ -30,24 +30,27 @@ and `playbooks/fractal.yml` deliberately does **not** invoke chezmoi:
 that would put user state under root's control and dissolve the boundary
 the layer exists to draw.
 
-## Cross-host state: one producer, one channel, zero copies
+## Shared configuration and generated state
 
-Every piece of state that crosses hosts follows one rule set:
+Authored, non-secret LAN addresses live in `config/lan-addresses.json` and
+travel through Git. Terraform, Ansible and bootstrap commands read that file
+directly. `tools/render-lan-addresses.py` generates the committed Komodo
+variable declarations; the pre-commit check rejects drift from the source.
 
-- **One producer.** Values Terraform generates (PKI, addresses, tokens)
-  live in Terraform state and nowhere else. Values a host generates
-  (Forgejo's host key, Periphery private keys) stay on the host that
-  made them, with only the public half committed or documented.
-- **One channel.** 1Password is the only distribution path for anything
-  that crosses hosts. Terraform publishes there; Ansible reads there
-  (`community.general.onepassword` lookups run on the control node, so
-  targets need no op auth); chezmoi and operator commands read there through
-  `op-vault` using the selected machine service account.
-- **Zero copies.** The repo carries no file whose content is derivable
-  from Terraform state. The narrow exception is a root-of-trust literal
-  a fresh machine needs before it can reach any channel — the Forgejo
-  host key in the dotfiles README, and the Pomerium SSH host-key
-  fingerprint there for human TOFU verification on non-homelab machines.
+Generated infrastructure state and credentials follow these rules:
+
+- **One producer.** Values Terraform generates (keys, allocated public
+  addresses, tokens) live in Terraform state. Values a host generates
+  (Forgejo's host key, Periphery private keys) stay on that host, with only
+  the public half committed or documented.
+- **One channel.** Terraform publishes generated handoffs through 1Password.
+  Ansible reads them on the control node, so targets need no `op` auth;
+  chezmoi and operator commands use `op-vault` with the selected machine
+  service account.
+- **No copied state.** The repo carries no file derived from Terraform state,
+  except a root-of-trust literal needed before reaching a distribution
+  channel: the Forgejo host key and Pomerium SSH host-key fingerprint in
+  the dotfiles README.
 - **Terraform feeds, never drives.** `terraform apply` never runs
   playbooks: provisioners are invisible to `plan` (breaking the
   from-anywhere contract), a failed playbook would taint and replace the
@@ -60,6 +63,7 @@ The resulting ledger:
 
 | Value | Producer | Channel | Consumers |
 |---|---|---|---|
+| Home-LAN addresses | `config/lan-addresses.json` | Git; generated Komodo variables | Terraform, Ansible, bootstrap commands and service stacks |
 | Pomerium SSH user CA (public) | TF `tls_private_key.pomerium_ssh_user_ca` | 1P `Pomerium Secrets` | `sshd_pomerium_ca` role; numbat cloud-init (TF-direct); `kangaroo_bootstrap` (op read on the bilby side) |
 | Pomerium SSH host key (public) | TF `tls_private_key.pomerium_ssh_host` | 1P `Pomerium Secrets` | chezmoi `00-ssh-hostkeys` upsert; README fingerprint for TOFU |
 | numbat application + relay IPv4 | TF (BinaryLane) | 1P numbat handoffs | numbat host_vars → nft/dispatcher templates |

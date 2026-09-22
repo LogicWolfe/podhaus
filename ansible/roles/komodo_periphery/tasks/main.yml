@@ -83,7 +83,7 @@
 - name: Render the Periphery .env
   # No secret here — outbound auth is the X25519 keypair. BILBY_LAN_IPV4 is
   # bandicoot/periphery/compose.yaml's extra_hosts pin for git.pod.haus,
-  # read from the 1Password item Terraform publishes; every other host's
+  # read from config/lan-addresses.json; every other host's
   # compose ignores it.
   ansible.builtin.copy:
     dest: "{{ podhaus_periphery_dir }}/.env"

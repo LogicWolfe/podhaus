@@ -1,3 +1,6 @@
+x-podhaus-content-paths:
+  - ../../config
+
 # Bilby's logging overlay. Adds bilby-specific alloy bits on top of
 # compose.shared.yaml: SELinux opt, ${PODHAUS_REPO}-rooted alloy-conf
 # bind.
@@ -11,8 +14,8 @@ services:
   alloy:
     environment:
       # Read by alloy-conf/config.alloy through sys.env(): the ClickStack
-      # collector's host and the two ESPHome scrape targets. Terraform owns
-      # every value; see terraform/lan_addresses.tf.
+      # collector's host and the two ESPHome scrape targets, supplied by
+      # config/lan-addresses.json through Komodo.
       BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
       TURN_TOUCH_BURROW_IPV4: ${TURN_TOUCH_BURROW_IPV4}
       LED_STRIP_GRASSHOPPER_IPV4: ${LED_STRIP_GRASSHOPPER_IPV4}

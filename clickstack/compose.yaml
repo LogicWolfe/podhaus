@@ -1,3 +1,6 @@
+x-podhaus-content-paths:
+  - ../config
+
 # ClickStack — ClickHouse + HyperDX UI + bundled OTel collector + Mongo.
 # ClickStack observability backend on bandicoot. Alloy on all managed
 # hosts ships here over OTLP; Gatus metrics ride the same pipeline. See

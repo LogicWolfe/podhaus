@@ -1,3 +1,6 @@
+x-podhaus-content-paths:
+  - ../config
+
 services:
   caddy-secrets-init:
     build:
@@ -60,7 +63,7 @@ services:
       SKY_CACHE_TAG: ${SKY_CACHE_TAG}
       SKY_CACHE_STATE_FILE: ${SKY_CACHE_STATE_FILE}
       # LAN addresses of the hosts this Caddy fronts, substituted into the
-      # Caddyfile at parse time as {$…}. Terraform owns the values.
+      # Caddyfile at parse time as {$…}; sourced from config/lan-addresses.json.
       BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
       KANGAROO_LAN_IPV4: ${KANGAROO_LAN_IPV4}
       GATUS_BASE_URL: http://gatus:8080

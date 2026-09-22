@@ -1,0 +1,46 @@
+# Generated from config/lan-addresses.json by tools/render-lan-addresses.py.
+
+[[variable]]
+name = "LAN_BILBY_IPV4"
+value = "10.0.0.119"
+description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
+name = "LAN_BANDICOOT_IPV4"
+value = "10.0.0.90"
+description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
+name = "LAN_KANGAROO_IPV4"
+value = "10.0.0.25"
+description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
+name = "LAN_KANGAROO_1G_IPV4"
+value = "10.0.0.232"
+description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
+name = "LAN_FRACTAL_WINDOWS_IPV4"
+value = "10.0.0.70"
+description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
+name = "LAN_TURN_TOUCH_BURROW_IPV4"
+value = "10.0.0.238"
+description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
+name = "LAN_LED_STRIP_GRASSHOPPER_IPV4"
+value = "10.0.0.44"
+description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
+name = "LAN_PIZERO_IPV4"
+value = "10.0.0.77"
+description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
+name = "LAN_NB_MACBOOK_AIR_IPV4"
+value = "10.0.0.202"
+description = "Shared LAN address from config/lan-addresses.json"

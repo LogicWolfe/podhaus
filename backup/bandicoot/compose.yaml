@@ -1,3 +1,6 @@
+x-podhaus-content-paths:
+  - ../../config
+
 # bandicoot's backrest overlay. Extends backup/compose.shared.yaml with
 # the linked-repo template binds, the SELinux opt, the restic repo on
 # Jump and the source-data binds for stacks that live on bandicoot.

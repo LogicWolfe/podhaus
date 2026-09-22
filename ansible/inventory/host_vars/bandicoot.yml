@@ -5,9 +5,9 @@
 ---
 # The split-horizon name (podhaus terraform/dns_unifi_split_horizon.tf),
 # which on the LAN resolves to the USB Ethernet adapter's UniFi-reserved
-# address. Terraform is the only owner of the IP — other hosts and the
-# Peripheries reach bandicoot by this name, so a re-address is a Terraform
-# change alone. Off-LAN the name does not resolve, so those connections
+# address from config/lan-addresses.json. Terraform applies the reservation
+# and DNS record; other hosts and Peripheries reach bandicoot by this name.
+# Off-LAN the name does not resolve, so those connections
 # are LAN-only by construction, as fractal's are. The adapter is a
 # Realtek RTL8153 (1 GbE; Asahi has no Thunderbolt) named enu1u4 after
 # its USB port, so it must stay in that port. Wi-Fi is left connected but

@@ -19,21 +19,20 @@
 # committed to komodo/keys/kangaroo-periphery.pub for Core's trust list.
 #
 # Every LAN address this script needs — kangaroo's own, for SSH, and
-# bandicoot's, for the Periphery .env — is read from the 1Password item
-# Terraform publishes (podhaus terraform/lan_addresses.tf). Nothing here
-# spells one out.
+# bandicoot's, for the Periphery .env — is read from the committed catalog.
+# Terraform consumes the same source. Nothing here spells one out.
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-# 1Password is read before anything else here: the LAN addresses below come
-# from it, so an unauthenticated run must say so rather than fail inside a
-# command substitution.
 : "${OP_SERVICE_ACCOUNT_TOKEN:?run with: op-vault dev -- ./kangaroo_bootstrap}"
 
 # --- Config ---
-op_lan_address() { op read "op://Homelab/Podhaus LAN Addresses/LAN/$1"; }
-KANGAROO_SSH="${KANGAROO_SSH:-admin@$(op_lan_address kangaroo_ipv4)}"
+LAN_ADDRESSES_FILE="$PWD/config/lan-addresses.json"
+lan_address() { jq -er --arg key "$1" '.[$key]' "$LAN_ADDRESSES_FILE"; }
+KANGAROO_IPV4="$(lan_address kangaroo_ipv4)"
+BANDICOOT_IPV4="$(lan_address bandicoot_ipv4)"
+KANGAROO_SSH="${KANGAROO_SSH:-admin@$KANGAROO_IPV4}"
 # Container state lives on CACHEDEV2 (Jump, the backed-up volume) per the
 # placement rule in docs/storage.html — never CACHEDEV1/Pouch.
 KANGAROO_DIR="/share/CACHEDEV2_DATA/Container/komodo-periphery"
@@ -114,7 +113,7 @@ log "Rendering .env (TZ + Core's LAN address)"
 TZ_VALUE="Australia/Perth"
 {
     printf 'TZ=%s\n' "$TZ_VALUE"
-    printf 'BANDICOOT_LAN_IPV4=%s\n' "$(op_lan_address bandicoot_ipv4)"
+    printf 'BANDICOOT_LAN_IPV4=%s\n' "$BANDICOOT_IPV4"
 } | ssh_kangaroo "cat > '$KANGAROO_DIR/.env' && chmod 600 '$KANGAROO_DIR/.env'"
 ok ".env staged on kangaroo"
 

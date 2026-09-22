@@ -1,3 +1,6 @@
+x-podhaus-content-paths:
+  - ../config
+
 # MeTube — yt-dlp web UI. Family pastes a video/playlist/channel URL on
 # metube.pod.haus; the file lands on Pouch for Plex's Kids libraries.
 # See docs/plans/metube.md for the full design.

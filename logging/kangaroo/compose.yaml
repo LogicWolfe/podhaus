@@ -1,3 +1,6 @@
+x-podhaus-content-paths:
+  - ../../config
+
 # Kangaroo's logging overlay: the alloy-conf bind for the kangaroo
 # config.alloy plus the shared ../alloy-modules bind every host carries.
 
@@ -6,7 +9,7 @@ services:
   alloy:
     environment:
       # The ClickStack collector's host, read by alloy-conf/config.alloy
-      # through sys.env(). Terraform owns it; see terraform/lan_addresses.tf.
+      # through sys.env(), supplied by config/lan-addresses.json through Komodo.
       BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
     volumes:
       # Absolute host path because Periphery's container-side relative-

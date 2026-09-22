@@ -182,8 +182,8 @@ Apple Home working at the same time.
   duplicate the fans; their presence sensors are for automations, not voice.
 - **`advertise_ip: !env_var BILBY_LAN_IPV4`** pins the bridge to bilby's LAN
   address so it advertises on `end0`, not a docker bridge interface. The value
-  arrives from the stack environment; Terraform owns it
-  (`terraform/lan_addresses.tf`), so the address is not written down here.
+  arrives from `config/lan-addresses.json` through the stack environment,
+  so the address is not written down here.
 - **Firewall:** the bridge listens on `tcp/21063`. No explicit firewalld rule —
   the Apple hubs are on the LAN, covered by the `public` zone's
   `10.0.0.0/24 → accept` rule, and mDNS is already open. See

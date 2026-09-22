@@ -1,3 +1,6 @@
+x-podhaus-content-paths:
+  - ../config
+
 # Push-to-deploy: covered by the single podhaus-push-deploy procedure
 # webhook (Stage 1 BatchDeployStackIfChanged "*") — no github.tf entry.
 services:

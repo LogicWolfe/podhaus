@@ -9,7 +9,7 @@
 # Cross-host upstreams name a host by variable, never by address:
 # {$BANDICOOT_LAN_IPV4} and {$KANGAROO_LAN_IPV4} are substituted into this
 # file when Caddy parses it, from the stack environment (caddy/stack.toml ←
-# the 1Password item Terraform publishes; see terraform/lan_addresses.tf).
+# the generated LAN_* variables from config/lan-addresses.json).
 # Parse-time {$VAR} rather than runtime {env.VAR} because an upstream
 # address is not one of the fields that expand runtime placeholders — the
 # {env.…} form above is for header and TLS values, which do.

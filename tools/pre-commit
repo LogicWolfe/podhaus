@@ -53,8 +53,11 @@ mise exec -- pipenv run python "$root/tools/lint-stack-env.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-content-hash.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-toml.py"
 mise exec -- pipenv run python "$root/tools/render-pomerium-keys.py" --verify
+mise exec -- pipenv run python "$root/tools/render-lan-addresses.py" --verify
 # These tests create repositories whose git commands need their own index.
 unset GIT_INDEX_FILE
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/tools/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/storage_binds/tests"
 mise exec -- pipenv run python -m unittest discover \

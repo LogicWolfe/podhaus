@@ -158,8 +158,8 @@ otelcol.processor.transform "svc_alloy" {
 // Scraped by IP because Alloy resolves through Docker's DNS, which has no
 // mDNS, so `turn-touch-burrow.local` is unreachable from in here. Both
 // addresses are pinned by UniFi reservations and reach this file as
-// environment variables from logging/bilby/stack.toml — Terraform owns them
-// (terraform/lan_addresses.tf); without the pin a DHCP drift would silently
+// environment variables from logging/bilby/stack.toml and the shared catalog
+// (config/lan-addresses.json); without the pin a DHCP drift would silently
 // end the scrape.
 //
 // Deliberately narrow: one target per device, ~10 series each. bilby's
@@ -217,7 +217,7 @@ otelcol.processor.batch "clickstack" {
 otelcol.exporter.otlphttp "clickstack" {
   client {
     // ClickStack lives on bandicoot: cross-LAN to its published :4318.
-    // The address comes from logging/bilby/stack.toml; Terraform owns it.
+    // The shared catalog supplies the address through logging/bilby/stack.toml.
     endpoint = "http://" + sys.env("BANDICOOT_LAN_IPV4") + ":4318"
     // Same reasoning as kangaroo's exporter: a fixed IP behind a published
     // port + NAT keeps a kept-alive connection mapped to a dead collector

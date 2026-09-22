@@ -16,18 +16,22 @@
       </p>
       <p id="lan-addresses">
         <strong>Every pinned LAN address has exactly one definition:</strong> the
-        <code>locals</code> block in <code>terraform/lan_addresses.tf</code>. The
-        <code>unifi_client</code> reservations beside it pin each DHCP lease to a
-        MAC, the split-horizon records give each address a name, and Terraform
-        publishes the addresses something outside Terraform actually reads to the
-        1Password item <strong>Podhaus LAN Addresses</strong>. Ansible reads that
-        item through the lookups in <code>ansible/inventory/group_vars/all.yml</code>;
-        komodo-op turns each field into an
-        <code>OP__KOMODO__PODHAUS_LAN_ADDRESSES__*</code> Komodo Variable that a
-        <code>stack.toml</code> environment block passes into compose. Addresses in
+        checked-in <code>config/lan-addresses.json</code> catalog. Terraform reads
+        it for DHCP reservations and split-horizon DNS. Ansible, Komodo startup
+        commands and the QNAP bootstrap read that same file directly, so host
+        provisioning does not depend on a running Komodo instance.
+        <code>tools/render-lan-addresses.py</code> generates
+        <code>komodo/sync/lan-addresses.toml</code>; ResourceSync publishes its
+        <code>LAN_*</code> variables, which stack environment blocks pass into Compose.
+        Edit the catalog and run <code>python3 tools/render-lan-addresses.py</code>
+        before committing; the pre-commit gate rejects stale generated values.
+        Addresses in
         prose on these pages are for the reader; the file above is the truth. Do not
         write an address into a compose file, Caddyfile, Gatus config, Alloy config,
         inventory entry, or script — read the variable instead.
+        Each consuming stack includes the catalog directory in its content hash,
+        so an address change redeploys those stacks after ResourceSync publishes
+        the variables.
       </p>
       <p>
         Each consumer compose file declares:

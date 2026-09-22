@@ -101,8 +101,7 @@ If Bandicoot is unavailable, work queues until it returns; there is no
 fallback runner. The daemon reaches Forgejo by pinning `git.pod.haus` to
 Bilby's LAN address inside the runner container and its job containers, which
 keeps the public hostname for TLS while bypassing Pomerium's browser login
-route; the address comes from Terraform, never from a literal in this repo
-(`terraform/lan_addresses.tf`). The runner's repository registration is durable
+route; Ansible reads the shared address from `config/lan-addresses.json`. The runner's repository registration is durable
 under `/opt/forgejo-runner/data`, while Ansible fetches a short-lived
 registration token only for first registration. Job containers do not receive
 Bandicoot's Docker socket. The runner removes disposable job resources on

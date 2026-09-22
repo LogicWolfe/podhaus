@@ -45,15 +45,15 @@ resource "unifi_port_forward" "mumble_tcp" {
 }
 
 # DHCP reservations. Every fixed_ip below reads local.<device>_ip from
-# lan_addresses.tf, which is the fleet's one definition of each address —
+# config/lan-addresses.json through lan_addresses.tf —
 # these resources are what make that definition true on the wire.
 #
 # DHCP reservations pinning kangaroo (the QNAP). Both NICs are cabled and
 # both reserved, so neither can drift off the address consumers expect:
 #   - eth0 1GbE (…78:bf) → kangaroo_ip_1g  (.232), the spare path
 #   - eth1 10GbE (…78:c0) → kangaroo_ip_10g (.25), the active path
-# Every consumer follows the 10GbE link: it is the address lan_addresses.tf
-# publishes as kangaroo_ipv4, so the spare NIC's reservation exists only to
+# Every consumer follows the 10GbE link: it is the address config/lan-addresses.json
+# defines as kangaroo_ipv4, so the spare NIC's reservation exists only to
 # keep the address free. Both stay live; QTS's arp_ignore/announce keep the two same-subnet IPs
 # from flapping. Import (existing clients):
 #   terraform import unifi_client.kangaroo     6a1d392d4f9fa3fc2042ea93

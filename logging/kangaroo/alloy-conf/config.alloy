@@ -91,8 +91,8 @@ otelcol.processor.batch "clickstack" {
 
 otelcol.exporter.otlphttp "clickstack" {
   client {
-    // bandicoot's LAN address, from logging/kangaroo/stack.toml; Terraform
-    // owns it (terraform/lan_addresses.tf).
+    // bandicoot's LAN address, from config/lan-addresses.json through
+    // logging/kangaroo/stack.toml.
     endpoint = "http://" + sys.env("BANDICOOT_LAN_IPV4") + ":4318"
     headers  = {
       // ClickStack ingestion API key (same key every host uses; injected via
