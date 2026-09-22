@@ -43,6 +43,10 @@ x-forgejo-environment: &forgejo-environment
   FORGEJO__security__REVERSE_PROXY_LIMIT: "1"
   FORGEJO__security__REVERSE_PROXY_TRUSTED_PROXIES: 172.18.0.0/16
   FORGEJO__security__DISABLE_QUERY_AUTH_TOKEN: "true"
+  # The nightly backup restarts Forgejo; sessions must survive on local disk.
+  FORGEJO__session__PROVIDER: file
+  FORGEJO__session__PROVIDER_CONFIG: /var/lib/gitea/data/sessions
+  FORGEJO__session__SESSION_LIFE_TIME: "2592000"
   FORGEJO__service__DISABLE_REGISTRATION: "true"
   FORGEJO__service__ALLOW_ONLY_EXTERNAL_REGISTRATION: "true"
   FORGEJO__service__REQUIRE_SIGNIN_VIEW: "true"

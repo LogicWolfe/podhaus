@@ -9,6 +9,8 @@ tags = ["podhaus"]
 # bandicoot over the LAN at ws://bandicoot.pod.haus:9120.
 address = ""
 enabled = true
+# Backups, builds and indexing can use every core without making services unhealthy.
+send_cpu_alerts = false
 disk_warning = 85.0
 disk_critical = 95.0
 

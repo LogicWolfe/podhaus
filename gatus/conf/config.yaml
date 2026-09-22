@@ -235,6 +235,29 @@ endpoints:
     <<: *defaults
     group: Media
 
+  # Radarr (bandicoot, lookup-only for Fenwick's movie suggestions) has
+  # no published port and no front door — nothing outside dockernet ever
+  # calls it directly, so there's no LAN address for gatus to probe the
+  # way it probes Sonarr above. Same Komodo InspectDockerContainer
+  # pattern as the Backrest (bandicoot) check below: asserts the
+  # container is running and its own healthcheck (curl against /ping)
+  # reports healthy.
+  - name: Radarr (bandicoot, via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Media
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"bandicoot","container":"radarr"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
   # Catches a stalled MeTube batch: if the last download in a batch errors,
   # metube/scripts/plexify's Exec postprocessor never runs, so the batch
   # sweep never runs either, and any file waiting its turn under
