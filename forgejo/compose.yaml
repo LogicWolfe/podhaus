@@ -65,6 +65,9 @@ x-forgejo-environment: &forgejo-environment
   # on separately provisioned remote runners (Fractal initially), never in the
   # Forgejo container or on Bilby's production Docker daemon.
   FORGEJO__repository__DISABLED_REPO_UNITS: ""
+  FORGEJO__repository__DEFAULT_REPO_UNITS: repo.code,repo.releases,repo.issues,repo.pulls,repo.wiki,repo.projects,repo.packages,repo.actions
+  FORGEJO__repository__DEFAULT_FORK_REPO_UNITS: repo.code,repo.pulls,repo.actions
+  FORGEJO__repository__DEFAULT_MIRROR_REPO_UNITS: repo.code,repo.releases,repo.issues,repo.wiki,repo.projects,repo.packages,repo.actions
   FORGEJO__attachment__STORAGE_TYPE: local
   FORGEJO__attachment__PATH: /data/jump/attachments
   FORGEJO__lfs__STORAGE_TYPE: local

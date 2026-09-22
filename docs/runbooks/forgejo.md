@@ -73,6 +73,13 @@ key reconciliation does not happen in a custom script.
 
 ## Actions and application delivery
 
+Actions stays enabled on every repository, including forks and mirrors.
+`forgejo/compose.yaml` explicitly includes `repo.actions` in all three
+repository-creation defaults and enables Actions globally. After creating or
+migrating a repository through the API, verify its `has_actions` field is
+`true`; request fields can override creation defaults. A missing workflow or
+runner is fixed without disabling Actions.
+
 Forgejo Actions is the CI control plane. Runners are outbound clients on
 separate hosts; Forgejo and Bilby's production Docker daemon never execute CI
 jobs. The fleet has one runner, on Bandicoot, registered as `bandicoot` and
