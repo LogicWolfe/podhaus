@@ -245,6 +245,22 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         pending-update alerts because their stored configuration is expected to match source.
       </p>
       <p>
+        <strong id="retiring-stack">Retiring a stack:</strong> ResourceSync is
+        additive (<code>delete = false</code>): removing a stack's
+        TOML or Compose files leaves its Komodo record and containers in place.
+        Before removing those files, stop and remove the retired stack's
+        containers, then delete its Komodo stack record. Preserve persistent
+        data unless its deletion is separately authorised. Remove dependent
+        schedules and any scheduler left with no jobs in the same retirement.
+      </p>
+      <p>
+        Verify both the container inventory on the host and Komodo's stack list,
+        then run the normal deployment procedure through completion. A retained
+        stack whose directory has been removed fails content-hash injection and
+        blocks fleet deployment. Keep that failure visible; do not enable global
+        sync deletion, which would also remove secrets managed outside TOML.
+      </p>
+      <p>
         Files in the sync directory today:
       </p>
       <ul>
