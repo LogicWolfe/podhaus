@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -51,6 +52,47 @@ class FakeCommands:
         )
 
 
+class SourceManifestTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.manifest = Path(self.temp.name) / "sources.json"
+        self.record = {
+            "name": "home", "type": "directory", "source": "/home/nathan/repos",
+            "required_path": ".",
+        }
+
+    def test_shared_manifest_preserves_source_type(self) -> None:
+        repository = self.record | {"name": "chezmoi", "type": "repository"}
+        self.manifest.write_text(json.dumps([self.record, repository]))
+        sources = MODULE.load_sources(self.manifest)
+        self.assertEqual([source.type for source in sources], ["directory", "repository"])
+        self.assertEqual(sources[0].source, Path("/home/nathan/repos"))
+        self.assertEqual(sources[0].required_path, Path("."))
+
+    def test_missing_extra_and_unknown_type_fields_fail(self) -> None:
+        missing = {key: value for key, value in self.record.items() if key != "type"}
+        invalid = [missing, self.record | {"extra": True}]
+        invalid.extend(self.record | {"type": value} for value in ("checkout", None, 1, []))
+        for record in invalid:
+            with self.subTest(record=record):
+                self.manifest.write_text(json.dumps([record]))
+                with self.assertRaises(RuntimeError):
+                    MODULE.load_sources(self.manifest)
+
+    def test_duplicate_names_fail(self) -> None:
+        self.manifest.write_text(json.dumps([self.record, self.record]))
+        with self.assertRaisesRegex(RuntimeError, "names must be unique"):
+            MODULE.load_sources(self.manifest)
+
+    def test_invalid_required_paths_fail(self) -> None:
+        for required in ("", "../outside", "/absolute", None):
+            with self.subTest(required=required):
+                self.manifest.write_text(json.dumps([self.record | {"required_path": required}]))
+                with self.assertRaises((RuntimeError, TypeError)):
+                    MODULE.load_sources(self.manifest)
+
+
 class SourceReconcilerTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -59,7 +101,9 @@ class SourceReconcilerTest(unittest.TestCase):
         MODULE.STATE_ROOT = root / "state"
         self.source = root / "source"
         (self.source / ".git").mkdir(parents=True)
-        self.slot = MODULE.SourceSlot("chezmoi", self.source, Path(".git"))
+        self.slot = MODULE.SourceSlot(
+            name="chezmoi", source=self.source, required_path=Path(".git"), type="repository"
+        )
         self.commands = FakeCommands()
         self.reconciler = MODULE.SourceReconciler((self.slot,), self.commands)
 

@@ -264,6 +264,12 @@ the running container. Its `/health` becomes degraded while repositories from
 other slots continue serving. The role owns only root state under `/opt`,
 `/etc/podhaus`, and systemd; repository paths under `/home` remain user state.
 
+Each entry in `/etc/podhaus/docs-sources.json` requires `name`, `type`,
+`source` and `required_path`. The type is `directory` for a directory containing
+repositories or `repository` for one checkout. Docs-server and Lumen consume
+the same declaration. When its schema or reconciler changes, the role stops
+the reconciliation timer and service before updating both files together.
+
 **`firewalld`** stages the declarative zone + service XML from role
 files — services before the zone, so the zone never references an
 undefined service — validates with `firewall-cmd --check-config` on
@@ -377,3 +383,24 @@ live gateway.
 
 See [Hosts → Adding another host](hosts.html#adding-host) for the
 end-to-end sequence including the Komodo-side resources.
+
+## Repository search
+
+Lumen supplies local semantic code search on Fractal, Voltaire, Bandicoot and
+Bilby. Komodo manages each host's Ollama embedding service, code model and
+`lumen:local` image through `lumen/<host>/stack.toml`. The `lumen-models` and
+`lumen-data` volumes retain models and indexes. Ofelia starts the local
+`lumen-sweep` container every ten minutes to refresh registered repositories
+and their Git worktrees, with overlapping scheduled sweeps disabled.
+
+Chezmoi installs `~/.local/bin/lumen`, the Claude and Codex connections, and
+`worktree-setup-common <worktree-path>` for background indexing after repository
+setup. Lumen preserves host paths inside its containers so linked worktrees
+resolve their shared Git directory. A new worktree outside an existing
+session's mounted source roots requires restarting that agent's Lumen connection.
+
+Use Lumen's `health_check` to verify the embedding service and model, and
+`index_status` for the target worktree to distinguish a ready index from one
+still warming. Inspect the reported warming container's logs and exit status
+when indexing fails. Missing source mounts remain visible failures; they do
+not mean a repository contains no matching code.

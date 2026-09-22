@@ -1,0 +1,37 @@
+# Fenwick uses Radarr on Bandicoot for movie metadata and posters.
+# It has no media-library mounts or public listener.
+services:
+  radarr:
+    container_name: radarr
+    image: lscr.io/linuxserver/radarr:latest
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      PUID: "1000"
+      PGID: "100"
+      RADARR__AUTH__METHOD: External
+      RADARR__AUTH__APIKEY: ${RADARR_API_KEY}
+    volumes:
+      - radarr-config:/config
+    networks:
+      - dockernet
+    mem_limit: 1g
+    cpus: 2
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:7878/ping
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  radarr-config:

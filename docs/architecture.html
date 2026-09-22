@@ -2,7 +2,7 @@
 
       <h1>Architecture</h1>
       <p class="lead text-lg text-text-muted">
-        Six active hosts, one Komodo Core, one git repo. Services run as Docker Compose stacks
+        Seven active hosts, one Komodo Core, one git repo. Services run as Docker Compose stacks
         whose configs are committed; secrets are templated in at deploy time from 1Password.
       </p>
 
@@ -73,16 +73,28 @@
         <a href="/komodo.html#operating-models">Komodo → operating models</a>.
       </p>
       <p>
-        Docs-server runs on Bilby, Fractal, and Voltaire. The Ansible
+        Docs-server runs on Bilby, Fractal, Voltaire and Bandicoot. The Ansible
         <code>docs_sources</code> role exposes each host's aggregate repository directory
         and canonical chezmoi checkout through stable read-only slots under
-        <code>/opt/podhaus/docs-sources</code>. The container mounts that slot root once;
+        <code>/opt/podhaus/docs-sources</code>. The shared repository manifest at
+        <code>/etc/podhaus/docs-sources.json</code> also feeds Lumen's local code
+        search and indexing. The docs container mounts that slot root once;
         an unavailable checkout makes docs health red without taking repositories from
         other slots offline. Host ownership and operating commands are documented in
         <a href="/host-provisioning.md">Host provisioning</a>, and alert coverage in
         <a href="/monitoring.html">Monitoring</a>.
       </p>
 
+      <p>
+        Komodo manages Lumen's embedding service and tooling image on Bilby,
+        Bandicoot, Fractal and Voltaire. Each host's Ofelia refreshes its indexes;
+        chezmoi exposes local search to Claude and Codex. See
+        <a href="/host-provisioning.md#repository-search">Repository search</a>.
+        Radarr runs on Bandicoot alongside Fenwick, providing movie metadata and
+        poster lookups over <code>dockernet</code> at <code>http://radarr:7878</code>.
+        Its configuration stays in the <code>radarr-config</code> volume; it has
+        no media-library mounts or published ports.
+      </p>
       <h2 id="design-principles">Design principles</h2>
       <p>These four principles trump local convenience whenever they conflict:</p>
 

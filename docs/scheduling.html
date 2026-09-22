@@ -10,8 +10,10 @@
       <h2 id="model">How ofelia works here</h2>
       <p>
         Each host with scheduled container jobs runs its own Ofelia: Bilby
-        (<code>ofelia/</code>), Bandicoot (<code>ofelia/bandicoot/</code>) and
-        Pinelake (<code>pinelake/ofelia/</code>). Each scheduler connects to its
+        (<code>ofelia/</code>), Bandicoot (<code>ofelia/bandicoot/</code>),
+        Fractal (<code>ofelia/fractal/</code>), Voltaire
+        (<code>ofelia/voltaire/</code>) and Pinelake
+        (<code>pinelake/ofelia/</code>). Each scheduler connects to its
         host's Docker socket and discovers jobs on that host. A job on another
         host needs a scheduler there; Bilby's scheduler does not discover or
         execute other hosts' container labels.
@@ -25,8 +27,8 @@
       <ul>
         <li><strong><code>job-exec</code></strong> — runs a command inside the target container
           via <code>docker exec</code>.</li>
-        <li><strong><code>job-run</code></strong> (rarely) — runs a one-shot ephemeral container
-          from a given image.</li>
+        <li><strong><code>job-run</code></strong> — starts a stopped container or creates
+          a one-shot container from an image. These labels belong on the scheduler.</li>
       </ul>
       <p>
         Cron schedules are interpreted in the scheduler container's local time. Bilby's
@@ -35,6 +37,13 @@
         means 04:00 at the host whose Ofelia executes it.
       </p>
 
+      <p>
+        Bilby, Bandicoot, Fractal and Voltaire share the Lumen schedule in
+        <code>ofelia/jobs/compose.yaml</code>. Every ten minutes their scheduler
+        starts the local <code>lumen-sweep</code> container to refresh repository
+        indexes. The Lumen stack owns that container's mounts and command;
+        <code>no-overlap</code> prevents concurrent scheduled sweeps.
+      </p>
       <h2 id="dead-time">04:00 local dead-time window</h2>
       <p>
         Scheduled work defaults to starting at <strong>04:00 local time</strong>. If a job is

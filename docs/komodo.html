@@ -248,6 +248,8 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <strong id="retiring-stack">Retiring a stack:</strong> ResourceSync is
         additive (<code>delete = false</code>): removing a stack's
         TOML or Compose files leaves its Komodo record and containers in place.
+        Confirm its consumers and intended use before retiring it: a deleted
+        definition does not establish that a service or development tool is unused.
         Before removing those files, stop and remove the retired stack's
         containers, then delete its Komodo stack record. Preserve persistent
         data unless its deletion is separately authorised. Remove dependent
