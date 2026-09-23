@@ -96,7 +96,7 @@ Docker container infrastructure for **seven** active hosts:
   and the `gnome_on_demand` role so GNOME runs only while the lid is open
   or a monitor is attached.
   Runs Komodo Core, `onepassword`, ClickStack, MeTube, the Forgejo Actions
-  runner, its own Backrest, and (since 2026-09-09) the Fenwick family — the
+  runner, its own Backrest, and the Fenwick family — the
   bot, signal-cli, brinno-downloader, and fenwick-web-agent.
 - **pinelake** (Apple M1 Mac mini, macOS, second household) is a dedicated
   media appliance. OrbStack is its sole container runtime; Plex, Flood,
