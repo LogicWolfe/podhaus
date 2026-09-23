@@ -92,8 +92,13 @@ scoped to a single repository. It is provisioned by
   which matches the architecture Komodo builds on Bilby;
 - the daemon waits persistently while each job container and network is
   disposable;
-- jobs have a one-hour timeout and may otherwise consume Bandicoot's available
-  host capacity;
+- jobs have a one-hour timeout and at most four run at once, set by
+  `podhaus_forgejo_runner_capacity`, and the rest queue; Bandicoot's 15 GiB
+  is shared with ClickStack, Komodo Core and Fenwick, and a Rust build job
+  takes several GiB;
+- job containers start with an OOM score adjustment of 900, so when memory
+  runs out earlyoom and the kernel kill CI jobs before host services or
+  interactive sessions;
 - no Bilby runner exists. A future runner elsewhere must justify itself
   explicitly.
 

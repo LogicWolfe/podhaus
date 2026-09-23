@@ -1,6 +1,7 @@
 # Managed by podhaus Ansible (roles/earlyoom). Kill order comes from each
 # process's oom_score_adj, which chezmoi raises for dev work: bash commands
-# +900, shells and agents +600, the tmux server +300, services 0.
+# +900, shells and agents +600, the tmux server +300, services 0. Forgejo
+# runner job containers start at +900 (roles/forgejo_runner).
 #
 # Thresholds are earlyoom's own defaults; Fedora's packaged 4% / 400 MiB fires
 # too late to prevent the swap-thrash lockups seen on bilby. The avoid list is

@@ -4,10 +4,10 @@ log:
 
 runner:
   file: /data/.runner
-  # A finite value is required by the runner. Sixteen is deliberately above
-  # the expected job fan-out; the runner host is allowed to use its available
-  # capacity rather than serialising CI.
-  capacity: 16
+  # Bandicoot's 15 GiB is shared with ClickStack, Komodo Core and the Fenwick
+  # family, and a Rust build job takes several GiB. Four jobs fit beside them;
+  # the rest queue rather than exhaust memory and lose builds to earlyoom.
+  capacity: {{ podhaus_forgejo_runner_capacity }}
   timeout: {{ podhaus_forgejo_runner_timeout }}
   shutdown_timeout: 5m
   insecure: false
@@ -26,8 +26,12 @@ container:
   network: ""
   privileged: false
   # Checkout and promotion run inside job containers, so they need the same
-  # direct-origin resolution as the daemon's Actions protocol.
-  options: --add-host git.pod.haus:{{ podhaus_forgejo_runner_instance_address }}
+  # direct-origin resolution as the daemon's Actions protocol. When memory runs
+  # out, a CI job is the cheapest thing to lose: the OOM score makes earlyoom
+  # and the kernel pick job containers before host services or dev sessions.
+  options: >-
+    --add-host git.pod.haus:{{ podhaus_forgejo_runner_instance_address }}
+    --oom-score-adj=900
   valid_volumes: []
   # The daemon uses the mounted socket to create job containers; jobs never
   # receive the socket themselves.
