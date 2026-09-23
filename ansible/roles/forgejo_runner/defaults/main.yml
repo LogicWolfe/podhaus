@@ -1,6 +1,5 @@
 ---
 podhaus_forgejo_runner_dir: /opt/forgejo-runner
-podhaus_forgejo_runner_repository: LogicWolfe/fenwick
 podhaus_forgejo_runner_name: "{{ inventory_hostname }}"
 podhaus_forgejo_runner_instance_address: "{{ podhaus_forgejo_internal_address }}"
 podhaus_forgejo_runner_image: >-

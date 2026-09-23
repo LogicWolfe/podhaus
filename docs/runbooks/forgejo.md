@@ -82,8 +82,8 @@ runner is fixed without disabling Actions.
 
 Forgejo Actions is the CI control plane. Runners are outbound clients on
 separate hosts; Forgejo and Bilby's production Docker daemon never execute CI
-jobs. The fleet has one runner, on Bandicoot, registered as `bandicoot` and
-scoped to a single repository. It is provisioned by
+jobs. The fleet has one runner, on Bandicoot, registered as `bandicoot` for
+every repository owned by LogicWolfe. It is provisioned by
 `ansible/roles/forgejo_runner` through `ansible/playbooks/bandicoot.yml`:
 
 - `podhaus-ci-x64` runs ordinary Node/Deno container jobs;
@@ -106,9 +106,12 @@ If Bandicoot is unavailable, work queues until it returns; there is no
 fallback runner. The daemon reaches Forgejo by pinning `git.pod.haus` to
 Bilby's LAN address inside the runner container and its job containers, which
 keeps the public hostname for TLS while bypassing Pomerium's browser login
-route; Ansible reads the shared address from `config/lan-addresses.json`. The runner's repository registration is durable
-under `/opt/forgejo-runner/data`, while Ansible fetches a short-lived
-registration token only for first registration. Job containers do not receive
+route; Ansible reads the shared address from `config/lan-addresses.json`.
+The runner's user registration is durable under `/opt/forgejo-runner/data`,
+while Ansible fetches a short-lived registration token from the LogicWolfe
+account only for first registration. Repository workflows select the existing
+labels, so adding a repository needs no new runner; all repositories share the
+job limit and the runner cache. Job containers do not receive
 Bandicoot's Docker socket. The runner removes disposable job resources on
 completion and its cache lives under `/opt/forgejo-runner/data/cache`.
 
