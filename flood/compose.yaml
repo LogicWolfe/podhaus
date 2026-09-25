@@ -132,11 +132,10 @@ services:
       # intermediate library dirs created by the tick are owned consistently
       # with the rest of the download/library tree.
       ofelia.job-exec.flood-publish.user: "1000:1001"
-      # Flood tag → Plex label mirror. 5min tick is the workhorse (Plex's own
-      # library scan lags publish, so the finish-hook pass usually no-ops);
-      # this catches tag-applied-after-completion and is idempotent + cheap at
-      # steady state (skips torrents whose tags already match the labelsync
-      # custom). See flood/scripts/plex-label-sync.py.
+      # Flood tag → Plex label mirror. Completion hooks run after 10s and 30s;
+      # this 5min tick catches slower Plex scans and tags applied later.
+      # Steady-state passes skip torrents whose tags match the labelsync custom.
+      # See flood/scripts/plex-label-sync.py.
       ofelia.job-exec.plex-label-sync.schedule: "0 */5 * * * *"
       ofelia.job-exec.plex-label-sync.command: "python3 /scripts/plex-label-sync.py"
       ofelia.job-exec.plex-label-sync.user: "1000:1001"

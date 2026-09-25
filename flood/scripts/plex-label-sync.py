@@ -16,9 +16,8 @@
 #
 # Trigger model mirrors pinelake-stignore (tags get applied at add-time,
 # mid-download, or after completion):
-#   - rtorrent event.download.finished hook (zero-latency on completion)
-#   - ofelia tick every 5 min (catches tag-applied-after-completion and is
-#     the workhorse, since Plex's own library scan lags the publish)
+#   - rtorrent event.download.finished hooks at 10 and 30 seconds after completion
+#   - ofelia tick every 5 min (catches slower Plex scans and tags applied later)
 #
 # Additive-only: removing a tag never strips the label (won't fight labels
 # set by hand in Plex). Access is revoked manually.
@@ -32,6 +31,7 @@
 # Plex's sharing label restrictions filter on. A tagged episode labels its
 # whole show.
 
+import argparse
 import fcntl
 import importlib.util
 import os
@@ -268,6 +268,11 @@ def heartbeat():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--delay-seconds", type=int, choices=(10, 30))
+    args = parser.parse_args()
+    if args.delay_seconds is not None:
+        time.sleep(args.delay_seconds)
     try:
         sys.stdout = open(LOG_FILE, "a")
         sys.stderr = sys.stdout

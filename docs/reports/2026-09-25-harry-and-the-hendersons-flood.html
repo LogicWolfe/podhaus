@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Harry and the Hendersons: Flood upload and tagging</title>
+  <style>
+    .doc-page {
+      --doc-paper: rgb(var(--bg, 255 255 255));
+      --doc-panel-color: rgb(var(--bg-soft, 246 250 246));
+      --doc-ink: rgb(var(--text, 15 23 42));
+      --doc-muted-color: rgb(var(--text-muted, 75 85 99));
+      --doc-line: rgb(var(--border, 229 231 235));
+      --doc-accent: rgb(var(--code-text, 17 94 64));
+      color: var(--doc-ink);
+      background: var(--doc-paper);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.6;
+      max-width: 72rem;
+      margin-inline: auto;
+    }
+    .doc-page .doc-panel,
+    .doc-page .doc-callout,
+    .doc-page .doc-diagram {
+      background: var(--doc-panel-color);
+      border: 1px solid var(--doc-line);
+      border-radius: .5rem;
+      padding: .75rem 1rem;
+      margin-block: 1rem;
+    }
+    .doc-page .doc-callout { border-inline-start: .25rem solid var(--doc-accent); }
+    .doc-page .doc-muted { color: var(--doc-muted-color); }
+    .doc-page .doc-badge {
+      display: inline-block;
+      color: var(--doc-ink);
+      background: var(--doc-panel-color);
+      border: 1px solid var(--doc-line);
+      border-radius: .25rem;
+      padding: .1em .45em;
+      font-size: .8em;
+    }
+    .doc-page .doc-diagram { overflow-x: auto; }
+    .doc-page .doc-diagram svg { display: block; max-width: 100%; height: auto; }
+    .doc-page .doc-diagram svg text { fill: currentColor; }
+    .doc-page .report-flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(10rem, 1fr));
+      gap: .6rem;
+      margin-block: 1rem;
+    }
+    .doc-page .report-flow.report-flow-three {
+      grid-template-columns: repeat(3, minmax(10rem, 1fr));
+    }
+    .doc-page .report-event {
+      border: 1px solid var(--doc-line);
+      border-top: .28rem solid var(--doc-accent);
+      border-radius: .4rem;
+      background: var(--doc-panel-color);
+      padding: .7rem;
+      min-width: 0;
+    }
+    .doc-page .report-event[data-result="failed"] { border-top-style: dashed; }
+    .doc-page .report-event time,
+    .doc-page .report-event strong,
+    .doc-page .report-event small { display: block; }
+    .doc-page .report-event strong { margin-block: .2rem; }
+    .doc-page .report-event small { color: var(--doc-muted-color); }
+    .doc-page .report-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .6rem;
+      align-items: center;
+      margin-block: .75rem;
+    }
+    .doc-page .report-tags span {
+      border: 1px solid var(--doc-line);
+      border-radius: .4rem;
+      background: var(--doc-panel-color);
+      padding: .45rem .65rem;
+    }
+    @media (max-width: 760px) {
+      .doc-page .report-flow,
+      .doc-page .report-flow.report-flow-three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 440px) {
+      .doc-page .report-flow,
+      .doc-page .report-flow.report-flow-three { grid-template-columns: 1fr; }
+    }
+    @media print {
+      .doc-page {
+        --doc-paper: #fff;
+        --doc-panel-color: #f6f6f6;
+        --doc-ink: #111;
+        --doc-muted-color: #555;
+        --doc-line: #ccc;
+        --doc-accent: #245c40;
+        color-scheme: light;
+        --tw-prose-body: var(--doc-ink);
+        --tw-prose-headings: var(--doc-ink);
+        --tw-prose-lead: var(--doc-muted-color);
+        --tw-prose-links: var(--doc-accent);
+        --tw-prose-bold: var(--doc-ink);
+        --tw-prose-captions: var(--doc-muted-color);
+        --tw-prose-code: var(--doc-ink);
+        --tw-prose-th-borders: var(--doc-line);
+        --tw-prose-td-borders: var(--doc-line);
+      }
+      .doc-page .doc-panel,
+      .doc-page .doc-callout,
+      .doc-page .doc-diagram,
+      .doc-page .report-event { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article class="doc-page">
+      <h1>Harry and the Hendersons: Flood upload and tagging</h1>
+      <p class="doc-muted">Investigation on 25 September 2026. Times below are Perth time (UTC+8).</p>
+
+      <div class="doc-callout">
+        <p><strong>Finding.</strong> Three file uploads reached Flood and received HTTP 500. Two later uploads were accepted, and the 1080p copy completed. The failed requests' exact error is unavailable: Flood logged the status but neither the exception nor the uploaded filename. Rowan's access lagged because Plex indexed the new movie after Flood's completion hook. Your manual labels made it visible before the scheduled retry. Flood also held the misspelled tag <code>Indig</code>.</p>
+      </div>
+
+      <h2>What the logs show</h2>
+      <div class="report-flow" role="list" aria-label="Flood file upload results in time order">
+        <div class="report-event" data-result="failed" role="listitem"><time>24 Sep · 18:57:28</time><strong>500 · failed</strong><small>First upload attempt</small></div>
+        <div class="report-event" data-result="failed" role="listitem"><time>24 Sep · 18:57:44</time><strong>500 · failed</strong><small>Retry, 16 seconds later</small></div>
+        <div class="report-event" role="listitem"><time>25 Sep · 06:51:32</time><strong>202 · accepted</strong><small>2160p torrent present now</small></div>
+        <div class="report-event" data-result="failed" role="listitem"><time>25 Sep · 06:53:43</time><strong>500 · failed</strong><small>Another upload attempt</small></div>
+        <div class="report-event" role="listitem"><time>25 Sep · 06:54:25</time><strong>202 · accepted</strong><small>1080p torrent present now</small></div>
+      </div>
+      <p>All five requests were <code>POST /api/torrents/add-files</code>. The three failures each returned an 89-byte response. A 500 generated by Flood rules out the browser-to-Flood gateway as the point of rejection, but response length alone cannot identify the underlying error. The logs contain no file names or error messages for these requests, so they cannot establish whether all three failures were the same release or why that file was rejected.</p>
+
+      <h2>Why Rowan did not see it immediately</h2>
+      <div class="report-flow report-flow-three" role="list" aria-label="Movie publication and Plex label timing">
+        <div class="report-event" role="listitem"><time>06:55:04 → 06:55:10</time><strong>Publish, then Plex scan</strong><small>Completion triggered the Flood hook before Plex created the movie.</small></div>
+        <div class="report-event" role="listitem"><time>06:58:35 → 06:58:38</time><strong>Manual labels, then visible</strong><small>You set indigo and rowan; Rowan's client fetched the movie three seconds later.</small></div>
+        <div class="report-event" role="listitem"><time>07:00:00</time><strong>Scheduled sync</strong><small>The five-minute retry ran after your correction.</small></div>
+      </div>
+      <p>Flood's completion pass can only label a movie after Plex has indexed its file. Here Plex created the movie six seconds after completion triggered the hook, and no label application was logged until the scheduled 07:00 pass. The indexing race explains the window when Rowan's label-filtered account could not find the movie; the manual Plex edit closed it first. A read-only query using Rowan's own Plex access now finds it in Kids Movies.</p>
+
+      <h2>Why the Indigo label was wrong</h2>
+      <p>The 07:00 sync logged <code>labeled movie 'Harry and the Hendersons' += Indig,rowan</code>. It copied Flood's torrent tags, including <code>Indig</code> without the final <code>o</code>; the logs do not show how that spelling was entered. Its <code>rowan</code> message is misleading in this case: your 06:58 edit had already supplied Rowan's label. The script compares label spelling with exact case, so it treated lowercase <code>rowan</code> as missing beside Plex's existing <code>Rowan</code>. An earlier sync recorded <code>Rowa</code> for another title, so a truncated tag has appeared before.</p>
+      <div class="report-tags" aria-label="Current tagging state">
+        <span><strong>Flood torrent:</strong> <code>Indig</code>, <code>rowan</code></span>
+        <span aria-hidden="true">→</span>
+        <span><strong>Plex movie now:</strong> <code>Indigo</code>, <code>Indig</code>, <code>Rowan</code></span>
+      </div>
+      <p>Your manual Plex edit supplied the intended <code>Indigo</code> and <code>Rowan</code> labels before the scheduled sync. The later sync left a stray <code>Indig</code> label, and the 1080p torrent still has that misspelled Flood tag. The 2160p torrent is accepted but incomplete; its current publish destination is <code>/data/Kids/TV</code>, which is also worth correcting for a movie.</p>
+
+      <h2>Next checks</h2>
+      <ul>
+        <li>To identify the 500's exact cause, inspect the failed <code>.torrent</code> file or the browser's 89-byte response body. Neither is retained in the available HyperDX logs. Flood's error handler returns the exception message to the client but does not log it.</li>
+        <li>Change the 1080p Flood tag from <code>Indig</code> to <code>Indigo</code> and remove the unwanted <code>Indig</code> Plex label. The label sync only adds labels; it never removes old ones. Check the entered tag before the next upload; the available logs cannot distinguish a typing error from a Flood input issue.</li>
+      </ul>
+      <p class="doc-muted">Evidence: HyperDX <em>Logs</em> source for Flood and Plex on 24–25 September; read-only checks of the current rTorrent tags, Plex labels, and Rowan's Plex library view on Bilby; the <a href="../runbooks/flood.html#plex-label-sync">Flood label-sync behavior</a> in the repository.</p>
+    </article>
+  </main>
+</body>
+</html>

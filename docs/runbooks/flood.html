@@ -311,9 +311,10 @@
           dockernet gateway at <code>172.18.0.1:32400</code>; the token is the same plex.tv
           account credential <code>plex/</code> uses.</li>
         <li><strong>Triggers</strong> — the rtorrent <code>event.download.finished</code> hook
-          (zero-latency) and an ofelia <code>*/5min</code> tick. The tick is the workhorse:
-          Plex's own library scan lags the publish, so the finish-hook pass usually finds the
-          file not-yet-indexed and no-ops, and the tick picks it up once Plex has scanned.</li>
+          launches background passes 10 and 30 seconds after completion, allowing publishing
+          and Plex indexing to finish. The ofelia <code>*/5min</code> tick catches slower scans
+          and tags applied after completion. Each pass is idempotent; a torrent whose tags
+          were already synced is skipped.</li>
         <li><strong>Label granularity is the show/movie</strong> — the only level Plex's
           sharing label restrictions filter on. A tagged episode labels its whole show.</li>
         <li><strong>Additive-only</strong> — removing a tag never strips the label (won't fight
