@@ -7,7 +7,7 @@ tags = ["podhaus"]
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/search-indexer"
-# Builds the node+mc+pagefind image inline (Dockerfile). Long-running
+# Builds the mc+pagefind image inline (Dockerfile). Long-running
 # service (sleep infinity) that ofelia execs into — no one-shot service,
 # so no ignore_services.
 run_build = true

@@ -1,4 +1,4 @@
-# nathanbaxter-deploy — build + mirror nathanbaxter.com to MinIO.
+# nathanbaxter-deploy — build + mirror nathanbaxter.com to RustFS.
 #
 # One-shot builder container: clones LogicWolfe/nathanbaxter@main from
 # Forgejo (SSH over dockernet, read-only deploy key) into the
