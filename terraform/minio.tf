@@ -198,8 +198,8 @@ resource "rustfs_serviceaccount" "pets_alive_assets" {
 }
 
 # Copy these two outputs into 1Password (Homelab) item
-# "MINIO Pets Alive Assets" with fields ACCESS_KEY_ID / SECRET_ACCESS_KEY
-# → OP__KOMODO__MINIO_PETS_ALIVE_ASSETS__* (see pets-alive/stack.toml).
+# "RustFS Pets Alive Assets" with fields ACCESS_KEY_ID / SECRET_ACCESS_KEY
+# → OP__KOMODO__RUSTFS_PETS_ALIVE_ASSETS__* (see pets-alive/stack.toml).
 output "pets_alive_assets_access_key" {
   value     = rustfs_serviceaccount.pets_alive_assets.access_key
   sensitive = true
@@ -306,7 +306,7 @@ resource "onepassword_item" "doggos_indigo_publish" {
 
 # RustFS's SFTP host key. Generated once here so it never changes across
 # redeploys — a changed host key is a scary warning on her iPad.
-# Published for komodo-op → OP__KOMODO__MINIO_SFTP_HOST_KEY__PRIVATE_KEY_B64,
+# Published for komodo-op → OP__KOMODO__SFTP_HOST_KEY__PRIVATE_KEY_B64,
 # consumed by rustfs/stack.toml.
 resource "tls_private_key" "minio_sftp_host" {
   algorithm = "ED25519"

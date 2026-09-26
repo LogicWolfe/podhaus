@@ -68,14 +68,17 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
       </p>
       <p>
         The <code>backrest-state</code> plan runs last. Its successful or unchanged-skip hook
-        verifies both Jump sentinels and repository IDs, requires a snapshot dated today for every
-        Bandicoot plan, copies Bandicoot's snapshots into Bilby's repository, applies retention
-        only to <code>created-by:bandicoot</code> snapshots, then mirrors the combined repository
-        to OneDrive. It reports either nightly heartbeat only after the whole sequence succeeds.
+        verifies Bilby's Jump sentinel and repository identity before any work. It requires a
+        snapshot dated today for every Bandicoot plan before copying those snapshots into Bilby's
+        repository and applying retention only to <code>created-by:bandicoot</code> snapshots.
+        If that source copy fails, it still mirrors Bilby's already-verified repository to OneDrive,
+        then returns failure. Its existing nightly heartbeat reports only after the complete copy
+        and upload, so it proves Bilby's aggregate off-site copy and upload without hiding a
+        Bandicoot failure.
       </p>
 
       <h2 id="bandicoot-plans">Bandicoot plans</h2>
-      <p>Configured in <code>backup/bandicoot/config.json.tmpl</code>. Its repository is on Jump and has no independent OneDrive writer. Every plan creates a nightly snapshot even when unchanged, so the copy gate can prove current source data from repository snapshots.</p>
+      <p>Configured in <code>backup/bandicoot/config.json.tmpl</code>. Its repository is on Jump and has no independent OneDrive writer. Every plan creates a nightly snapshot even when unchanged, so the copy gate can prove current source data from repository snapshots. Its own <code>backrest-state</code> heartbeat proves the local Bandicoot backup pipeline; Bilby's off-site heartbeat never replaces that signal.</p>
       <table>
         <thead><tr><th>Plan</th><th>Source</th><th>Schedule</th></tr></thead>
         <tbody>
@@ -129,19 +132,19 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
       <h2 id="sky-backups">Sky backups on Pouch</h2>
       <p>
         Sky's client writes an encrypted restic repository to the private
-        <code>sky-backups</code> bucket at <code>pouch.pod.haus</code>. The dedicated MinIO
+        <code>sky-backups</code> bucket at <code>pouch.pod.haus</code>. The dedicated RustFS
         instance runs on kangaroo and stores its data directly under
-        <code>/share/CACHEDEV1_DATA/Pouch/minio</code>.
+        <code>/share/CACHEDEV1_DATA/Pouch/rustfs</code>.
       </p>
       <p>
         This repository is deliberately outside the fleet Backrest plans and OneDrive rclone
         hooks. It is already an additional backup copy, and the placement requirement is that
         none of it lands on Jump. Pouch loss therefore loses this repository; Sky's source data
-        is the rebuild source. See the <a href="/runbooks/pouch-minio">Pouch MinIO runbook</a>.
+        is the rebuild source. See the <a href="/runbooks/pouch-rustfs">Pouch RustFS runbook</a>.
       </p>
       <p>
         Gatus has a <code>Backup / Sky Restic Repository</code> check. An hourly monitor lists
-        committed <code>snapshots/&lt;id&gt;</code> objects in MinIO and requires one written within
+        committed <code>snapshots/&lt;id&gt;</code> objects in RustFS and requires one written within
         the last seven days. A normal restic backup creates a snapshot even when the source tree
         hasn't changed, so the check measures completed backup runs without a client callback.
         A new empty repository gets seven days from its <code>config</code> object's creation time

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Check the Restic repository's committed snapshot objects in MinIO. Restic
+# Check the Restic repository's committed snapshot objects in RustFS. Restic
 # writes snapshots/<id> only when a backup reaches its commit point, including
 # normal successful runs whose file tree is unchanged.
 set -u
@@ -34,7 +34,7 @@ publish_result() {
 # the container environment and never gets written into the image or repo.
 if ! mc alias set --quiet "$alias_name" "$SKY_BACKUPS_ENDPOINT" \
     "$SKY_BACKUPS_ACCESS_KEY" "$SKY_BACKUPS_SECRET_KEY" >/dev/null; then
-    echo "sky-backups monitor: couldn't configure the MinIO client" >&2
+    echo "sky-backups monitor: couldn't configure the RustFS client" >&2
     exit 1
 fi
 

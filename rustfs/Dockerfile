@@ -13,7 +13,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/usr/src/rustfs/target \
     cargo run --locked --bin gproto && \
-    cargo build --release --locked --bin rustfs --features sftp && \
+    cargo build --release --locked --bin rustfs --features sftp \
+      --config 'profile.release.package.rustfs.codegen-units=16' && \
     install -m 0755 target/release/rustfs /usr/local/bin/rustfs
 
 FROM ubuntu:26.04

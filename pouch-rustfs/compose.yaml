@@ -10,6 +10,7 @@ services:
       RUSTFS_VOLUMES: /data
       RUSTFS_ADDRESS: 0.0.0.0:9000
       RUSTFS_CONSOLE_ENABLE: "false"
+      RUSTFS_OBS_LOG_DIRECTORY: ""
     volumes:
       - /share/CACHEDEV1_DATA/Pouch/rustfs:/data
     ports:

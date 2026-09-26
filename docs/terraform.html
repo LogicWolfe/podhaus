@@ -136,6 +136,9 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
         The <code>1Password/onepassword</code> provider remains for credentials it
         can read or manage cleanly, including Pocket ID, Pouch RustFS, Forgejo, and
         the Sky backup accounts.
+        Before running this root, unset <code>RUSTFS_ENDPOINT</code>, <code>RUSTFS_USER</code>,
+        and <code>RUSTFS_SECRET</code>: the native provider gives those environment variables
+        precedence over both configured RustFS endpoints, including the Pouch alias.
       </blockquote>
       <p>
         The S3 state backend is the public
@@ -205,14 +208,12 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
 
       <h2 id="dr">Disaster recovery</h2>
       <p>
-        After a bilby rebuild, before any <code>tf apply</code> runs, the
-        <code>terraform-state</code> bucket has to exist in RustFS with the current state
-        objects. Order:
+        Terraform state is on Bandicoot's RustFS, so a Bilby rebuild does not restore or deploy
+        that stack. If Bandicoot storage is lost, follow the tagged RustFS restore procedure in
+        <a href="/disaster-recovery.html#bandicoot-rustfs-recovery">Disaster recovery</a> before
+        running Terraform. Then:
       </p>
       <ol>
-        <li>Bring RustFS up via Komodo (<code>./komodo-sync</code> + deploy).</li>
-        <li>Restore <code>/var/lib/rustfs</code> from the most recent Backrest snapshot
-          via the Backrest UI. The bucket + objects come back intact.</li>
         <li><code>cd terraform && terraform init</code> — TF
           finds the restored state.</li>
         <li><code>terraform plan</code> — inspect and resolve any drift before applying.</li>

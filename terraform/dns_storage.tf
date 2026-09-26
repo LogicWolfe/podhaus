@@ -1,4 +1,4 @@
-# storage.pod.haus — the public MinIO S3 endpoint. DNS-only
+# storage.pod.haus — the public RustFS S3 endpoint. DNS-only
 # (grey-cloud): Cloudflare is authoritative DNS but NEVER in the data
 # path (its HTTP proxy mangles the SigV4-signed Accept-Encoding header
 # and its single-level Universal SSL cert can't cover Publii's

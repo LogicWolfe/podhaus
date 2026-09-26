@@ -335,13 +335,6 @@
           "actionCommand": {
             "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_ENDPOINT_ID}/external?success=true'"
           }
-        },
-        {
-          "conditions": ["CONDITION_SNAPSHOT_SUCCESS", "CONDITION_SNAPSHOT_SKIPPED"],
-          "onError": "ON_ERROR_IGNORE",
-          "actionCommand": {
-            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BANDICOOT_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_BANDICOOT_ENDPOINT_ID}/external?success=true'"
-          }
         }
       ],
       "skipIfUnchanged": true

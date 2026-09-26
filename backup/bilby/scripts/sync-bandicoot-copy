@@ -1,0 +1,39 @@
+#!/bin/sh
+# A separate process keeps errexit effective while the parent hook continues
+# to upload Bilby's existing repository after a source-copy failure.
+set -eu
+
+source_repository=/repos/podhaus-bandicoot
+destination_repository=/repos/podhaus
+source_repository_id=af91f4420f462b9a2fe6c5f27ba1259ee3fbf0fb9ecca5629544b8d46b517791
+expected_plans='clickstack-mongo rustfs backrest-state komodo onepassword metube sonarr fenwick'
+
+repository_id() {
+  restic -r "$1" cat config --json | jq -er '.id'
+}
+
+require_current_snapshot() {
+  repository=$1
+  plan=$2
+  today=$(date +%Y-%m-%d)
+  restic -r "$repository" snapshots --json \
+    --tag "created-by:bandicoot,plan:$plan" |
+    jq -e --arg today "$today" '[.[] | select(.time | startswith($today))] | length > 0' >/dev/null
+}
+
+[ -e "$source_repository/.podhaus-share-mounted" ]
+[ "$(repository_id "$source_repository")" = "$source_repository_id" ]
+
+for plan in $expected_plans; do
+  require_current_snapshot "$source_repository" "$plan"
+done
+
+restic -r "$destination_repository" --retry-lock 1h copy \
+  --from-repo "$source_repository" --tag 'created-by:bandicoot'
+restic -r "$destination_repository" --retry-lock 1h forget \
+  --tag 'created-by:bandicoot' --group-by host,paths,tags \
+  --keep-daily 14 --keep-weekly 4 --keep-monthly 6
+
+for plan in $expected_plans; do
+  require_current_snapshot "$destination_repository" "$plan"
+done

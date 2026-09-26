@@ -95,15 +95,6 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
           the same quiesced snapshot, then follow the
           <a href="/runbooks/forgejo">Forgejo runbook</a> before starting it.
         </li>
-        <li>Deploy <code>rustfs</code> first so the Terraform state backend is available, then
-          restore <code>/var/lib/rustfs</code> from the latest Backrest snapshot.
-          The stack's own <code>rustfs-init</code> service re-asserts the
-          <code>terraform-state</code> bucket with versioning idempotently
-          (<code>mc mb --ignore-existing</code> + <code>mc version enable</code>),
-          so the cold-start path needs no manual <code>mcli</code> step. Verify
-          the bucket holds the restored <code>podhaus.tfstate</code> via
-          <a href="https://rustfs.pod.haus">rustfs.pod.haus</a> or
-          <code>mcli ls local/terraform-state</code>.</li>
         <li>Deploy <code>caddy</code> next: Terraform's backend is the public
           <code>https://storage.pod.haus</code> (Caddy + LE wildcard). LAN clients reach
           Caddy direct via UniFi split-horizon; external clients arrive via the
@@ -130,6 +121,39 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
         <code>komodo-start</code>. Folding this into the script as an automatic first-boot
         path is a deferred follow-up.
       </blockquote>
+
+      <h2 id="bandicoot-rustfs-recovery">Restoring Bandicoot RustFS</h2>
+      <p>
+        RustFS and the Terraform state backend live on Bandicoot. A Bilby rebuild does not
+        deploy or restore this stack. When Bandicoot storage is lost, restore its snapshots
+        from Bilby's existing OneDrive mirror with their Bandicoot and plan tags; never use an
+        unrestricted <code>latest</code> selection from that mixed repository.
+      </p>
+      <ol>
+        <li>Stop the <code>rustfs</code> stack in Komodo. The target
+          <code>/var/lib/rustfs</code> must be empty before files are placed there.</li>
+        <li>After downloading <code>onedrive:Backups/podhaus-restic</code> as described in
+          <a href="#offsite-restore">Restoring from OneDrive</a>, identify the exact RustFS
+          snapshot and restore it to a new empty working directory:
+          <pre><code>restic -r ./recovery/podhaus snapshots \
+  --tag 'created-by:bandicoot,plan:rustfs'
+restic -r ./recovery/podhaus restore &lt;snapshot-id&gt; \
+  --target ./rustfs-restore</code></pre>
+        </li>
+        <li>Copy the restored <code>./rustfs-restore/userdata/rustfs/</code> contents into the
+          empty data root, retaining the RustFS runtime owner:
+          <pre><code>sudo install -d -o 10001 -g 10001 /var/lib/rustfs
+sudo rsync -a --chown=10001:10001 \
+  ./rustfs-restore/userdata/rustfs/ /var/lib/rustfs/</code></pre>
+        </li>
+        <li>Start RustFS through Komodo only after the copy completes. Its init service
+          re-asserts the versioned <code>terraform-state</code> bucket.</li>
+        <li>Restore another Bandicoot plan by selecting its own exact tag, for example
+          <code>created-by:bandicoot,plan:komodo</code>. The copied plans are
+          <code>clickstack-mongo</code>, <code>rustfs</code>, <code>backrest-state</code>,
+          <code>komodo</code>, <code>onepassword</code>, <code>metube</code>,
+          <code>sonarr</code>, and <code>fenwick</code>.</li>
+      </ol>
 
       <h2 id="kangaroo-rebuild">Fresh kangaroo from scratch</h2>
       <p>Assumes kangaroo is QTS-installed with Container Station available.</p>
@@ -271,9 +295,11 @@ rclone sync onedrive:Backups/podhaus-kangaroo-restic  ./recovery/kangaroo</code>
         <li>Pull the restic password from 1P (Emergency Kit gets you in if 1P account access
           is gone; the password lives at
           <code>op://Homelab/restic-repo-password/credential</code>).</li>
-        <li>Browse and restore from each repo with regular restic commands:
-          <pre><code>restic -r ./recovery/podhaus snapshots
-restic -r ./recovery/podhaus restore latest --target ./out</code></pre>
+        <li>Browse snapshots by host and plan tags, then restore the selected snapshot:
+          <pre><code>restic -r ./recovery/podhaus snapshots --tag 'created-by:bandicoot,plan:rustfs'
+restic -r ./recovery/podhaus restore &lt;snapshot-id&gt; --target ./out</code></pre>
+          Bilby plans and copied Bandicoot plans share this repository, so use the
+          <code>created-by:bandicoot,plan:&lt;plan&gt;</code> tag for every Bandicoot restore.
         </li>
         <li>Stage the restored files on a fresh bilby/kangaroo and run the relevant
           rebuild runbook above.</li>

@@ -69,9 +69,24 @@ mcli alias remove doggos
 
 ## Rotating her password
 
-Set `update_secret = true` on `rustfs_user.doggos_indigo_deploy` in
-`terraform/minio.tf`, apply, set it back. The 1Password item follows
-because Terraform writes it. Then re-enter the password in Blocs.
+This is a deliberate Terraform replacement, not a normal rollout action. The
+native RustFS user secret requires replacement, so rotation recreates the user
+with the same username and policy and updates the Terraform-owned 1Password
+item. Temporarily remove <code>prevent_destroy</code> only from
+<code>random_password.rustfs_user_doggos_indigo_deploy</code> in
+<code>terraform/rustfs_credentials.tf</code>, then save and review this plan:
+
+```sh
+op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
+  terraform -chdir=terraform plan \
+  -replace=random_password.rustfs_user_doggos_indigo_deploy \
+  -out=doggos-password-rotation.tfplan
+```
+
+Confirm that it replaces that user and updates the Doggos 1Password item, then
+apply the saved plan with <code>terraform -chdir=terraform apply
+doggos-password-rotation.tfplan</code>. Restore <code>prevent_destroy</code> on the password
+resource immediately afterward and enter the new password in Blocs.
 
 ## The editable original
 

@@ -49,12 +49,10 @@ services:
       RUSTFS_SFTP_ENABLE: "true"
       RUSTFS_SFTP_ADDRESS: 0.0.0.0:8022
       RUSTFS_SFTP_HOST_KEY_DIR: /run/podhaus-secrets/sftp
-      RUSTFS_OBS_LOG_DIRECTORY: /logs
+      RUSTFS_OBS_LOG_DIRECTORY: ""
     volumes:
       - /var/lib/rustfs:/data
       - rustfs-secrets:/run/podhaus-secrets:ro
-    tmpfs:
-      - /logs:uid=10001,gid=10001,mode=0750
     ports:
       - 9000:9000
       - 9001:9001
@@ -65,7 +63,12 @@ services:
       podhaus.depends-on-rustfs-secrets-init: ${BUILD_HASH_RUSTFS_SECRETS_INIT:-unset}
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health/ready"]
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS http://localhost:9000/health/ready &&
+          timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/8022;
+          IFS= read -r banner <&3; [[ "$${banner}" == SSH-* ]]'
       interval: 30s
       timeout: 5s
       retries: 3

@@ -7,8 +7,8 @@ tags = ["bandicoot", "podhaus"]
 server = "bandicoot"
 linked_repo = "podhaus-bandicoot"
 run_directory = "backup/bandicoot"
-# Shared first so this overlay's healthcheck override wins (see
-# backup/bilby/stack.toml). Local-only like pinelake: no OneDrive leg yet.
+# Shared first so this overlay's healthcheck override wins. Bilby copies
+# these snapshots into its repository before its existing OneDrive sync.
 file_paths = ["../compose.shared.yaml", "compose.yaml"]
 run_build = true
 ignore_services = ["backrest-init"]

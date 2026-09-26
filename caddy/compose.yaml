@@ -48,8 +48,7 @@ services:
         condition: service_completed_successfully
     # Public TLS front: must be reachable on the host LAN interface so
     # the UniFi WAN:443 port-forward (and the split-horizon LAN name)
-    # land here. Unlike MinIO (loopback-only), Caddy is intentionally
-    # LAN/WAN-facing.
+    # land here. Caddy is intentionally LAN/WAN-facing.
     ports:
       - 443:443
       - 8022:8022

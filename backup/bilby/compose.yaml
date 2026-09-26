@@ -25,10 +25,6 @@ services:
     volumes:
       - ${PODHAUS_REPO}/backup:/tmpl/shared:ro,z
       - ${PODHAUS_REPO}/backup/bilby:/tmpl/host:ro,z
-    environment:
-      GATUS_BACKREST_BANDICOOT_ENDPOINT_ID: ${GATUS_BACKREST_BANDICOOT_ENDPOINT_ID}
-      GATUS_BANDICOOT_PUSH_TOKEN: ${GATUS_BANDICOOT_PUSH_TOKEN}
-
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   backrest:
@@ -39,8 +35,6 @@ services:
       - label:disable
     environment:
       GATUS_BACKREST_ENDPOINT_ID: ${GATUS_BACKREST_ENDPOINT_ID}
-      GATUS_BACKREST_BANDICOOT_ENDPOINT_ID: ${GATUS_BACKREST_BANDICOOT_ENDPOINT_ID}
-      GATUS_BANDICOOT_PUSH_TOKEN: ${GATUS_BANDICOOT_PUSH_TOKEN}
     image: podhaus-backrest:local
     pull_policy: never
     build:

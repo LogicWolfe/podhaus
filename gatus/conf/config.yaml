@@ -347,8 +347,8 @@ endpoints:
 
   # --- storage.pod.haus paths ---
   # On-bilby probe (LAN/split-horizon resolves to bilby:443 directly):
-  # tests Caddy + MinIO. Independent of the relay. Catches a
-  # Caddy/MinIO/cert failure on-box.
+  # tests Bilby Caddy + Bandicoot RustFS. Independent of the relay. Catches a
+  # Caddy/RustFS/cert failure on-box.
   - name: RustFS S3 (storage.pod.haus, on-bilby)
     url: https://storage.pod.haus/health/ready
     <<: *defaults
@@ -947,7 +947,7 @@ external-endpoints:
       interval: 3m
     alerts:
       - type: custom
-        description: "Sky's release monitor has not checked in for 3 minutes. The minute job may be stopped or unable to read the MinIO manifest; inspect the caddy/ofelia logs before trusting the edge cache."
+        description: "Sky's release monitor has not checked in for 3 minutes. The minute job may be stopped or unable to read the RustFS manifest; inspect the caddy/ofelia logs before trusting the edge cache."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true
@@ -997,7 +997,7 @@ external-endpoints:
         send-on-resolved: true
 
   # An hourly monitor lists the Restic repository's committed snapshot objects
-  # in Pouch MinIO. A normal backup creates snapshots/<id> even when its tree is
+  # in Pouch RustFS. A normal backup creates snapshots/<id> even when its tree is
   # unchanged; interrupted uploads that leave only packs or indexes don't pass.
   # Endpoint key: `backup_sky-restic-repository`.
   - name: Sky Restic Repository
@@ -1007,7 +1007,7 @@ external-endpoints:
       interval: 2h
     alerts:
       - type: custom
-        description: "Sky's Restic repository has no snapshot committed within the last 7 days, or the hourly MinIO snapshot check has stopped reporting. Check the laptop's backup scheduler and Restic logs, then inspect sky-backups/personal-laptop/snapshots/ at pouch.pod.haus. The client must not use --skip-if-unchanged."
+        description: "Sky's Restic repository has no snapshot committed within the last 7 days, or the hourly RustFS snapshot check has stopped reporting. Check the laptop's backup scheduler and Restic logs, then inspect sky-backups/personal-laptop/snapshots/ at pouch.pod.haus. The client must not use --skip-if-unchanged."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true
@@ -1019,9 +1019,9 @@ external-endpoints:
       interval: 25h
     alerts:
       - type: custom
-        description: "Backrest's nightly backup pipeline didn't check in. Either no snapshots ran tonight, or the post-plan rclone sync to OneDrive failed. Investigate: `docker logs backrest`, or query in HyperDX (watch.pod.haus), and check /mnt/pouch/backups for the expected repository state."
-        failure-threshold: 3
-        success-threshold: 2
+        description: "Bilby's off-site backup did not complete: a local backup, Bandicoot snapshot copy or OneDrive upload failed or stopped reporting. Inspect the Backrest hook logs and /mnt/jump/backups and /mnt/jump/backups-bandicoot on Bilby."
+        failure-threshold: 1
+        success-threshold: 1
         send-on-resolved: true
 
   # bandicoot's nightly pipeline: the backrest-state plan pushes success
@@ -1033,9 +1033,9 @@ external-endpoints:
       interval: 25h
     alerts:
       - type: custom
-        description: "bandicoot's Backrest nightly didn't check in: no snapshot of the ClickStack mongo dumps ran, or the repo on /mnt/jump/backups-bandicoot errored. Investigate: `docker logs backrest` on bandicoot, and the bind's sentinel (`ls /mnt/jump/backups-bandicoot/.podhaus-share-mounted`)."
-        failure-threshold: 3
-        success-threshold: 2
+        description: "Bandicoot's local nightly backups failed or stopped reporting. The separate Bilby nightly check reports their off-site copy. Investigate: `docker logs backrest` on bandicoot, and the bind's sentinel (`ls /mnt/jump/backups-bandicoot/.podhaus-share-mounted`)."
+        failure-threshold: 1
+        success-threshold: 1
         send-on-resolved: true
 
   - name: Backrest Forgejo
