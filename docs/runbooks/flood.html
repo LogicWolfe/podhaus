@@ -21,7 +21,8 @@
       <p>
         <code>flood/Dockerfile.flood</code> builds Flood 4.16.2 from the private
         <a href="https://git.pod.haus/LogicWolfe/flood">LogicWolfe/flood fork</a>,
-        branch <code>podhaus</code>. Its logging change records caught request failures.
+        branch <code>podhaus</code>. Its patch logs caught request failures and captures
+        failed file uploads for inspection.
         Keep the source revision and runtime image tag on the same release because the
         runtime supplies external modules. Source access uses a read-only, repository-restricted
         token from the Homelab <code>Flood Source</code> item, exposed only as a BuildKit secret.
@@ -72,7 +73,8 @@
         client failures are warnings. Arbitrary error properties, request bodies, cookies
         and authorization headers are excluded from this diagnostic record.
         Alloy preserves the full record and uses its timestamp and severity.
-        Failed file-add requests also save their original torrent bytes and an
+        File-add requests that pass authentication and destination validation but fail
+        in the torrent client gateway also save their original torrent bytes and an
         <code>error.json</code> record under <code>/tmp/failed-uploads/request-*</code>.
         A correlated log record supplies <code>failedUploadPath</code>. A failed batch
         retains all submitted files because some may already have been added.
@@ -81,13 +83,32 @@
         Inspect it before restarting Flood. Capture errors are logged separately and
         preserve the original upload error.
       </p>
+      <ol>
+        <li>Find the <code>Request failed</code> record and match its <code>reqId</code>
+          to <code>Failed upload retained for inspection</code>. Use that record's
+          <code>failedUploadPath</code> inside the web container.</li>
+        <li>Read <code>error.json</code> with <code>docker exec flood cat</code>.
+          It records the exception and each numbered torrent's byte count and SHA-256
+          checksum. Compare the checksum with the original file on the uploading device;
+          matching files prove that the upload preserved its bytes.</li>
+        <li>For <code>Invalid data: Missing delimiter ":" [0x3a]</code>, inspect the
+          torrent encoding. A file that ends before a declared byte string finishes is
+          truncated. If the original matches, investigate the source download. Missing
+          piece hashes cannot be reconstructed from the incomplete file.</li>
+        <li>Check the torrent list before retrying a failed batch: the error banner can
+          report the whole request as failed even when individual torrents were added.
+          Retry the rejected file alone to isolate its error.</li>
+        <li>After diagnosis, remove only that request directory and any temporary copies.
+          There is no need to restart Flood or discard other pending captures.</li>
+      </ol>
       <p>
         Locally, use <code>docker logs --since 10m flood</code> and
         <code>docker logs --since 10m rtorrent</code>, substituting the Pinelake names
         there. Engine and job files under <code>/flood-db</code> reach ClickStack as
         <code>rtorrent</code> or <code>pinelake-rtorrent</code>. The remote-control
-        request limit is 10,000,000 bytes; a multi-file upload is one request, so retain
-        the error record and total torrent-file sizes when investigating a batch failure.
+        request limit is 10,000,000 bytes. The deployed socket connection sends one
+        engine request per torrent within a single web upload, so do not infer an
+        engine size-limit failure from the combined batch size. Use the logged exception.
       </p>
       <h2 id="atomic-publish">Atomic publish: redirect + hardlink</h2>
       <p>

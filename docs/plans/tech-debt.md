@@ -42,3 +42,51 @@ account in one deliberate credential migration, then delete the stale Komodo
 variables and verify stock Terraform still runs from any chezmoi-managed
 machine. Runtime certificates and service tokens used by stacks remain in the
 Homelab vault.
+
+## Deployment failures can leave the parent procedure green
+
+**Status:** Open. Inspect individual deployment results until corrected.
+
+The `podhaus-inject-content-hashes` action in `komodo/sync/actions.toml` awaits
+`DeployStack` without checking the returned update's success, increments its
+deployed count unconditionally, and logs caught exceptions without failing the
+action. During the Flood migration on 2026-09-26, Gatus deployment
+`6ab725b59b43c5b181c5b181` failed to build, while parent procedure
+`6ab725409b43c5b181c5b0b8` reported success. The normal procedure also invokes
+`BatchDeployStackIfChanged`; its child-failure propagation needs coverage.
+
+Make a failed child deployment fail the action and enclosing procedure, with
+the affected stack named in the error. Verify both a returned unsuccessful
+update and a thrown execution error, plus the batch deployment path. A failed
+image build must never produce an overall successful deployment result.
+
+## Two build images still depend on an unavailable MinIO client image
+
+**Status:** Open. Existing running images are unaffected; fresh builds are at risk.
+
+`search-indexer/Dockerfile` and `nathanbaxter-deploy/Dockerfile` both use
+`quay.io/minio/mc:latest`. On 2026-09-26 that image returned HTTP 401 repeatedly
+and blocked the Gatus monitor build. The official direct client downloads also
+returned HTTP 410. `gatus/Dockerfile.monitor` builds the official client source
+with Go instead; its native ARM build and real backup check passed.
+
+Apply that source-build approach to both remaining consumers. Preserve their
+installed command names: `mc` for the search indexer and `mcli` for the website
+builder. Verify fresh native builds and their object-storage operations before
+deploying; do not remove their existing working images as part of the change.
+
+## Caddy and Pomerium collection discards structured diagnostic fields
+
+**Status:** Open. Flood's collector already preserves its full error record.
+
+`logging/alloy-modules/caddy.alloy` replaces each structured record with logger
+name and message; `logging/alloy-modules/pomerium.alloy` keeps only service,
+component and message. Their `stage.output` blocks discard the remaining
+fields, so central logs cannot recover diagnostic context that exists in the
+original container record.
+
+Preserve useful structured diagnostics while retaining correct timestamps and
+severity. Decide explicitly which request fields to redact before broadening
+retention: richer diagnostics must not copy credentials or sensitive request
+data into central storage. Verify representative error records end to end in
+ClickStack and assert that credential canaries remain absent.
