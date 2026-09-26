@@ -28,6 +28,7 @@ class ContainerPair:
         self.names = [f'{self.prefix}-{i}.mkv' for i in range(3)]
         self.contents = [(name + '\n').encode() * 600 for name in self.names]
         self.hashes = []
+        self.failed_upload_path = None
 
     def python(self, source, *args):
         return subprocess.check_output(['docker', 'exec', '-i', self.engine, 'python3', '-c', source, *args], text=True).strip()
@@ -134,10 +135,25 @@ console.log(JSON.stringify({status:response.status,body:await response.json()}))
         assert error['err']['message'] and error['level'] == 50, error
         for canary in ['secret-cookie-canary', 'secret-auth-canary', 'secret-payload-canary', 'c2VjcmV0LXBheWxvYWQtY2FuYXJ5']:
             assert canary not in json.dumps(error), error
+        captures = [json.loads(line) for line in lines if line.startswith('{') and '"msg":"Failed upload retained for inspection"' in line]
+        capture = next(record for record in reversed(captures) if record['reqId'] == error['reqId'])
+        self.failed_upload_path = capture['failedUploadPath']
+        source = "const fs=require('fs');const p=process.argv[1];if(fs.readFileSync(p+'/1.torrent').toString()!=='secret-payload-canary')throw Error('Captured bytes differ');if((fs.statSync(p+'/1.torrent').mode&511)!==384)throw Error('Permissions too broad');JSON.parse(fs.readFileSync(p+'/error.json'));"
+        subprocess.run(['docker', 'exec', self.web, 'node', '-e', source, self.failed_upload_path], check=True)
+        print('PASS failed upload bytes and private diagnostic files', flush=True)
         print('PASS structured failure cause, route/status, and input canaries excluded', flush=True)
         print(json.dumps(error), flush=True)
 
+    def verify_capture_restart(self):
+        subprocess.run(['docker', 'restart', self.web], check=True)
+        source = "if(require('fs').existsSync(process.argv[1]))throw Error('Failed upload survived restart');"
+        subprocess.run(['docker', 'exec', self.web, 'node', '-e', source, self.failed_upload_path], check=True)
+        print('PASS failed uploads disappear on container restart', flush=True)
+
     def cleanup(self):
+        if self.failed_upload_path:
+            subprocess.run(['docker', 'exec', self.web, 'node', '-e',
+                            "require('fs').rmSync(process.argv[1],{recursive:true,force:true})", self.failed_upload_path], check=True)
         loaded = set(self.rpc('download_list'))
         for thash in self.hashes:
             if thash in loaded:
@@ -165,5 +181,7 @@ if __name__ == '__main__':
             pair.restart()
         pair.complete()
         pair.logging()
+        if args.restart:
+            pair.verify_capture_restart()
     finally:
         pair.cleanup()

@@ -2,7 +2,7 @@ FROM node:24-alpine AS build
 RUN apk add --no-cache curl && npm install -g corepack && corepack enable
 WORKDIR /source
 # Keep this revision and the runtime tag on the same Flood release.
-ARG FLOOD_REVISION=c7e369eb6660c82117dd56d648b526f466be317e
+ARG FLOOD_REVISION=cf79aab8e375595d1cd87122f203068ee349f614
 # BuildKit keeps the private source credential out of layers and image metadata.
 RUN --mount=type=secret,id=flood_source_token,required=true \
     curl --fail --silent --show-error --location \

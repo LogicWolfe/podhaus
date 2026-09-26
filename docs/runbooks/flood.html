@@ -72,6 +72,14 @@
         client failures are warnings. Arbitrary error properties, request bodies, cookies
         and authorization headers are excluded from this diagnostic record.
         Alloy preserves the full record and uses its timestamp and severity.
+        Failed file-add requests also save their original torrent bytes and an
+        <code>error.json</code> record under <code>/tmp/failed-uploads/request-*</code>.
+        A correlated log record supplies <code>failedUploadPath</code>. A failed batch
+        retains all submitted files because some may already have been added.
+        This private, 128 MiB temporary mount clears whenever the Flood container
+        stops or restarts; it is not part of persistent state or backups.
+        Inspect it before restarting Flood. Capture errors are logged separately and
+        preserve the original upload error.
       </p>
       <p>
         Locally, use <code>docker logs --since 10m flood</code> and

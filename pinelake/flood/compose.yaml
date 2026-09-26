@@ -53,6 +53,9 @@ services:
       FLOOD_SECRET: ${FLOOD_SECRET}
       TZ: ${TZ}
       LOG_FORMAT: json
+    # Failed upload bytes are private and disappear on every container restart.
+    tmpfs:
+      - /tmp/failed-uploads:rw,noexec,nosuid,nodev,size=128m,mode=0700,uid=501,gid=20
     volumes:
       - /Users/Shared/Podhaus/flood:/flood-db
       - type: bind
