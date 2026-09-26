@@ -138,7 +138,7 @@ storage.pod.haus, *.storage.pod.haus, storage.pod.haus:4444, *.storage.pod.haus:
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 
-	# The full MinIO API (S3 + admin) is served. The access-control
+	# The full RustFS API (S3 + admin) is served. The access-control
 	# boundary is RustFS's own SigV4 — unauthenticated calls (incl. to
 	# /minio/admin/) get AccessDenied; root/admin creds live only in
 	# 1Password + the chezmoi-rendered Terraform env. Deliberately NOT
@@ -148,7 +148,7 @@ storage.pod.haus, *.storage.pod.haus, storage.pod.haus:4444, *.storage.pod.haus:
 	reverse_proxy {$BANDICOOT_LAN_IPV4}:9000
 }
 
-# pouch.pod.haus is the public S3 endpoint for the separate MinIO instance
+# pouch.pod.haus is the public S3 endpoint for the separate RustFS instance
 # on kangaroo. This :443 site remains for LAN access and Kookaburra rollback;
 # Numbat uses the matching :4444 site above.
 pouch.pod.haus, pouch.pod.haus:4444 {
@@ -259,7 +259,7 @@ music.pod.haus {
 		}
 
 		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
-			# MinIO 404 (NoSuchKey) → raise error 404 so handle_errors
+			# RustFS 404 (NoSuchKey) → raise error 404 so handle_errors
 			# above can serve the styled 404 page while keeping the
 			# real status code.
 			@missing status 404
