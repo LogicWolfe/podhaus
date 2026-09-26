@@ -18,7 +18,7 @@
 # extraction failure we leave no marker, so flood/scripts/rar-backlog.sh
 # catches the stuck folder on its next daily run and Gatus alerts.
 #
-# Why bsdtar (libarchive) — see flood/Dockerfile. Why we don't trust its
+# Why bsdtar (libarchive) — see flood/Dockerfile.rtorrent. Why we don't trust its
 # exit code: libarchive emits "Truncated RAR file data" at the last-volume
 # boundary on legacy multi-volume sets even after a full extraction, so we
 # verify by comparing the count of non-archive "keeper" files before vs

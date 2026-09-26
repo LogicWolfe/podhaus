@@ -1,25 +1,21 @@
 [[stack]]
 name = "flood"
-description = "rtorrent + Flood web UI for torrents"
+description = "Separate rTorrent engine and Flood web UI with media publishing"
 tags = ["podhaus"]
 
 [stack.config]
 server = "podhaus"
 files_on_host = true
 run_directory = "/etc/komodo/repo/flood"
-# `flood-init` is a one-shot init container — it installs .rtorrent.rc
-# into /flood-db then exits 0 (flood depends_on it via
-# service_completed_successfully). Without this exclusion Komodo counts
-# its exited state and marks the whole stack Unhealthy. Same pattern as
-# plex/stack.toml and backup/{bilby,kangaroo}/stack.toml.
+
+# Successful one-shot init containers must not make the whole stack unhealthy.
 ignore_services = ["flood-init"]
-# flood now extends the upstream image with p7zip (see flood/Dockerfile)
-# so the event.download.finished hook can extract RARs in place. The
-# build runs on each deploy; Periphery's compose build is fast (single
-# `apk add` layer on top of the cached upstream image).
+
+# Both images are built locally, including the private Flood logging patch.
 run_build = true
 
 environment = """
+FLOOD_SOURCE_TOKEN=[[OP__KOMODO__FLOOD_SOURCE__PASSWORD]]
 FLOOD_SECRET=[[OP__KOMODO__FLOOD_SECRET__PASSWORD]]
 GATUS_OFELIA_PUSH_TOKEN=[[OP__KOMODO__GATUS_OFELIA_PUSH_TOKEN__TOKEN]]
 MEDIA_DIR=[[MEDIA_DIR]]

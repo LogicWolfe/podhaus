@@ -1,23 +1,22 @@
-scgi_local = /tmp/rtorrent.sock
+network.scgi.open_local = /tmp/rtorrent.sock
 
-encoding_list = UTF-8
-port_range = 49184-49184
-port_random = no
-check_hash = no
-directory = /data/torrents
-session = /flood-db
+network.listen.port.range.set = 49184-49184
+network.listen.port.random.set = no
+pieces.hash.on_completion.set = no
+directory.default.set = /data/torrents
 session.path.set = /flood-db
+# Container names enforce one engine; stale hostname/PID locks block crash recovery.
 session.use_lock.set = no
-encryption = allow_incoming, try_outgoing, enable_retry
+protocol.encryption.set = handshake_prefer, stream_prefer
 trackers.use_udp.set = yes
 dht.mode.set = off
 protocol.pex.set = no
 
-min_peers = 1
-max_peers = 100
-min_peers_seed = 1
-max_peers_seed = 50
-max_uploads = 15
+throttle.min_peers.normal.set = 1
+throttle.max_peers.normal.set = 100
+throttle.min_peers.seed.set = 1
+throttle.max_peers.seed.set = 50
+throttle.max_uploads.set = 15
 
 network.xmlrpc.size_limit.set = 10000000
 
@@ -49,7 +48,7 @@ method.set_key=event.download.finished,pinelake_stignore,"execute.nothrow.bg={py
 # Real-time in-place RAR extraction. Replaces the previous unpackerr
 # stack: rtorrent passes $d.base_path= (the exact directory the torrent
 # landed under), and the script walks it at any depth for the archive
-# entry-point, then runs 7za in place. Drops the _unpackerred.<dir>.txt
+# entry-point, then runs bsdtar in place. Drops the _unpackerred.<dir>.txt
 # marker so rar-backlog.sh's daily safety-net scan won't re-flag it.
 # Idempotent on the marker; failure-loud (leaves no marker) so the
 # safety-net catches stuck folders. See flood/scripts/rtorrent-extract.sh.

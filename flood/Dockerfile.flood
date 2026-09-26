@@ -1,0 +1,21 @@
+FROM node:24-alpine AS build
+RUN apk add --no-cache curl && npm install -g corepack && corepack enable
+WORKDIR /source
+# Keep this revision and the runtime tag on the same Flood release.
+ARG FLOOD_REVISION=c7e369eb6660c82117dd56d648b526f466be317e
+# BuildKit keeps the private source credential out of layers and image metadata.
+RUN --mount=type=secret,id=flood_source_token,required=true \
+    curl --fail --silent --show-error --location \
+      -H "Authorization: token $(cat /run/secrets/flood_source_token)" \
+      "https://git.pod.haus/api/v1/repos/LogicWolfe/flood/archive/${FLOOD_REVISION}.tar.gz" \
+      | tar xz --strip-components=1
+RUN corepack install && pnpm install --frozen-lockfile && pnpm run build
+
+# The upstream runtime supplies external modules; update it together with the fork.
+FROM jesec/flood:4.16.2
+USER root
+COPY --from=build /source/dist /usr/local/lib/node_modules/flood/dist
+RUN chmod 0755 /usr/local/lib/node_modules/flood/dist/index.js
+ARG STACK_CONTENT_HASH=unset
+ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
+USER 1001

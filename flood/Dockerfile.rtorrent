@@ -1,0 +1,22 @@
+FROM alpine:latest AS build
+RUN apk add --no-cache build-base pkgconf curl-dev openssl-dev zlib-dev ncurses-dev tinyxml2-dev curl
+WORKDIR /build
+# Alpine packages lag upstream; this release is verified against existing resume state.
+ARG RTORRENT_VERSION=0.16.24
+RUN curl -fL https://github.com/rakshasa/rtorrent/releases/download/v${RTORRENT_VERSION}/libtorrent-${RTORRENT_VERSION}.tar.gz | tar xz \
+ && cd libtorrent-${RTORRENT_VERSION} && ./configure --disable-debug && make -j4 && make install
+RUN curl -fL https://github.com/rakshasa/rtorrent/releases/download/v${RTORRENT_VERSION}/rtorrent-${RTORRENT_VERSION}.tar.gz | tar xz \
+ && cd rtorrent-${RTORRENT_VERSION} && ./configure --with-xmlrpc-tinyxml2 --disable-debug && make -j4 && make install
+# libarchive supports multi-volume RAR; Alpine 7zip lacks its RAR codec.
+# Python/PlexAPI serve the existing publishing and label-sync hooks.
+FROM alpine:latest
+RUN apk add --no-cache libcurl libstdc++ ncurses-libs tinyxml2 openssl zlib libarchive-tools python3 py3-pip tini \
+ && pip install --no-cache-dir --break-system-packages plexapi
+COPY --from=build /usr/local/bin/rtorrent /usr/local/bin/rtorrent
+COPY --from=build /usr/local/lib/libtorrent.so* /usr/local/lib/
+ARG STACK_CONTENT_HASH=unset
+ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
+ENV HOME=/flood-db
+# rTorrent saves session state on SIGINT; tini forwards it and reaps hook children.
+STOPSIGNAL SIGINT
+ENTRYPOINT ["/sbin/tini", "--", "rtorrent", "-o", "system.daemon.set=true"]

@@ -19,7 +19,7 @@
 # If the script itself never runs (container dead, ofelia broken), Gatus
 # misses the 25h heartbeat and alerts as a dead-man's switch.
 #
-# Scheduled via an Ofelia label on each Flood container; runs at 04:50 in the
+# Scheduled via an Ofelia label on each rTorrent container; runs at 04:50 in the
 # scheduler's local timezone.
 
 set -u

@@ -1,10 +1,5 @@
 services:
-  # One-shot init container that lays down the repo's rtorrent.rc into
-  # the flood-db volume at the dotfile path rtorrent expects. Replaces
-  # the previous single-file bind (which is forbidden — see
-  # docs/stack-conventions.html#bind-mounts). rtorrent reads the file
-  # once at startup, so this runs every time flood starts and the
-  # in-volume copy is always the same as the repo copy on next deploy.
+  # Install the startup config into local state; a directory bind survives atomic edits.
   flood-init:
     container_name: flood-init
     image: alpine:latest
@@ -12,6 +7,7 @@ services:
     volumes:
       - /var/lib/flood-db:/flood-db:z
       - ${PODHAUS_REPO}/flood/conf:/conf:ro,z
+      - rtorrent-socket:/tmp
     command:
       - /bin/sh
       - -c
@@ -19,14 +15,8 @@ services:
         set -e
         install -o 1000 -g 1001 -m 0644 /conf/rtorrent.rc /flood-db/.rtorrent.rc
         echo "rtorrent.rc installed at /flood-db/.rtorrent.rc"
-        # flood-publish's log + single-flight lock are touched by both the
-        # ofelia tick and rtorrent's uid-1000 execute hooks. Pre-own them
-        # 1000 so neither path hits a cross-uid permission error (a root-first
-        # run would otherwise create them root-owned and lock out the hooks).
-        # Explicit paths, no shell variables: docker compose interpolates
-        # bare shell variables in the command and would mangle them (an
-        # earlier loop variable expanded to empty and chmod'd /flood-db
-        # itself, stripping its execute bit and crash-looping flood).
+        # Explicit paths prevent Compose from expanding shell variables to empty strings.
+        # Pre-own logs and locks so scheduled jobs and completion hooks share one owner.
         touch /flood-db/flood-publish.log /flood-db/flood-publish.lock \
               /flood-db/plex-label-sync.log /flood-db/plex-label-sync.lock
         chown 1000:1001 /flood-db/flood-publish.log /flood-db/flood-publish.lock \
@@ -34,136 +24,119 @@ services:
         chmod 0664 /flood-db/flood-publish.log /flood-db/flood-publish.lock \
               /flood-db/plex-label-sync.log /flood-db/plex-label-sync.lock
 
+        chown 1000:1001 /tmp
+        chmod 0770 /tmp
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   flood:
     container_name: flood
-    # Local build adds libarchive-tools to the upstream image so the
-    # event.download.finished hook (scripts/rtorrent-extract.sh) can
-    # extract RARs in place. Pinning `pull_policy: build` keeps Komodo's
-    # deploy from trying to pull from Docker Hub.
-    #
-    # STACK_CONTENT_HASH is the build-arg side of the podhaus content-
-    # hash mechanism (see AGENTS.md "Content-hash change detection").
-    # The Stage 1 Action of podhaus-push-deploy injects per-service
-    # BUILD_HASH_<service> into the stack's env; feeding it into build
-    # args means any Dockerfile / build-context change invalidates
-    # docker's layer cache so the image actually rebuilds. The ARG
-    # inside the Dockerfile is named STACK_CONTENT_HASH for uniformity
-    # across stacks — the per-service variable is just how it reaches
-    # the build.
     build:
       context: .
+      dockerfile: Dockerfile.flood
+      secrets: [flood_source_token]
       args:
         STACK_CONTENT_HASH: ${BUILD_HASH_FLOOD:-unset}
     image: flood:local
     pull_policy: build
     restart: unless-stopped
     depends_on:
-      flood-init:
-        condition: service_completed_successfully
+      rtorrent:
+        condition: service_healthy
     command: --auth=none --rtsocket=/tmp/rtorrent.sock
     user: "1000:1001"
     environment:
       HOME: /flood-db
       FLOOD_SECRET: ${FLOOD_SECRET}
-      GID: "44"
       TZ: ${TZ}
-      # plex-label-sync.py reaches host-network Plex over the dockernet
-      # bridge gateway (same path Cloudflare Tunnel uses). The plex.tv
-      # account token authorizes admin access to your own server's local
-      # API. Sourced from the same 1Password item plex/ uses.
+      LOG_FORMAT: json
+    volumes:
+      - /var/lib/flood-db:/flood-db:z
+      - ${MEDIA_DIR}:/data
+      - rtorrent-socket:/tmp
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      podhaus.depends-on-rtorrent: ${BUILD_HASH_RTORRENT:-unset}
+    healthcheck:
+      # The sentinel rejects bare NFS mountpoints; timeout bounds stalled filesystem calls.
+      # Fifteen retries ride out NAS reboots without restart storms (2026-06-16).
+      test:
+        - CMD-SHELL
+        - timeout 10 sh -c 'wget -q -O- http://localhost:3000/ >/dev/null && grep -q " /flood-db " /proc/mounts
+          && [ -e /data/.podhaus-share-mounted ]'
+      interval: 60s
+      timeout: 15s
+      retries: 15
+      start_period: 60s
+    networks:
+      - dockernet
+  rtorrent:
+    container_name: rtorrent
+    build:
+      context: .
+      dockerfile: Dockerfile.rtorrent
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_RTORRENT:-unset}
+    image: rtorrent:local
+    pull_policy: build
+    restart: unless-stopped
+    depends_on:
+      flood-init:
+        condition: service_completed_successfully
+    user: "1000:1001"
+    environment:
+      HOME: /flood-db
+      TZ: ${TZ}
       PLEX_URL: http://172.18.0.1:32400
       PLEX_TOKEN: ${PLEX_ONLINE_TOKEN}
-      # Shared Gatus heartbeat push token for this container's ofelia jobs:
-      # /scripts/rar-backlog.sh (torrents_rar-extraction) and
-      # /scripts/pinelake-stignore.py (torrents_pinelake-stignore).
-      # Shared-secret bearer token; Gatus rejects pushes with any other value.
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
       GATUS_BASE_URL: http://gatus:8080
       GATUS_LABEL_SYNC_ENDPOINT_ID: torrents_plex-label-sync
       GATUS_RAR_ENDPOINT_ID: torrents_rar-extraction
       GATUS_STIGNORE_ENDPOINT_ID: torrents_pinelake-stignore
-      # This is the one source-side Flood instance allowed to mutate the four
-      # normal .stignore files. Pinelake uses the same image/config with this
-      # explicitly false.
-      PINELAKE_STIGNORE_SOURCE: "true"
+      # Only Bilby mutates source-side Syncthing exclusions; Pinelake disables this.
+      PINELAKE_STIGNORE_SOURCE: 'true'
     volumes:
-      # rtorrent session (~16 MB: .torrent + .libtorrent_resume + .rtorrent
-      # files). Local NVMe per the post-phase-6 sizing rule. The .rtorrent.rc
-      # file lands here too via flood-init above.
       - /var/lib/flood-db:/flood-db:z
       - ${MEDIA_DIR}:/data
-      # Hook + ofelia scripts as a directory bind so host edits propagate
-      # without restart. File-level binds pin the inode at mount time, so
-      # any tool that saves via atomic rename (vim, $EDITOR, Claude Code)
-      # leaves the container looking at the original inode forever.
-      # Contents:
-      #   - rtorrent-extract.sh   (event.download.finished hook; real-time
-      #                            in-place RAR extraction)
-      #   - rar-backlog.sh        (daily ofelia health-check + safety-net)
-      #   - pinelake-stignore.py  (event hook + 5min ofelia tick)
-      #   - flood-publish.py      (hardlink publisher + gap audit)
       - ${PODHAUS_REPO}/flood/scripts:/scripts:ro,z
+      - rtorrent-socket:/tmp
     labels:
       autoheal: "true"
-      # Daily RAR-extraction backlog scan. Runs 04:50 AWST (dead-time
-      # window, after backrest + plex cleanup). Pushes success/failure
-      # to Gatus heartbeat — dead-man's switch on the full extraction
-      # pipeline's health. See flood/rar-backlog.sh for logic.
+      autoheal.stop.timeout: "120"
+      # Daily extraction audit, minute publishing, and five-minute tag reconciliation
+      # cover torrents missed by completion hooks and tags applied after completion.
       ofelia.enabled: "true"
-      ofelia.job-exec.rar-backlog.schedule: "0 50 4 * * *"
-      ofelia.job-exec.rar-backlog.command: "/scripts/rar-backlog.sh"
-      # pinelake-tag → Pouch .stignore reconciler. 5min tick catches the
-      # tag-applied-after-completion case the rtorrent event.download.finished
-      # hook in rtorrent.rc can't cover. Script is idempotent (insert-only,
-      # grep -Fxq dedupe), so collisions with the event hook are harmless.
-      ofelia.job-exec.pinelake-stignore.schedule: "0 */5 * * * *"
-      ofelia.job-exec.pinelake-stignore.command: "python3 /scripts/pinelake-stignore.py"
-      # Hardlink-publish completed media from /data/torrents into the Plex
-      # library, file by file (every minute, at :00). Steady-state driver
-      # for file-at-a-time delivery; the event.download.finished hook gives
-      # near-instant publish on completion and this is the backstop. Cheap
-      # at steady state — fully-published completed torrents carry a pubdone
-      # custom flag and are skipped. See flood/scripts/flood-publish.py.
-      ofelia.job-exec.flood-publish.schedule: "0 * * * * *"
-      ofelia.job-exec.flood-publish.command: "python3 /scripts/flood-publish.py"
-      # Run as uid 1000 (same as rtorrent's execute hooks) so the log and any
-      # intermediate library dirs created by the tick are owned consistently
-      # with the rest of the download/library tree.
-      ofelia.job-exec.flood-publish.user: "1000:1001"
-      # Flood tag → Plex label mirror. Completion hooks run after 10s and 30s;
-      # this 5min tick catches slower Plex scans and tags applied later.
-      # Steady-state passes skip torrents whose tags match the labelsync custom.
-      # See flood/scripts/plex-label-sync.py.
-      ofelia.job-exec.plex-label-sync.schedule: "0 */5 * * * *"
-      ofelia.job-exec.plex-label-sync.command: "python3 /scripts/plex-label-sync.py"
-      ofelia.job-exec.plex-label-sync.user: "1000:1001"
+      ofelia.job-exec.rar-backlog.schedule: 0 50 4 * * *
+      ofelia.job-exec.rar-backlog.command: /scripts/rar-backlog.sh
+      ofelia.job-exec.pinelake-stignore.schedule: 0 */5 * * * *
+      ofelia.job-exec.pinelake-stignore.command: python3 /scripts/pinelake-stignore.py
+      ofelia.job-exec.flood-publish.schedule: 0 * * * * *
+      ofelia.job-exec.flood-publish.command: python3 /scripts/flood-publish.py
+      ofelia.job-exec.flood-publish.user: 1000:1001
+      ofelia.job-exec.plex-label-sync.schedule: 0 */5 * * * *
+      ofelia.job-exec.plex-label-sync.command: python3 /scripts/plex-label-sync.py
+      ofelia.job-exec.plex-label-sync.user: 1000:1001
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
     healthcheck:
-      # Stall-proof + stub-proof: prove the service via loopback wget,
-      # verify the local flood-db bind via /proc/mounts (cheap local read,
-      # never blocks), and prove /data is the real Pouch NFS via the
-      # .podhaus-share-mounted sentinel dropped on every NFS bind-source
-      # path. A bare-stub /mnt/pouch (NFS unmounted, host btrfs directory
-      # showing through the bind) lacks the sentinel and goes red —
-      # caught the 2026-05-23 post-reboot regression where /proc/mounts
-      # presence alone false-greened. The `timeout 10` envelope still
-      # guards against any soft-NFS stall. See
-      # docs/postmortems/2026-05-23-pouch-jump-mount-failure.md.
-      test: ["CMD-SHELL", "timeout 10 sh -c 'wget -q -O- http://localhost:3000/ >/dev/null && grep -q \" /flood-db \" /proc/mounts && [ -e /data/.podhaus-share-mounted ]'"]
+      # The sentinel rejects bare NFS mountpoints; timeout bounds stalled filesystem calls.
+      # Fifteen retries ride out NAS reboots without restart storms (2026-06-16).
+      test:
+        - CMD-SHELL
+        - timeout 10 python3 /scripts/rtorrent-health.py /data/.podhaus-share-mounted
       interval: 60s
       timeout: 15s
-      # retries 15 (≈15-min patience at 60s interval): a kangaroo NFS
-      # outage — every QNAP firmware auto-update reboots the NAS, dropping
-      # Pouch/Jump for minutes — must ride out without autoheal restart-
-      # storming this NFS-bind container (the storm wedged flood 2026-06-16).
-      # One successful probe after NFS returns resets to healthy in ~60s.
       retries: 15
       start_period: 60s
     networks:
       - dockernet
-
+    stop_grace_period: 2m
 networks:
   dockernet:
     external: true
+volumes:
+  rtorrent-socket: {}
+
+secrets:
+  flood_source_token:
+    environment: FLOOD_SOURCE_TOKEN

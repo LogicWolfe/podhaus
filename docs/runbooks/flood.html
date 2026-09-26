@@ -2,46 +2,49 @@
 
       <h1>Flood + RAR pipeline</h1>
       <p class="lead text-lg text-text-muted">
-        Flood (rtorrent + Flood web UI) is bilby-resident. Downloads land in
-        <code>/data/torrents</code> — a Plex-invisible working tree — never directly in
-        the library. RAR releases extract in place there, and completed media is
-        <strong>hardlinked file-by-file into the clean <code>/data/{TV,Movies,Kids}</code>
-        library</strong>. Plex therefore only ever sees complete files (the partial-file
-        scan race is gone), and a prioritized episode publishes the moment it finishes
-        rather than when the whole torrent does. Every config file lives in the repo and
-        bind-mounts into the container.
+        Flood provides the torrent web interface on Bilby and Pinelake. A separate
+        rTorrent engine downloads into <code>/data/torrents</code>, extracts RAR releases,
+        and hardlinks completed media into <code>/data/{TV,Movies,Kids}</code>.
+        Plex sees complete files while the engine retains its working copy for seeding.
       </p>
 
-      <h2 id="flood">Flood</h2>
+      <h2 id="flood">Services and updates</h2>
       <p>
-        <code>jesec/rtorrent-flood</code> upstream, locally extended via
-        <code>flood/Dockerfile</code> to add <code>libarchive-tools</code> (provides
-        <code>bsdtar</code> with permissive RAR-read + multi-volume support — the
-        right primitive for alpine, where standalone <code>unrar</code> isn't
-        packaged and the <code>p7zip</code> package doesn't ship the RAR codec) and
-        <code>python3</code> (runs <code>flood-publish.py</code>, which queries rtorrent
-        over its SCGI socket for per-file completion and hardlinks completed media into
-        the library). Runs as <code>1000:1001</code> so created files end up owned the
-        same as rtorrent's. UI on port 3000, reachable at <code>torrent.pod.haus</code>.
+        Bilby runs <code>flood</code> and <code>rtorrent</code> as <code>1000:1001</code>;
+        Pinelake runs <code>pinelake-flood</code> and <code>pinelake-rtorrent</code> as
+        <code>501:20</code>. The web interfaces remain at <code>torrent.pod.haus</code>
+        and <code>torrent.pinelake.haus</code>, behind Pomerium. Both processes share
+        local state and a Docker named volume providing <code>/tmp/rtorrent.sock</code>.
+        The engine owns completion hooks, scheduled jobs, Python, PlexAPI and
+        <code>bsdtar</code>; the web container owns the interface and settings.
       </p>
-      <blockquote>
-        <p><strong>Build-stack content-hash convention</strong></p>
-        flood uses a <code>build:</code> directive, which means changes to the
-        Dockerfile (and any future COPY-source files) need to invalidate docker's
-        image-layer cache. Per AGENTS.md "Content-hash change detection":
-        <code>flood/compose.yaml</code> passes
-        <code>build.args.STACK_CONTENT_HASH: ${BUILD_HASH_FLOOD:-unset}</code>
-        and the Dockerfile declares
-        <code>ARG STACK_CONTENT_HASH=unset</code> + ENV-from-ARG so a new value
-        busts the cache. <code>BUILD_HASH_FLOOD</code> is injected per-deploy
-        by Stage 1 of the push procedure. The running container never reads the
-        value; it's purely a layer-cache invalidation lever.
-      </blockquote>
+      <p>
+        <code>flood/Dockerfile.flood</code> builds Flood 4.16.2 from the private
+        <a href="https://git.pod.haus/LogicWolfe/flood">LogicWolfe/flood fork</a>,
+        branch <code>podhaus</code>. Its logging change records caught request failures.
+        Keep the source revision and runtime image tag on the same release because the
+        runtime supplies external modules. Source access uses a read-only, repository-restricted
+        token from the Homelab <code>Flood Source</code> item, exposed only as a BuildKit secret.
+        The fork keeps Actions enabled and tests the patch before updating the pinned revision.
+      </p>
+      <p>
+        <code>flood/Dockerfile.rtorrent</code> builds official rTorrent 0.16.24 source;
+        Alpine's packaged release trails upstream. Test engine updates against a stopped,
+        copied session directory before allowing access to live state. Each built service
+        uses the ordinary Podhaus build-content hash and dependency labels. Deploy through
+        Komodo so image builds, init and engine health complete before the web service starts.
+      </p>
+      <p>
+        Graceful engine shutdown uses <code>SIGINT</code> and a two-minute timeout,
+        including Autoheal restarts. Session locking is disabled because hostname/process
+        locks survive crashes inside containers; fixed container names enforce one managed
+        engine. Never run a second engine against the same state directory.
+      </p>
       <p>Storage:</p>
       <ul>
         <li><code>/var/lib/flood-db</code> (local NVMe) — rtorrent session
           (<code>.torrent</code> + <code>.libtorrent_resume</code> +
-          <code>.rtorrent</code> files for ~200 active torrents) plus the script logs
+          <code>.rtorrent</code> files for active torrents) plus the script logs
           and locks.</li>
         <li><code>/data/torrents</code> (under <code>/mnt/pouch</code>, mounted as
           <code>/data</code>) — the download/extract <strong>working tree</strong>: RAR
@@ -51,6 +54,33 @@
           working-tree copy, so it's a single copy on disk until the torrent is removed.</li>
       </ul>
 
+      <p>
+        Pinelake stores state at <code>/Users/Shared/Podhaus/flood</code> and maps
+        <code>/Volumes/TerraMaster/Torrents</code> to <code>/data</code>. Its pre-deploy
+        mount gate, non-creating bind mounts and UUID sentinel require the expected
+        external APFS volume. Unix sockets stay in OrbStack's Linux volume, not APFS.
+        <code>PLEX_MEDIA_ROOT=/Volumes/TerraMaster/Torrents</code> translates paths for
+        native Plex, reached through host networking. Only Bilby edits source-side
+        Syncthing exclusions.
+      </p>
+      <h2 id="upload-errors">Diagnosing failed uploads</h2>
+      <p>
+        Search ClickStack for <code>ServiceName=flood</code> (or
+        <code>pinelake-flood</code>) and <code>Request failed</code> at the failure time.
+        The complete structured record contains the exception message, stack, code,
+        request identifier, method, route and response status. Server failures are errors;
+        client failures are warnings. Arbitrary error properties, request bodies, cookies
+        and authorization headers are excluded from this diagnostic record.
+        Alloy preserves the full record and uses its timestamp and severity.
+      </p>
+      <p>
+        Locally, use <code>docker logs --since 10m flood</code> and
+        <code>docker logs --since 10m rtorrent</code>, substituting the Pinelake names
+        there. Engine and job files under <code>/flood-db</code> reach ClickStack as
+        <code>rtorrent</code> or <code>pinelake-rtorrent</code>. The remote-control
+        request limit is 10,000,000 bytes; a multi-file upload is one request, so retain
+        the error record and total torrent-file sizes when investigating a batch failure.
+      </p>
       <h2 id="atomic-publish">Atomic publish: redirect + hardlink</h2>
       <p>
         The core of the pipeline, and why Plex never sees a partial file:
@@ -186,8 +216,8 @@
       <ul>
         <li><code>${PODHAUS_REPO}/flood/conf/rtorrent.rc</code> installed onto
           <code>/flood-db/.rtorrent.rc</code> via the <code>flood-init</code> one-shot
-          init container — rtorrent reads it once at startup. flood-init also creates
-          <code>/data/torrents</code>-adjacent state and pre-owns the publish log/lock.</li>
+          init container — rtorrent reads it once at startup. Init also owns the socket
+          volume and pre-owns the publish log/lock.</li>
         <li><code>${PODHAUS_REPO}/flood/scripts</code> overlaid onto <code>/scripts</code>
           (directory bind, so host edits propagate without restart):
           <code>flood-publish.py</code> (per-file hardlink publisher + <code>--gaps</code>
@@ -204,11 +234,13 @@
 
       <h2 id="healthcheck-recovery">Healthcheck + recovery from NFS loss</h2>
       <p>
-        The flood healthcheck has three parts, each defending a specific failure mode:
+        Both services check local state and real media storage. Flood additionally checks HTTP;
+        the engine calls its remote-control interface through <code>rtorrent-health.py</code>.
+        Gatus checks engine health directly, as well as the web interface. The Bilby web probe checks:
       </p>
       <ol>
         <li><code>wget -q -O- http://localhost:3000/</code> — Flood's Node web server is up
-          (proves rtorrent's parent process is alive and serving).</li>
+          (checks the web process independently from the engine).</li>
         <li><code>grep -q " /flood-db " /proc/mounts</code> — the local NVMe bind is present
           (catches an unmounted volume after a docker volume rebuild).</li>
         <li><code>[ -e /data/.podhaus-share-mounted ]</code> — the sentinel proves
@@ -240,7 +272,7 @@
       </ol>
       <p>
         Worst-case manual recovery (QNAP is up, NFS is up, but containers stayed red):
-        <code>docker restart flood plex paperless backrest</code>. This is the
+        <code>docker restart rtorrent flood plex paperless backrest</code>. This is the
         bilby-side incident-response one-liner — covers every Pouch/Jump consumer.
       </p>
 

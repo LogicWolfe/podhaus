@@ -41,7 +41,7 @@ podhaus.plex_server_log "run" {
 
 podhaus.flood_job_logs "run" {
 	host       = "bilby"
-	container  = "flood"
+	container  = "rtorrent"
 	flood_db   = "/var/log/podhaus/flood-db"
 	forward_to = [podhaus.chain.run.receiver]
 }

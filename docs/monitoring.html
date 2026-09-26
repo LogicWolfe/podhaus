@@ -333,7 +333,10 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
           bilby and pinelake) — <code>flood-publish</code>, <code>rtorrent-extract</code>,
           <code>plex-label-sync</code> and <code>pinelake-stignore</code> redirect their own
           output to files under flood-db because rtorrent's finish hooks discard stdout;
-          rtorrent's own log is opened by <code>flood/conf/rtorrent.rc</code>. The
+          rtorrent's own log is opened by <code>flood/conf/rtorrent.rc</code>.
+          These records are attributed to <code>rtorrent</code> or <code>pinelake-rtorrent</code>.
+          Flood request errors retain their complete structured exception record, timestamp
+          and severity under the corresponding web service name. The
           five-minute <code>changed=0</code> stignore heartbeat is dropped in Alloy.</li>
         <li><strong>ClickHouse error log</strong> (<code>container_file_log</code>,
           bandicoot) — the only place ClickHouse's own errors land; tailed from the end
@@ -362,7 +365,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
       <ul>
         <li>parses that service's real event timestamp into the log entry,</li>
         <li>normalizes the level to a <code>detected_level</code> attribute,</li>
-        <li>reduces the Body down to the message.</li>
+        <li>retains the full structured Body for Flood request diagnostics; other parsers may reduce it to the message.</li>
       </ul>
       <p>
         After the chain, the shared <code>enrich.alloy</code> OTTL module stamps the host

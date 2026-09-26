@@ -629,6 +629,38 @@ endpoints:
       - "[BODY].State.Status == running"
       - "[BODY].State.Health.Status == healthy"
 
+  - name: Pinelake rTorrent (via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Torrents
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"pinelake","container":"pinelake-rtorrent"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
+  - name: rTorrent (via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Torrents
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"podhaus","container":"rtorrent"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
   # Komodo alert pipeline → Gatus. Komodo emits an alert for a range of
   # conditions: a stack deploy/build/procedure/action failure, a server
   # going unreachable, a host CPU/mem threshold breach, or an unexpected
@@ -1062,7 +1094,7 @@ external-endpoints:
       interval: 25h
     alerts:
       - type: custom
-        description: "RAR extraction pipeline is unhealthy. Either the rtorrent event.download.finished hook (rtorrent-extract.sh) didn't fire or failed (check `/flood-db/rtorrent-extract.log` inside the flood container), the cron job itself is broken (check ofelia + `docker logs flood | grep rar-backlog`), or the scanner found folders with RAR files >2h old and no extracted content alongside. Manual scan: `docker exec flood /scripts/rar-backlog.sh`. Full backlog paths land in the flood container logs."
+        description: "RAR extraction pipeline is unhealthy. Either the rtorrent event.download.finished hook (rtorrent-extract.sh) didn't fire or failed (check `/flood-db/rtorrent-extract.log` inside the rtorrent container), the cron job itself is broken (check ofelia + `docker logs ofelia | grep rar-backlog`), or the scanner found folders with RAR files >2h old and no extracted content alongside. Manual scan: `docker exec rtorrent /scripts/rar-backlog.sh`. Full backlog paths land in the job output collected by Ofelia."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true
@@ -1074,7 +1106,7 @@ external-endpoints:
       interval: 25h
     alerts:
       - type: custom
-        description: "Pinelake's RAR extraction and publish-backlog job stopped checking in or reported an error. Inspect pinelake-flood and pinelake-ofelia through Komodo; corrupt or incomplete archives are disposable, but completed media must publish before torrent working data is removed."
+        description: "Pinelake's RAR extraction and publish-backlog job stopped checking in or reported an error. Inspect pinelake-rtorrent and pinelake-ofelia through Komodo; corrupt or incomplete archives are disposable, but completed media must publish before torrent working data is removed."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true
@@ -1156,7 +1188,7 @@ external-endpoints:
       interval: 30m
     alerts:
       - type: custom
-        description: "The pinelake .stignore reconciler hasn't ticked in 30 min — newly-completed pinelake-tagged torrents won't be allowlisted for replication until it resumes. Check ofelia + `docker exec flood python3 /scripts/pinelake-stignore.py`."
+        description: "The pinelake .stignore reconciler hasn't ticked in 30 min — newly-completed pinelake-tagged torrents won't be allowlisted for replication until it resumes. Check ofelia + `docker exec rtorrent python3 /scripts/pinelake-stignore.py`."
         failure-threshold: 2
         success-threshold: 1
         send-on-resolved: true
@@ -1171,7 +1203,7 @@ external-endpoints:
       interval: 30m
     alerts:
       - type: custom
-        description: "The Plex label sync hasn't ticked in 30 min — newly-tagged torrents won't have their kid-access labels applied in Plex until it resumes. Check ofelia + `docker exec flood python3 /scripts/plex-label-sync.py` (then `/flood-db/plex-label-sync.log`). A FATAL there usually means Plex is unreachable at 172.18.0.1:32400 or the token is stale."
+        description: "The Plex label sync hasn't ticked in 30 min — newly-tagged torrents won't have their kid-access labels applied in Plex until it resumes. Check ofelia + `docker exec rtorrent python3 /scripts/plex-label-sync.py` (then `/flood-db/plex-label-sync.log`). A FATAL there usually means Plex is unreachable at 172.18.0.1:32400 or the token is stale."
         failure-threshold: 2
         success-threshold: 1
         send-on-resolved: true
@@ -1183,7 +1215,7 @@ external-endpoints:
       interval: 30m
     alerts:
       - type: custom
-        description: "Pinelake's Flood-to-Plex label sync stopped checking in. Inspect pinelake-flood and pinelake-ofelia through Komodo and confirm the preserved Pinelake Plex token still reaches localhost:32400."
+        description: "Pinelake's Flood-to-Plex label sync stopped checking in. Inspect pinelake-rtorrent and pinelake-ofelia through Komodo and confirm the preserved Pinelake Plex token still reaches localhost:32400."
         failure-threshold: 2
         success-threshold: 1
         send-on-resolved: true

@@ -34,7 +34,7 @@ podhaus.plex_server_log "run" {
 
 podhaus.flood_job_logs "run" {
 	host       = "pinelake"
-	container  = "pinelake-flood"
+	container  = "pinelake-rtorrent"
 	flood_db   = "/var/log/podhaus/flood-db"
 	forward_to = [podhaus.chain.run.receiver]
 }
