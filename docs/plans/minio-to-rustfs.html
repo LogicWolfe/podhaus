@@ -417,13 +417,13 @@ Never apply the target IAM deletion to the retained MinIO directories.</p>
 <tr><td>Doggos Indigo Publish, Sky Backups, Sky Backups Monitor</td><td>unchanged titles (Address field updated by Terraform)</td><td>Terraform</td><td>none</td></tr>
 </tbody>
 </table>
-<p class="doc-muted">The podhaus ResourceSync is additive, so the old <code>OP__KOMODO__MINIO_*</code> variables linger in Komodo after komodo-op stops producing them. Cleanup lists them for <code>DeleteVariable</code>.</p>
+<p class="doc-muted">The podhaus ResourceSync is additive, but komodo-op independently deletes managed variables whose item titles no longer exist. The old MinIO aliases are gone. Rollback uses saved resolved Compose environment files and keeps the current RustFS-named secret references when restoring managed stack definitions; credential values are unchanged.</p>
 
 <h2>Delivery status</h2>
 
 <h3>Completed cutover</h3>
 <ul>
-<li>✅ Both RustFS copies are running from manually prepared data copies. The original MinIO data directories are stopped and untouched; their Komodo records and containers are gone, while volumes, saved images, credentials and checkpoints remain.</li>
+<li>✅ Both RustFS stores are now Komodo-managed and running from their migrated data copies. The original MinIO data directories are stopped and untouched; their Komodo records and containers are gone, while volumes, saved images, credentials and checkpoints remain.</li>
 <li>✅ Primary comparison matched 55,108 version and delete-marker records, including exact plaintext SHA-256 values, metadata and timestamps. Pouch comparison matched 14,956 keys by key, size, ETag and time, with all 81 restic snapshot IDs identical. Bucket configuration matched semantically.</li>
 <li>✅ Native IAM applied 17 resources using the same 11 adopted secret values. Ordinary users loaded from the copied data; MinIO service accounts did not, so Terraform recreated them. Pouch transitioned before the primary store, and the serial-151 follow-up Terraform plan had no changes.</li>
 <li>✅ The console moved to <code>rustfs.pod.haus</code> and the Doggos publish address moved to <code>storage.pod.haus</code>. All four S3 client credentials passed CRUD and cross-bucket-denial probes; Publii's signed virtual-host HEAD passed.</li>
@@ -433,14 +433,14 @@ Never apply the target IAM deletion to the retained MinIO directories.</p>
 
 <h3>Pending delivery and recovery proof</h3>
 <ul>
-<li>⬜ The corrected source build is running. A version-newline defect caused the RustFS update worker to panic; the rebuild pins <code>RUSTFS_BUILD_VERSION=1.0.0</code>, uses 16 code-generation units and two root build jobs, and temporarily swaps the update worker to <code>REMOVE</code>. It still needs to finish, then <code>main</code> at <code>bbf0634</code> needs its managed push and CI.</li>
-<li>⬜ The eight Bandicoot backup plans are running. Afterward, prove Bilby's restic copy into its existing OneDrive mirror, restore all eight tagged plans, and restore RustFS in isolation.</li>
-<li>⬜ Run <code>restic check --read-data</code> on Pouch, then prove a new backup and file restore. Console authentication and managed health checks remain pending.</li>
-<li>⬜ A real Indigo iPad publish and Sky client backup are optional device smoke tests. Protocol-equivalent probes already cover the server contracts; those device checks do not block the server rollout.</li>
+<li>✅ The corrected SFTP image built and deployed on Bandicoot with <code>RUSTFS_BUILD_VERSION=1.0.0</code>, two build jobs and 16 code-generation units for the RustFS package. The temporary 32 GiB build swap was removed. The deployed release reports 1.0.0, starts its SFTP listener and has no update-worker panic. Infrastructure CI passed at <code>e9e4805</code>. Two publishing images now build the official MinIO client source because the former registry image returns 401; the website publisher completed a real publish, and search-indexer rebuilt, deployed healthy and read the bucket successfully. The managed deployment completed; both infrastructure and pets CI passed.</li>
+<li>✅ All eight Bandicoot backup plans completed successfully. RustFS was stopped for its snapshot, restarted healthy, and left no recovery marker. ⬜ Bilby is copying those snapshots before its existing OneDrive upload; cloud restores and the isolated RustFS restore proof remain in progress.</li>
+<li>⬜ Run <code>restic check --read-data</code> on Pouch, then prove a new backup and file restore. Both public S3 paths and Pouch report ready; private data and anonymous bucket listing remain denied. The console serves its browser interface and its public name redirects unauthenticated requests to Pomerium.</li>
+<li>A real Indigo iPad publish and Sky client backup are optional device smoke tests. Protocol-equivalent probes already cover the server contracts; those device checks do not block the server rollout.</li>
 </ul>
 
-<h3>Rollback remains pending</h3>
-<p>Do not use serial 146 directly: Pouch IAM moved first, so it cannot perform a Pouch-only rollback after primary native IAM landed and would discard primary RustFS IAM ownership. The supported recovery states are described below; the execution recipe remains pending.</p>
+<h3>Rollback retained</h3>
+<p>Do not use serial 146 directly: Pouch IAM moved first, so it cannot perform a Pouch-only rollback after primary native IAM landed and would discard primary RustFS IAM ownership. The supported recovery states and execution sequence are described below.</p>
 
 <h3>Deferred backend-user privilege finding</h3>
 <p>The manually managed <code>terraform</code> RustFS user currently has built-in
@@ -468,12 +468,12 @@ lock Terraform out of its own backend.</p>
 <tr><td>Sky's repository</td><td><code>restic check --read-data</code> reads all repository packs through <code>pouch.pod.haus</code>; retained snapshot IDs match; a file restore verifies content. Then a new client backup commits a snapshot and the hourly monitor reports it. Plain <code>restic check</code> does not read all payloads (<a href="https://restic.readthedocs.io/en/stable/045_working_with_repos.html#checking-integrity-and-consistency">restic documentation</a>).</td></tr>
 <tr><td>Monitoring</td><td>Gatus readiness checks are green on both primary paths (<code>/health/ready</code>) and Pouch’s repository monitor is green. Verify Docker restart recovery separately from autoheal: killing a process exercises the restart policy; autoheal responds to a running container marked unhealthy.</td></tr>
 <tr><td>Backups</td><td>Restore the complete <code>plan:rustfs</code> data root into an isolated RustFS and verify current objects, historical versions, Terraform state and IAM through the service. Perform this restore from <code>onedrive:Backups/podhaus-restic</code>, not merely Jump. Verify all seven other Bandicoot plans there and require a green off-site freshness check. No new remote destination is created. Confirm original MinIO snapshots and rollback artifacts remain available.</td></tr>
-<tr><td>Rollback remains available</td><td>Both original MinIO directories, saved images, secret volumes, old credential variables and matching Terraform checkpoints remain available. No cleanup deletes original MinIO snapshots or prunes Docker images or volumes. The old stack definitions are removed from automatic deployment.</td></tr>
+<tr><td>Rollback remains available</td><td>Both original MinIO directories, saved images, secret volumes, saved resolved credentials and matching Terraform checkpoints remain available. No cleanup deletes original MinIO snapshots or prunes Docker images or volumes. The old stack definitions are removed from automatic deployment.</td></tr>
 </tbody>
 </table>
 
 <h2>Rollback to the preserved cutover state</h2>
-<p><strong>Pending:</strong> the retired procedure and serial-146 state are unsafe after the
+<p>The retired procedure and a direct serial-146 state push are unsafe after the
 Pouch-first transition. Three offline, supported Terraform command-line recovery states were made
 from post-rollout serial 151 and serial 146 using only <code>terraform state rm</code> and
 <code>terraform state mv</code> with <code>-state</code>/<code>-state-out</code>. They preserve
@@ -481,12 +481,25 @@ lineage and all unchanged resources: primary-only restores 15 old primary MinIO 
 retains six native Pouch resources; Pouch-only restores eight old Pouch MinIO IAM resources and
 retains 11 native primary resources; full rollback restores all 23 old MinIO IAM resources.</p>
 <p>The canonical private archive is
-<code>/home/nathan/.local/state/podhaus-rustfs-rollout/podhaus-rustfs-terraform-recovery-set-v2.tar.gz</code>,
+<code>/home/nathan/.local/state/podhaus-rustfs-rollout/podhaus-rustfs-terraform-recovery-set-v3.tar.gz</code>,
 with its matching <code>.sha256</code>; it contains the matching HCL roots and proofs. Pull a
 fresh remote state backup from inside the authenticated <code>op run</code> child with Python
 writing the file, because 1Password masks stdout even when an outer redirect is used. Never use
-<code>terraform state push -force</code>. Audit a normal push, then require a no-change plan
-before any apply. The exact rollback sequence remains pending.</p>
+<code>terraform state push -force</code>. Audit the normal state push and the subsequent saved plan. The plan may reverse console DNS and the Doggos address, but must not replace credentials, recreate existing IAM or destroy buckets.</p>
+<p>The same private archive and checksum are retained on Bilby under
+<code>/var/lib/podhaus-rollback/minio-20260926/</code> and on Kangaroo under
+<code>/share/CACHEDEV1_DATA/Pouch/podhaus-rollback/minio-20260926/</code>.
+Both copies match SHA-256 <code>a011344feb17c83e90ba6ce126fc6ba50f5435d50bb0b0ae6009ae791867bfe4</code>.
+These directories also retain the original images, Compose files and resolved environment files.</p>
+<ol>
+<li>Pause writers for the selected store. Stop its RustFS stack. Restore the saved MinIO Compose configuration and image against the untouched original directory. For primary rollback, first restore Bilby's old Caddy configuration so Caddy releases port 8022, restore the pets endpoint, and return Indigo's address to Bilby. Restore the selected stack definition through configuration management after its old directory is present. Its Compose environment keys retain the MinIO spellings, but their Komodo references must use the current RustFS Root, SFTP Host Key and Pouch RustFS Root variables. The old MinIO-named aliases no longer exist.</li>
+<li>For primary rollback, restore the MinIO readiness paths and Bilby's MinIO backup plan/source bind. Remove Bandicoot's RustFS backup plan, source bind and quiesce hooks, and remove only <code>rustfs</code> from the aggregate copy hook's required source plans. Preserve the other seven Bandicoot plans and their copy into Bilby's existing OneDrive destination. Do not restore the entire old backup directory, which would undo that off-site coverage. Pouch-only rollback leaves this backup flow unchanged.</li>
+<li>Extract the recovery archive privately on the control node at <code>/home/nathan/.local/state/podhaus-rustfs-rollout/</code> and verify its internal <code>recovery-set-v3-files.sha256</code>. Follow the included <code>ROLLBACK-RECIPE.txt</code>, which contains the exact authenticated commands and matching configuration/state pairs. Keep the current 1Password titles: the archived configurations already reference them.</li>
+<li>Select <code>terraform-primary-rollback</code> with <code>rollback-states-post-native-dns/primary/rollback.tfstate</code> (serial 167), <code>terraform-pouch-rollback</code> with <code>pouch/rollback.tfstate</code> (serial 160), or <code>terraform-rollback</code> with <code>full/rollback.tfstate</code> (serial 175). The abbreviated Pouch/full state paths share the same <code>rollback-states-post-native-dns/</code> parent. Confirm the other store matches that selection.</li>
+<li>Unset the three provider override variables <code>RUSTFS_ENDPOINT</code>, <code>RUSTFS_USER</code> and <code>RUSTFS_SECRET</code>. Initialize the selected configuration, save an immediate private backend checkpoint using the recipe's child-process file writer, verify matching lineage, and use normal <code>terraform state push</code>. If a newer backend serial causes rejection, stop and reconstruct a reviewed recovery state from the newer checkpoint; never force an older state over later infrastructure changes.</li>
+<li>Review and apply only the expected routing/address reconciliation. Verify original client credentials, object versions and backend locking before resuming writers. A rollback intentionally discards post-cutover writes to the selected store, as authorized. Do not delete the original directories, images, secret volumes or backup snapshots as migration cleanup.</li>
+</ol>
+
 
 
 </div>
