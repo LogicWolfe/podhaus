@@ -20,7 +20,7 @@ The bucket allows anonymous `GetObject` only. Nobody can list it. Versioning
 is on, so every publish keeps the file it replaced.
 
 Terraform owns the bucket, its policies, the deploy user, and both
-1Password items (`terraform/minio.tf`). Gatus checks the public URL.
+1Password items (`terraform/rustfs.tf`). Gatus checks the public URL.
 `/var/lib/rustfs` is under Bandicoot's `rustfs` Backrest plan and reaches
 Bilby's existing OneDrive mirror through the existing repository sync.
 
