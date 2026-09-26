@@ -440,7 +440,13 @@ Never apply the target IAM deletion to the retained MinIO directories.</p>
 </ul>
 
 <h3>Rollback remains pending</h3>
-<p>The previous rollback instructions use a pre-Pouch Terraform state and would lose the primary store's native IAM ownership. Do not use them. Terraform has prepared offline hybrid state sets for primary, Pouch and full rollback from final serial 151, alongside the old serial 146 state. The rollback recipe remains pending until its exact sequence is supplied.</p>
+<p>Do not use serial 146 directly: Pouch IAM moved first, so it cannot perform a Pouch-only rollback after primary native IAM landed and would discard primary RustFS IAM ownership. The supported recovery states are described below; the execution recipe remains pending.</p>
+
+<h3>Deferred backend-user privilege finding</h3>
+<p>The manually managed <code>terraform</code> RustFS user currently has built-in
+<code>readwrite</code> access to every bucket, although the intended contract is state-only
+access. Defer narrowing that policy until rollout validation is complete: a mistaken change can
+lock Terraform out of its own backend.</p>
 
 <h2>Verification</h2>
 <p>The completed results are recorded above. The unchecked rows remain acceptance requirements; data and restore checks must pass before declaring rollout complete.</p>
@@ -467,11 +473,20 @@ Never apply the target IAM deletion to the retained MinIO directories.</p>
 </table>
 
 <h2>Rollback to the preserved cutover state</h2>
-<p><strong>Pending:</strong> do not execute the retired rollback procedure. Its pre-Pouch
-Terraform state loses the primary store's native IAM ownership. The preserved MinIO directories,
-images, secret volumes, credentials and checkpoints remain available, and Terraform has prepared
-offline hybrid state sets for primary-only, Pouch-only and full rollback from final serial 151,
-alongside the old serial 146 state. This section will name the exact recipe when it is supplied.</p>
+<p><strong>Pending:</strong> the retired procedure and serial-146 state are unsafe after the
+Pouch-first transition. Three offline, supported Terraform command-line recovery states were made
+from post-rollout serial 151 and serial 146 using only <code>terraform state rm</code> and
+<code>terraform state mv</code> with <code>-state</code>/<code>-state-out</code>. They preserve
+lineage and all unchanged resources: primary-only restores 15 old primary MinIO IAM resources and
+retains six native Pouch resources; Pouch-only restores eight old Pouch MinIO IAM resources and
+retains 11 native primary resources; full rollback restores all 23 old MinIO IAM resources.</p>
+<p>The canonical private archive is
+<code>/home/nathan/.local/state/podhaus-rustfs-rollout/podhaus-rustfs-terraform-recovery-set-v2.tar.gz</code>,
+with its matching <code>.sha256</code>; it contains the matching HCL roots and proofs. Pull a
+fresh remote state backup from inside the authenticated <code>op run</code> child with Python
+writing the file, because 1Password masks stdout even when an outer redirect is used. Never use
+<code>terraform state push -force</code>. Audit a normal push, then require a no-change plan
+before any apply. The exact rollback sequence remains pending.</p>
 
 
 </div>
