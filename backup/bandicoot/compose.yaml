@@ -56,6 +56,8 @@ services:
       # Terraform state. Bilby's serialized Backrest hook copies its snapshots
       # into the existing off-site repository.
       - /var/lib/rustfs:/userdata/rustfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot/backup/bandicoot/scripts:/hooks:ro,z
       # Docker named volumes owned by Komodo Core and onepassword, moved
       # here from bilby. Referenced via `external: true` in the volumes
       # block below so docker can share the live data with the owning
@@ -66,6 +68,9 @@ services:
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
       podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}
+      ofelia.enabled: "true"
+      ofelia.job-exec.rustfs-backup-recover.schedule: "0 */5 * * * *"
+      ofelia.job-exec.rustfs-backup-recover.command: "/hooks/rustfs-backup-control recover"
 
 volumes:
   # External volumes owned by other stacks — Backrest mounts them

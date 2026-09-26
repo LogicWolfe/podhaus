@@ -1,0 +1,78 @@
+#!/bin/sh
+# Keeps RustFS quiescent only while its snapshot is being read.
+set -eu
+
+LOCK=/data/rustfs-backup.lock
+CONTROL=/data/rustfs-backup.control
+STALE_LOCK_SECONDS=900
+
+rustfs_state() {
+  state=$(docker inspect -f '{{.State.Running}}' rustfs) || return 1
+  case "$state" in
+    true|false) printf '%s\n' "$state" ;;
+    *) return 1 ;;
+  esac
+}
+
+start_rustfs() {
+  docker start rustfs >/dev/null || return 1
+  [ "$(rustfs_state)" = true ]
+}
+
+stop_rustfs() {
+  state=$(rustfs_state) || return 1
+  [ "$state" = false ] && return 0
+  date +%s > "$LOCK"
+  if docker stop --time 60 rustfs >/dev/null && [ "$(rustfs_state)" = false ]; then
+    return 0
+  fi
+  state=$(rustfs_state) || return 1
+  if [ "$state" = false ]; then
+    start_rustfs || return 1
+  fi
+  rm -f "$LOCK"
+  return 1
+}
+
+finish_backup() {
+  [ -f "$LOCK" ] || return 0
+  start_rustfs
+  rm -f "$LOCK"
+}
+
+restic_running() {
+  for comm in /proc/[0-9]*/comm; do
+    [ -r "$comm" ] || continue
+    [ "$(cat "$comm")" = restic ] && return 0
+  done
+  return 1
+}
+
+recover_interrupted() {
+  [ -f "$LOCK" ] || return 0
+  [ "$(( $(date +%s) - $(stat -c %Y "$LOCK") ))" -ge "$STALE_LOCK_SECONDS" ] || return 0
+  restic_running && return 0
+  finish_backup
+}
+
+exec 9>"$CONTROL"
+
+case "${1:-}" in
+  stop)
+    flock 9
+    recover_interrupted
+    stop_rustfs
+    ;;
+  finish)
+    flock 9
+    finish_backup
+    ;;
+  recover)
+    flock -n 9 || exit 0
+    recover_interrupted
+    ;;
+  *)
+    echo "usage: $0 {stop|finish|recover}" >&2
+    exit 2
+    ;;
+esac

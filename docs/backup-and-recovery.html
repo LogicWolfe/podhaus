@@ -79,6 +79,7 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
 
       <h2 id="bandicoot-plans">Bandicoot plans</h2>
       <p>Configured in <code>backup/bandicoot/config.json.tmpl</code>. Its repository is on Jump and has no independent OneDrive writer. Every plan creates a nightly snapshot even when unchanged, so the copy gate can prove current source data from repository snapshots. Its own <code>backrest-state</code> heartbeat proves the local Bandicoot backup pipeline; Bilby's off-site heartbeat never replaces that signal.</p>
+      <p>The 03:30 RustFS plan stops RustFS before its filesystem snapshot and starts it again after the snapshot, including when restic fails. A persistent control marker lets Backrest's five-minute recovery job restart RustFS after an interrupted backup; a RustFS service already stopped before the plan remains stopped.</p>
       <table>
         <thead><tr><th>Plan</th><th>Source</th><th>Schedule</th></tr></thead>
         <tbody>

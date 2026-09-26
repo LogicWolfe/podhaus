@@ -98,7 +98,22 @@
           "monthly": 6
         }
       },
-      "hooks": [],
+      "hooks": [
+        {
+          "conditions": ["CONDITION_SNAPSHOT_START"],
+          "onError": "ON_ERROR_FATAL",
+          "actionCommand": {
+            "command": "/hooks/rustfs-backup-control stop"
+          }
+        },
+        {
+          "conditions": ["CONDITION_SNAPSHOT_END"],
+          "onError": "ON_ERROR_FATAL",
+          "actionCommand": {
+            "command": "/hooks/rustfs-backup-control finish"
+          }
+        }
+      ],
       "skipIfUnchanged": false
     },
     {
