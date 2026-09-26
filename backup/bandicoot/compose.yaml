@@ -52,6 +52,10 @@ services:
       # Sonarr: its database + config (series/episode metadata, import
       # history). The library files themselves live on Pouch, not here.
       - /var/lib/sonarr:/userdata/sonarr:ro
+      # RustFS holds the primary object store, including version history and
+      # Terraform state. Bilby's serialized Backrest hook copies its snapshots
+      # into the existing off-site repository.
+      - /var/lib/rustfs:/userdata/rustfs:ro
       # Docker named volumes owned by Komodo Core and onepassword, moved
       # here from bilby. Referenced via `external: true` in the volumes
       # block below so docker can share the live data with the owning

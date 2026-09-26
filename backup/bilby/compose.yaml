@@ -25,6 +25,9 @@ services:
     volumes:
       - ${PODHAUS_REPO}/backup:/tmpl/shared:ro,z
       - ${PODHAUS_REPO}/backup/bilby:/tmpl/host:ro,z
+    environment:
+      GATUS_BACKREST_BANDICOOT_ENDPOINT_ID: ${GATUS_BACKREST_BANDICOOT_ENDPOINT_ID}
+      GATUS_BANDICOOT_PUSH_TOKEN: ${GATUS_BANDICOOT_PUSH_TOKEN}
 
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -34,6 +37,17 @@ services:
     # label:disable lifts SELinux confinement for that.
     security_opt:
       - label:disable
+    environment:
+      GATUS_BACKREST_ENDPOINT_ID: ${GATUS_BACKREST_ENDPOINT_ID}
+      GATUS_BACKREST_BANDICOOT_ENDPOINT_ID: ${GATUS_BACKREST_BANDICOOT_ENDPOINT_ID}
+      GATUS_BANDICOOT_PUSH_TOKEN: ${GATUS_BANDICOOT_PUSH_TOKEN}
+    image: podhaus-backrest:local
+    pull_policy: never
+    build:
+      context: bilby
+      dockerfile: Backrest.Dockerfile
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_BACKREST:-unset}
     # Overrides the shared compose's healthcheck — adds a sentinel check
     # proving /repos/podhaus is the real Jump NFS share (not a bare-stub
     # local-disk dir from a missed mount). The 2026-05-23 incident saw
@@ -57,6 +71,9 @@ services:
       # rule, the backup repo lives on Jump — durable storage we'd hate
       # to lose, on a different physical drive set than Pouch's bulk media.
       - /mnt/jump/backups:/repos/podhaus
+      # restic copy locks its source while it reads, so this must remain
+      # writable. The Backrest hook is the only copied-snapshot writer.
+      - /mnt/jump/backups-bandicoot:/repos/podhaus-bandicoot
       # Forgejo's SQLite/config is local; repositories and large objects
       # are on Jump. One plan snapshots both while Forgejo is stopped.
       - /var/lib/forgejo:/userdata/forgejo/local:ro
@@ -83,13 +100,9 @@ services:
       # consistent restic-on-pgdata pattern as paperless/komodo above;
       # Postgres WAL-replays on restore). Local NVMe, not reproducible.
       - /var/lib/umami-pgdata:/userdata/umami/pgdata:ro
-      - /var/lib/minio:/userdata/minio:ro
-      # Pets engine: its SQLite DB + the MinIO bucket holding the art the DB
-      # references, mounted together so one plan snapshots a consistent set
-      # (the app writes an asset before the DB references it, so a combined
-      # snapshot never has a dangling reference).
+      # Pets engine's SQLite DB. RustFS owns asset durability on bandicoot;
+      # existing historical snapshots keep their asset path until retention.
       - /var/lib/pets-alive:/userdata/pets:ro
-      - /var/lib/minio/pets-alive-assets:/userdata/pets-assets:ro
       # Yiayia's stories: SQLite (Sky's months of transcription) and the
       # irreplaceable audio originals, one root so a snapshot is consistent.
       - /var/lib/yiayia-stories:/userdata/yiayia-stories:ro

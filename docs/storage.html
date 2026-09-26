@@ -65,8 +65,8 @@
         <code>/share/CACHEDEV1_DATA/Pouch</code>. Same backing data.
       </p>
       <p>
-        The dedicated <code>pouch-minio</code> stack runs on kangaroo and writes directly to
-        <code>/share/CACHEDEV1_DATA/Pouch/minio</code>. Its private
+        The dedicated <code>pouch-rustfs</code> stack runs on kangaroo and writes directly to
+        <code>/share/CACHEDEV1_DATA/Pouch/rustfs</code>. Its private
         <code>sky-backups</code> bucket is an additional backup copy of data that remains on
         Sky's source device. It is not copied to Jump or OneDrive.
       </p>
@@ -92,14 +92,14 @@
         <code>/share/CACHEDEV2_DATA/Container/</code>, the backed-up SSD volume — Container
         Station itself installs there too (it follows the QTS default volume, which is
         CACHEDEV2). <strong>CACHEDEV1 (Pouch) holds bulk media, Syncthing's synced data,
-        and the deliberate <code>pouch-minio</code> backup-target exception.</strong>
-        MinIO's system metadata stays beside its objects because the server requires one
+        and the deliberate <code>pouch-rustfs</code> backup-target exception.</strong>
+        RustFS system metadata stays beside its objects because the server requires one
         exclusive data root; Terraform and 1Password can reconstruct its configuration.
         The 2026-06 Pouch RAID
         failure wiped Container Station and every stack whose state had defaulted onto
         CACHEDEV1; state survived only because backrest <em>copied</em> it cross-volume.
         Placement on the backed-up volume remains the model for every ordinary stack. The
-        MinIO exception is safe only because Pouch itself is the requested secondary copy.
+        RustFS exception is safe only because Pouch itself is the requested secondary copy.
       </blockquote>
 
       <h2 id="nas-quirks">NFS quirks</h2>
@@ -196,7 +196,7 @@
           <tr><td><code>/var/lib/&lt;stack&gt;</code></td><td>bilby</td><td>Local NVMe state per stack.</td></tr>
           <tr><td><code>/mnt/jump</code></td><td>bilby</td><td>NFS to QNAP SSD (Jump).</td></tr>
           <tr><td><code>/mnt/pouch</code></td><td>bilby</td><td>NFS to QNAP HDD (Pouch).</td></tr>
-          <tr><td><code>/share/CACHEDEV1_DATA/Pouch</code></td><td>kangaroo</td><td>Direct access to Pouch, including <code>pouch-minio</code> at <code>Pouch/minio</code>.</td></tr>
+          <tr><td><code>/share/CACHEDEV1_DATA/Pouch</code></td><td>kangaroo</td><td>Direct access to Pouch, including <code>pouch-rustfs</code> at <code>Pouch/rustfs</code>.</td></tr>
           <tr><td><code>/share/CACHEDEV2_DATA/Jump</code></td><td>kangaroo</td><td>Direct access to Jump.</td></tr>
           <tr><td><code>/share/CACHEDEV2_DATA/Container/</code></td><td>kangaroo</td><td>Container state on the backed-up SSD volume (Periphery, Syncthing, kangaroo Backrest). Never on CACHEDEV1 — see the placement rule above.</td></tr>
           <tr><td><code>/home</code></td><td>fractal</td><td>LUKS volume (<code>/dev/mapper/vault</code>) holding Nathan's checkouts and the machine key. Unlocked by hand per WSL instance start, so it can arrive hours after Docker — covered by the same <code>storage_binds</code> defences as the NAS mounts.</td></tr>

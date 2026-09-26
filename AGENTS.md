@@ -59,7 +59,9 @@ machine SSH key.
 
 Docker container infrastructure for **seven** active hosts:
 - **bilby** (Apple M1 Mac mini, primary; Fedora Asahi Linux) — runs an
-  outbound Komodo Periphery, MinIO, Caddy, every primary service.
+  outbound Komodo Periphery, Caddy, and every primary service.
+- **bandicoot** runs the primary RustFS store on its local NVMe; bilby's Caddy
+  proxies its public S3, console, and LAN SFTP surfaces.
 - **kangaroo** (QNAP NAS, QTS + Container Station) — secondary LAN
   deploy target via linked-repo Periphery.
 - **numbat** (BinaryLane Perth, Rocky Linux 10, x86_64) is the active
@@ -267,8 +269,8 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `ansible/playbooks/numbat-bootstrap.yml` + `ansible/playbooks/numbat.yml` | Numbat's two plays. The bootstrap play (fresh VM only, run from bandicoot) pins Terraform's 1P-published host key for first contact, connects on first-boot port 2222, stages the `numbat_edge` firewall without activating it, starts rathole before outbound Periphery, enrolls the userspace SSH recovery daemon, then loads the final ruleset and closes 2222 last. The steady-state play (base, docker, numbat_edge, sshd_pomerium_ca, komodo_periphery) reaches the host through Pomerium and is what check-mode equivalence proves. Numbat application stacks are Komodo-managed. |
 | `tailscale-recovery-bootstrap` | Host-native, userspace-mode Tailscale recovery bootstrap for bilby, numbat, and kangaroo. It publishes only loopback OpenSSH through Tailscale Serve on TCP 22; no host route, DNS override, TUN, or container socket/state exposure. |
 | `config/lan-addresses.json` | **The fleet's one definition of every pinned home-LAN address.** Terraform reads it through `terraform/lan_addresses.tf`; Ansible and bootstrap commands read the same file. `tools/render-lan-addresses.py` publishes the derived `LAN_*` declarations in `komodo/sync/lan-addresses.toml`, verified by the pre-commit gate. |
-| `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS/CDN/AOP, UniFi DNS, GitHub deploy webhooks, the SSH-only Tailscale recovery plane, MinIO IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in MinIO via public `https://storage.pod.haus`; run stock `terraform` directly. |
-| `minio/` | Single-node MinIO — S3 backend for Terraform state + public S3 (per-site static hosting) via `storage.pod.haus`. |
+| `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS/CDN/AOP, UniFi DNS, GitHub deploy webhooks, the SSH-only Tailscale recovery plane, RustFS IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in RustFS via public `https://storage.pod.haus`; run stock `terraform` directly. |
+| `rustfs/` | Single-node RustFS on Bandicoot — S3 backend for Terraform state and public S3, plus LAN-only SFTP publishing. `pouch-rustfs/` is the separate Pouch store on kangaroo. Both original stopped MinIO data roots and images remain the indefinite rollback path. |
 | `caddy/` | Bilby's split origin: private mTLS `:4443` for Pomerium, public-only `:4444` for Numbat raw/CDN endpoints, and `:443` for LAN routes. |
 | `relay/` | Outbound rathole clients on internal hosts and the Numbat server. Services are individually tokened and use Noise transport. |
 | `pomerium/` | Pomerium Core on Numbat: Pocket ID browser policy, scoped machine exceptions, native SSH, private-origin client mTLS, and persistent replaceable Autocert cache. Includes the `ssh-auth-notify` sidecar, which pushes parked SSH sign-in links to the key owner's Signal via fenwick (see `docs/networking.html#ssh-auth-notify`); fingerprint→owner routing lives as variables in `pomerium/stack.toml`. |
@@ -491,21 +493,21 @@ These have failure modes that you must not introduce:
   exists deliberately to keep the surface small and reject the
   "this is bilby-only / admin tooling" carve-out rationale.
   No host-pinned backend endpoint (the S3 state backend uses
-  the public `https://storage.pod.haus`, never `minio:9000`/loopback),
+  the public `https://storage.pod.haus`, never `rustfs:9000`/loopback),
   no LAN-only provider `api_url` (UniFi uses `https://unifi.pod.haus`,
-  never `10.0.0.1`; the MinIO provider uses `https://storage.pod.haus`,
+  never `10.0.0.1`; the RustFS providers use `https://storage.pod.haus`,
   never `127.0.0.1`), no dockernet assumption anywhere. Reject any
   change reintroducing a LAN IP, dockernet name, or loopback in
   `terraform/` — and reject any "this is bilby-only / admin tooling"
   carve-out (that exact rationalisation was caught and removed once).
   Run `terraform` directly — there is no wrapper script.
   See [`docs/terraform.html`](docs/terraform.html).
-- **MinIO public access-control model: SigV4, not an edge block.**
-  `storage.pod.haus` serves the full MinIO API (S3 *and* admin); the
-  sole boundary is MinIO's own per-request SigV4 (root/scoped creds
+- **RustFS public access-control model: SigV4, not an edge block.**
+  `storage.pod.haus` serves the full RustFS API (S3 *and* admin); the
+  sole boundary is RustFS's own per-request SigV4 (root/scoped creds
   live only in 1Password + the chezmoi Terraform env;
-  unauthenticated calls incl. `/minio/admin/` get `AccessDenied`).
-  **Do not add an edge `/minio/admin/` 403 / WAF block** — it breaks
+  unauthenticated admin requests get `AccessDenied`).
+  **Do not add an edge admin 403 / WAF block** — it breaks
   the from-anywhere `terraform/` root and contradicts the rule above.
   Data-plane isolation is done with per-bucket least-priv keys (e.g.
   per-site service accounts), not network filtering.
@@ -700,7 +702,7 @@ The full set of pages on `docs.pod.haus`:
 - [Music Assistant + doorbell](docs/runbooks/music-assistant.html)
 - [pizero](docs/runbooks/pizero.md)
 - [Pocket ID](docs/runbooks/pocket-id.md)
-- [Pouch MinIO](docs/runbooks/pouch-minio.md)
+- [Pouch RustFS](docs/runbooks/pouch-rustfs.md)
 - [StreamFab publish](docs/runbooks/streamfab-publish.html)
 
 **Plans**

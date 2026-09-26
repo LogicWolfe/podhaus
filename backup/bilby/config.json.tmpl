@@ -256,24 +256,6 @@
       "skipIfUnchanged": true
     },
     {
-      "id": "minio",
-      "repo": "podhaus",
-      "paths": ["/userdata/minio"],
-      "schedule": {
-        "cron": "15 5 * * *",
-        "clock": "CLOCK_LOCAL"
-      },
-      "retention": {
-        "policyTimeBucketed": {
-          "daily": 14,
-          "weekly": 4,
-          "monthly": 6
-        }
-      },
-      "hooks": [],
-      "skipIfUnchanged": true
-    },
-    {
       "id": "clickstack",
       "repo": "podhaus",
       "paths": ["/userdata/clickstack"],
@@ -329,7 +311,7 @@
       "repo": "podhaus",
       "paths": ["/userdata/backrest-state"],
       "schedule": {
-        "cron": "20 5 * * *",
+        "cron": "0 6 * * *",
         "clock": "CLOCK_LOCAL"
       },
       "retention": {
@@ -341,17 +323,24 @@
       },
       "hooks": [
         {
-          "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
+          "conditions": ["CONDITION_SNAPSHOT_SUCCESS", "CONDITION_SNAPSHOT_SKIPPED"],
           "onError": "ON_ERROR_FATAL",
           "actionCommand": {
-            "command": "rclone sync --config /rclone/rclone.conf /repos/podhaus onedrive:Backups/podhaus-restic"
+            "command": "/hooks/sync-bandicoot-repository"
           }
         },
         {
-          "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
+          "conditions": ["CONDITION_SNAPSHOT_SUCCESS", "CONDITION_SNAPSHOT_SKIPPED"],
           "onError": "ON_ERROR_IGNORE",
           "actionCommand": {
             "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_ENDPOINT_ID}/external?success=true'"
+          }
+        },
+        {
+          "conditions": ["CONDITION_SNAPSHOT_SUCCESS", "CONDITION_SNAPSHOT_SKIPPED"],
+          "onError": "ON_ERROR_IGNORE",
+          "actionCommand": {
+            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BANDICOOT_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_BANDICOOT_ENDPOINT_ID}/external?success=true'"
           }
         }
       ],
@@ -360,7 +349,7 @@
     {
       "id": "pets",
       "repo": "podhaus",
-      "paths": ["/userdata/pets", "/userdata/pets-assets"],
+      "paths": ["/userdata/pets"],
       "schedule": {
         "cron": "0 * * * *",
         "clock": "CLOCK_LOCAL"

@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MinIO to RustFS</title>
+<style>
+/* Shared document styles (document-authoring skill). */
+.doc-page {
+  --doc-paper: rgb(var(--bg, 255 255 255));
+  --doc-panel-color: rgb(var(--bg-soft, 246 250 246));
+  --doc-ink: rgb(var(--text, 15 23 42));
+  --doc-muted-color: rgb(var(--text-muted, 75 85 99));
+  --doc-line: rgb(var(--border, 229 231 235));
+  --doc-accent: rgb(var(--code-text, 17 94 64));
+  color: var(--doc-ink);
+  background: var(--doc-paper);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.6;
+  max-width: 72rem;
+  margin-inline: auto;
+}
+.doc-page .doc-panel,
+.doc-page .doc-callout,
+.doc-page .doc-diagram {
+  background: var(--doc-panel-color);
+  border: 1px solid var(--doc-line);
+  border-radius: .5rem;
+  padding: .75rem 1rem;
+  margin-block: 1rem;
+}
+.doc-page .doc-callout { border-inline-start: .25rem solid var(--doc-accent); }
+.doc-page .doc-muted { color: var(--doc-muted-color); }
+.doc-page .doc-badge {
+  display: inline-block;
+  color: var(--doc-ink);
+  background: var(--doc-panel-color);
+  border: 1px solid var(--doc-line);
+  border-radius: .25rem;
+  padding: .1em .45em;
+  font-size: .8em;
+}
+.doc-page .doc-diagram { overflow-x: auto; }
+.doc-page .doc-diagram svg { display: block; max-width: 100%; height: auto; }
+.doc-page .doc-diagram svg text { fill: currentColor; }
+
+/* Page-specific: the target-stack diagram as structured HTML. */
+.doc-page .stack-map { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+.doc-page .stack-map .node { border: 1px solid var(--doc-line); border-radius: .4rem; padding: .5rem .75rem; background: var(--doc-paper); }
+.doc-page .stack-map .node h4 { margin: 0 0 .25rem; font-size: 1em; }
+.doc-page .stack-map .node ul { margin: 0; padding-left: 1.1rem; font-size: .9em; }
+.doc-page .stack-map .store { border-color: var(--doc-accent); border-width: 2px; }
+.doc-page table td, .doc-page table th { vertical-align: top; }
+
+@media print {
+  .doc-page {
+    --doc-paper: #fff; --doc-panel-color: #f6f6f6; --doc-ink: #111;
+    --doc-muted-color: #555; --doc-line: #ccc; --doc-accent: #245c40;
+    color-scheme: light;
+    --tw-prose-body: var(--doc-ink); --tw-prose-headings: var(--doc-ink);
+    --tw-prose-lead: var(--doc-muted-color); --tw-prose-links: var(--doc-accent);
+    --tw-prose-bold: var(--doc-ink); --tw-prose-captions: var(--doc-muted-color);
+    --tw-prose-code: var(--doc-ink); --tw-prose-th-borders: var(--doc-line);
+    --tw-prose-td-borders: var(--doc-line);
+  }
+  .doc-page .doc-panel, .doc-page .doc-callout, .doc-page .doc-diagram { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<main>
+<div class="doc-page">
+
+<h1>MinIO to RustFS</h1>
+
+<h2>Goal</h2>
+<p>
+Both object stores run RustFS: the primary <code>storage.pod.haus</code> instance
+(Terraform state, three static sites, the pets art bucket, Indigo's SFTP
+publishing through RustFS's own SFTP server) now on <strong>bandicoot</strong>,
+and kangaroo's <code>pouch.pod.haus</code> instance (Sky's restic repository).
+S3 endpoint names and client credentials stay unchanged; the console and
+Indigo’s SFTP address get the names described below. Backrest covers the primary
+store and every existing Bandicoot plan through Bilby’s existing OneDrive destination. The stopped MinIO data roots, images, secret volumes, credentials and matching
+Terraform checkpoints remain available for rollback after validation. MinIO’s
+S3 client and Terraform bucket resources remain; older pets snapshots expire
+under their existing retention. Destructive cleanup is deferred until Nathan separately authorizes removing rollback.
+</p>
+
+<div class="doc-callout">
+<p><strong>The one constraint that shapes this plan.</strong> The official
+RustFS 1.0.0 image is built with the <em>ftps + webdav</em> feature set. SFTP
+is an opt-in compile-time feature it does not include: the 1.0.0 binary's own
+feature manifest reads "Default feature set: ftps + webdav" and lists SFTP only
+in the "full" bundle, and the SFTP documentation says to build with
+<code>cargo build --release --features sftp</code>. Blocs on Indigo's iPad
+speaks FTP and SFTP only. So the primary instance runs an image we build from
+the RustFS source at the release tag with the sftp feature on. Upstream ships
+the recipe (<code>Dockerfile.source</code> with a <code>RUSTFS_BUILD_FEATURES</code>
+build argument), so our Dockerfile is that recipe pinned to a tag, not a
+bespoke build. The Pouch instance needs no SFTP and runs the official image at
+the same version.</p>
+</div>
+
+<div class="doc-callout">
+<p><strong>Operating tolerance.</strong> This is a home-lab migration. Temporary
+outages during build, cutover or repair are acceptable. Preserve all data present
+at the cutover boundary; Nathan accepts losing writes made afterward if rollback
+is needed. The original stopped MinIO directories remain untouched until the
+payload and restore checks pass. No full parallel rehearsal environment is required.</p>
+</div>
+
+<h2>Placement and access</h2>
+<p>
+Where a service runs and how it is reached are separate decisions. Bilby's
+Caddy is the front door: every name resolves to it (on the LAN directly, off
+the LAN through Numbat), and it proxies to wherever the service lives, by
+container name on bilby or by LAN address elsewhere. It already does this for
+nine bandicoot services. It does it for HTTP only, and the store's SFTP
+listener is raw TCP, so this plan adds Caddy's layer-4 module: one more
+<code>--with</code> in <code>caddy/Dockerfile</code> and a <code>layer4</code>
+block that forwards port 8022 to the store's host. After that, any TCP service
+can land on any host with the same one-line change as an HTTP one.
+</p>
+<p>
+The primary store lands on bandicoot: 766 GB free against bilby's 29, ten
+cores, and the recurring source build of the image is exactly the CPU- and
+disk-heavy work the bandicoot migration designated for it. Moving it later is
+two Caddy upstream addresses, a Backrest bind and a data copy; nothing in DNS,
+Terraform or any client changes.
+</p>
+
+<h2>What MinIO is today</h2>
+
+<table>
+<thead><tr><th>Instance</th><th>Host and data root</th><th>Holds</th><th>Identities</th></tr></thead>
+<tbody>
+<tr>
+<td><code>minio</code> stack<br><span class="doc-muted">quay.io/minio/minio RELEASE.2025-09-07, arm64</span></td>
+<td>bilby, <code>/var/lib/minio</code><br>1.4 GB on disk; 5,111 objects, 54,981 versions</td>
+<td>
+<ul>
+<li><code>terraform-state</code> 77 MiB, 850 versions, versioned</li>
+<li><code>nathanbaxter-com</code> 7 MiB, versioned, anonymous read</li>
+<li><code>skycroeser-net</code> 1.0 GiB, 50,318 versions, versioned, anonymous read</li>
+<li><code>doggos-indigo</code> 10 MiB, versioned, anonymous read</li>
+<li><code>pets-alive-assets</code> 129 MiB, unversioned, private: 76 write-once PNG uploads named by UUID, so versioning would hold nothing</li>
+</ul>
+</td>
+<td>Terraform-managed users <code>nathanbaxter-com-deploy</code>, <code>skycroeser-net-deploy</code>, <code>pets-alive-assets</code> (each with one service account) and <code>doggos-indigo-deploy</code> (logs in directly, over SFTP). One hand-made user <code>terraform</code> with the built-in <code>readwrite</code> policy: the Terraform S3 backend credential ("MinIO Terraform User" in 1Password).</td>
+</tr>
+<tr>
+<td><code>pouch-minio</code> stack<br><span class="doc-muted">same image, amd64</span></td>
+<td>kangaroo, <code>/share/CACHEDEV1_DATA/Pouch/minio</code><br>241 GB; 14,956 objects</td>
+<td><code>sky-backups</code>, unversioned, private. Sky's restic repository at prefix <code>personal-laptop</code>.</td>
+<td>Terraform-managed <code>sky-backups</code> (service account) and list-only <code>sky-backups-monitor</code>.</td>
+</tr>
+</tbody>
+</table>
+
+<h3>Who talks to it</h3>
+
+<table>
+<thead><tr><th>Consumer</th><th>Path</th><th>Where it is configured</th></tr></thead>
+<tbody>
+<tr><td>Terraform S3 backend</td><td><code>https://storage.pod.haus</code>, path-style, native lockfile on a versioned bucket</td><td><code>terraform/backend.tf</code>, creds in <code>terraform/terraform.env.op</code></td></tr>
+<tr><td>Terraform <code>aminueza/minio</code> provider (two aliases)</td><td>Admin API as root on <code>storage.pod.haus</code> and <code>pouch.pod.haus</code></td><td><code>terraform/providers.tf</code>, <code>minio.tf</code>, <code>minio_pouch.tf</code></td></tr>
+<tr><td>Caddy</td><td><code>minio:9000</code> for the S3 vhost and the three static sites; <code>minio:9001</code> console at <code>minio.pod.haus</code>; kangaroo <code>:9000</code> for <code>pouch.pod.haus</code></td><td><code>caddy/Caddyfile</code>, <code>caddy/stack.toml</code> (Sky's cache manifest URL)</td></tr>
+<tr><td>Pomerium + DNS</td><td><code>minio.pod.haus</code> family route</td><td><code>pomerium/config.yaml</code>, <code>terraform/services_pod_haus.tf</code></td></tr>
+<tr><td>Publii (Sky's laptop)</td><td>Virtual-host <code>skycroeser-net.storage.pod.haus</code>, scoped key</td><td>Her machine; split-horizon records in <code>terraform/dns_unifi_split_horizon.tf</code></td></tr>
+<tr><td><code>nathanbaxter-deploy</code></td><td><code>mcli mirror</code> to <code>storage.pod.haus</code>, scoped key</td><td><code>nathanbaxter-deploy/{stack.toml,compose.yaml,build.sh}</code></td></tr>
+<tr><td><code>search-indexer</code></td><td><code>mc</code> against <code>http://minio:9000</code>, Sky's deploy key</td><td><code>search-indexer/{stack.toml,compose.yaml}</code></td></tr>
+<tr><td>Caddy's <code>sky-cache-invalidate</code> job</td><td>Reads the version id of <code>files.publii.json</code> over <code>http://minio:9000</code></td><td><code>caddy/stack.toml</code></td></tr>
+<tr><td>pets-alive backend</td><td>S3 over dockernet, scoped key, ensure-bucket on boot</td><td><strong>External repo</strong> <code>LogicWolfe/pets</code> (its <code>stack.toml</code> reads <code>OP__KOMODO__MINIO_PETS_ALIVE_ASSETS__*</code>)</td></tr>
+<tr><td>Indigo's Blocs</td><td>SFTP to <code>bilby.pod.haus:8022</code>, user <code>doggos-indigo-deploy</code>, path <code>/doggos-indigo</code></td><td>1Password "Doggos Indigo Publish"; host key in "MinIO SFTP Host Key"</td></tr>
+<tr><td>Sky's restic</td><td><code>s3:https://pouch.pod.haus/sky-backups/personal-laptop</code></td><td>Her laptop; 1Password "Sky Backups"</td></tr>
+<tr><td>Gatus</td><td>Two HTTP checks on <code>/minio/health/live</code>; hourly <code>sky-backups-monitor</code> (<code>mc ls</code>, S3 only)</td><td><code>gatus/conf/config.yaml</code>, <code>gatus/compose.yaml</code></td></tr>
+<tr><td>Operator tooling on bilby</td><td><code>mcli</code> for admin (users, policies) and S3 (mirror, undo)</td><td><code>docs/hosts.html</code>, <code>docs/runbooks/doggos-indigo.md</code></td></tr>
+</tbody>
+</table>
+
+<h3>How it is backed up</h3>
+<ul>
+<li><strong>Backrest plan <code>minio</code></strong> (bilby) snapshots <code>/var/lib/minio</code> nightly at 05:15 into the <code>podhaus</code> restic repository on Jump (<code>/mnt/jump/backups</code>). 20 snapshots exist, about 1.29 GiB each. Retention 14 daily, 4 weekly, 6 monthly.</li>
+<li><strong>Backrest plan <code>pets</code></strong> (bilby) binds <code>/var/lib/minio/pets-alive-assets</code> alongside the pets SQLite, hourly, so one snapshot holds a consistent database-plus-assets set. 64 snapshots.</li>
+<li>Bilby's and kangaroo's restic repositories are each mirrored to OneDrive by an <code>rclone sync</code> hook, so a prune propagates on the next run. <strong>Bandicoot’s existing repository (<code>/mnt/jump/backups-bandicoot</code>) has no OneDrive mirror in the checked-in configuration.</strong> This migration feeds its snapshots into Bilby’s existing off-site destination; it provisions no new OneDrive destination or independent mirror.</li>
+<li>These snapshots hold MinIO's internal on-disk layout (<code>xl.meta</code> plus part files). They restore only into a server that reads MinIO's format, which RustFS does.</li>
+<li>Pouch MinIO is deliberately not backed up: it is itself the extra copy, and Sky's laptop is the rebuild source.</li>
+</ul>
+
+<h2>Decisions</h2>
+
+<table>
+<thead><tr><th>Decision</th><th>Choice and why</th><th>Rejected</th></tr></thead>
+<tbody>
+<tr>
+<td>How the data moves</td>
+<td><strong>Copy, then switch.</strong> RustFS 1.0.0 reads a MinIO data directory in place (objects, versions, bucket metadata, versioning flags and the built-in IAM, provided it is started with the same root credentials). We use that format compatibility but never on the live directory: MinIO is stopped, its directory is copied to the new host's data root, RustFS starts on the copy. The original remains untouched for rollback, so rollback restores the cutover state, deliberately discarding later writes. Preserve every object version, including Terraform state and Indigo’s undo history. Recreate Terraform-managed IAM on the RustFS copy using the original credential values, as described below. The copy is 1.4 GB over the LAN for the primary and 241 GB within Pouch (13 TB free) for kangaroo.</td>
+<td><em>Re-upload with <code>mc mirror</code></em>: loses all object versions and needs the IAM rebuilt. <em>Rename the directory in place</em> (kangaroo): instant, but RustFS rewrites system metadata on first start, so rollback is no longer a rename back.</td>
+</tr>
+<tr>
+<td>Preparation and validation</td>
+<td>Build the image, capture credentials and Terraform state, and inventory the source data before stopping MinIO. Use the production cutover for integration checks. A small isolated provider check may resolve a specific uncertainty, but duplicating Caddy, both stores and every client for rehearsal is unnecessary. The untouched source directories protect the data while failures are repaired.</td>
+<td>A mandatory full rehearsal delays this home-lab migration without changing its accepted outage tolerance.</td>
+</tr>
+<tr>
+<td>SFTP</td>
+<td><strong>RustFS's built-in SFTP server</strong>, from our own build of the release tag with the sftp feature. It authenticates with the IAM access key as username and the secret as password, exactly as MinIO's did, and serves <code>/&lt;bucket&gt;/&lt;key&gt;</code> paths. Indigo's username, password, path and the host key fingerprint all stay as they are; the address becomes <code>storage.pod.haus:8022</code>, the store's name rather than a host's, reached through the front door's layer-4 forward.</td>
+<td>An SFTP gateway beside RustFS (SFTPGo): a second credential store and a second upstream for one user. RustFS's built-in FTP: cleartext credentials plus a passive port range. A prebuilt "full" image: upstream publishes none. Port 22: it is every host's own sshd, and Numbat's relay 22 is Forgejo's; SFTP stays LAN-only on 8022, as today.</td>
+</tr>
+<tr>
+<td>Front door forwards TCP</td>
+<td>Caddy gains <code>github.com/mholt/caddy-l4</code> in its <code>xcaddy build</code> and a <code>layer4</code> app block: listen <code>:8022</code>, proxy to <code>{$BANDICOOT_LAN_IPV4}:8022</code>. The <code>caddy</code> stack publishes 8022; the store's stack publishes it on bandicoot's LAN address. This is what makes placement independent of access for non-HTTP services, and it is reused unchanged if the store ever moves.</td>
+<td>A split-horizon record to bandicoot for a second SFTP name: works, but one service under two names. A second Caddy on bandicoot: two front doors.</td>
+</tr>
+<tr>
+<td>Where the image is built</td>
+<td><strong>On bandicoot, by Komodo</strong>, with the same content-hash mechanism every other build service uses: a <code>rustfs/Dockerfile</code> pinned to the release tag rebuilds only when that file changes. This is the <code>search-indexer</code> and <code>indy-board</code> precedent (both build Rust on a 16 GB host), with jobs capped so the compile stays inside memory: bandicoot had 9.7 GB available and 2.9 GB of swap in use on 2026-09-26.</td>
+<td>A registry pipeline (build on the Forgejo runner, push to <code>git.pod.haus</code>, pull on the host): a second deploy path to maintain for one image. Hand-carrying an image with <code>docker save</code>: not config-as-code.</td>
+</tr>
+<tr>
+<td>Version reference</td>
+<td>The Dockerfile's <code>ARG RUSTFS_VERSION</code> and the Pouch stack's image tag name the same release (1.0.0 today). A source build must name a tag, so this is not a reproducibility pin; bumping is editing two lines, and the two instances move together.</td>
+<td></td>
+</tr>
+<tr>
+<td>Backup coverage</td>
+<td>Every host backing up to Jump must have an off-site route. Bilby and Kangaroo already do. Feed all Bandicoot snapshots, including the new RustFS plan, into Bilby’s existing <code>podhaus</code> restic repository with <code>restic copy</code> before its existing OneDrive sync. Keep <code>onedrive:Backups/podhaus-restic</code> and its current OAuth state. Preserve Bandicoot’s local repository and retention. The cost is another local copy on Jump, not another remote destination.</td>
+<td>A new remote mirror for Bandicoot; byte-copying one restic repository into another; unsynchronised rclone reads of Bandicoot’s live repository.</td>
+</tr>
+<tr>
+<td>Pets backup consistency</td>
+<td>The assets bucket is snapshotted by bandicoot's <code>rustfs</code> plan and the pets SQLite by bilby's <code>pets</code> plan, so they are no longer one consistent snapshot. The bucket is write-once UUID-named PNGs that the app writes before the database references them, so the worst case is a restored database referencing an asset up to a nightly interval newer than the restored bucket. Accepted.</td>
+<td>Moving pets to bandicoot too: out of scope for this plan; it can follow the same front-door move any time.</td>
+</tr>
+<tr>
+<td>Terraform</td>
+<td>IAM moves to <a href="https://registry.terraform.io/providers/weinmann-emt/rustfs/latest/docs">weinmann-emt/rustfs</a> using its native RustFS admin API; buckets, versioning and bucket policies stay on <code>aminueza/minio</code>’s S3 resources. This is an explicit choice to use the RustFS provider, not a claim that MinIO admin clients cannot work: <a href="https://github.com/rustfs/rustfs/blob/1.0.0/docs/architecture/minio-rustfs-router-compatibility.md">RustFS 1.0.0 accepts MinIO admin routes</a> and handles their encrypted payloads. The chosen provider’s v0.0.8 imports omit fields needed to preserve users and service-account parents, so managed IAM is recreated on the copy with the same credentials. Terraform continues owning it.</td>
+<td>Importing native IAM resources and hand-editing Terraform state to repair missing fields. Moving IAM management into an init script. Both are unnecessary when a brief authentication outage is acceptable.</td>
+</tr>
+<tr>
+<td>Anonymous read on versioned buckets</td>
+<td>RustFS 1.0.0 denies <code>GetObject</code> on a versioned bucket unless the policy also grants <code>s3:GetObjectVersion</code> (<a href="https://github.com/rustfs/rustfs/issues/7989">issue 7989</a>, closed as not planned). The three public site policies and their three deploy policies gain that action; the unversioned pets bucket does not need it. Cost: an anonymous client can fetch a noncurrent version by id if it already knows the id; nothing lists versions anonymously.</td>
+<td></td>
+</tr>
+<tr>
+<td>Admin tooling</td>
+<td><code>rc</code> (<code>rustfs/cli</code>, arm64 binary) is installed on bandicoot for admin work. <code>mcli</code> stays on bilby for S3 work (<code>mirror</code>, <code>ls</code>, <code>undo</code>) against <code>storage.pod.haus</code>, as do the <code>mc</code> images inside <code>nathanbaxter-deploy</code>, <code>search-indexer</code> and the Gatus monitor: it is used here for S3 operations. The MinIO Terraform provider also remains for bucket resources.</td>
+<td></td>
+</tr>
+<tr>
+<td>Console hostname</td>
+<td><code>minio.pod.haus</code> becomes <code>rustfs.pod.haus</code> (Pomerium family route, Caddy route to bandicoot's <code>:9001</code>, DNS map). Settled.</td>
+<td></td>
+</tr>
+<tr>
+<td>1Password item names</td>
+<td>Every item named for MinIO is renamed for RustFS so the komodo-op variable names stop saying MinIO. Terraform-owned items rename in Terraform. The five hand-made items rename with <code>op-vault dev -- op item edit &lt;id&gt; --title "…" --vault Homelab</code>: the Podhaus service account holds <code>write_items</code> on Homelab (verified 2026-09-26 with <code>op vault list --permission write_items</code>), so the item renames are scripted preparation before cutover. Rename Terraform-owned items in a preparatory apply while both MinIO endpoints still run. Wait for every new Komodo variable before deploying consumers. Credential values remain unchanged.</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+<h2>Jump backup coverage</h2>
+<p>This inventory is from the checked-in Backrest configuration on 2026-09-26;
+it is not evidence that the latest scheduled upload succeeded. The rule is:
+<strong>every repository on Jump has a verified route to OneDrive</strong>.</p>
+<table>
+<thead><tr><th>Host</th><th>Current backup coverage</th><th>Required result</th></tr></thead>
+<tbody>
+<tr><td>Bilby</td><td><code>/mnt/jump/backups</code> → <code>onedrive:Backups/podhaus-restic</code>.</td><td>Keep this destination; include copied Bandicoot snapshots before reporting off-site success.</td></tr>
+<tr><td>Kangaroo</td><td><code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo</code> → <code>onedrive:Backups/podhaus-kangaroo-restic</code>.</td><td>Keep the existing independent upload and verify its freshness.</td></tr>
+<tr><td>Bandicoot</td><td><code>/mnt/jump/backups-bandicoot</code>, with no off-site route. Seven plans: HyperDX Mongo dumps, Komodo Postgres/FerretDB, 1Password Connect state, MeTube queue/history, Sonarr database/config, Fenwick plus Signal device state, and Backrest state.</td><td>All seven plans and RustFS flow through Bilby’s existing destination.</td></tr>
+<tr><td>Pinelake</td><td>Local TerraMaster repository; Plex, Flood, Syncthing, Periphery and Backrest. No OneDrive route.</td><td>Existing local-only policy remains; this repository is not on Jump.</td></tr>
+<tr><td>Fractal, Voltaire, Numbat</td><td>No configured Backrest/Jump repository.</td><td>No Jump mirror to add. This inventory does not assert that every file on these hosts is backed up.</td></tr>
+</tbody>
+</table>
+<p>Sky’s <code>sky-backups</code> repository is on Pouch, not Jump, and remains
+an additional copy of her laptop without a second off-site leg.</p>
+
+<h3>Use Bilby’s existing off-site job</h3>
+<ol>
+<li>Mount Bandicoot’s existing Jump repository into Bilby’s Backrest container at <code>/repos/podhaus-bandicoot</code>. Restic needs write access to its lock directory even when reading snapshots; validate both the Jump sentinel and the expected repository identity before touching either repository. Read the existing restic password from the rendered secret configuration without logging it; no new secret or OAuth token is needed.</li>
+<li>Extend Bilby’s existing <code>backrest-state</code> success hook into one synchronous operation: copy all committed Bandicoot snapshots with <code>restic -r /repos/podhaus copy --from-repo /repos/podhaus-bandicoot</code>, apply scoped retention to those copied snapshots, then run the existing rclone sync to <code>onedrive:Backups/podhaus-restic</code>. Run it on successful and unchanged backups. Do not initialise either repository or disable restic locking.</li>
+<li>Keep the copy and upload in Bilby’s Backrest task queue, which runs tasks serially; its own backups and prune must not mutate the destination during the raw mirror. Source-side restic locks protect the snapshot copy against Bandicoot prune. Do not run an independent scheduler or manual destination mutation alongside this hook. Verify queue behaviour on the deployed Backrest version. The five-minute schedule offset is not a correctness mechanism.</li>
+<li>Copied snapshots retain <code>created-by:bandicoot</code> and <code>plan:…</code> tags. Bilby’s ordinary per-plan retention does not own them. Apply the source’s 14-daily/4-weekly/6-monthly policy to only <code>created-by:bandicoot</code>, grouping by host, paths and tags so the seven plans and RustFS remain separate. Bilby’s existing prune reclaims their expired packs. Validate the copied tags before enabling retention; never use an unfiltered forget command.</li>
+<li>Treat copy, retention, upload or freshness-check failures as fatal and withhold the success heartbeat. Check that every expected source plan has a recent successful or unchanged backup and that its selected snapshot is present at the destination; an old but readable source repository must not earn a green off-site status. Keep the existing Bandicoot local-backup heartbeat distinct from Bilby’s off-site completion signal.</li>
+</ol>
+<p><a href="https://restic.readthedocs.io/en/stable/045_working_with_repos.html#copying-snapshots-between-repositories">Restic’s snapshot-copy command</a>
+transfers snapshots between repositories and skips already copied snapshots. It
+reads and rewrites their data under the destination’s encryption; the repositories’
+files cannot be merged with rclone. Initial copying consumes extra space on Jump
+and may deduplicate less effectively across the existing repositories.</p>
+<p>Add a configuration check alongside <code>backup/tests/test_heartbeat_contract.py</code>
+that accounts for every Jump-backed repository and its off-site route. A future
+host must not gain a Jump backup without a destination and failure signal.
+Validate the live result by restoring a representative file from every Bandicoot
+plan from the existing OneDrive repository, plus the complete RustFS restore
+below. Also check Bilby and Kangaroo’s latest off-site snapshot inventories.</p>
+
+<h2>Target shape</h2>
+
+<div class="doc-diagram" role="img" aria-label="The rustfs stack on bandicoot: an init container renders the SFTP host key, a self-built RustFS serves S3 on 9000, the console on 9001 and SFTP on 8022 on bandicoot's LAN address. Bilby's Caddy fronts all three: HTTPS routes proxy to 9000 and 9001, a layer-4 forward carries 8022. Consumers reach storage.pod.haus and never see the host. Kangaroo runs the official image for Pouch.">
+<div class="stack-map">
+<div class="node"><h4>Front door: bilby Caddy</h4><ul><li><code>storage.pod.haus</code>, <code>*.storage.pod.haus</code>, the three sites → <code>{$BANDICOOT_LAN_IPV4}:9000</code></li><li><code>rustfs.pod.haus</code> (Pomerium) → <code>:9001</code></li><li><strong>new</strong> layer-4: <code>:8022</code> → <code>{$BANDICOOT_LAN_IPV4}:8022</code></li><li><code>pouch.pod.haus</code> → kangaroo <code>:9000</code> (unchanged)</li></ul></div>
+<div class="node"><h4>rustfs-secrets-init (bandicoot)</h4><ul><li>writes the SFTP host key into a directory in the <code>rustfs-secrets</code> volume, owner uid 10001, mode 0700/0600</li><li>same <code>init-tools</code> shape as today</li></ul></div>
+<div class="node store"><h4>rustfs (bandicoot, self-built, sftp feature)</h4><ul><li><code>build: rustfs/Dockerfile</code> → <code>rustfs-sftp:local</code></li><li><code>/var/lib/rustfs</code> → <code>/data</code></li><li>publishes 9000, 9001, 8022 on bandicoot's LAN address</li><li><code>RUSTFS_SERVER_DOMAINS=storage.pod.haus</code></li><li>root creds unchanged (needed to read the migrated IAM)</li></ul></div>
+<div class="node"><h4>rustfs-init (bandicoot)</h4><ul><li>one-shot: ensures <code>terraform-state</code> exists and is versioned, with <code>rc</code></li><li>ignored by Komodo health</li></ul></div>
+<div class="node"><h4>Consumers (unchanged contracts)</h4><ul><li>Terraform, nathanbaxter-deploy, Publii, mcli → <code>storage.pod.haus</code></li><li>search-indexer, pets-alive (bilby) → <code>http://{LAN_BANDICOOT_IPV4}:9000</code></li><li>Blocs → <code>storage.pod.haus:8022</code></li><li>bandicoot Backrest → Jump → restic snapshot copy into Bilby’s repo → its existing OneDrive destination</li></ul></div>
+<div class="node store"><h4>pouch-rustfs (kangaroo)</h4><ul><li>official <code>rustfs/rustfs:1.0.0</code>, amd64</li><li><code>Pouch/rustfs</code> → <code>/data</code></li><li><code>:9000</code> on the LAN for Caddy, as today</li><li>no console, no SFTP</li></ul></div>
+</div>
+</div>
+
+<h3>The image: <code>rustfs/Dockerfile</code></h3>
+<p>
+A two-stage file that is upstream's <code>Dockerfile.source</code> at the release
+tag, reduced to what we need, plus the repo's content-hash contract.
+</p>
+<ul>
+<li><strong>Builder stage</strong>: <code>rust:1.97.1-trixie</code> (upstream's toolchain image for 1.0.0), the packages upstream installs (<code>build-essential pkg-config libssl-dev lld protobuf-compiler flatbuffers-compiler git</code>), <code>git clone --depth 1 --branch ${RUSTFS_VERSION}</code> of <code>rustfs/rustfs</code>, upstream's <code>scripts/static.sh</code> and <code>cargo run --bin gproto</code> steps, then <code>cargo build --release --locked --bin rustfs --features sftp</code> for the native target. No cross-compilation: bandicoot builds arm64, which is what it runs.</li>
+<li><strong>Memory bound</strong>: <code>CARGO_BUILD_JOBS=2</code>, <code>CARGO_PROFILE_RELEASE_LTO=false</code>, <code>CARGO_INCREMENTAL=0</code>, debug info off, symbols stripped (the last three are upstream's own settings). BuildKit cache mounts for the cargo registry and target directory keep a version bump from starting cold.</li>
+<li><strong>Runtime stage</strong>: <code>ubuntu:26.04</code> as upstream, <code>ca-certificates</code> and <code>wget</code> for the healthcheck, user <code>rustfs</code> uid 10001, the binary at <code>/usr/local/bin/rustfs</code>, upstream's entrypoint semantics reduced to <code>ENTRYPOINT ["rustfs"]</code> since the stack passes everything by environment. <code>ARG STACK_CONTENT_HASH</code> / <code>ENV STACK_CONTENT_HASH</code> pair for the lint.</li>
+<li><strong>Proof inside the build</strong>: the last builder step runs the fresh binary with <code>RUSTFS_SFTP_ENABLE=true</code> and a throwaway key for a few seconds and greps its log for the SFTP listener line, so a build whose feature flag silently did nothing fails loudly, the way <code>search-indexer</code> runs <code>pagefind --version</code>.</li>
+</ul>
+
+<h3>The bandicoot stack: <code>rustfs/</code></h3>
+<p>Replaces bilby's <code>minio/</code> (the directory is renamed and re-homed; Komodo sees a new stack and the old one is deleted at cleanup). <code>server = "bandicoot"</code>, <code>linked_repo = "podhaus-bandicoot"</code>, <code>run_directory = "rustfs"</code>, <code>run_build = true</code>; <code>ignore_services</code> lists both inits. Bandicoot runs SELinux enforcing like bilby, so bind-mounting services carry <code>security_opt: label:disable</code>.</p>
+<ul>
+<li><strong><code>rustfs</code></strong> service. <code>build: { context: ., args: { STACK_CONTENT_HASH: ${BUILD_HASH_RUSTFS:-unset} } }</code>, <code>image: rustfs-sftp:local</code>, <code>pull_policy: never</code>. Environment: <code>RUSTFS_ACCESS_KEY</code>/<code>RUSTFS_SECRET_KEY</code> from the renamed root item, <code>RUSTFS_VOLUMES=/data</code>, <code>RUSTFS_ADDRESS=0.0.0.0:9000</code>, <code>RUSTFS_CONSOLE_ENABLE=true</code>, <code>RUSTFS_CONSOLE_ADDRESS=0.0.0.0:9001</code>, <code>RUSTFS_SERVER_DOMAINS=storage.pod.haus</code>, <code>RUSTFS_SFTP_ENABLE=true</code>, <code>RUSTFS_SFTP_ADDRESS=0.0.0.0:8022</code>, <code>RUSTFS_SFTP_HOST_KEY_DIR=/run/podhaus-secrets/sftp</code>, <code>TZ</code>. Ports <code>9000:9000</code>, <code>9001:9001</code>, <code>8022:8022</code> on the LAN, which is how kangaroo's Pouch store and every other bandicoot service fronted by bilby are reached (the LAN is the trusted zone; Docker-published ports bypass firewalld). Use <code>/health/ready</code> for readiness and Gatus availability checks; <code>/health</code> reports process liveness. The data root is <code>chown</code>ed to uid 10001 once at copy time. Labels: autoheal (bandicoot has its own autoheal stack), the stack content hash, <code>podhaus.depends-on-rustfs-secrets-init</code>.</li>
+<li><strong><code>rustfs-secrets-init</code></strong>. Writes the host key (base64 from the renamed 1Password item) to <code>/secrets/sftp/ssh_host_ed25519_key</code>, directory 0700 and file 0600, both owned by 10001. RustFS refuses to start if any file in that directory has group or other permission bits, and a root-owned 0600 file is unreadable to the rustfs user, so the ownership is part of the contract, not tidiness.</li>
+<li><strong><code>rustfs-init</code></strong>. Uses <code>rustfs/rc</code> to <code>mb</code> and <code>version enable</code> the <code>terraform-state</code> bucket idempotently, what <code>minio-init</code> does with <code>mc</code> today.</li>
+</ul>
+
+<h3>SFTP behaviour Indigo will see</h3>
+<ul>
+<li>The address becomes <code>storage.pod.haus</code>, the store's own name, instead of the host name <code>bilby.pod.haus</code>. On the LAN that name resolves to bilby's Caddy, whose layer-4 forward hands port 8022 to the store on bandicoot. SFTP stays LAN-only: off the LAN the name resolves to Numbat, which does not relay 8022. Port <code>8022</code>, user <code>doggos-indigo-deploy</code>, her existing password and path <code>/doggos-indigo</code> are unchanged. The host key is the same Terraform-generated Ed25519 key, so no changed-key warning. She edits one field in Blocs; the 1Password item's Address field is Terraform-written and follows.</li>
+<li>RustFS's stated limits: uploads are sequential from the start of a file (no resume or append), rename is not atomic, no public-key or anonymous login, no symlinks or permission changes. Blocs' "publish just the changes" is whole-file uploads and deletes, which is within those limits; MinIO's SFTP had the stricter "no rename" rule.</li>
+<li>The doggos runbook's rollback (<code>mcli undo</code>) is S3 versioning and unchanged.</li>
+</ul>
+
+<h3>The kangaroo stack: <code>pouch-rustfs/</code></h3>
+<p>Replaces <code>pouch-minio/</code>. One service, official <code>rustfs/rustfs:1.0.0</code> (kangaroo is a NAS; it does not compile anything), <code>RUSTFS_*</code> root credentials from the renamed "Pouch RustFS Root" item, <code>/share/CACHEDEV1_DATA/Pouch/rustfs:/data</code>, port <code>9000:9000</code>, healthcheck on <code>/health/ready</code>. No console, no domains, no SFTP. Linked-repo on <code>kangaroo</code> as today.</p>
+
+<h2>Every consumer edit</h2>
+
+<table>
+<thead><tr><th>File</th><th>Change</th><th>Kind</th></tr></thead>
+<tbody>
+<tr><td><code>caddy/Dockerfile</code></td><td><code>xcaddy build --with github.com/caddy-dns/cloudflare --with github.com/mholt/caddy-l4</code>.</td><td>minor</td></tr>
+<tr><td><code>caddy/Caddyfile</code></td><td>Every <code>reverse_proxy minio:9000</code> (S3 vhost, three sites, their 404 handlers) → <code>{$BANDICOOT_LAN_IPV4}:9000</code>; console route host <code>rustfs.pod.haus</code> → <code>{$BANDICOOT_LAN_IPV4}:9001</code>; a global-options <code>layer4</code> block: <code>:8022</code> → <code>proxy {$BANDICOOT_LAN_IPV4}:8022</code>; comments. The <code>pouch.pod.haus</code> block is unchanged.</td><td>minor</td></tr>
+<tr><td><code>caddy/compose.yaml</code>, <code>caddy/stack.toml</code></td><td>Publish <code>8022:8022</code> (moves from the old minio stack). <code>SKY_CACHE_MANIFEST_URL=http://[[LAN_BANDICOOT_IPV4]]:9000/skycroeser-net/files.publii.json</code>; description.</td><td>minor</td></tr>
+<tr><td><code>search-indexer/{compose.yaml,stack.toml,scripts/index.sh}</code></td><td>Endpoint <code>http://[[LAN_BANDICOOT_IPV4]]:9000</code> via a stack variable; variable names <code>MINIO_*</code> → <code>S3_*</code>; 1Password reference follows the item rename.</td><td>minor</td></tr>
+<tr><td><code>nathanbaxter-deploy/{stack.toml,compose.yaml,build.sh}</code></td><td>Variable names and 1Password references only; the endpoint <code>storage.pod.haus</code> and <code>mcli mirror</code> are unchanged.</td><td>rename</td></tr>
+<tr><td><code>pomerium/config.yaml</code>, <code>terraform/services_pod_haus.tf</code></td><td><code>minio.pod.haus</code> → <code>rustfs.pod.haus</code>.</td><td>rename</td></tr>
+<tr><td><code>gatus/conf/config.yaml</code></td><td>Both primary storage checks → <code>/health/ready</code>, names "RustFS S3 (…)"; alert text for the Sky monitor says RustFS. The monitor's own script is S3-only and unchanged. Checks go through <code>storage.pod.haus</code>, so the host move is invisible to them.</td><td>minor</td></tr>
+<tr><td><code>backup/bandicoot/{compose.yaml,config.json.tmpl}</code></td><td>Bind <code>/var/lib/rustfs:/userdata/rustfs:ro</code>; new plan <code>rustfs</code> on <code>/userdata/rustfs</code>, nightly at 05:15, retention 14/4/6 as before.</td><td>minor</td></tr>
+<tr><td><code>backup/bilby/{compose.yaml,config.json.tmpl,scripts/}</code>, <code>backup/tests/</code>, <code>gatus/conf/config.yaml</code></td><td>Remove the old MinIO source bind and plan; the pets plan drops the old assets path. Add access to Bandicoot’s repository and the synchronous snapshot-copy, scoped retention and existing-destination upload described above. Update failure/freshness monitoring and require off-site coverage for every Jump repository.</td><td>backup boundary change</td></tr>
+<tr><td><code>komodo/sync/procedures.toml</code>, <code>komodo-start</code></td><td>Comments only.</td><td>rename</td></tr>
+<tr><td><strong><code>LogicWolfe/pets</code></strong> (external)</td><td>Endpoint <code>http://[[LAN_BANDICOOT_IPV4]]:9000</code> and the renamed variable references. The endpoint change is load-bearing: the container name <code>minio</code> stops resolving at cutover. Coordinate that push with the cutover.</td><td>minor, separate repo</td></tr>
+<tr><td>Indigo's Blocs</td><td>Address field: <code>bilby.pod.haus</code> → <code>storage.pod.haus</code>. Nothing else.</td><td>one field</td></tr>
+<tr><td>Sky's Publii, Sky's restic</td><td>Nothing.</td><td></td></tr>
+</tbody>
+</table>
+
+<h2>Terraform and credential preservation</h2>
+
+<p>The new provider receives the same usernames, access keys and secrets as the
+old provider. Identity records are recreated only on the RustFS copy. Buckets,
+objects, root accounts, the hand-made <code>terraform</code> backend user, SFTP
+host key, and Sky’s restic encryption password are never deleted or regenerated.</p>
+
+<table>
+<thead><tr><th>Area</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td><code>backend.tf</code></td><td>Keep the S3 backend unchanged. Add <code>weinmann-emt/rustfs</code> (reviewed version 0.0.8); retain <code>aminueza/minio</code> for S3-level resources.</td></tr>
+<tr><td><code>providers.tf</code></td><td>Native providers on <code>storage.pod.haus:443</code> and <code>pouch.pod.haus:443</code>, <code>ssl = true</code>, using existing root credentials. Keep the corresponding MinIO providers for buckets.</td></tr>
+<tr><td><code>minio.tf</code> → <code>rustfs.tf</code></td><td>Keep bucket resource addresses. Replace IAM policies, users, attachments and service accounts with <code>rustfs_policy</code>, <code>rustfs_user</code> and <code>rustfs_serviceaccount</code>. Policies use <code>statement = [{ effect, action, ressource }]</code>; the spelling is the provider’s. User <code>policy</code> references the policy resource name; service-account <code>user</code> references its user’s <code>access_key</code>, establishing creation order. Supply the service-account display <code>name</code> and original access key explicitly.</td></tr>
+<tr><td><code>minio_pouch.tf</code> → <code>rustfs_pouch.tf</code></td><td>The same transformation using <code>rustfs.pouch</code>. This file remains on MinIO IAM until the separate Pouch cutover; do not switch both providers’ IAM resources in the primary-store apply.</td></tr>
+<tr><td>Credential storage in Terraform</td><td>Before removing old resources, adopt the six managed users’ existing secrets and five service-account secrets into named <code>random_password</code> resources. Import the actual value into each resource; set its length to the original length and match the random provider’s import attributes so the next plan proposes no regeneration. These resources retain the existing values in Terraform state and supply the native IAM resources. Usernames and service-account access-key identifiers are explicit non-secret configuration. Existing 1Password items and sensitive outputs reference the retained values, keeping every client’s credentials unchanged.</td></tr>
+<tr><td>Preparatory apply</td><td>Using the old IAM resources and live MinIO endpoints, rename the SFTP host-key and Pouch root 1Password items; widen the three public bucket policies and versioned-site deploy policies with <code>s3:GetObjectVersion</code>. Preserve resource addresses, or use same-type <code>moved</code> blocks when renaming them. No root password, host key or client credential may change. The five hand-made item retitles and <code>terraform.env.op</code> reference updates follow, before stopping either store.</td></tr>
+<tr><td>State transition per store</td><td>Save a private <code>terraform state pull</code> checkpoint. Remove only that store’s old <code>minio_iam_*</code> addresses from state, with the replacement configuration ready. Do not run a destroy. On the RustFS copy, use root-authenticated admin operations to remove the inventoried managed service accounts, their users and their policies, in that order. Terraform then creates native policies, users and service accounts with the retained credentials. Inspect the plan before applying; afterward require an empty plan and successful authentication with every original client credential.</td></tr>
+<tr><td>Names</td><td>Rename the console DNS and Pomerium route to <code>rustfs.pod.haus</code>. S3 and Publii DNS stay unchanged. Change the Doggos item’s Address field to <code>storage.pod.haus</code> at primary cutover; Indigo updates Blocs to match.</td></tr>
+</tbody>
+</table>
+
+<p><strong>Credential handoff.</strong> Export the old Terraform state to a
+mode-0600 file outside the repository before any state removal. Extract values
+programmatically without printing them or pasting them into tracked files.
+Use the existing <code>op-vault dev</code> authentication boundary. Importing
+<code>random_password</code> preserves a supplied value; importing
+<code>rustfs_user</code> does not populate its secret. The native resources
+therefore take their normal create path. A fresh deployment generates new
+passwords normally, while this migration retains the existing ones.
+See the <a href="https://raw.githubusercontent.com/hashicorp/terraform-provider-random/main/internal/provider/resource_password.go">random provider’s import implementation</a>
+and the <a href="https://github.com/weinmann-emt/terraform-provider-rustfs/blob/v0.0.8/provider/rustfs_user_resource.go">native user resource</a>.</p>
+
+<p>The managed identity inventory is four users and three service accounts on
+the primary store, and two users and two service accounts on Pouch. Inventory
+the actual records and policy bindings before deleting any target identity;
+unexpected records stay intact. Use a fixed display name and explicit description for each service account so its first refresh agrees with configuration. The primary store’s separate backend user
+<code>terraform</code> and both root credentials are excluded from this operation.
+Never apply the target IAM deletion to the retained MinIO directories.</p>
+
+<h3>1Password items and Komodo variables</h3>
+
+<table>
+<thead><tr><th>Today</th><th>After</th><th>Owner</th><th>Consumers to update</th></tr></thead>
+<tbody>
+<tr><td>MinIO Root (<code>6hev73x4vkpq4swrvkkdgjefny</code>)</td><td>RustFS Root (<code>OP__KOMODO__RUSTFS_ROOT__*</code>)</td><td><code>op item edit</code></td><td><code>rustfs/stack.toml</code>, <code>terraform.env.op</code></td></tr>
+<tr><td>MinIO Terraform User (<code>35ub3ecgf5gkrxlib2xxwdhgee</code>)</td><td>RustFS Terraform User</td><td><code>op item edit</code></td><td><code>terraform.env.op</code></td></tr>
+<tr><td>MinIO SFTP Host Key</td><td>SFTP Host Key</td><td>Terraform</td><td><code>rustfs/stack.toml</code></td></tr>
+<tr><td>MinIO nathanbaxter.com (<code>xpgtkj6w6dewgc53ae3oe4lk4u</code>, <code>OP__KOMODO__MINIO_NATHANBAXTER_COM__*</code>)</td><td>RustFS nathanbaxter.com</td><td><code>op item edit</code></td><td><code>nathanbaxter-deploy/stack.toml</code></td></tr>
+<tr><td>MINIO Skycroeser Net Deploy (<code>cav2ixnx4i6umpqmk3azrton2u</code>, <code>OP__KOMODO__MINIO_SKYCROESER_NET_DEPLOY__*</code>)</td><td>RustFS Skycroeser Net Deploy</td><td><code>op item edit</code></td><td><code>search-indexer/stack.toml</code>; Sky's Publii holds the same key and is unaffected</td></tr>
+<tr><td>MINIO Pets Alive Assets (<code>2fkkeretywoz4lmpxjuhjpobdy</code>)</td><td>RustFS Pets Alive Assets</td><td><code>op item edit</code></td><td><code>LogicWolfe/pets</code> stack.toml</td></tr>
+<tr><td>Pouch MinIO Root</td><td>Pouch RustFS Root</td><td>Terraform</td><td><code>pouch-rustfs/stack.toml</code>, <code>providers.tf</code></td></tr>
+<tr><td>Doggos Indigo Publish, Sky Backups, Sky Backups Monitor</td><td>unchanged titles (Address field updated by Terraform)</td><td>Terraform</td><td>none</td></tr>
+</tbody>
+</table>
+<p class="doc-muted">The podhaus ResourceSync is additive, so the old <code>OP__KOMODO__MINIO_*</code> variables linger in Komodo after komodo-op stops producing them. Cleanup lists them for <code>DeleteVariable</code>.</p>
+
+<h2>Procedure, in dependency order</h2>
+
+<h3>Preparation while MinIO still runs</h3>
+<ol>
+<li>Prepare the stack, Caddy, consumer and Terraform changes on a branch. Separate the preparatory Terraform configuration, primary cutover and Pouch cutover so each apply matches the server currently running. A branch push does not deploy: the webhook filters for <code>main</code>, and Komodo pulls <code>origin/main</code>.</li>
+<li>Build the RustFS image on bandicoot with the SFTP feature and memory limits; build Caddy with layer 4 and confirm the module is present. Enable info-level logging for the build’s SFTP smoke check so the listener message is visible. These finite builds and checks are performed during implementation, not as part of this document edit.</li>
+<li>Capture private Terraform state, the complete IAM inventory, current item titles and both stores’ bucket configuration. Adopt the existing managed secrets into the password resources and confirm a plan proposes no password regeneration. Retain that credential checkpoint with the rollback artifacts.</li>
+<li>Apply only the preparatory changes described above using the old IAM resources: Terraform-owned item retitles and the compatible policy widening. Rename the five hand-made items by their recorded IDs, update <code>terraform.env.op</code>, and verify every new Komodo variable, including <code>OP__KOMODO__SFTP_HOST_KEY__PRIVATE_KEY_B64</code> and <code>OP__KOMODO__POUCH_RUSTFS_ROOT__*</code>, exists before a stack consumes it.</li>
+<li>Check for server-side encryption and unsupported storage features on the source. Capture the primary store’s object/version manifest, including delete markers, and plaintext SHA-256 hashes fetched through S3 for every retained version. Pause publishers and scheduled writers during this final inventory and the copy; temporary failures are acceptable. Read failures or unsupported encryption must be resolved before the original store is retired.</li>
+</ol>
+
+<h3>Primary-store cutover</h3>
+<ol>
+<li>Take a final private Terraform state checkpoint with the preparatory changes complete; make no unrelated infrastructure changes during this migration. Stop the <code>minio</code> stack in Komodo. Copy <code>/var/lib/minio/</code> to an empty <code>/var/lib/rustfs/</code> on bandicoot using <code>rsync -a</code> as root at both ends, then <code>chown -R 10001:10001</code> the target. Keep the source untouched and stopped.</li>
+<li>Merge the primary cutover into <code>main</code> and push <code>main</code>. The commit adds <code>rustfs/</code>, removes <code>minio/</code>, updates Caddy and the primary consumers, and changes backup bindings. Merge and push the pets endpoint/variable change to that repository’s <code>main</code> too. Await the deployment results and CI with <code>ci-watch &lt;branch&gt; &lt;head_sha&gt;</code>. Repair any startup failures with the originals retained; zero downtime is not a requirement.</li>
+<li>Verify RustFS starts with the original root credentials, serves the copied buckets, and the unchanged <code>terraform</code> user can read and write its backend. Compare the source manifest and payload hashes before allowing publishers to resume.</li>
+<li>Perform the primary store’s IAM state transition described above. Terraform removes no bucket or object: it creates four native users and three service accounts with the original credential values. Apply the console DNS rename and Doggos Address change. Pouch’s IAM remains on its existing provider until its cutover. Require an empty follow-up plan and check the original client credentials before resuming writers.</li>
+<li>Run the primary-store acceptance checks below through the real names, including Caddy’s SFTP forward and a publish from Indigo’s iPad. An optional isolated probe must redirect both backend and provider endpoints; changing Terraform’s backend URL alone does not redirect its providers.</li>
+</ol>
+
+<h3>Pouch cutover</h3>
+<ol>
+<li>Pause Sky’s backup writer, record the repository snapshot IDs and bucket inventory, and take another private Terraform state checkpoint. Stop <code>pouch-minio</code> in Komodo. Copy <code>/share/CACHEDEV1_DATA/Pouch/minio</code> to the new, absent <code>/share/CACHEDEV1_DATA/Pouch/rustfs</code> directory and change the copy’s owner to 10001. The endpoint stays unavailable during the copy; the old directory remains untouched.</li>
+<li>Merge and push the Pouch changes to <code>main</code>: add <code>pouch-rustfs/</code>, remove <code>pouch-minio/</code>, and switch only Pouch’s IAM resources to the native provider. Its renamed root variables already exist. Await deployment and CI.</li>
+<li>Recreate the two managed users and two service accounts on the RustFS copy with their original credentials, following the same state-transition procedure. Apply and require an empty follow-up plan. Do not regenerate Sky’s restic encryption password.</li>
+<li>Check readiness through the LAN and Numbat paths. Run <code>restic check --read-data</code> against the copied repository using the existing Sky Backups credentials and compare snapshot IDs with the source inventory. Restore a representative file and verify its content. Then resume Sky’s writer, confirm a new backup commits a snapshot, and verify the hourly monitor reports it.</li>
+</ol>
+
+<h3>Backup proof and retained rollback</h3>
+<ul>
+<li>Restore RustFS and all seven existing Bandicoot plans from Bilby’s existing OneDrive destination. Verify Bilby and Kangaroo’s current off-site coverage too.</li>
+<li>Keep both original MinIO directories untouched, saved MinIO images, secret volumes, old Komodo variables, and private Terraform checkpoints. Retain the original MinIO snapshots. Do not forget or prune them as migration cleanup.</li>
+<li>Remove the old stacks from automatic deployment so they cannot restart over the frozen rollback data. Keep their original compose configuration with the checkpoint and the original Git revision.</li>
+<li>Do not prune Docker images, volumes or build caches as part of this rollout. Destructive cleanup needs Nathan’s separate authorization.</li>
+</ul>
+
+<h2>Verification</h2>
+<p>Run these checks at cutover against the real endpoints, with the untouched source directories retained. Data and restore checks must pass before declaring rollout complete; other failures can be repaired during an accepted outage. These are acceptance requirements, not results already obtained.</p>
+
+<table>
+<thead><tr><th>Property</th><th>Check</th></tr></thead>
+<tbody>
+<tr><td>The image builds on bandicoot and has SFTP</td><td><code>docker build</code> completes within the host’s available memory; the build’s info-level smoke log shows the SFTP listener. The deployed SFTP endpoint presents the retained host-key fingerprint.</td></tr>
+<tr><td>Every object and version survived the copy</td><td>Compare the primary store’s complete manifest by bucket, key, version ID, size and delete-marker state; compare SHA-256 hashes of every version’s S3 response body. Check bucket policies, versioning flags and object metadata. Counts and ETags alone are insufficient. Inventory server-side encryption before copying: the selected builds do not read every MinIO encryption format (<a href="https://github.com/rustfs/rustfs/blob/1.0.0/docs/architecture/minio-file-format-compat.md">upstream limits</a>).</td></tr>
+<tr><td>No client-held credential changes</td><td>Sky's restic (<code>restic snapshots</code> from her laptop with the existing configuration), Sky's Publii, the pets backend, <code>nathanbaxter-deploy</code> and Indigo's Blocs all authenticate after cutover with the credentials they had before. The retained password resources propose no regeneration, recreated IAM uses those exact values, and the follow-up Terraform plan is empty.</td></tr>
+<tr><td>IAM survived</td><td>The primary has its four managed users, three service accounts and unchanged backend user; Pouch has two managed users and two service accounts. Policy bindings match Terraform. Each scoped key succeeds in its own bucket and is denied access to another bucket; the Pouch monitor can list snapshots but cannot read or write objects.</td></tr>
+<tr><td>Deploy keys still work</td><td><code>mcli mirror</code> a scratch file with the nathanbaxter key; <code>mc ls</code> with Sky's key from the search-indexer image; a pets asset upload and read-back through the pets API.</td></tr>
+<tr><td>Anonymous site reads through the front door</td><td>HTTP GET requests for <code>index.html</code>, a nested pretty URL, an asset, and a missing key for each of the three sites through Caddy: 200, 200, 200, 404 with the site's own 404 body. Listing the bucket anonymously is denied.</td></tr>
+<tr><td>Publii's virtual-host addressing</td><td>An authenticated <code>HEAD</code> with Host <code>skycroeser-net.storage.pod.haus</code> resolves the bucket (proves <code>RUSTFS_SERVER_DOMAINS</code> survives the proxy hop).</td></tr>
+<tr><td>Terraform backend</td><td><code>terraform plan</code> twice in a row succeeds (lockfile created and released on a versioned bucket); then <code>apply</code> writes a new state version and <code>mcli ls --versions</code> shows it.</td></tr>
+<tr><td>Sky's cache invalidation still sees versions</td><td>The Caddy job's manifest URL returns an <code>x-amz-version-id</code>; a re-upload of <code>files.publii.json</code> changes it and the job purges (Gatus "Sky release monitor" stays green).</td></tr>
+<tr><td>The layer-4 forward</td><td><code>ssh-keyscan -p 8022 storage.pod.haus</code> from a LAN client returns the Terraform key's fingerprint (the connection went bilby → bandicoot); from off the LAN the port is closed.</td></tr>
+<tr><td>Indigo's publishing</td><td>From a laptop on the LAN, <code>sftp -P 8022 doggos-indigo-deploy@storage.pod.haus</code>: the host key fingerprint matches today's, <code>cd /doggos-indigo</code>, <code>ls</code> shows the site, upload then delete a scratch file, and the upload appears as a new version in the bucket (<code>mcli ls --versions</code>). Then a real publish from her iPad.</td></tr>
+<tr><td>Sky's repository</td><td><code>restic check --read-data</code> reads all repository packs through <code>pouch.pod.haus</code>; retained snapshot IDs match; a file restore verifies content. Then a new client backup commits a snapshot and the hourly monitor reports it. Plain <code>restic check</code> does not read all payloads (<a href="https://restic.readthedocs.io/en/stable/045_working_with_repos.html#checking-integrity-and-consistency">restic documentation</a>).</td></tr>
+<tr><td>Monitoring</td><td>Gatus readiness checks are green on both primary paths (<code>/health/ready</code>) and Pouch’s repository monitor is green. Verify Docker restart recovery separately from autoheal: killing a process exercises the restart policy; autoheal responds to a running container marked unhealthy.</td></tr>
+<tr><td>Backups</td><td>Restore the complete <code>plan:rustfs</code> data root into an isolated RustFS and verify current objects, historical versions, Terraform state and IAM through the service. Perform this restore from <code>onedrive:Backups/podhaus-restic</code>, not merely Jump. Verify all seven other Bandicoot plans there and require a green off-site freshness check. No new remote destination is created. Confirm original MinIO snapshots and rollback artifacts remain available.</td></tr>
+<tr><td>Rollback remains available</td><td>Both original MinIO directories, saved images, secret volumes, old credential variables and matching Terraform checkpoints remain available. No cleanup deletes original MinIO snapshots or prunes Docker images or volumes. The old stack definitions are removed from automatic deployment.</td></tr>
+</tbody>
+</table>
+
+<h2>Rollback to the preserved cutover state</h2>
+<p>Rollback remains available after rollout and intentionally loses writes made
+after that store’s cutover. Nathan accepts this loss. Stop the RustFS stack,
+restore the previous stack and consumer configuration through <code>main</code>,
+and restart MinIO on its untouched original directory. Reverse the pets endpoint
+change for a primary rollback and restore Indigo’s Blocs address. Remove Caddy’s
+8022 publication before restarting the primary MinIO listener.</p>
+<p>Use the saved item-ID/title inventory to restore names required by the old
+configuration and wait for their Komodo variables. Keep root passwords, client
+credentials, SFTP key and restic password unchanged. Restore the matching old
+Terraform configuration. A primary rollback also restores the old backend state
+already held in the untouched primary directory; do not run reverse IAM imports
+against it. Reconcile the preparatory item-title changes against that state.
+For a Pouch-only rollback, the primary backend is still current: restore the
+pre-Pouch Terraform checkpoint, whose lineage matches, with Terraform’s supported
+state push operation, checking lineage and the saved checkpoint before any required
+serial override, and reconcile the known external changes. No unrelated
+Terraform applies occur between that checkpoint and the rollback decision.</p>
+<p>The checkpoint and old directories are one recovery set; never combine a
+pre-cutover IAM configuration with post-transition state by accident. Any future
+removal of rollback artifacts requires separate authorization.</p>
+
+
+</div>
+</main>
+</body>
+</html>

@@ -12,7 +12,7 @@ locals {
     kangaroo-backup = local.numbat_application_ipv4
     komodo          = local.numbat_application_ipv4
     metube          = local.numbat_application_ipv4
-    minio           = local.numbat_application_ipv4
+    rustfs          = local.numbat_application_ipv4
     music           = local.numbat_application_ipv4
     paperless       = local.numbat_application_ipv4
     plex            = local.numbat_application_ipv4

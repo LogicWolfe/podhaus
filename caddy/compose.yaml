@@ -52,6 +52,7 @@ services:
     # LAN/WAN-facing.
     ports:
       - 443:443
+      - 8022:8022
     environment:
       TZ: ${TZ}
       # Cloudflare token for ACME DNS-01 and Sky's cache-tag purge,

@@ -184,7 +184,7 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
       <p>
         Sky's backup check is storage-driven. The hourly
         <code>sky-backups-monitor</code> job lists encrypted snapshot objects under
-        <code>sky-backups/personal-laptop/snapshots/</code> in Pouch MinIO and reports whether
+        <code>sky-backups/personal-laptop/snapshots/</code> in Pouch RustFS and reports whether
         the newest object was committed within seven days. The job pushes its result to Gatus
         over dockernet; the laptop has no Gatus token or callback. Its
         <code>Backup / Sky Restic Repository</code> endpoint has a two-hour heartbeat window so

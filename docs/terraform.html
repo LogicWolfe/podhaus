@@ -3,8 +3,8 @@
       <h1>Terraform</h1>
       <p class="lead text-lg text-text-muted">
         Declarative config for the public edge, DNS, identity integrations, cloud hosts,
-        MinIO IAM, and the GitHub webhook that drives push-to-deploy.
-        Single TF root at <code>terraform/</code>, state in MinIO via the public
+        RustFS IAM, and the GitHub webhook that drives push-to-deploy.
+        Single TF root at <code>terraform/</code>, state in RustFS via the public
         <code>storage.pod.haus</code>, run with <strong>stock <code>terraform</code></strong>
         from any machine — no wrapper.
       </p>
@@ -56,34 +56,36 @@
         <a href="/komodo.html">Komodo</a> and
         <a href="/secrets.html">Secrets</a>.
       </p>
-      <h2 id="state">State backend — MinIO</h2>
+      <h2 id="state">State backend — RustFS</h2>
       <p>
-        Terraform state lives in MinIO at <code>s3://terraform-state/podhaus.tfstate</code>.
+        Terraform state lives in RustFS at <code>s3://terraform-state/podhaus.tfstate</code>.
         The bucket has <strong>versioning enabled</strong>, so an accidental
-        <code>terraform destroy</code> leaves the previous state version recoverable from MinIO's
-        web console at <a href="https://minio.pod.haus">minio.pod.haus</a>. Terraform
+        <code>terraform destroy</code> leaves the previous state version recoverable from the
+        RustFS web console at <a href="https://rustfs.pod.haus">rustfs.pod.haus</a>. Terraform
         reaches the backend over the public <code>https://storage.pod.haus</code>
-        (Numbat rathole → Caddy → MinIO; see the runner section for why it is DNS-only).
+        (Numbat rathole → Caddy → RustFS; see the runner section for why it is DNS-only).
       </p>
       <p>
-        MinIO runs as a Komodo-managed single-node stack on bilby
-        (<code>minio/compose.yaml</code>, data at <code>/var/lib/minio</code>, API on
-        loopback <code>127.0.0.1:9000</code> + console through Numbat and Pomerium). The S3 backend
+        RustFS runs as a Komodo-managed single-node stack on bandicoot
+        (<code>rustfs/compose.yaml</code>, data at <code>/var/lib/rustfs</code>, API, console,
+        and SFTP on LAN ports <code>9000</code>, <code>9001</code>, and <code>8022</code>). The S3 backend
         uses <strong>native lockfile-in-S3</strong> (provider feature
         <code>use_lockfile = true</code>) — no DynamoDB sidecar needed; concurrent
         <code>terraform apply</code> attempts block on a <code>.tflock</code> object with
-        S3 conditional-put semantics. Verified during the foundation smoke test.
+        S3 conditional-put semantics.
       </p>
       <p>
-        Backrest covers the bucket via the <code>minio</code> plan
-        (<code>backup/bilby/config.json.tmpl</code>) — daily snapshot of
-        <code>/var/lib/minio</code>, which the nightly rclone hook ships to OneDrive.
+        Backrest covers the data root via the <code>rustfs</code> plan on bandicoot.
+        Bilby copies every Bandicoot repository into its existing restic repository and its
+        existing OneDrive mirror.
         Restore drill steps are in <a href="/disaster-recovery.html">disaster recovery</a>.
       </p>
       <p>
-        The same MinIO provider has a <code>pouch</code> alias for the separate instance at
+        The MinIO provider retains S3-compatible bucket, versioning, and bucket-policy resources;
+        the native <code>weinmann-emt/rustfs</code> provider owns RustFS IAM. Both have a
+        <code>pouch</code> alias for the separate instance at
         <code>https://pouch.pod.haus</code>. Terraform generates its root credential in the
-        standard-field <code>Pouch MinIO Root</code> 1Password login, then owns the private
+        standard-field <code>Pouch RustFS Root</code> 1Password login, then owns the private
         <code>sky-backups</code> bucket, scoped IAM service account, and the ready-to-use
         <code>Sky Backups</code> credential handoff. The endpoint still satisfies the
         from-any-machine rule: remote Terraform traffic traverses Numbat and LAN traffic
@@ -132,12 +134,12 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
         custom root fields with random IDs, so restructuring them would ripple to
         the environment file's 1Password references and komodo-op variable names.
         The <code>1Password/onepassword</code> provider remains for credentials it
-        can read or manage cleanly, including Pocket ID, Pouch MinIO, Forgejo, and
+        can read or manage cleanly, including Pocket ID, Pouch RustFS, Forgejo, and
         the Sky backup accounts.
       </blockquote>
       <p>
         The S3 state backend is the public
-        <code>https://storage.pod.haus</code> — MinIO behind its own Caddy
+        <code>https://storage.pod.haus</code> — RustFS behind its own Caddy
         + Let's Encrypt wildcard, <strong>not</strong> Cloudflare-proxied.
         Cloudflare's HTTP proxy rewrites the SigV4-signed
         <code>Accept-Encoding</code> header and breaks
@@ -150,12 +152,12 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
         <strong>Numbat BinaryLane rathole relay</strong>:
         <code>storage.pod.haus</code> A → Numbat's Terraform-derived relay address
         → rathole reverse tunnel (bilby
-        dials out, noise+token) → bilby Caddy → MinIO. The UDM Pro SE
+        dials out, noise+token) → bilby Caddy → RustFS on bandicoot. The UDM Pro SE
         binds WAN:443 itself, so direct port-forward is a dead path —
         see <a href="/hosts.html#numbat">Numbat</a> and
         <a href="/networking.html">networking</a> for the relay
         architecture. <code>pouch.pod.haus</code> reuses the same raw port 443 relay and Caddy,
-        then proxies to kangaroo's MinIO over the LAN. The UniFi provider talks to
+        then proxies to kangaroo's RustFS over the LAN. The UniFi provider talks to
         <code>https://unifi.pod.haus</code> (not a LAN IP). Off-LAN that reaches
         Numbat; UniFi split DNS sends LAN callers through bilby Caddy, preserving the
         same valid certificate and from-anywhere provider contract.
@@ -204,17 +206,16 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
       <h2 id="dr">Disaster recovery</h2>
       <p>
         After a bilby rebuild, before any <code>tf apply</code> runs, the
-        <code>terraform-state</code> bucket has to exist in MinIO with the current state
+        <code>terraform-state</code> bucket has to exist in RustFS with the current state
         objects. Order:
       </p>
       <ol>
-        <li>Bring MinIO up via Komodo (<code>./komodo-sync</code> + deploy).</li>
-        <li>Restore <code>/var/lib/minio</code> from the most recent Backrest snapshot
+        <li>Bring RustFS up via Komodo (<code>./komodo-sync</code> + deploy).</li>
+        <li>Restore <code>/var/lib/rustfs</code> from the most recent Backrest snapshot
           via the Backrest UI. The bucket + objects come back intact.</li>
         <li><code>cd terraform && terraform init</code> — TF
           finds the restored state.</li>
-        <li><code>terraform plan</code> — should show zero drift if the rebuild matched the
-          last-applied state.</li>
+        <li><code>terraform plan</code> — inspect and resolve any drift before applying.</li>
       </ol>
       <p>
         Full bilby-rebuild runbook in <a href="/disaster-recovery.html">disaster
@@ -229,7 +230,7 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
           configured here is what triggers redeploys.</li>
         <li><a href="/monitoring.html">Monitoring</a> — the <code>Komodo Alerts</code>
           Gatus poll that surfaces deploy failures.</li>
-        <li><a href="/disaster-recovery.html">Disaster recovery</a> — bilby/MinIO rebuild
+        <li><a href="/disaster-recovery.html">Disaster recovery</a> — RustFS rebuild
           sequence.</li>
       </ul>
 

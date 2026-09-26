@@ -349,13 +349,13 @@ endpoints:
   # On-bilby probe (LAN/split-horizon resolves to bilby:443 directly):
   # tests Caddy + MinIO. Independent of the relay. Catches a
   # Caddy/MinIO/cert failure on-box.
-  - name: MinIO S3 (storage.pod.haus, on-bilby)
-    url: https://storage.pod.haus/minio/health/live
+  - name: RustFS S3 (storage.pod.haus, on-bilby)
+    url: https://storage.pod.haus/health/ready
     <<: *defaults
     group: Storage
 
-  - name: MinIO S3 (via Numbat relay, external path)
-    url: https://numbat-probe.storage.pod.haus/minio/health/live
+  - name: RustFS S3 (via Numbat relay, external path)
+    url: https://numbat-probe.storage.pod.haus/health/ready
     <<: *defaults
     group: Storage
 

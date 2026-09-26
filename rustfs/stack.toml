@@ -1,0 +1,17 @@
+[[stack]]
+name = "rustfs"
+description = "S3 storage and SFTP publishing on Bandicoot"
+tags = ["podhaus", "bandicoot"]
+
+[stack.config]
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "rustfs"
+run_build = true
+ignore_services = ["rustfs-secrets-init", "rustfs-init"]
+environment = """
+TZ=[[TZ]]
+RUSTFS_ACCESS_KEY=[[OP__KOMODO__RUSTFS_ROOT__USERNAME]]
+RUSTFS_SECRET_KEY=[[OP__KOMODO__RUSTFS_ROOT__CREDENTIAL]]
+SFTP_HOST_KEY_B64=[[OP__KOMODO__SFTP_HOST_KEY__PRIVATE_KEY_B64]]
+"""

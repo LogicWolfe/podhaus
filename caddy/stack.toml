@@ -1,6 +1,6 @@
 [[stack]]
 name = "caddy"
-description = "Public TLS front for MinIO S3 (own LE wildcard; not Cloudflare-proxied)"
+description = "Public TLS front for RustFS S3 (own LE wildcard; not Cloudflare-proxied)"
 tags = ["podhaus"]
 
 [stack.config]
@@ -18,7 +18,7 @@ CLOUDFLARE_API_TOKEN=[[OP__KOMODO__CLOUDFLARE_API_TOKEN__CREDENTIAL]]
 BANDICOOT_LAN_IPV4=[[LAN_BANDICOOT_IPV4]]
 KANGAROO_LAN_IPV4=[[LAN_KANGAROO_IPV4]]
 NATHANBAXTER_CACHE_TAG=nathanbaxter
-SKY_CACHE_MANIFEST_URL=http://minio:9000/skycroeser-net/files.publii.json
+SKY_CACHE_MANIFEST_URL=http://[[LAN_BANDICOOT_IPV4]]:9000/skycroeser-net/files.publii.json
 SKY_CACHE_ZONE=skycroeser.net
 SKY_CACHE_TAG=skycroeser
 SKY_CACHE_STATE_FILE=/data/cache-state/skycroeser-manifest-version

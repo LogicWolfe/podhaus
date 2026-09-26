@@ -2,33 +2,25 @@
 
       <h1>Backup &amp; recovery</h1>
       <p class="lead text-lg text-text-muted">
-        Backrest manages restic snapshots of operational state from bilby, kangaroo, and
-        Pinelake. Each stateful host has its own repository; Bilby and kangaroo also mirror
-        theirs to OneDrive through independent rclone hooks and OAuth token chains.
+        Backrest manages restic snapshots of operational state from bilby, kangaroo, bandicoot,
+        and Pinelake. Each stateful host has its own repository. Bilby mirrors its own and
+        Bandicoot's snapshots to its existing OneDrive repository; kangaroo mirrors its own.
       </p>
 
       <h2 id="topology">Backup topology</h2>
-      <pre><code>bilby state                kangaroo state                 pinelake state
-    │                          │                               │
-    ↓                          ↓                               ↓
-bilby Backrest             kangaroo Backrest              pinelake Backrest
-    │                          │                               │
-    ↓                          ↓                               ↓
-restic repo                restic repo                     restic repo
-/mnt/jump/backups/         /share/CACHEDEV2_DATA/Jump/     TerraMaster/
-                           backups-kangaroo/               .podhaus-backups/
-                                                          pinelake-restic/
-    │                          │
-    ↓                          ↓
-bilby rclone hook          kangaroo rclone hook
-    │                          │
-    ↓                          ↓
-OneDrive                   OneDrive
-Backups/                   Backups/
-podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
+      <pre><code>bilby state ─────→ bilby Backrest ─────→ /mnt/jump/backups/
+bandicoot state ─→ bandicoot Backrest ─→ /mnt/jump/backups-bandicoot/
+                                               │
+                                               │ restic copy in Bilby's Backrest hook
+                                               ↓
+                           /mnt/jump/backups/ ─→ OneDrive Backups/podhaus-restic/
+
+kangaroo state ──→ kangaroo Backrest ──→ Jump backups-kangaroo/ ──→ OneDrive
+pinelake state ──→ pinelake Backrest ──→ TerraMaster local repository</code></pre>
       <p>
-        Each host owns a separate restic repository and plan schedule. Bilby and kangaroo also
-        own separate rclone configurations and refresh-token chains. Pinelake's local repository
+        Each host owns a separate restic repository and plan schedule. Bandicoot's snapshots are
+        copied with restic into Bilby's repository by Bilby's serialized Backrest hook, then flow
+        through Bilby's existing rclone configuration and refresh-token chain. Pinelake's local repository
         protects operational state from accidental damage; it does not protect against loss of
         the TerraMaster volume and does not contain its multi-terabyte media.
       </p>
@@ -36,7 +28,7 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
       <h2 id="bilby-plans">Bilby plans</h2>
       <p>
         Configured in <code>backup/bilby/config.json.tmpl</code> (the config is the source of
-        truth — keep this table matching it). Nightly plans staggered 03:45 to 05:35 AWST so the
+        truth — keep this table matching it). Nightly plans staggered 03:45 to 06:00 AWST so the
         rolling write load doesn't pile up, plus two hourly plans:
       </p>
       <table>
@@ -54,11 +46,10 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
           <tr><td><code>logging</code></td><td>Alloy runtime state (<code>logging_alloy-data</code>) — config-as-code parsers live in git, so this is just WAL/positions</td><td>05:00</td></tr>
           <tr><td><code>clickstack</code></td><td>HyperDX app-state via nightly <code>mongodump</code> (dashboards/alerts/users/sources/ingestion-key). ClickHouse telemetry is deliberately <em>not</em> backed up — regenerable.</td><td>05:05</td></tr>
           <tr><td><code>gatus</code></td><td><code>gatus_gatus-data</code></td><td>05:10</td></tr>
-          <tr><td><code>minio</code></td><td><code>/var/lib/minio</code></td><td>05:15</td></tr>
-          <tr><td><code>backrest-state</code></td><td>Backrest's own DB</td><td>05:20</td></tr>
+          <tr><td><code>backrest-state</code></td><td>Backrest's own DB</td><td>06:00</td></tr>
           <tr><td><code>bugsink</code></td><td>Bugsink SQLite + event store</td><td>05:25</td></tr>
           <tr><td><code>pocket-id</code></td><td>Pocket ID SQLite + uploads (restore also needs <code>ENCRYPTION_KEY</code> from 1Password)</td><td>05:35</td></tr>
-          <tr><td><code>pets</code></td><td><code>/var/lib/pets-alive</code> + the MinIO assets bucket</td><td>hourly (:00)</td></tr>
+          <tr><td><code>pets</code></td><td><code>/var/lib/pets-alive</code></td><td>hourly (:00)</td></tr>
           <tr><td><code>yiayia-stories</code></td><td><code>/var/lib/yiayia-stories</code> (the transcription SQLite and the irreplaceable audio originals, one root so the snapshot is consistent)</td><td>hourly (:08)</td></tr>
         </tbody>
       </table>
@@ -76,11 +67,28 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
         died between the hooks. See the <a href="/runbooks/forgejo">Forgejo runbook</a>.
       </p>
       <p>
-        The <code>backrest-state</code> plan runs last and has a
-        <code>CONDITION_SNAPSHOT_SUCCESS</code> hook that fires the nightly rclone sync to
-        OneDrive for bilby's repository, and a
-        success ping to the Gatus heartbeat.
+        The <code>backrest-state</code> plan runs last. Its successful or unchanged-skip hook
+        verifies both Jump sentinels and repository IDs, requires a snapshot dated today for every
+        Bandicoot plan, copies Bandicoot's snapshots into Bilby's repository, applies retention
+        only to <code>created-by:bandicoot</code> snapshots, then mirrors the combined repository
+        to OneDrive. It reports either nightly heartbeat only after the whole sequence succeeds.
       </p>
+
+      <h2 id="bandicoot-plans">Bandicoot plans</h2>
+      <p>Configured in <code>backup/bandicoot/config.json.tmpl</code>. Its repository is on Jump and has no independent OneDrive writer. Every plan creates a nightly snapshot even when unchanged, so the copy gate can prove current source data from repository snapshots.</p>
+      <table>
+        <thead><tr><th>Plan</th><th>Source</th><th>Schedule</th></tr></thead>
+        <tbody>
+          <tr><td><code>rustfs</code></td><td><code>/var/lib/rustfs</code>, including object versions and Terraform state</td><td>03:30</td></tr>
+          <tr><td><code>clickstack-mongo</code></td><td>nightly ClickStack MongoDB dump</td><td>04:00</td></tr>
+          <tr><td><code>metube</code></td><td>MeTube state</td><td>04:10</td></tr>
+          <tr><td><code>fenwick</code></td><td>Fenwick and Signal device state</td><td>04:15</td></tr>
+          <tr><td><code>sonarr</code></td><td>Sonarr state</td><td>04:25</td></tr>
+          <tr><td><code>komodo</code></td><td>Komodo database volumes</td><td>04:40</td></tr>
+          <tr><td><code>onepassword</code></td><td>1Password Connect state</td><td>04:50</td></tr>
+          <tr><td><code>backrest-state</code></td><td>Backrest's own DB</td><td>05:00</td></tr>
+        </tbody>
+      </table>
 
       <h2 id="kangaroo-plans">Kangaroo plans</h2>
       <p>Configured in <code>backup/kangaroo/config.json.tmpl</code>. Three plans:</p>
@@ -175,11 +183,12 @@ podhaus-restic/            podhaus-kangaroo-restic/</code></pre>
 
       <h2 id="off-site">Off-site sync</h2>
       <p>
-        Bilby and kangaroo each trigger their own rclone sync after a successful
-        <code>backrest-state</code> snapshot. The upload targets are:
+        Bilby and kangaroo trigger rclone sync after a successful or unchanged-skip
+        <code>backrest-state</code> snapshot. Before Bilby syncs, its hook copies the complete
+        current Bandicoot set from its Jump repository into Bilby's repository. The upload targets are:
       </p>
       <ul>
-        <li><code>onedrive:Backups/podhaus-restic/</code> — bilby's repo.</li>
+        <li><code>onedrive:Backups/podhaus-restic/</code> — Bilby's repo and copied Bandicoot snapshots.</li>
         <li><code>onedrive:Backups/podhaus-kangaroo-restic/</code>: kangaroo's repo.</li>
       </ul>
       <p>

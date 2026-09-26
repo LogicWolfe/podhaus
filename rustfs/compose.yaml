@@ -1,0 +1,99 @@
+services:
+  rustfs-secrets-init:
+    build:
+      context: ../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_RUSTFS_SECRETS_INIT:-unset}
+    image: init-tools:local
+    pull_policy: never
+    restart: "no"
+    environment:
+      SFTP_HOST_KEY_B64: ${SFTP_HOST_KEY_B64}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        mkdir -p /secrets/sftp
+        printf '%s' "$${SFTP_HOST_KEY_B64}" | base64 -d > /secrets/sftp/ssh_host_ed25519_key
+        chown -R 10001:10001 /secrets/sftp
+        chmod 700 /secrets/sftp
+        chmod 600 /secrets/sftp/ssh_host_ed25519_key
+    volumes:
+      - rustfs-secrets:/secrets
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  rustfs:
+    container_name: rustfs
+    build:
+      context: .
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_RUSTFS:-unset}
+    image: podhaus-rustfs:local
+    pull_policy: never
+    restart: unless-stopped
+    security_opt: [label:disable]
+    depends_on:
+      rustfs-secrets-init:
+        condition: service_completed_successfully
+    environment:
+      TZ: ${TZ}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_SERVER_DOMAINS: storage.pod.haus
+      RUSTFS_SFTP_ENABLE: "true"
+      RUSTFS_SFTP_ADDRESS: 0.0.0.0:8022
+      RUSTFS_SFTP_HOST_KEY_DIR: /run/podhaus-secrets/sftp
+      RUSTFS_OBS_LOG_DIRECTORY: /logs
+    volumes:
+      - /var/lib/rustfs:/data
+      - rustfs-secrets:/run/podhaus-secrets:ro
+    tmpfs:
+      - /logs:uid=10001,gid=10001,mode=0750
+    ports:
+      - 9000:9000
+      - 9001:9001
+      - 8022:8022
+    networks: [dockernet]
+    labels:
+      autoheal: "true"
+      podhaus.depends-on-rustfs-secrets-init: ${BUILD_HASH_RUSTFS_SECRETS_INIT:-unset}
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  rustfs-init:
+    image: quay.io/minio/mc:latest
+    restart: "no"
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mc alias set local http://rustfs:9000 "$$RUSTFS_ACCESS_KEY" "$$RUSTFS_SECRET_KEY"
+        mc mb --ignore-existing local/terraform-state
+        mc version enable local/terraform-state
+    networks: [dockernet]
+    labels:
+      podhaus.depends-on-rustfs: ${BUILD_HASH_RUSTFS:-unset}
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+networks:
+  dockernet:
+    external: true
+volumes:
+  rustfs-secrets:

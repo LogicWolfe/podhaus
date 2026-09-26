@@ -3,7 +3,7 @@
 # cloudflare/, minio/terraform/, and the relay-only terraform/. See
 # /docs/terraform.html for the bootstrap story (komodo-start guarantees
 # the terraform-state bucket; one apply needs only the selected 1P machine
-# identity plus the process-scoped MinIO bucket credentials).
+# identity plus the process-scoped RustFS bucket credentials).
 terraform {
   required_version = ">= 1.10.0"
 
@@ -61,12 +61,18 @@ terraform {
       version = "~> 0.13.0"
     }
     minio = {
-      # MinIO IAM + bucket policies for the public Publii tenants
-      # (nathanbaxter-com, future skycroeser-net …). Server is
-      # storage.pod.haus (Caddy → MinIO; full API including admin).
+      # S3 buckets, versioning, and anonymous bucket policies on RustFS.
+      # The compatible S3 API preserves these existing resource addresses.
       # Docs: https://registry.terraform.io/providers/aminueza/minio/latest/docs
       source  = "aminueza/minio"
       version = "~> 3.0"
+    }
+    rustfs = {
+      # Native RustFS IAM users, policies, and service accounts. Keep the
+      # 0.x patch constraint deliberate: the provider schema is still young.
+      # Docs: https://registry.terraform.io/providers/weinmann-emt/rustfs/latest/docs
+      source  = "weinmann-emt/rustfs"
+      version = "~> 0.0.8"
     }
     onepassword = {
       # Reads selected credentials and manages Terraform-owned 1Password
@@ -106,7 +112,7 @@ terraform {
     endpoints = {
       # Public endpoint so Terraform runs from any machine. Path goes
       # storage.pod.haus → (split-horizon on LAN / numbat rathole
-      # off-LAN) → bilby Caddy → MinIO. SigV4 is the boundary; nothing
+      # off-LAN) → bilby Caddy → RustFS. SigV4 is the boundary; nothing
       # is host- or LAN-pinned.
       s3 = "https://storage.pod.haus"
     }

@@ -1,4 +1,11 @@
 {
+	layer4 {
+		:8022 {
+			route {
+				proxy {$BANDICOOT_LAN_IPV4}:8022
+			}
+		}
+	}
 	# Pomerium authenticates once with mTLS, then preserves each route's Host
 	# header for Caddy dispatch. The private listener is not reachable directly.
 	servers :4443 {
@@ -14,7 +21,7 @@
 # address is not one of the fields that expand runtime placeholders — the
 # {env.…} form above is for header and TLS values, which do.
 
-# Public TLS front for MinIO's S3 API. Owns its own Let's Encrypt
+# Public TLS front for RustFS's S3 API. Owns its own Let's Encrypt
 # wildcard so the S3 data path never touches Cloudflare's proxy (which
 # rewrites the SigV4-signed Accept-Encoding header and only has a
 # single-level Universal SSL cert). See docs/hosts.html#numbat.
@@ -22,7 +29,7 @@
 # One endpoint serves every S3 client:
 #   - path-style   https://storage.pod.haus            (Terraform)
 #   - virtual-host  https://<bucket>.storage.pod.haus   (Publii, aws-sdk-js v3)
-# MinIO (MINIO_DOMAIN=storage.pod.haus) discriminates by Host, which
+# RustFS (RUSTFS_SERVER_DOMAINS=storage.pod.haus) discriminates by Host, which
 # Caddy's reverse_proxy forwards unchanged — as it does Accept-Encoding
 # (no `encode` here, deliberately) — so SigV4 validates for Go and JS
 # SDKs alike.
@@ -59,7 +66,7 @@
 	@sonarr host sonarr.pod.haus
 	@watch host watch.pod.haus
 	@docs host docs.pod.haus bilby.docs.pod.haus
-	@minio_console host minio.pod.haus
+	@rustfs_console host rustfs.pod.haus
 	@sync host sync.pod.haus
 	@paperless host paperless.pod.haus
 	@stats host stats.pod.haus
@@ -88,7 +95,7 @@
 		# HyperDX lives on bandicoot; the front door stays here.
 		reverse_proxy @watch {$BANDICOOT_LAN_IPV4}:8080
 		reverse_proxy @docs docs:8000
-		reverse_proxy @minio_console minio:9001
+		reverse_proxy @rustfs_console {$BANDICOOT_LAN_IPV4}:9001
 		reverse_proxy @sync {$KANGAROO_LAN_IPV4}:8384
 		reverse_proxy @paperless paperless:8000
 		reverse_proxy @stats umami:3000
@@ -132,13 +139,13 @@ storage.pod.haus, *.storage.pod.haus, storage.pod.haus:4444, *.storage.pod.haus:
 	}
 
 	# The full MinIO API (S3 + admin) is served. The access-control
-	# boundary is MinIO's own SigV4 — unauthenticated calls (incl. to
+	# boundary is RustFS's own SigV4 — unauthenticated calls (incl. to
 	# /minio/admin/) get AccessDenied; root/admin creds live only in
 	# 1Password + the chezmoi-rendered Terraform env. Deliberately NOT
 	# edge-blocked: an admin-path 403 would break the from-anywhere
 	# `minio/terraform/` Terraform root (no TF root is exempt from the
 	# from-anywhere rule; see AGENTS.md and docs/terraform.html.
-	reverse_proxy minio:9000
+	reverse_proxy {$BANDICOOT_LAN_IPV4}:9000
 }
 
 # pouch.pod.haus is the public S3 endpoint for the separate MinIO instance
@@ -212,7 +219,7 @@ music.pod.haus {
 		Cache-Tag "{env.NATHANBAXTER_CACHE_TAG}"
 	}
 
-	# Missing-object handling: the route's reverse_proxy detects MinIO's
+	# Missing-object handling: the route's reverse_proxy detects RustFS's
 	# NoSuchKey 404, raises `error 404`, and this handler serves the
 	# styled 404.html body from the bucket with a real 404 status.
 	# `replace_status` overrides the 200 the inner reverse_proxy gets
@@ -220,7 +227,7 @@ music.pod.haus {
 	# reverse_proxy block, not as a standalone handle_errors directive.
 	handle_errors 404 {
 		rewrite * /nathanbaxter-com/404.html
-		reverse_proxy minio:9000 {
+		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
 			replace_status 404
 		}
 	}
@@ -251,7 +258,7 @@ music.pod.haus {
 			rewrite * /nathanbaxter-com{path}
 		}
 
-		reverse_proxy minio:9000 {
+		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
 			# MinIO 404 (NoSuchKey) → raise error 404 so handle_errors
 			# above can serve the styled 404 page while keeping the
 			# real status code.
@@ -298,7 +305,7 @@ nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
 	# reverse_proxy block). Terminal theme emits 404.html.
 	handle_errors 404 {
 		rewrite * /skycroeser-net/404.html
-		reverse_proxy minio:9000 {
+		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
 			replace_status 404
 		}
 	}
@@ -377,7 +384,7 @@ nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
 			rewrite * /skycroeser-net{path}
 		}
 
-		reverse_proxy minio:9000 {
+		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
 			@missing status 404
 			handle_response @missing {
 				error 404
@@ -427,7 +434,7 @@ id.pod.haus:4444 {
 }
 
 # doggos.indigopod.au: Indigo's "Doggos Alive", a Blocs export she
-# publishes into the doggos-indigo bucket over MinIO's SFTP. Served like
+# publishes into the doggos-indigo bucket over RustFS's SFTP. Served like
 # skycroeser.net minus the CDN: not a cache zone, so plain no-cache and
 # ETag revalidation. Blocs busts its CSS/JS with query strings.
 (doggos_site) {
@@ -435,7 +442,7 @@ id.pod.haus:4444 {
 
 	handle_errors 404 {
 		rewrite * /doggos-indigo/404.html
-		reverse_proxy minio:9000 {
+		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
 			replace_status 404
 		}
 	}
@@ -457,7 +464,7 @@ id.pod.haus:4444 {
 			rewrite * /doggos-indigo{path}
 		}
 
-		reverse_proxy minio:9000 {
+		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
 			@missing status 404
 			handle_response @missing {
 				error 404

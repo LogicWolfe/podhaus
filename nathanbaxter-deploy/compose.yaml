@@ -37,8 +37,8 @@ services:
       - label:disable
     environment:
       TZ: ${TZ}
-      MINIO_ACCESS_KEY: ${NATHANBAXTER_MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${NATHANBAXTER_MINIO_SECRET_KEY}
+      S3_ACCESS_KEY: ${NATHANBAXTER_S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${NATHANBAXTER_S3_SECRET_KEY}
       DEPLOY_KEY_B64: ${NATHANBAXTER_DEPLOY_KEY_B64}
     networks:
       - dockernet

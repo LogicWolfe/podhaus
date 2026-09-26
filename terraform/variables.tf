@@ -5,13 +5,13 @@ variable "account_id" {
 }
 
 variable "minio_user" {
-  description = "MinIO root user (TF_VAR_minio_user, from chezmoi → op://Homelab/MinIO Root). Used by the minio provider for admin operations on storage.pod.haus."
+  description = "RustFS root user for storage.pod.haus (supplied through TF_VAR_minio_user). The variable name remains stable for the existing environment handoff."
   type        = string
   sensitive   = true
 }
 
 variable "minio_password" {
-  description = "MinIO root password (TF_VAR_minio_password, from chezmoi → op://Homelab/MinIO Root)."
+  description = "RustFS root password for storage.pod.haus (supplied through TF_VAR_minio_password)."
   type        = string
   sensitive   = true
 }

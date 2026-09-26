@@ -45,7 +45,7 @@ sudo usermod -aG docker "$USER"</code></pre>
 for cmd in git curl jq op restic rclone sqlite3 mount mount.nfs chattr firewall-cmd ssh; do
   command -v "$cmd" || echo "missing: $cmd"
 done</code></pre>
-          Terraform is installed separately by the chezmoi Fedora package setup. MinIO
+          Terraform is installed separately by the chezmoi Fedora package setup. S3
           CLI, GitHub CLI, and Zellij are optional operator tools.</li>
         <li>Mount Jump and Pouch from kangaroo:
           <pre><code>sudo mkdir -p /mnt/jump /mnt/pouch
@@ -95,14 +95,14 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
           the same quiesced snapshot, then follow the
           <a href="/runbooks/forgejo">Forgejo runbook</a> before starting it.
         </li>
-        <li>Deploy <code>minio</code> first so the Terraform state backend is available, then
-          restore <code>/var/lib/minio</code> from the latest Backrest snapshot.
-          The stack's own <code>minio-init</code> service re-asserts the
+        <li>Deploy <code>rustfs</code> first so the Terraform state backend is available, then
+          restore <code>/var/lib/rustfs</code> from the latest Backrest snapshot.
+          The stack's own <code>rustfs-init</code> service re-asserts the
           <code>terraform-state</code> bucket with versioning idempotently
           (<code>mc mb --ignore-existing</code> + <code>mc version enable</code>),
           so the cold-start path needs no manual <code>mcli</code> step. Verify
           the bucket holds the restored <code>podhaus.tfstate</code> via
-          <a href="https://minio.pod.haus">minio.pod.haus</a> or
+          <a href="https://rustfs.pod.haus">rustfs.pod.haus</a> or
           <code>mcli ls local/terraform-state</code>.</li>
         <li>Deploy <code>caddy</code> next: Terraform's backend is the public
           <code>https://storage.pod.haus</code> (Caddy + LE wildcard). LAN clients reach
@@ -110,16 +110,14 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
           Numbat BinaryLane rathole relay (see
           <a href="/hosts.html#numbat">hosts → Numbat</a>). Until
           <code>caddy</code> is up + has its cert, <code>terraform</code> cannot reach
-          state. <code>MINIO_DOMAIN</code> (in <code>minio/stack.toml</code>) is part of
-          the minio deploy. See <a href="/terraform.html">Terraform</a> for the full
+          state. <code>RUSTFS_SERVER_DOMAINS</code> (in <code>rustfs/compose.yaml</code>) is part of
+          the RustFS deploy. See <a href="/terraform.html">Terraform</a> for the full
           backend setup.</li>
         <li>Deploy every other stack from the Komodo UI in dependency order. The repo's
           ResourceSync has already created the stack definitions.</li>
         <li>Verify DNS with
           <code>op-vault dev -- op run --env-file=terraform/terraform.env.op -- terraform -chdir=terraform plan</code>
-          from the working directory. Should report no changes (state restored from
-          Backrest matches the deployed Cloudflare + UniFi resources). If there's drift,
-          stop and investigate before applying — drift here means either the restored
+          from the working directory. Inspect any drift before applying — it means either the restored
           state is stale or someone touched Cloudflare via the dashboard. See
           <a href="/terraform.html#dr">Terraform → disaster recovery</a>.</li>
       </ol>
@@ -168,7 +166,7 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
         <li>Run <code>./komodo-sync</code> to deploy kangaroo's stacks: <code>syncthing</code>,
           <code>kangaroo-backup</code>, <code>kangaroo-autoheal</code>, and
           <code>kangaroo-logging</code>, <code>kangaroo-relay</code>, and
-          <code>pouch-minio</code>.</li>
+          <code>pouch-rustfs</code>.</li>
         <li>Restore kangaroo's state from
           <code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo/</code> if state was lost.</li>
       </ol>
@@ -196,7 +194,7 @@ op-vault dev -- ansible-playbook playbooks/numbat-bootstrap.yml</code></pre>
           <code>numbat-autoheal</code> from <code>podhaus-numbat</code>; it adopts the
           already-running relay project.</li>
         <li>Verify Pocket ID login, native SSH, public TLS, Periphery, log ingestion,
-          and a no-op Terraform plan through <code>storage.pod.haus</code>.</li>
+          and Terraform access through <code>storage.pod.haus</code>.</li>
       </ol>
       <p>
         Numbat has no irreplaceable state. Pomerium's Autocert cache is persistent for

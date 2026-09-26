@@ -1,10 +1,10 @@
-# Root credential for the dedicated Pouch-backed MinIO instance. Terraform
+# Root credential for the dedicated Pouch-backed RustFS instance. Terraform
 # generates it once and 1Password is the handoff to both komodo-op and the
-# aliased MinIO provider added below. The standard login fields are deliberate:
+# aliased providers. The standard login fields are deliberate:
 # the 1Password data source can resolve their stable username/password IDs.
 resource "onepassword_item" "pouch_minio_root" {
   vault    = data.onepassword_vault.homelab.uuid
-  title    = "Pouch MinIO Root"
+  title    = "Pouch RustFS Root"
   category = "login"
   url      = "https://pouch.pod.haus"
   username = "pouch-minio-root"
@@ -26,82 +26,74 @@ resource "minio_s3_bucket" "sky_backups" {
   acl    = "private"
 }
 
-resource "minio_iam_policy" "sky_backups" {
-  provider = minio.pouch
+resource "rustfs_policy" "sky_backups" {
+  provider = rustfs.pouch
 
   name = "sky-backups"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = ["arn:aws:s3:::sky-backups/*"]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
-        Resource = ["arn:aws:s3:::sky-backups"]
-      },
-    ]
-  })
+  statement = [
+    {
+      effect    = "Allow"
+      action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+      ressource = ["arn:aws:s3:::sky-backups/*"]
+    },
+    {
+      effect    = "Allow"
+      action    = ["s3:ListBucket", "s3:GetBucketLocation"]
+      ressource = ["arn:aws:s3:::sky-backups"]
+    },
+  ]
 }
 
-resource "minio_iam_user" "sky_backups" {
-  provider = minio.pouch
+resource "rustfs_user" "sky_backups" {
+  provider = rustfs.pouch
 
-  name = "sky-backups"
+  access_key = "sky-backups"
+  secret_key = random_password.rustfs_user_sky_backups.result
+  policy     = rustfs_policy.sky_backups.name
 }
 
-resource "minio_iam_user_policy_attachment" "sky_backups" {
-  provider = minio.pouch
+resource "rustfs_serviceaccount" "sky_backups" {
+  provider = rustfs.pouch
 
-  user_name   = minio_iam_user.sky_backups.name
-  policy_name = minio_iam_policy.sky_backups.name
-}
-
-resource "minio_iam_service_account" "sky_backups" {
-  provider = minio.pouch
-
-  target_user = minio_iam_user.sky_backups.name
+  access_key  = "6AMTJ3T0GM1BT4A6C4IB"
+  secret_key  = random_password.rustfs_serviceaccount_sky_backups.result
+  name        = "sky-backups"
+  description = ""
+  user        = rustfs_user.sky_backups.access_key
 }
 
 # Read-only metadata identity for the hourly repository monitor. ListBucket is
 # enough for mc to see snapshots/<id> names and server-side modification times;
 # it cannot read, write, or delete any backup object.
-resource "minio_iam_policy" "sky_backups_monitor" {
-  provider = minio.pouch
+resource "rustfs_policy" "sky_backups_monitor" {
+  provider = rustfs.pouch
 
   name = "sky-backups-monitor"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
-        Resource = ["arn:aws:s3:::sky-backups"]
-      },
-    ]
-  })
+  statement = [
+    {
+      effect    = "Allow"
+      action    = ["s3:ListBucket", "s3:GetBucketLocation"]
+      ressource = ["arn:aws:s3:::sky-backups"]
+    },
+  ]
 }
 
-resource "minio_iam_user" "sky_backups_monitor" {
-  provider = minio.pouch
+resource "rustfs_user" "sky_backups_monitor" {
+  provider = rustfs.pouch
 
-  name = "sky-backups-monitor"
+  access_key = "sky-backups-monitor"
+  secret_key = random_password.rustfs_user_sky_backups_monitor.result
+  policy     = rustfs_policy.sky_backups_monitor.name
 }
 
-resource "minio_iam_user_policy_attachment" "sky_backups_monitor" {
-  provider = minio.pouch
+resource "rustfs_serviceaccount" "sky_backups_monitor" {
+  provider = rustfs.pouch
 
-  user_name   = minio_iam_user.sky_backups_monitor.name
-  policy_name = minio_iam_policy.sky_backups_monitor.name
-}
-
-resource "minio_iam_service_account" "sky_backups_monitor" {
-  provider = minio.pouch
-
-  target_user = minio_iam_user.sky_backups_monitor.name
+  access_key  = "WNPK54SZAR1N363YD04F"
+  secret_key  = random_password.rustfs_serviceaccount_sky_backups_monitor.result
+  name        = "sky-backups-monitor"
+  description = ""
+  user        = rustfs_user.sky_backups_monitor.access_key
 }
 
 resource "onepassword_item" "sky_backups_monitor" {
@@ -109,8 +101,8 @@ resource "onepassword_item" "sky_backups_monitor" {
   title    = "Sky Backups Monitor"
   category = "login"
   url      = "https://pouch.pod.haus"
-  username = minio_iam_service_account.sky_backups_monitor.access_key
-  password = minio_iam_service_account.sky_backups_monitor.secret_key
+  username = rustfs_serviceaccount.sky_backups_monitor.access_key
+  password = rustfs_serviceaccount.sky_backups_monitor.secret_key
   tags     = ["terraform-managed", "monitoring", "sky"]
 }
 
@@ -122,8 +114,8 @@ resource "onepassword_item" "sky_backups" {
   title    = "Sky Backups"
   category = "login"
   url      = "https://pouch.pod.haus"
-  username = minio_iam_service_account.sky_backups.access_key
-  password = minio_iam_service_account.sky_backups.secret_key
+  username = rustfs_serviceaccount.sky_backups.access_key
+  password = rustfs_serviceaccount.sky_backups.secret_key
   tags     = ["terraform-managed", "sky"]
 
   section {

@@ -1,8 +1,8 @@
-# Pouch MinIO
+# Pouch RustFS
 
 `pouch.pod.haus` is a dedicated S3 endpoint for Sky's encrypted restic
-repository. The MinIO process runs on kangaroo and writes directly to Pouch at
-`/share/CACHEDEV1_DATA/Pouch/minio`. No repository data lands on Jump.
+repository. RustFS runs on kangaroo and writes directly to Pouch at
+`/share/CACHEDEV1_DATA/Pouch/rustfs`. No repository data lands on Jump.
 
 ## Path
 
@@ -11,8 +11,8 @@ Sky's restic
   -> pouch.pod.haus:443
   -> Numbat public TLS rathole :443
   -> bilby Caddy
-  -> kangaroo 10.0.0.25:9000
-  -> /share/CACHEDEV1_DATA/Pouch/minio/sky-backups
+  -> kangaroo RustFS :9000
+  -> /share/CACHEDEV1_DATA/Pouch/rustfs/sky-backups
 ```
 
 The public DNS record is grey-cloud. Cloudflare is authoritative DNS but never
@@ -27,7 +27,7 @@ kangaroo path. Remote clients resolve it to Numbat's relay address.
 
 Terraform owns the whole identity chain:
 
-- `Pouch MinIO Root` in 1Password, generated once for the server and aliased
+- `Pouch RustFS Root` in 1Password, generated once for the server and aliased
   Terraform provider;
 - the private `sky-backups` bucket, with S3 versioning disabled;
 - the `sky-backups` IAM user, policy, and revocable service account;
@@ -35,7 +35,7 @@ Terraform owns the whole identity chain:
 - the `Sky Backups` 1Password login containing the S3 access key, secret key,
   repository URL, region, and restic encryption password.
 
-Sky never receives the MinIO root credential. Her policy grants object
+Sky never receives the RustFS root credential. Her policy grants object
 read/write/delete plus list and location operations on `sky-backups` only.
 
 The `Sky Backups` 1Password item is the Terraform-owned source of truth for
@@ -51,7 +51,7 @@ AWS_DEFAULT_REGION=us-east-1
 
 The `personal-laptop` repository is initialized, so the client must not run
 `restic init` again. Configure the backup and retention schedule on Sky's
-client. Don't enable MinIO bucket versioning: restic owns snapshot retention,
+client. Don't enable RustFS bucket versioning: restic owns snapshot retention,
 and S3 versions would retain packs that restic has pruned.
 
 Do not use `restic backup --skip-if-unchanged` on the client. A normal backup
@@ -63,8 +63,8 @@ invisible to the repository monitor.
 ## Operation
 
 The container has no CPU or memory limit. Backups are bursty and kangaroo has
-enough headroom to let MinIO use the host normally. Docker's healthcheck probes
-MinIO's live endpoint and kangaroo's existing autoheal container restarts it on
+enough headroom to let RustFS use the host normally. Docker's healthcheck probes
+RustFS's live endpoint and kangaroo's existing autoheal container restarts it on
 a sustained failure. There are no service-specific resource alerts.
 
 The console port is not published. Terraform reaches the admin API through
@@ -76,7 +76,7 @@ under `sky-backups/personal-laptop/snapshots/` at 15 minutes past each hour. It
 reports success when at least one snapshot object has a server-side modification
 time within the last seven days.
 
-Terraform provisions a separate `sky-backups-monitor` MinIO identity for this
+Terraform provisions a separate `sky-backups-monitor` RustFS identity for this
 check. Its policy permits bucket listing and location lookup only. It cannot read,
 write, or delete an object.
 
@@ -89,7 +89,7 @@ needs no Gatus credential or callback.
 ## Checks
 
 ```sh
-curl -fsS https://pouch.pod.haus/minio/health/live
+curl -fsS https://pouch.pod.haus/health/ready
 restic snapshots
 restic check
 ```
@@ -98,10 +98,10 @@ An external-path check can force the Numbat route from bilby:
 
 ```sh
 curl --resolve pouch.pod.haus:443:$(terraform -chdir=terraform output -raw numbat_relay_ipv4) \
-  -fsS https://pouch.pod.haus/minio/health/live
+  -fsS https://pouch.pod.haus/health/ready
 ```
 
-## Recovery
+## Recovery and rollback
 
 Pouch holds this additional backup copy and is deliberately not backed up to
 Jump. If the container or its configuration is lost while Pouch survives,
@@ -109,5 +109,7 @@ redeploy the stack and run Terraform to recreate the bucket and IAM state. If
 Pouch itself is lost, the repository is lost with it; create a new empty bucket
 and initialize a new restic repository from Sky's source data.
 
-The MinIO system metadata lives beside the objects under the dedicated data
-root. Don't edit, move, or restore individual files underneath it.
+RustFS system metadata lives beside the objects under the dedicated data root.
+The stopped MinIO data directory, image, credentials, and Terraform checkpoint
+remain the rollback path; do not edit, move, restore individual files from, or
+prune either server data root.

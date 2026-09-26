@@ -25,7 +25,7 @@ resource "minio_s3_bucket_policy" "nathanbaxter_com" {
       Sid       = "PublicReadObjects"
       Effect    = "Allow"
       Principal = { AWS = ["*"] }
-      Action    = ["s3:GetObject"]
+      Action    = ["s3:GetObject", "s3:GetObjectVersion"]
       Resource  = ["arn:aws:s3:::nathanbaxter-com/*"]
     }]
   })
@@ -33,46 +33,44 @@ resource "minio_s3_bucket_policy" "nathanbaxter_com" {
 
 # Least-privilege deploy key: read/write that one bucket only
 # (ListBucket is required for clients that compute a deploy delta).
-resource "minio_iam_policy" "nathanbaxter_com_deploy" {
+resource "rustfs_policy" "nathanbaxter_com_deploy" {
   name = "nathanbaxter-com-deploy"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = ["arn:aws:s3:::nathanbaxter-com/*"]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
-        Resource = ["arn:aws:s3:::nathanbaxter-com"]
-      },
-    ]
-  })
+  statement = [
+    {
+      effect    = "Allow"
+      action    = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:DeleteObject"]
+      ressource = ["arn:aws:s3:::nathanbaxter-com/*"]
+    },
+    {
+      effect    = "Allow"
+      action    = ["s3:ListBucket", "s3:GetBucketLocation"]
+      ressource = ["arn:aws:s3:::nathanbaxter-com"]
+    },
+  ]
 }
 
-resource "minio_iam_user" "nathanbaxter_com_deploy" {
-  name = "nathanbaxter-com-deploy"
-}
-
-resource "minio_iam_user_policy_attachment" "nathanbaxter_com_deploy" {
-  user_name   = minio_iam_user.nathanbaxter_com_deploy.name
-  policy_name = minio_iam_policy.nathanbaxter_com_deploy.name
+resource "rustfs_user" "nathanbaxter_com_deploy" {
+  access_key = "nathanbaxter-com-deploy"
+  secret_key = random_password.rustfs_user_nathanbaxter_com_deploy.result
+  policy     = rustfs_policy.nathanbaxter_com_deploy.name
 }
 
 # Revocable app credential the deploy actually uses.
-resource "minio_iam_service_account" "nathanbaxter_com_deploy" {
-  target_user = minio_iam_user.nathanbaxter_com_deploy.name
+resource "rustfs_serviceaccount" "nathanbaxter_com_deploy" {
+  access_key  = "CZRE0QT79G3MU6F5BRDK"
+  secret_key  = random_password.rustfs_serviceaccount_nathanbaxter_com_deploy.result
+  name        = "nathanbaxter-com-deploy"
+  description = ""
+  user        = rustfs_user.nathanbaxter_com_deploy.access_key
 }
 
 output "nathanbaxter_com_deploy_access_key" {
-  value     = minio_iam_service_account.nathanbaxter_com_deploy.access_key
+  value     = rustfs_serviceaccount.nathanbaxter_com_deploy.access_key
   sensitive = true
 }
 
 output "nathanbaxter_com_deploy_secret_key" {
-  value     = minio_iam_service_account.nathanbaxter_com_deploy.secret_key
+  value     = rustfs_serviceaccount.nathanbaxter_com_deploy.secret_key
   sensitive = true
 }
 
@@ -103,7 +101,7 @@ resource "minio_s3_bucket_policy" "skycroeser_net" {
       Sid       = "PublicReadObjects"
       Effect    = "Allow"
       Principal = { AWS = ["*"] }
-      Action    = ["s3:GetObject"]
+      Action    = ["s3:GetObject", "s3:GetObjectVersion"]
       Resource  = ["arn:aws:s3:::skycroeser-net/*"]
     }]
   })
@@ -111,48 +109,46 @@ resource "minio_s3_bucket_policy" "skycroeser_net" {
 
 # Least-privilege deploy key for Publii (Sky's laptop): read/write that
 # one bucket only (ListBucket is required so Publii can compute the
-# deploy delta against files.publii.json). Never the MinIO root creds.
-resource "minio_iam_policy" "skycroeser_net_deploy" {
+# deploy delta against files.publii.json). Never the RustFS root creds.
+resource "rustfs_policy" "skycroeser_net_deploy" {
   name = "skycroeser-net-deploy"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = ["arn:aws:s3:::skycroeser-net/*"]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
-        Resource = ["arn:aws:s3:::skycroeser-net"]
-      },
-    ]
-  })
+  statement = [
+    {
+      effect    = "Allow"
+      action    = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:DeleteObject"]
+      ressource = ["arn:aws:s3:::skycroeser-net/*"]
+    },
+    {
+      effect    = "Allow"
+      action    = ["s3:ListBucket", "s3:GetBucketLocation"]
+      ressource = ["arn:aws:s3:::skycroeser-net"]
+    },
+  ]
 }
 
-resource "minio_iam_user" "skycroeser_net_deploy" {
-  name = "skycroeser-net-deploy"
-}
-
-resource "minio_iam_user_policy_attachment" "skycroeser_net_deploy" {
-  user_name   = minio_iam_user.skycroeser_net_deploy.name
-  policy_name = minio_iam_policy.skycroeser_net_deploy.name
+resource "rustfs_user" "skycroeser_net_deploy" {
+  access_key = "skycroeser-net-deploy"
+  secret_key = random_password.rustfs_user_skycroeser_net_deploy.result
+  policy     = rustfs_policy.skycroeser_net_deploy.name
 }
 
 # Revocable app credential Publii actually uses. Copy these outputs into
 # the 1Password Homelab item for Sky's publish key.
-resource "minio_iam_service_account" "skycroeser_net_deploy" {
-  target_user = minio_iam_user.skycroeser_net_deploy.name
+resource "rustfs_serviceaccount" "skycroeser_net_deploy" {
+  access_key  = "VQWA4845DIZ3Y3IJ1ALD"
+  secret_key  = random_password.rustfs_serviceaccount_skycroeser_net_deploy.result
+  name        = "skycroeser-net-deploy"
+  description = ""
+  user        = rustfs_user.skycroeser_net_deploy.access_key
 }
 
 output "skycroeser_net_deploy_access_key" {
-  value     = minio_iam_service_account.skycroeser_net_deploy.access_key
+  value     = rustfs_serviceaccount.skycroeser_net_deploy.access_key
   sensitive = true
 }
 
 output "skycroeser_net_deploy_secret_key" {
-  value     = minio_iam_service_account.skycroeser_net_deploy.secret_key
+  value     = rustfs_serviceaccount.skycroeser_net_deploy.secret_key
   sensitive = true
 }
 
@@ -166,62 +162,58 @@ resource "minio_s3_bucket" "pets_alive_assets" {
 
 # Least-privilege: read/write/delete that one bucket. CreateBucket is
 # included so the backend's idempotent ensure-bucket-on-boot succeeds
-# even on a fresh MinIO (it no-ops once this resource has created it).
-resource "minio_iam_policy" "pets_alive_assets" {
+# even on a fresh RustFS instance (it no-ops once this resource has created it).
+resource "rustfs_policy" "pets_alive_assets" {
   name = "pets-alive-assets"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = ["arn:aws:s3:::pets-alive-assets/*"]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:ListBucket",
-          "s3:GetBucketLocation",
-          "s3:CreateBucket",
-        ]
-        Resource = ["arn:aws:s3:::pets-alive-assets"]
-      },
-    ]
-  })
+  statement = [
+    {
+      effect    = "Allow"
+      action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+      ressource = ["arn:aws:s3:::pets-alive-assets/*"]
+    },
+    {
+      effect = "Allow"
+      action = [
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:CreateBucket",
+      ]
+      ressource = ["arn:aws:s3:::pets-alive-assets"]
+    },
+  ]
 }
 
-resource "minio_iam_user" "pets_alive_assets" {
-  name = "pets-alive-assets"
+resource "rustfs_user" "pets_alive_assets" {
+  access_key = "pets-alive-assets"
+  secret_key = random_password.rustfs_user_pets_alive_assets.result
+  policy     = rustfs_policy.pets_alive_assets.name
 }
 
-resource "minio_iam_user_policy_attachment" "pets_alive_assets" {
-  user_name   = minio_iam_user.pets_alive_assets.name
-  policy_name = minio_iam_policy.pets_alive_assets.name
-}
-
-resource "minio_iam_service_account" "pets_alive_assets" {
-  target_user = minio_iam_user.pets_alive_assets.name
+resource "rustfs_serviceaccount" "pets_alive_assets" {
+  access_key  = "F0PBY9JEC7NGF2C7RZ5V"
+  secret_key  = random_password.rustfs_serviceaccount_pets_alive_assets.result
+  name        = "pets-alive-assets"
+  description = ""
+  user        = rustfs_user.pets_alive_assets.access_key
 }
 
 # Copy these two outputs into 1Password (Homelab) item
 # "MINIO Pets Alive Assets" with fields ACCESS_KEY_ID / SECRET_ACCESS_KEY
 # → OP__KOMODO__MINIO_PETS_ALIVE_ASSETS__* (see pets-alive/stack.toml).
 output "pets_alive_assets_access_key" {
-  value     = minio_iam_service_account.pets_alive_assets.access_key
+  value     = rustfs_serviceaccount.pets_alive_assets.access_key
   sensitive = true
 }
 
 output "pets_alive_assets_secret_key" {
-  value     = minio_iam_service_account.pets_alive_assets.secret_key
+  value     = rustfs_serviceaccount.pets_alive_assets.secret_key
   sensitive = true
 }
 
 # doggos-indigo — Indigo's "Doggos Alive" site, exported from Blocs for
-# iPad and published by her over MinIO's SFTP server (see
-# docs/runbooks/doggos-indigo.md). Same shape as the two sites above,
-# minus the service account: Blocs logs in as the IAM user itself, since
-# a service account needs "=svc" appended to the username, which is a
-# footgun on an iPad keyboard.
+# iPad and published by her over RustFS's SFTP server (see
+# docs/runbooks/doggos-indigo.md). Blocs logs in as the scoped IAM user
+# directly, so this site has no separate service account.
 resource "minio_s3_bucket" "doggos_indigo" {
   bucket = "doggos-indigo"
   acl    = "private" # public read is granted narrowly by the policy below
@@ -243,38 +235,32 @@ resource "minio_s3_bucket_policy" "doggos_indigo" {
       Sid       = "PublicReadObjects"
       Effect    = "Allow"
       Principal = { AWS = ["*"] }
-      Action    = ["s3:GetObject"]
+      Action    = ["s3:GetObject", "s3:GetObjectVersion"]
       Resource  = ["arn:aws:s3:::doggos-indigo/*"]
     }]
   })
 }
 
-resource "minio_iam_policy" "doggos_indigo_deploy" {
+resource "rustfs_policy" "doggos_indigo_deploy" {
   name = "doggos-indigo-deploy"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = ["arn:aws:s3:::doggos-indigo/*"]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
-        Resource = ["arn:aws:s3:::doggos-indigo"]
-      },
-    ]
-  })
+  statement = [
+    {
+      effect    = "Allow"
+      action    = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:DeleteObject"]
+      ressource = ["arn:aws:s3:::doggos-indigo/*"]
+    },
+    {
+      effect    = "Allow"
+      action    = ["s3:ListBucket", "s3:GetBucketLocation"]
+      ressource = ["arn:aws:s3:::doggos-indigo"]
+    },
+  ]
 }
 
-resource "minio_iam_user" "doggos_indigo_deploy" {
-  name = "doggos-indigo-deploy"
-}
-
-resource "minio_iam_user_policy_attachment" "doggos_indigo_deploy" {
-  user_name   = minio_iam_user.doggos_indigo_deploy.name
-  policy_name = minio_iam_policy.doggos_indigo_deploy.name
+resource "rustfs_user" "doggos_indigo_deploy" {
+  access_key = "doggos-indigo-deploy"
+  secret_key = random_password.rustfs_user_doggos_indigo_deploy.result
+  policy     = rustfs_policy.doggos_indigo_deploy.name
 }
 
 # The ready-to-type handoff for Blocs' Publish screen.
@@ -283,8 +269,8 @@ resource "onepassword_item" "doggos_indigo_publish" {
   title    = "Doggos Indigo Publish"
   category = "login"
   url      = "https://doggos.indigopod.au"
-  username = minio_iam_user.doggos_indigo_deploy.name
-  password = minio_iam_user.doggos_indigo_deploy.secret
+  username = rustfs_user.doggos_indigo_deploy.access_key
+  password = rustfs_user.doggos_indigo_deploy.secret_key
   tags     = ["terraform-managed", "indigo"]
 
   section {
@@ -293,7 +279,7 @@ resource "onepassword_item" "doggos_indigo_publish" {
     field {
       label = "Address"
       type  = "STRING"
-      value = "bilby.pod.haus"
+      value = "storage.pod.haus"
     }
     field {
       label = "Port"
@@ -318,17 +304,17 @@ resource "onepassword_item" "doggos_indigo_publish" {
   }
 }
 
-# MinIO's SFTP host key. Generated once here so it never changes across
+# RustFS's SFTP host key. Generated once here so it never changes across
 # redeploys — a changed host key is a scary warning on her iPad.
 # Published for komodo-op → OP__KOMODO__MINIO_SFTP_HOST_KEY__PRIVATE_KEY_B64,
-# consumed by minio/stack.toml.
+# consumed by rustfs/stack.toml.
 resource "tls_private_key" "minio_sftp_host" {
   algorithm = "ED25519"
 }
 
 resource "onepassword_item" "minio_sftp_host_key" {
   vault    = data.onepassword_vault.homelab.uuid
-  title    = "MinIO SFTP Host Key"
+  title    = "SFTP Host Key"
   category = "secure_note"
   tags     = ["terraform-managed"]
 

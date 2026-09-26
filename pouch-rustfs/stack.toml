@@ -1,0 +1,14 @@
+[[stack]]
+name = "pouch-rustfs"
+description = "Sky's Pouch-backed restic repository on Kangaroo"
+tags = ["kangaroo", "podhaus"]
+
+[stack.config]
+server = "kangaroo"
+linked_repo = "podhaus"
+run_directory = "pouch-rustfs"
+environment = """
+TZ=[[TZ]]
+RUSTFS_ACCESS_KEY=[[OP__KOMODO__POUCH_RUSTFS_ROOT__USERNAME]]
+RUSTFS_SECRET_KEY=[[OP__KOMODO__POUCH_RUSTFS_ROOT__PASSWORD]]
+"""

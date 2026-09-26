@@ -55,14 +55,14 @@
         }
       },
       "hooks": [],
-      "skipIfUnchanged": true
+      "skipIfUnchanged": false
     },
     {
       "id": "backrest-state",
       "repo": "podhaus-bandicoot",
       "paths": ["/userdata/backrest-state"],
       "schedule": {
-        "cron": "20 4 * * *",
+        "cron": "0 5 * * *",
         "clock": "CLOCK_LOCAL"
       },
       "retention": {
@@ -72,16 +72,26 @@
           "monthly": 6
         }
       },
-      "hooks": [
-        {
-          "conditions": ["CONDITION_SNAPSHOT_SUCCESS"],
-          "onError": "ON_ERROR_IGNORE",
-          "actionCommand": {
-            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_ENDPOINT_ID}/external?success=true'"
-          }
+      "hooks": [],
+      "skipIfUnchanged": false
+    },
+    {
+      "id": "rustfs",
+      "repo": "podhaus-bandicoot",
+      "paths": ["/userdata/rustfs"],
+      "schedule": {
+        "cron": "30 3 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
         }
-      ],
-      "skipIfUnchanged": true
+      },
+      "hooks": [],
+      "skipIfUnchanged": false
     },
     {
       "id": "komodo",
@@ -99,7 +109,7 @@
         }
       },
       "hooks": [],
-      "skipIfUnchanged": true
+      "skipIfUnchanged": false
     },
     {
       "id": "onepassword",
@@ -117,7 +127,7 @@
         }
       },
       "hooks": [],
-      "skipIfUnchanged": true
+      "skipIfUnchanged": false
     },
     {
       "id": "metube",
@@ -135,7 +145,7 @@
         }
       },
       "hooks": [],
-      "skipIfUnchanged": true
+      "skipIfUnchanged": false
     },
     {
       "id": "sonarr",
@@ -153,7 +163,7 @@
         }
       },
       "hooks": [],
-      "skipIfUnchanged": true
+      "skipIfUnchanged": false
     },
     {
       "id": "fenwick",
@@ -171,7 +181,7 @@
         }
       },
       "hooks": [],
-      "skipIfUnchanged": true
+      "skipIfUnchanged": false
     }
   ]
 }

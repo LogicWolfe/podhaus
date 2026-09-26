@@ -42,11 +42,8 @@ provider "binarylane" {
 }
 
 provider "minio" {
-  # MinIO admin API (for IAM resources) is served on storage.pod.haus
-  # alongside S3 — Caddy proxies the full API; SigV4 is the boundary.
-  # Provider auths as MinIO root (full reach; scoped admin creds are
-  # escalation-capable anyway). Creds from TF_VAR_minio_user /
-  # TF_VAR_minio_password env vars (op://Homelab/MinIO Root).
+  # RustFS's S3-compatible API preserves the existing MinIO-provider bucket,
+  # versioning, and anonymous-policy resources. IAM uses the native provider.
   minio_server   = "storage.pod.haus"
   minio_ssl      = true
   minio_region   = "us-east-1"
@@ -55,8 +52,8 @@ provider "minio" {
 }
 
 # Standard login fields make this newly-created root credential readable by
-# the 1Password data source. The aliased provider reaches the full admin API
-# through the public endpoint, preserving the from-any-machine TF contract.
+# the 1Password data source. Both aliased providers use the public endpoint,
+# preserving the from-any-machine Terraform contract.
 data "onepassword_item" "pouch_minio_root" {
   vault = data.onepassword_vault.homelab.uuid
   title = onepassword_item.pouch_minio_root.title
@@ -74,9 +71,25 @@ provider "minio" {
   minio_password = data.onepassword_item.pouch_minio_root.password
 }
 
+provider "rustfs" {
+  endpoint      = "storage.pod.haus:443"
+  ssl           = true
+  access_key    = var.minio_user
+  access_secret = var.minio_password
+}
+
+provider "rustfs" {
+  alias = "pouch"
+
+  endpoint      = "pouch.pod.haus:443"
+  ssl           = true
+  access_key    = data.onepassword_item.pouch_minio_root.username
+  access_secret = data.onepassword_item.pouch_minio_root.password
+}
+
 # The 1Password provider is deliberately selective. Backend and provider
 # credentials use the op run environment file; data sources and managed items stay here when
-# their field shapes are stable, as with Pocket ID, Pouch MinIO, and Forgejo.
+# their field shapes are stable, as with Pocket ID, Pouch RustFS, and Forgejo.
 
 provider "pocketid" {
   # Public by design: OIDC relying parties and Terraform must reach the

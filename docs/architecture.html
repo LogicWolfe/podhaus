@@ -58,9 +58,9 @@
         <li><code>terraform/</code> is the ONE consolidated Terraform root for everything
           outside Docker: BinaryLane and Numbat edge material, Cloudflare DNS, CDN, AOP, and
           Pine Lake DNS, UniFi LAN DNS, the GitHub webhook
-          that drives Komodo auto-deploy, Tailscale recovery auth-key rotation, and MinIO IAM for
+          that drives Komodo auto-deploy, Tailscale recovery auth-key rotation, and RustFS IAM for
           Publii tenants. State at <code>s3://terraform-state/podhaus.tfstate</code> in
-          MinIO (backend via <code>https://storage.pod.haus</code>). Stock
+          RustFS (backend via <code>https://storage.pod.haus</code>). Stock
           <code>terraform</code> runs from any machine — no wrapper. See
           <a href="/terraform.html">Terraform</a>.</li>
       </ul>
@@ -132,7 +132,7 @@
           restic repositories.</li>
         <li><strong>Pouch</strong> (NAS HDD RAID5) holds bulk content where capacity matters
           more than latency, including the dedicated
-          <code>sky-backups</code> restic target served by MinIO on kangaroo.</li>
+          <code>sky-backups</code> restic target served by RustFS on kangaroo.</li>
       </ul>
       <p>See <a href="/storage.html">Storage</a> for mount details and the NAS-squash quirk.</p>
 

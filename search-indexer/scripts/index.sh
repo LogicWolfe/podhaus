@@ -8,7 +8,7 @@ SITE=/tmp/site
 STATE=/state/last-index.hash
 mkdir -p "$(dirname "$STATE")"
 
-mc alias set "$ALIAS" "$MINIO_ENDPOINT" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null
+mc alias set "$ALIAS" "$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY" >/dev/null
 
 # Change detection: hash the HTML object listing (name+size+mtime). A
 # republish updates mtimes; an unchanged bucket is skipped.

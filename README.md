@@ -7,7 +7,7 @@ external infrastructure.
 - **bilby:** Apple M1 Mac mini running Fedora Asahi Linux. It hosts an
   outbound Komodo Periphery and the primary services.
 - **kangaroo:** QNAP NAS running QTS and Container Station. It hosts Syncthing,
-  Backrest, Autoheal, Alloy, and Pouch MinIO.
+  Backrest, Autoheal, Alloy, and Pouch RustFS.
 - **numbat:** BinaryLane Rocky Linux VM in Perth. It is the public Pomerium and
   rathole gateway.
 - **fractal:** Fedora under WSL2. It is an outbound-only remote development and
@@ -78,7 +78,7 @@ bandicoot, now the Ansible control node:
 ## Terraform
 
 `terraform/` is the single Terraform root for BinaryLane, Cloudflare, UniFi,
-GitHub, Tailscale, MinIO, and Pocket ID. `op-vault` selects the machine's
+GitHub, Tailscale, RustFS, and Pocket ID. `op-vault` selects the machine's
 Podhaus service account and `op run` supplies credentials only to Terraform's
 process tree.
 
@@ -89,7 +89,7 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
   terraform -chdir=terraform apply
 ```
 
-State lives in MinIO at `s3://terraform-state/podhaus.tfstate` through
+State lives in RustFS at `s3://terraform-state/podhaus.tfstate` through
 `https://storage.pod.haus`. There is no shell hook or Terraform wrapper, and
 DNSControl has been retired.
 

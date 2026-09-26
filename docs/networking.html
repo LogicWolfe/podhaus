@@ -86,7 +86,7 @@ networks:
         no protected virtual hosts.
       </p>
       <p>
-        The public listener serves MinIO S3, Pocket ID, UniFi, static sites, scoped Umami
+        The public listener serves RustFS S3, Pocket ID, UniFi, static sites, scoped Umami
         ingestion, <code>paperless-api.pod.haus</code>, Komodo's outbound connection, and
         mTLS log ingestion. Forgejo uses Pomerium for HTTPS and the application address on
         port 22 for ordinary <code>git@git.pod.haus</code> SSH. Managed devices use the
@@ -249,7 +249,7 @@ networks:
 
       <h2 id="dns">DNS</h2>
       <p>
-        All DNS is Terraform-managed under <code>terraform/</code>, state in MinIO at
+        All DNS is Terraform-managed under <code>terraform/</code>, state in RustFS at
         <code>s3://terraform-state/podhaus.tfstate</code>:
       </p>
       <ul>
@@ -269,7 +269,7 @@ networks:
         then <code>terraform apply</code> (stock <code>terraform</code>, no
         wrapper, from any machine; creds are loaded by the PWD-scoped chezmoi
         fish hook through <code>op inject</code>). The S3 state backend is the public
-        <code>https://storage.pod.haus</code> (Caddy → MinIO), not
+        <code>https://storage.pod.haus</code> (Caddy → RustFS), not
         Cloudflare-proxied — see <a href="/terraform.html">Terraform</a>.
       </p>
       <p>
@@ -302,7 +302,7 @@ networks:
           <tr><td><code>bilby.docs.pod.haus</code></td><td>Same docs-server as <code>docs.pod.haus</code>, per-host name (nathan-only)</td></tr>
           <tr><td><code>fractal.docs.pod.haus</code></td><td>docs-server over Fractal's configured repository sources (nathan-only)</td></tr>
           <tr><td><code>voltaire.docs.pod.haus</code></td><td>docs-server over Voltaire's configured repository sources (nathan-only)</td></tr>
-          <tr><td><code>minio.pod.haus</code></td><td>MinIO console (Terraform state backend)</td></tr>
+          <tr><td><code>rustfs.pod.haus</code></td><td>RustFS console (Terraform state backend)</td></tr>
           <tr><td><code>id.pod.haus</code></td><td>Pocket ID</td></tr>
           <tr><td><code>stats.pod.haus</code></td><td>Umami analytics</td></tr>
         </tbody>

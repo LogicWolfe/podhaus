@@ -5,8 +5,8 @@
 # Forgejo and the GitHub copy is dead).
 set -eu
 
-: "${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY required}"
-: "${MINIO_SECRET_KEY:?MINIO_SECRET_KEY required}"
+: "${S3_ACCESS_KEY:?S3_ACCESS_KEY required}"
+: "${S3_SECRET_KEY:?S3_SECRET_KEY required}"
 : "${DEPLOY_KEY_B64:?DEPLOY_KEY_B64 required}"
 
 WORK=/tmp/source
@@ -36,7 +36,7 @@ echo "==> npm run build"
 npm run build
 
 echo "==> mirroring dist/ -> nathanbaxter-com bucket"
-mcli alias set podhaus https://storage.pod.haus "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+mcli alias set podhaus https://storage.pod.haus "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
 mcli mirror --overwrite --remove dist/ podhaus/nathanbaxter-com/
 
 echo "==> done"

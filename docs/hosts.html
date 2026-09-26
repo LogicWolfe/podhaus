@@ -66,7 +66,7 @@
           <tr><td><code>op</code></td><td>1Password CLI — secret reads, item edits</td><td><code>dnf</code> (1P upstream repo)</td></tr>
           <tr><td><code>gh</code></td><td>GitHub PR / issue interaction</td><td><code>dnf</code></td></tr>
           <tr><td><code>jq</code></td><td>JSON munging (Komodo API, mc output, etc.)</td><td><code>dnf</code></td></tr>
-          <tr><td><code>mcli</code></td><td>MinIO admin (buckets, users, policies)</td><td>Extract <code>/usr/bin/mc</code> from <code>quay.io/minio/mc:latest</code> for the host architecture and install locally as <code>mcli</code>.</td></tr>
+          <tr><td><code>mcli</code></td><td>S3 administration (buckets, users, policies)</td><td>Extract <code>/usr/bin/mc</code> from <code>quay.io/minio/mc:latest</code> for the host architecture and install locally as <code>mcli</code>.</td></tr>
           <tr><td><code>terraform</code></td><td>Stock HashiCorp Terraform. Run it directly in <code>terraform/</code> (no wrapper; backend = public <code>storage.pod.haus</code>; creds loaded through <code>op inject</code> by the PWD-scoped chezmoi fish hook). Any chezmoi-managed machine gets it. See <a href="/terraform.html">Terraform</a>.</td><td>chezmoi-managed (official HashiCorp dnf repo, Fedora branch of the packages script)</td></tr>
           <tr><td><code>zellij</code></td><td>Terminal multiplexer (user preference)</td><td>Cargo / upstream</td></tr>
         </tbody>
@@ -140,7 +140,7 @@
       <p>
         QNAP NAS, AMD GX-420MC, 16 GB RAM, QTS 5.x with Container Station, ext4. Secondary host.
         Runs a Komodo Periphery agent + Syncthing + a second Backrest + autoheal + a logging
-        Alloy collector + the Pouch-backed MinIO instance. The active 10GbE LAN IP is
+        Alloy collector + the Pouch-backed RustFS instance. The active 10GbE LAN IP is
         <code>10.0.0.25</code>; <code>10.0.0.232</code> is the spare 1GbE path.
       </p>
       <p>
@@ -148,8 +148,8 @@
       </p>
       <ul>
         <li><strong><code>/share/CACHEDEV1_DATA/Pouch</code></strong> — the bulk HDD volume. Same
-          content bilby sees as <code>/mnt/pouch</code>. The dedicated MinIO data root is
-          <code>/share/CACHEDEV1_DATA/Pouch/minio</code>.</li>
+          content bilby sees as <code>/mnt/pouch</code>. The dedicated RustFS data root is
+          <code>/share/CACHEDEV1_DATA/Pouch/rustfs</code>.</li>
         <li><strong><code>/share/CACHEDEV2_DATA/Jump</code></strong> — the SSD volume. Kangaroo's
           Backrest restic repo lives at
           <code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo</code> — a separate repo from bilby's

@@ -1,0 +1,25 @@
+services:
+  pouch-rustfs:
+    container_name: pouch-rustfs
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ENABLE: "false"
+    volumes:
+      - /share/CACHEDEV1_DATA/Pouch/rustfs:/data
+    ports:
+      - 9000:9000
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

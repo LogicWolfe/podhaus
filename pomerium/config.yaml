@@ -109,7 +109,7 @@ routes:
   - <<: *family_route
     from: https://docs.pod.haus
   - <<: *family_route
-    from: https://minio.pod.haus
+    from: https://rustfs.pod.haus
   - <<: *family_route
     from: https://paperless.pod.haus
   - <<: *family_route
