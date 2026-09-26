@@ -195,6 +195,8 @@ music.pod.haus {
 # `nathanbaxter-com` bucket (anonymous GetObject). Cloudflare reaches the
 # active Numbat path on :4444. Only :4444 requires Cloudflare's origin-pull
 # client certificate.
+# RustFS interprets website Host names as bucket domains, so these
+# unsigned path-style site proxies use the storage Host explicitly.
 (nathan_site) {
 	@www host www.nathanbaxter.com
 	redir @www https://nathanbaxter.com{uri} permanent
@@ -228,6 +230,7 @@ music.pod.haus {
 	handle_errors 404 {
 		rewrite * /nathanbaxter-com/404.html
 		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
+			header_up Host storage.pod.haus
 			replace_status 404
 		}
 	}
@@ -259,6 +262,7 @@ music.pod.haus {
 		}
 
 		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
+			header_up Host storage.pod.haus
 			# RustFS 404 (NoSuchKey) → raise error 404 so handle_errors
 			# above can serve the styled 404 page while keeping the
 			# real status code.
@@ -306,6 +310,7 @@ nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
 	handle_errors 404 {
 		rewrite * /skycroeser-net/404.html
 		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
+			header_up Host storage.pod.haus
 			replace_status 404
 		}
 	}
@@ -385,6 +390,7 @@ nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
 		}
 
 		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
+			header_up Host storage.pod.haus
 			@missing status 404
 			handle_response @missing {
 				error 404
@@ -443,6 +449,7 @@ id.pod.haus:4444 {
 	handle_errors 404 {
 		rewrite * /doggos-indigo/404.html
 		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
+			header_up Host storage.pod.haus
 			replace_status 404
 		}
 	}
@@ -465,6 +472,7 @@ id.pod.haus:4444 {
 		}
 
 		reverse_proxy {$BANDICOOT_LAN_IPV4}:9000 {
+			header_up Host storage.pod.haus
 			@missing status 404
 			handle_response @missing {
 				error 404

@@ -1,4 +1,4 @@
-# pouch.pod.haus is the public endpoint for the Pouch-backed MinIO instance
+# pouch.pod.haus is the public endpoint for the Pouch-backed RustFS instance
 # on kangaroo. Cloudflare provides DNS only. Raw :443 reaches Numbat, crosses
 # the rathole service to bilby's Caddy, then crosses the LAN to kangaroo.
 # SigV4 remains the auth boundary.

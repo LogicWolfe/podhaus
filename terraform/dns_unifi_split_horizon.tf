@@ -41,7 +41,7 @@ resource "unifi_dns_record" "storage_pod_haus" {
   enabled     = true
 }
 
-# Pouch MinIO follows the same split path as the primary storage endpoint.
+# Pouch RustFS follows the same split path as the primary storage endpoint.
 # LAN clients reach bilby's Caddy directly; remote clients use Numbat.
 resource "unifi_dns_record" "pouch_pod_haus" {
   name        = "pouch.pod.haus"
