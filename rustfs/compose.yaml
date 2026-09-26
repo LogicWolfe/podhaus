@@ -50,6 +50,7 @@ services:
       RUSTFS_SFTP_ADDRESS: 0.0.0.0:8022
       RUSTFS_SFTP_HOST_KEY_DIR: /run/podhaus-secrets/sftp
       RUSTFS_OBS_LOG_DIRECTORY: ""
+      RUSTFS_OBS_LOGGER_LEVEL: info
     volumes:
       - /var/lib/rustfs:/data
       - rustfs-secrets:/run/podhaus-secrets:ro

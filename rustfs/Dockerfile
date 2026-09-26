@@ -8,7 +8,8 @@ WORKDIR /usr/src/rustfs
 RUN git clone --depth 1 --branch 1.0.0 https://github.com/rustfs/rustfs.git . \
     && ./scripts/static.sh
 ENV CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_LTO=false \
-    CARGO_PROFILE_RELEASE_DEBUG=false CARGO_PROFILE_RELEASE_STRIP=symbols
+    CARGO_PROFILE_RELEASE_DEBUG=false CARGO_PROFILE_RELEASE_STRIP=symbols \
+    RUSTFS_BUILD_VERSION=1.0.0
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/usr/src/rustfs/target \
