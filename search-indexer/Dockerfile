@@ -6,7 +6,8 @@
 # bundles the prebuilt WASM/UI assets (include_dir, build=false), so this is
 # a plain CLI compile — no wasm-pack/nightly/node. LTO off + capped jobs keep
 # the build-time memory bounded (see docs).
-FROM quay.io/minio/mc:latest AS mc
+FROM golang:alpine AS mc
+RUN CGO_ENABLED=0 go install github.com/minio/mc@latest
 
 FROM rust:bookworm AS build
 ARG PAGEFIND_VERSION=1.5.2
@@ -19,7 +20,7 @@ ARG STACK_CONTENT_HASH=unset
 ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl bash \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=mc /usr/bin/mc /usr/local/bin/mc
+COPY --from=mc /go/bin/mc /usr/local/bin/mc
 COPY --from=build /opt/pf/bin/pagefind /usr/local/bin/pagefind
 # Executes the freshly-built binary on bilby (16k pages) — fails the build
 # loudly if jemalloc ever sneaks back in.

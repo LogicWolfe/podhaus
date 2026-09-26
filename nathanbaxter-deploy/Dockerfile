@@ -4,7 +4,8 @@
 # content-hash mechanism in AGENTS.md).
 
 ARG STACK_CONTENT_HASH=unset
-FROM quay.io/minio/mc:latest AS mc
+FROM golang:alpine AS mc
+RUN CGO_ENABLED=0 go install github.com/minio/mc@latest
 
 FROM node:lts
 ARG STACK_CONTENT_HASH
@@ -14,7 +15,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates git curl openssh-client && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=mc /usr/bin/mc /usr/local/bin/mcli
+COPY --from=mc /go/bin/mc /usr/local/bin/mcli
 
 COPY build.sh /usr/local/bin/build.sh
 RUN chmod +x /usr/local/bin/build.sh
