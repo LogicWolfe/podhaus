@@ -1,10 +1,10 @@
 # Komodo stack — nathanbaxter-deploy.
 #
 # Komodo-managed build + mirror pipeline for nathanbaxter.com. One-shot
-# builder image (node:lts + mcli) clones nathanbaxter@main from Forgejo
+# builder image (node:lts + rc) clones nathanbaxter@main from Forgejo
 # (git.pod.haus — the repo moved off GitHub; SSH over dockernet with a
 # read-only deploy key from terraform/forgejo.tf), npm ci + npm run
-# build, mcli mirrors dist/ to the nathanbaxter-com bucket on bandicoot's
+# build, rc mirrors dist/ to the nathanbaxter-com bucket on bandicoot's
 # RustFS, exits 0.
 #
 # Why Komodo-managed instead of GHA:

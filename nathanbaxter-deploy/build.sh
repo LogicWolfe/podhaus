@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Clone LogicWolfe/nathanbaxter@main from Forgejo, build, mirror dist/
-# to the nathanbaxter-com MinIO bucket. Same end state as the previous
+# to the nathanbaxter-com RustFS bucket. Same end state as the previous
 # GitHub-based flow, just sourced from git.pod.haus (the repo moved to
 # Forgejo and the GitHub copy is dead).
 set -eu
@@ -36,7 +36,7 @@ echo "==> npm run build"
 npm run build
 
 echo "==> mirroring dist/ -> nathanbaxter-com bucket"
-mcli alias set podhaus https://storage.pod.haus "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
-mcli mirror --overwrite --remove dist/ podhaus/nathanbaxter-com/
+rc alias set podhaus https://storage.pod.haus "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
+rc mirror --overwrite --remove dist/ podhaus/nathanbaxter-com/
 
 echo "==> done"

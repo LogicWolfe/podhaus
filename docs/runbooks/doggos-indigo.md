@@ -52,20 +52,25 @@ First publish: *entire site*. After that: *just the changes*.
 **If Blocs' own publisher will not talk to RustFS**, she exports the site to
 the Files app and uploads the folder with an SFTP app (FTP Files, Documents
 by Readdle) using the same settings. Failing that, someone with the export
-runs `mcli mirror --overwrite <export>/ doggos/doggos-indigo/` on bilby with
+runs `rc mirror --overwrite ./<export>/ doggos/doggos-indigo/` on Bandicoot with
 her credential.
 
 ## Rolling back a bad publish
 
-On bilby, with her credential from 1Password:
+On Bandicoot, with `rc` and her credential from 1Password:
 
+```sh
+rc alias set doggos https://storage.pod.haus doggos-indigo-deploy '<password>'
+rc object list --versions doggos/doggos-indigo/index.html
+rc undo doggos/doggos-indigo/index.html --dry-run
+rc undo doggos/doggos-indigo/index.html
+rc alias remove doggos
 ```
-mcli alias set doggos http://127.0.0.1:9000 doggos-indigo-deploy '<password>'
-mcli ls --versions doggos/doggos-indigo/index.html      # see what there is
-mcli undo doggos/doggos-indigo/index.html               # put back the previous version
-mcli undo --action put --last 5 doggos/doggos-indigo/   # undo the last five uploads in the bucket
-mcli alias remove doggos
-```
+
+The dry run identifies the version to restore. For an explicitly selected
+historical version, add `--version-id <version-id>` to both undo commands.
+Review each affected object before restoring a multi-file publish. Restoring a
+data version creates a new current version while retaining the old data history.
 
 ## Rotating her password
 

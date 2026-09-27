@@ -246,8 +246,8 @@ executions = [
 # (komodo.pod.haus/listener/github/procedure/nathanbaxter-deploy/main,
 # branch-filtered to main; see terraform/forgejo.tf). Single stage:
 # force-redeploy the nathanbaxter-deploy stack, whose one-shot builder
-# container clones the repo, runs npm ci + npm run build, mcli mirrors
-# dist/ to the nathanbaxter-com MinIO bucket, exits.
+# container clones the repo, runs npm ci + npm run build, rc mirrors
+# dist/ to the nathanbaxter-com RustFS bucket, exits.
 #
 # Always force-deploy (DeployStack, not IfChanged) — every push to
 # main should produce a fresh build, regardless of whether the stack

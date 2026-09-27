@@ -63,7 +63,7 @@ resource "rustfs_serviceaccount" "sky_backups" {
 }
 
 # Read-only metadata identity for the hourly repository monitor. ListBucket is
-# enough for mc to see snapshots/<id> names and server-side modification times;
+# enough for rc to see snapshots/<id> names and server-side modification times;
 # it cannot read, write, or delete any backup object.
 resource "rustfs_policy" "sky_backups_monitor" {
   provider = rustfs.pouch

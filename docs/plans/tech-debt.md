@@ -60,21 +60,6 @@ the affected stack named in the error. Verify both a returned unsuccessful
 update and a thrown execution error, plus the batch deployment path. A failed
 image build must never produce an overall successful deployment result.
 
-## Two build images still depend on an unavailable MinIO client image
-
-**Status:** Open. Existing running images are unaffected; fresh builds are at risk.
-
-`search-indexer/Dockerfile` and `nathanbaxter-deploy/Dockerfile` both use
-`quay.io/minio/mc:latest`. On 2026-09-26 that image returned HTTP 401 repeatedly
-and blocked the Gatus monitor build. The official direct client downloads also
-returned HTTP 410. `gatus/Dockerfile.monitor` builds the official client source
-with Go instead; its native ARM build and real backup check passed.
-
-Apply that source-build approach to both remaining consumers. Preserve their
-installed command names: `mc` for the search indexer and `mcli` for the website
-builder. Verify fresh native builds and their object-storage operations before
-deploying; do not remove their existing working images as part of the change.
-
 ## Caddy and Pomerium collection discards structured diagnostic fields
 
 **Status:** Open. Flood's collector already preserves its full error record.

@@ -95,7 +95,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command: ["exec sleep infinity"]
     environment:
-      MC_CONFIG_DIR: /dev/shm/mc
+      RC_CONFIG_DIR: /dev/shm/rc
       SKY_BACKUPS_ENDPOINT: https://pouch.pod.haus
       SKY_BACKUPS_BUCKET: sky-backups
       SKY_BACKUPS_PREFIX: personal-laptop

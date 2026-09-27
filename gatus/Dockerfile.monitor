@@ -1,12 +1,10 @@
-# Build the official client source because upstream image and binary downloads are unavailable.
-FROM golang:alpine AS mc
-RUN CGO_ENABLED=0 go install github.com/minio/mc@latest
+FROM rustfs/rc:latest AS rc
 
 FROM alpine:latest
 
-RUN apk add --no-cache ca-certificates curl
+RUN apk add --no-cache ca-certificates curl jq
 
-COPY --from=mc /go/bin/mc /usr/local/bin/mc
+COPY --from=rc /usr/bin/rc /usr/local/bin/rc
 COPY scripts/check-sky-backups.sh /usr/local/bin/check-sky-backups
 RUN chmod 0755 /usr/local/bin/check-sky-backups
 
