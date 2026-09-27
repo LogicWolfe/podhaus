@@ -93,6 +93,14 @@
         reaches bilby's Caddy through split-horizon DNS.
       </p>
 
+      <p>
+        Restic and the native RustFS provider retain their upstream-maintained MinIO S3
+        library dependencies. Podhaus operates no MinIO server, command-line client or
+        Terraform provider. The <code>moved</code> declarations preserve credential and
+        SFTP-key identity across Terraform address changes; the existing
+        <code>pouch-minio-root</code> username is an unchanged credential value.
+      </p>
+
       <h2 id="runner">Running Terraform (stock, from any machine)</h2>
       <p>
         There is <strong>no shell hook or Terraform wrapper</strong>.

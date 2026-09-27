@@ -140,8 +140,10 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
 restic -r ./recovery/podhaus restore &lt;snapshot-id&gt; \
   --target ./rustfs-restore</code></pre>
         </li>
-        <li>Copy the restored <code>./rustfs-restore/userdata/rustfs/</code> contents into the
-          empty data root, retaining the RustFS runtime owner:
+        <li>Copy the complete restored <code>./rustfs-restore/userdata/rustfs/</code> tree into the
+          empty data root, including <code>.minio.sys</code> and <code>.rustfs.sys</code>.
+          These are active storage metadata; never remove them based on their names.
+          Retain the RustFS runtime owner:
           <pre><code>sudo install -d -o 10001 -g 10001 /var/lib/rustfs
 sudo rsync -a --chown=10001:10001 \
   ./rustfs-restore/userdata/rustfs/ /var/lib/rustfs/</code></pre>
