@@ -1,5 +1,5 @@
 # nathanbaxter.com PUBLIC WEBSITE records. Cloudflare's CDN reaches the
-# Numbat relay, then rathole, Caddy, and the nathanbaxter-com MinIO bucket.
+# Numbat relay, then rathole, Caddy, and the nathanbaxter-com RustFS bucket.
 # Separate file from dns_nathanbaxter_com.tf so the mail
 # records (Fastmail MX/DKIM/SRV, Postmark) are never touched.
 #

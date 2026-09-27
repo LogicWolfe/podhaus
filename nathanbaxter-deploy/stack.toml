@@ -11,7 +11,7 @@
 #   - No external CI runner dependency. The 2026-05-26 GitHub Actions
 #     outage held a prod deploy hostage with no visible recovery ETA.
 #   - Credentials never leave 1Password → komodo-op → Komodo Variables.
-#     GHA needed MINIO_* GitHub secrets duplicated outside 1P.
+#     GHA needed S3 GitHub secrets duplicated outside 1Password.
 #   - Build logs land in ClickStack via Periphery's container logging,
 #     alongside every other deploy on the homelab.
 #

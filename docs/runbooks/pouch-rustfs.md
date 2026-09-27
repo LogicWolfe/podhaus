@@ -101,7 +101,7 @@ curl --resolve pouch.pod.haus:443:$(terraform -chdir=terraform output -raw numba
   -fsS https://pouch.pod.haus/health/ready
 ```
 
-## Recovery and rollback
+## Recovery
 
 Pouch holds this additional backup copy and is deliberately not backed up to
 Jump. If the container or its configuration is lost while Pouch survives,
@@ -110,6 +110,4 @@ Pouch itself is lost, the repository is lost with it; create a new empty bucket
 and initialize a new restic repository from Sky's source data.
 
 RustFS system metadata lives beside the objects under the dedicated data root.
-The stopped MinIO data directory, image, credentials, and Terraform checkpoint
-remain the rollback path; do not edit, move, restore individual files from, or
-prune either server data root.
+Do not edit, move, restore individual files from, or prune the server data root.

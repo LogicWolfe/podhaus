@@ -1,6 +1,6 @@
 # skycroeser.net — Sky Croeser's academic site, migrated off WordPress.com
 # to the self-hosted Publii static site served from the skycroeser-net
-# MinIO bucket through Numbat and Caddy. Same serving shape as
+# RustFS bucket through Numbat and Caddy. Same serving shape as
 # nathanbaxter.com's public website records.
 #
 # PROXIED (orange-cloud): the rendered site is plain static HTTP with no

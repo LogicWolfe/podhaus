@@ -3,7 +3,8 @@
 # `op-vault dev -- op run --env-file=terraform/terraform.env.op` supplies the
 # standard provider variables only to Terraform's process tree. The selected
 # machine service account grants Homelab access only on Podhaus operators; the
-# AWS credentials are limited to the terraform-state bucket.
+# AWS environment credentials authenticate the state backend. Its current
+# broad built-in policy is tracked separately in docs/plans/tech-debt.md.
 
 data "onepassword_vault" "homelab" {
   name = "Homelab"
@@ -41,41 +42,21 @@ provider "binarylane" {
   api_token = data.onepassword_item.binarylane_api_token.credential
 }
 
-provider "minio" {
-  # RustFS's S3-compatible API preserves the existing MinIO-provider bucket,
-  # versioning, and anonymous-policy resources. IAM uses the native provider.
-  minio_server   = "storage.pod.haus"
-  minio_ssl      = true
-  minio_region   = "us-east-1"
-  minio_user     = var.minio_user
-  minio_password = var.minio_password
-}
-
 # Standard login fields make this newly-created root credential readable by
 # the 1Password data source. Both aliased providers use the public endpoint,
 # preserving the from-any-machine Terraform contract.
-data "onepassword_item" "pouch_minio_root" {
+data "onepassword_item" "pouch_rustfs_root" {
   vault = data.onepassword_vault.homelab.uuid
-  title = onepassword_item.pouch_minio_root.title
+  title = onepassword_item.pouch_rustfs_root.title
 
-  depends_on = [onepassword_item.pouch_minio_root]
-}
-
-provider "minio" {
-  alias = "pouch"
-
-  minio_server   = "pouch.pod.haus"
-  minio_ssl      = true
-  minio_region   = "us-east-1"
-  minio_user     = data.onepassword_item.pouch_minio_root.username
-  minio_password = data.onepassword_item.pouch_minio_root.password
+  depends_on = [onepassword_item.pouch_rustfs_root]
 }
 
 provider "rustfs" {
   endpoint      = "storage.pod.haus:443"
   ssl           = true
-  access_key    = var.minio_user
-  access_secret = var.minio_password
+  access_key    = var.rustfs_user
+  access_secret = var.rustfs_password
 }
 
 provider "rustfs" {
@@ -83,8 +64,8 @@ provider "rustfs" {
 
   endpoint      = "pouch.pod.haus:443"
   ssl           = true
-  access_key    = data.onepassword_item.pouch_minio_root.username
-  access_secret = data.onepassword_item.pouch_minio_root.password
+  access_key    = data.onepassword_item.pouch_rustfs_root.username
+  access_secret = data.onepassword_item.pouch_rustfs_root.password
 }
 
 # The 1Password provider is deliberately selective. Backend and provider
@@ -97,4 +78,33 @@ provider "pocketid" {
   # from 1Password at plan time and never committed.
   base_url  = "https://id.pod.haus"
   api_token = data.onepassword_item.pocket_id_api_key.credential
+}
+
+provider "aws" {
+  region                      = "us-east-1"
+  access_key                  = var.rustfs_user
+  secret_key                  = var.rustfs_password
+  s3_use_path_style           = true
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+  skip_region_validation      = true
+  endpoints {
+    s3 = "https://storage.pod.haus"
+  }
+}
+
+provider "aws" {
+  alias                       = "pouch"
+  region                      = "us-east-1"
+  access_key                  = data.onepassword_item.pouch_rustfs_root.username
+  secret_key                  = data.onepassword_item.pouch_rustfs_root.password
+  s3_use_path_style           = true
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+  skip_region_validation      = true
+  endpoints {
+    s3 = "https://pouch.pod.haus"
+  }
 }

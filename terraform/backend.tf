@@ -1,6 +1,5 @@
 # Consolidated podhaus Terraform root. One state, one apply, every
-# provider for the whole fleet — replaces the historical split between
-# cloudflare/, minio/terraform/, and the relay-only terraform/. See
+# provider for the whole fleet. See
 # /docs/terraform.html for the bootstrap story (komodo-start guarantees
 # the terraform-state bucket; one apply needs only the selected 1P machine
 # identity plus the process-scoped RustFS bucket credentials).
@@ -60,12 +59,10 @@ terraform {
       source  = "oscarhermoso/binarylane"
       version = "~> 0.13.0"
     }
-    minio = {
-      # S3 buckets, versioning, and anonymous bucket policies on RustFS.
-      # The compatible S3 API preserves these existing resource addresses.
-      # Docs: https://registry.terraform.io/providers/aminueza/minio/latest/docs
-      source  = "aminueza/minio"
-      version = "~> 3.0"
+    aws = {
+      # S3 buckets, versioning and public policies on our RustFS endpoints.
+      source  = "hashicorp/aws"
+      version = "~> 6.66.0"
     }
     rustfs = {
       # Native RustFS IAM users, policies, and service accounts. Keep the

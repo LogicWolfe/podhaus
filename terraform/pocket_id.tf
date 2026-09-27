@@ -175,7 +175,7 @@ resource "pocketid_client" "tailscale" {
 
 # Forgejo's stack consumes the confidential-client secret through
 # komodo-op. The secret is generated once by Pocket ID, stored in
-# Terraform's versioned MinIO state, and copied into 1Password.
+# Terraform's versioned RustFS state, and copied into 1Password.
 #
 # No username field, deliberately: komodo-op syncs every field as a
 # secret Komodo Variable, and Komodo redacts every secret's value in

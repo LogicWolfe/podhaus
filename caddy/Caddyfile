@@ -140,11 +140,11 @@ storage.pod.haus, *.storage.pod.haus, storage.pod.haus:4444, *.storage.pod.haus:
 
 	# The full RustFS API (S3 + admin) is served. The access-control
 	# boundary is RustFS's own SigV4 — unauthenticated calls (incl. to
-	# /minio/admin/) get AccessDenied; root/admin creds live only in
-	# 1Password + the chezmoi-rendered Terraform env. Deliberately NOT
+	# /rustfs/admin/v3/) get AccessDenied; root/admin creds live only in
+	# 1Password + the process-scoped Terraform environment. Deliberately NOT
 	# edge-blocked: an admin-path 403 would break the from-anywhere
-	# `minio/terraform/` Terraform root (no TF root is exempt from the
-	# from-anywhere rule; see AGENTS.md and docs/terraform.html.
+	# `terraform/` root (no TF root is exempt from the
+	# from-anywhere rule); see AGENTS.md and docs/terraform.html.
 	reverse_proxy {$BANDICOOT_LAN_IPV4}:9000
 }
 

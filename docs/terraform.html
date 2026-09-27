@@ -81,9 +81,10 @@
         Restore drill steps are in <a href="/disaster-recovery.html">disaster recovery</a>.
       </p>
       <p>
-        The MinIO provider retains S3-compatible bucket, versioning, and bucket-policy resources;
-        the native <code>weinmann-emt/rustfs</code> provider owns RustFS IAM. Both have a
-        <code>pouch</code> alias for the separate instance at
+        The <code>hashicorp/aws</code> provider, configured only for the RustFS S3 endpoints,
+        owns the five buckets, three versioning settings, and three public-read policies.
+        The native <code>weinmann-emt/rustfs</code> provider owns the seventeen RustFS IAM
+        resources. Both have a <code>pouch</code> alias for the separate instance at
         <code>https://pouch.pod.haus</code>. Terraform generates its root credential in the
         standard-field <code>Pouch RustFS Root</code> 1Password login, then owns the private
         <code>sky-backups</code> bucket, scoped IAM service account, and the ready-to-use

@@ -16,7 +16,7 @@
 # The provider reaches Forgejo through the public https://git.pod.haus
 # name (never dockernet/loopback — the from-any-machine TF contract).
 # Pomerium passes /api/v1 unauthenticated (pomerium/config.yaml);
-# Forgejo's own token auth is the boundary, same stance as MinIO SigV4.
+# Forgejo's own token auth is the boundary, same stance as RustFS SigV4.
 
 data "onepassword_item" "forgejo_terraform" {
   vault = data.onepassword_vault.homelab.uuid

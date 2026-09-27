@@ -2,7 +2,7 @@
 # generates it once and 1Password is the handoff to both komodo-op and the
 # aliased providers. The standard login fields are deliberate:
 # the 1Password data source can resolve their stable username/password IDs.
-resource "onepassword_item" "pouch_minio_root" {
+resource "onepassword_item" "pouch_rustfs_root" {
   vault    = data.onepassword_vault.homelab.uuid
   title    = "Pouch RustFS Root"
   category = "login"
@@ -19,11 +19,15 @@ resource "onepassword_item" "pouch_minio_root" {
 
 # Sky's repository. Versioning stays disabled: restic owns snapshot history,
 # and S3 object versions would keep pruned packs alive indefinitely.
-resource "minio_s3_bucket" "sky_backups" {
-  provider = minio.pouch
+resource "aws_s3_bucket" "sky_backups" {
+  provider = aws.pouch
 
-  bucket = "sky-backups"
-  acl    = "private"
+  bucket        = "sky-backups"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "rustfs_policy" "sky_backups" {

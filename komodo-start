@@ -258,7 +258,6 @@ poll_until_complete "$pull_update_id" "podhaus-deploy pull"
 
 echo "Bootstrap complete. Use ./komodo-sync for local iteration; push to deploy."
 
-# MinIO terraform-state bucket is bootstrapped by the MinIO stack's
-# own `minio-init` init container — see minio/compose.yaml. Removed
-# from komodo-start: the bucket is now a consequence of MinIO being
-# deployed, not a side effect of the Komodo bootstrap script.
+# The RustFS stack's `rustfs-init` container creates and versions the
+# terraform-state bucket. It is a storage-stack concern, not a side effect
+# of the Komodo bootstrap script.

@@ -2,23 +2,27 @@
 # Pattern is reusable per future static-site tenant (skycroeser.net, …):
 # copy this file, swap the name.
 
-resource "minio_s3_bucket" "nathanbaxter_com" {
-  bucket = "nathanbaxter-com"
-  acl    = "private" # public read is granted narrowly by the policy below
+resource "aws_s3_bucket" "nathanbaxter_com" {
+  bucket        = "nathanbaxter-com"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
-resource "minio_s3_bucket_versioning" "nathanbaxter_com" {
-  bucket = minio_s3_bucket.nathanbaxter_com.bucket
+resource "aws_s3_bucket_versioning" "nathanbaxter_com" {
+  bucket = aws_s3_bucket.nathanbaxter_com.bucket
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Anonymous GetObject ONLY — Caddy serves the rendered site
+# Anonymous object and version reads only — Caddy serves the rendered site
 # anonymously. No anon ListBucket: no public enumeration of unlinked
 # objects.
-resource "minio_s3_bucket_policy" "nathanbaxter_com" {
-  bucket = minio_s3_bucket.nathanbaxter_com.bucket
+resource "aws_s3_bucket_policy" "nathanbaxter_com" {
+  bucket = aws_s3_bucket.nathanbaxter_com.bucket
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -78,23 +82,27 @@ output "nathanbaxter_com_deploy_secret_key" {
 # Publii static output. Same shape as nathanbaxter-com above. The
 # bucket is named for the real domain even while the site is demoed at
 # sky.pod.haus — the temporary host never names storage.
-resource "minio_s3_bucket" "skycroeser_net" {
-  bucket = "skycroeser-net"
-  acl    = "private" # public read is granted narrowly by the policy below
+resource "aws_s3_bucket" "skycroeser_net" {
+  bucket        = "skycroeser-net"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
-resource "minio_s3_bucket_versioning" "skycroeser_net" {
-  bucket = minio_s3_bucket.skycroeser_net.bucket
+resource "aws_s3_bucket_versioning" "skycroeser_net" {
+  bucket = aws_s3_bucket.skycroeser_net.bucket
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Anonymous GetObject ONLY — Caddy serves the rendered site
+# Anonymous object and version reads only — Caddy serves the rendered site
 # anonymously. No anon ListBucket: no public enumeration of unlinked
 # objects (e.g. unpublished drafts Publii may stage).
-resource "minio_s3_bucket_policy" "skycroeser_net" {
-  bucket = minio_s3_bucket.skycroeser_net.bucket
+resource "aws_s3_bucket_policy" "skycroeser_net" {
+  bucket = aws_s3_bucket.skycroeser_net.bucket
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -155,9 +163,13 @@ output "skycroeser_net_deploy_secret_key" {
 # pets-alive-assets — uploaded art for the pet simulator. NOT publicly
 # readable (no anon policy): the pets-alive backend proxies every object
 # via /api/assets, so only the scoped service account needs access.
-resource "minio_s3_bucket" "pets_alive_assets" {
-  bucket = "pets-alive-assets"
-  acl    = "private"
+resource "aws_s3_bucket" "pets_alive_assets" {
+  bucket        = "pets-alive-assets"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Least-privilege: read/write/delete that one bucket. CreateBucket is
@@ -214,21 +226,25 @@ output "pets_alive_assets_secret_key" {
 # iPad and published by her over RustFS's SFTP server (see
 # docs/runbooks/doggos-indigo.md). Blocs logs in as the scoped IAM user
 # directly, so this site has no separate service account.
-resource "minio_s3_bucket" "doggos_indigo" {
-  bucket = "doggos-indigo"
-  acl    = "private" # public read is granted narrowly by the policy below
+resource "aws_s3_bucket" "doggos_indigo" {
+  bucket        = "doggos-indigo"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Versioning is her undo: every publish keeps the file it replaced.
-resource "minio_s3_bucket_versioning" "doggos_indigo" {
-  bucket = minio_s3_bucket.doggos_indigo.bucket
+resource "aws_s3_bucket_versioning" "doggos_indigo" {
+  bucket = aws_s3_bucket.doggos_indigo.bucket
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-resource "minio_s3_bucket_policy" "doggos_indigo" {
-  bucket = minio_s3_bucket.doggos_indigo.bucket
+resource "aws_s3_bucket_policy" "doggos_indigo" {
+  bucket = aws_s3_bucket.doggos_indigo.bucket
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -308,11 +324,11 @@ resource "onepassword_item" "doggos_indigo_publish" {
 # redeploys — a changed host key is a scary warning on her iPad.
 # Published for komodo-op → OP__KOMODO__SFTP_HOST_KEY__PRIVATE_KEY_B64,
 # consumed by rustfs/stack.toml.
-resource "tls_private_key" "minio_sftp_host" {
+resource "tls_private_key" "rustfs_sftp_host" {
   algorithm = "ED25519"
 }
 
-resource "onepassword_item" "minio_sftp_host_key" {
+resource "onepassword_item" "rustfs_sftp_host_key" {
   vault    = data.onepassword_vault.homelab.uuid
   title    = "SFTP Host Key"
   category = "secure_note"
@@ -323,11 +339,11 @@ resource "onepassword_item" "minio_sftp_host_key" {
       field_map = {
         private_key_b64 = {
           type  = "CONCEALED"
-          value = base64encode(tls_private_key.minio_sftp_host.private_key_openssh)
+          value = base64encode(tls_private_key.rustfs_sftp_host.private_key_openssh)
         }
         public_key = {
           type  = "STRING"
-          value = trimspace(tls_private_key.minio_sftp_host.public_key_openssh)
+          value = trimspace(tls_private_key.rustfs_sftp_host.public_key_openssh)
         }
       }
     }

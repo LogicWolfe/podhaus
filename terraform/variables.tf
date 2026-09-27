@@ -4,14 +4,14 @@ variable "account_id" {
   default     = "7e660ed6610dce078359713b3cacdea0"
 }
 
-variable "minio_user" {
-  description = "RustFS root user for storage.pod.haus (supplied through TF_VAR_minio_user). The variable name remains stable for the existing environment handoff."
+variable "rustfs_user" {
+  description = "RustFS root user for storage.pod.haus (supplied through TF_VAR_rustfs_user)."
   type        = string
   sensitive   = true
 }
 
-variable "minio_password" {
-  description = "RustFS root password for storage.pod.haus (supplied through TF_VAR_minio_password)."
+variable "rustfs_password" {
+  description = "RustFS root password for storage.pod.haus (supplied through TF_VAR_rustfs_password)."
   type        = string
   sensitive   = true
 }

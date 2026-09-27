@@ -43,6 +43,21 @@ variables and verify stock Terraform still runs from any chezmoi-managed
 machine. Runtime certificates and service tokens used by stacks remain in the
 Homelab vault.
 
+## Terraform state backend identity has broad storage access
+
+**Status:** Deferred. Keep this permission migration separate from the storage retirement.
+
+The RustFS Terraform backend account, whose credential is held in the
+**RustFS Terraform User** 1Password item, has RustFS's built-in `readwrite`
+policy. It can access buckets beyond `terraform-state`, although the backend
+needs only its state object, versions, and S3 lock object.
+
+Create a Terraform-managed state-only identity and policy while the current
+credential still works. Switch a fresh Terraform process to the new credential,
+then verify state reads, writes, versioning, locking, and denial for other
+buckets. Revoke the broad account only after those checks pass. This is a
+deliberate credential rotation in exchange for a narrower storage boundary.
+
 ## Deployment failures can leave the parent procedure green
 
 **Status:** Open. Inspect individual deployment results until corrected.
