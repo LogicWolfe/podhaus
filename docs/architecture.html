@@ -103,13 +103,17 @@
         backups and device recovery.
       </p>
       <p>
-        bookbinder runs on Bilby and decodes downloaded Kindle page data into
-        EPUB and Markdown over HTTP, reachable only on <code>dockernet</code>
-        at <code>http://bookbinder:8787</code>. Its own repository supplies the
-        stack; Podhaus owns the deployment webhook and Komodo integration.
-        Requests name paths under <code>/var/lib/bookwork</code>, a transient
-        work directory on Bilby's local disk that every book service mounts at
-        the same path and that is not backed up.
+        The book services run on Bilby, reachable only on
+        <code>dockernet</code>: bookcard (<code>http://bookcard:8788</code>)
+        signs in to the Kindle library and downloads books' page data, and
+        bookbinder (<code>http://bookbinder:8787</code>) decodes it into EPUB
+        and Markdown. Each repository supplies its own stack; Podhaus owns the
+        deployment webhooks and Komodo integration. Requests name paths under
+        <code>/var/lib/bookwork</code>, a transient work directory on Bilby's
+        local disk that every book service mounts at the same path, runs as
+        uid 1000 against, and that is not backed up. bookcard's sign-in state
+        lives in its own Docker volume, and its Amazon credentials in the
+        <code>Bookcard Amazon</code> Homelab item.
       </p>
       <h2 id="design-principles">Design principles</h2>
       <p>These four principles trump local convenience whenever they conflict:</p>

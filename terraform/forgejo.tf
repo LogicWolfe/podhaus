@@ -48,6 +48,11 @@ data "forgejo_repository" "bookbinder" {
   name  = "bookbinder"
 }
 
+data "forgejo_repository" "bookcard" {
+  owner = "LogicWolfe"
+  name  = "bookcard"
+}
+
 # Push webhook → Komodo's yiayia-stories-push-deploy procedure (linked-repo
 # stack defined in that repository; see komodo/sync/procedures.toml).
 resource "forgejo_repository_webhook" "yiayia_stories_deploy" {
@@ -87,6 +92,22 @@ resource "forgejo_repository_webhook" "bookbinder_deploy" {
   repository    = data.forgejo_repository.bookbinder.full_name
   type          = "forgejo"
   url           = "https://komodo.pod.haus/listener/github/procedure/bookbinder-push-deploy/deploy"
+  content_type  = "json"
+  secret        = var.komodo_webhook_secret
+  branch_filter = "deploy"
+  active        = true
+
+  events {
+    push = true
+  }
+}
+
+# `deploy` push webhook → Komodo's bookcard-push-deploy procedure. Green CI on
+# main is the only writer of `deploy` (the repo's promote job).
+resource "forgejo_repository_webhook" "bookcard_deploy" {
+  repository    = data.forgejo_repository.bookcard.full_name
+  type          = "forgejo"
+  url           = "https://komodo.pod.haus/listener/github/procedure/bookcard-push-deploy/deploy"
   content_type  = "json"
   secret        = var.komodo_webhook_secret
   branch_filter = "deploy"

@@ -274,6 +274,38 @@ executions = [
 ]
 
 
+# bookcard-push-deploy — push-to-deploy for the bookcard stack on bilby, the
+# same three stages as bookbinder-push-deploy.
+
+[[procedure]]
+name = "bookcard-push-deploy"
+description = "Push-to-deploy for the bookcard stack."
+tags = ["bookcard", "podhaus"]
+config.webhook_enabled = true
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Pull green bookcard release"
+enabled = true
+executions = [
+  { execution.type = "PullRepo", execution.params = { repo = "bookcard" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Reconcile bookcard stack definition (sync TOML -> Komodo)"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params = { sync = "bookcard" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy bookcard (build + up; layer cache makes an unchanged push a no-op)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "bookcard" }, enabled = true },
+]
+
+
 # nathanbaxter-deploy — push-to-deploy for nathanbaxter.com.
 #
 # Bound to the nathanbaxter Forgejo push webhook — the repo lives on

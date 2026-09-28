@@ -18,6 +18,7 @@ class GreenRelease:
 GREEN_RELEASES = [
     GreenRelease("indy-board-push-deploy", "LogicWolfe/indy-board", "indy-board"),
     GreenRelease("bookbinder-push-deploy", "LogicWolfe/bookbinder", "bookbinder"),
+    GreenRelease("bookcard-push-deploy", "LogicWolfe/bookcard", "bookcard"),
 ]
 
 

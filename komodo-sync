@@ -117,3 +117,4 @@ run_procedure pets-push-deploy
 run_procedure docs-push-deploy
 run_procedure indy-board-push-deploy
 run_procedure bookbinder-push-deploy
+run_procedure bookcard-push-deploy
