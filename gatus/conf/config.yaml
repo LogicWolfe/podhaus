@@ -335,6 +335,12 @@ endpoints:
       - "[BODY].ok == true"
     alerts: *alerts
 
+  # bookbinder answers only on dockernet; /health is 200 while it serves.
+  - name: bookbinder (container)
+    url: http://bookbinder:8787/health
+    <<: *defaults
+    group: Books
+
   # Signed out, the workbench must not exist: a 200 here means the editor
   # gate has failed open.
   - name: Yiayia's stories (workbench hidden)
