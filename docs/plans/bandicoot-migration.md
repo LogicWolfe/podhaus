@@ -33,7 +33,8 @@ a move does not fit.
 | Komodo Core (+ postgres, ferretdb) | **bandicoot** | ✅ moved (432c350, 3ad7e29) |
 | `onepassword` (op-connect-api, op-connect-sync, komodo-op) | **bandicoot** | ✅ moved with the existing credentials — no new Connect server |
 | Fenwick family (fenwick, signal-cli, web-agent, brinno-downloader) | **bandicoot** | ✅ moved (77caca3, 97d7d2d, 57b571b) |
-| Plex, Music Assistant, Home Assistant, ESPHome, Flood, StreamFab, MinIO, Forgejo, Pocket ID, Gatus, Caddy, Backrest, Ofelia, the relay, Bugsink, Umami, pets, yiayia-stories, nathanbaxter-dev | bilby | stay |
+| RustFS primary object storage | bandicoot | ✅ serves the website buckets, asset bucket and Terraform state |
+| Plex, Music Assistant, Home Assistant, ESPHome, Flood, StreamFab, Forgejo, Pocket ID, Gatus, Caddy, Backrest, Ofelia, the relay, Bugsink, Umami, pets, yiayia-stories, nathanbaxter-dev | bilby | stay |
 
 **Memory after the moves.** bandicoot today: 9.9 GB used of 15.4 with
 Paperless resident (≈2 GB peak) and GNOME (≈1.4 GB shmem). Paperless leaves;
@@ -113,7 +114,7 @@ bilby becomes an ordinary outbound-Periphery host with files_on_host stacks.
 | Backrest | `backup/bilby` binds `komodo_postgres-data`, `komodo_ferretdb-state`, `onepassword_op-connect-data` + plans `komodo`, `onepassword` | move to `backup/bandicoot` |
 | Komodo's own nightly DB dumps `/opt/komodo/backups` | bilby, 169 MB | copied to bandicoot's `/opt/komodo/backups` |
 | Ansible control node | bilby (`ansible_connection: local`) | bandicoot (`ansible_connection: local`, `ansible_python_interpreter: /usr/bin/python3`); bilby becomes an SSH target (`ansible_host: bilby.pod.haus`). `podhaus_komodo_core_url` stays loopback |
-| Terraform | run from bilby | run from bandicoot (state is in MinIO via `storage.pod.haus`; nothing host-pinned) |
+| Terraform | run from bilby | run from bandicoot (state is in RustFS via `storage.pod.haus`; nothing host-pinned) |
 | Logging | bilby's Alloy parsers for komodo-core/op/postgres/ferretdb, op-connect-* | bandicoot's Alloy carries the same parser files already; verify the chain in its `config.alloy` |
 | Docs | | `docs/komodo.html`, `docs/hosts.html` (bilby and bandicoot sections, control-node statement), `docs/host-provisioning.md`, `docs/disaster-recovery.html`, `docs/secrets.html`, `AGENTS.md` (komodo-start/komodo-sync/deploy-tree paragraphs, the ansible row), `README.md` ("Bootstrap the remote hosts from bilby") |
 

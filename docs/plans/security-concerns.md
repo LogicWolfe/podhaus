@@ -37,7 +37,7 @@ pre-migration hostname carried an Access application whose only policy was
 `unifi_bypass`. What changed is that the Cloudflare proxy in front of it is
 gone: no WAF, no bot management, no rate limiting, no origin-IP concealment.
 The remaining boundary is a session login form on `10.0.0.1`, the LAN
-gateway itself. That is not the same class of boundary as MinIO's
+gateway itself. That is not the same class of boundary as RustFS's
 per-request SigV4, which is the justification `AGENTS.md` uses for keeping a
 raw endpoint on the relay address.
 
@@ -146,8 +146,7 @@ where a boundary is.
       webhook bypass, the whole pod.haus wildcard". The wildcard and the
       webhook bypass are gone.
 - [ ] Remove the three "Kookaburra rollback" / "Cloudflare Tunnel paths
-      remain configured separately for rollback" notes in `caddy/Caddyfile`,
-      and the deleted-stack reference in `minio/stack.toml`.
+      remain configured separately for rollback" notes in `caddy/Caddyfile`.
 - [ ] Remove `gatus/config.yaml` — it is an empty **directory**, a
       Docker-created stub from a bind whose source did not exist. This is
       the exact failure `AGENTS.md` warns about. The live config is
