@@ -219,6 +219,22 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/indy-board"
 branch = "deploy"
 
+# Bilby clone of the bookbinder repo (the Kindle page-data decode service).
+# Same linked_repo + run_build pattern as indy-board: Komodo builds the image
+# on bilby from the Forgejo `deploy` branch, which only green CI on main
+# advances.
+[[repo]]
+name = "bookbinder"
+description = "Komodo-managed clone of the bookbinder repo on bilby's Periphery"
+tags = ["podhaus", "bilby", "bookbinder"]
+
+[repo.config]
+server = "podhaus"             # = bilby
+git_provider = "git.pod.haus"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/bookbinder"
+branch = "deploy"
+
 # Core's sync tree since the move to bandicoot — komodo-sync overlays it
 # the same way it overlays podhaus-deploy below, so on_pull needs the same
 # `git clean -fd` for the same reason (see the podhaus-deploy comment

@@ -88,3 +88,20 @@ include_variables = true
 include_resources = true
 delete = false
 managed = false
+
+# The bookbinder sync reads the [[stack]] block in the bookbinder repo's root
+# stack.toml. Only that file, as for indy-board: the repo's Cargo.toml is not
+# a Komodo resource and fails the sync. Stage 1 of bookbinder-push-deploy
+# runs it explicitly.
+[[resource_sync]]
+name = "bookbinder"
+description = "ResourceSync for the stack def that lives in the bookbinder repo."
+tags = ["bookbinder", "podhaus"]
+
+[resource_sync.config]
+linked_repo = "bookbinder"
+resource_path = ["stack.toml"]
+include_variables = true
+include_resources = true
+delete = false
+managed = false

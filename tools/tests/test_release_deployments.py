@@ -1,11 +1,27 @@
 import tomllib
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 
 
-class IndyDeploymentContractTests(unittest.TestCase):
+@dataclass(frozen=True)
+class GreenRelease:
+    """A service whose green CI advances a Forgejo `deploy` branch that Komodo deploys."""
+
+    procedure: str
+    forgejo_repo: str
+    stack_pattern: str
+
+
+GREEN_RELEASES = [
+    GreenRelease("indy-board-push-deploy", "LogicWolfe/indy-board", "indy-board"),
+    GreenRelease("bookbinder-push-deploy", "LogicWolfe/bookbinder", "bookbinder"),
+]
+
+
+class GreenReleaseDeploymentContractTests(unittest.TestCase):
     def resources(self, filename, kind):
         content = tomllib.loads((REPO / "komodo/sync" / filename).read_text())
         return {resource["name"]: resource["config"] for resource in content[kind]}
@@ -14,7 +30,11 @@ class IndyDeploymentContractTests(unittest.TestCase):
         repos = self.resources("repos.toml", "repo")
         syncs = self.resources("syncs.toml", "resource_sync")
         procedures = self.resources("procedures.toml", "procedure")
-        procedure = procedures["indy-board-push-deploy"]
+        for release in GREEN_RELEASES:
+            with self.subTest(release.procedure):
+                self.assert_deployment_path(release, repos, syncs, procedures[release.procedure])
+
+    def assert_deployment_path(self, release, repos, syncs, procedure):
         stages = [stage for stage in procedure["stage"] if stage["enabled"]]
         executions = [
             item["execution"]
@@ -29,14 +49,14 @@ class IndyDeploymentContractTests(unittest.TestCase):
         )
         repo_name = executions[0]["params"]["repo"]
         sync = syncs[executions[1]["params"]["sync"]]
-        self.assertEqual(repos[repo_name]["repo"], "LogicWolfe/indy-board")
+        self.assertEqual(repos[repo_name]["repo"], release.forgejo_repo)
         self.assertEqual(repos[repo_name]["branch"], "deploy")
         self.assertEqual(sync["linked_repo"], repo_name)
         self.assertEqual(sync["resource_path"], ["stack.toml"])
         self.assertTrue(sync["include_variables"])
         self.assertTrue(sync["include_resources"])
         self.assertFalse(sync["delete"])
-        self.assertEqual(executions[2]["params"]["pattern"], "indy-board")
+        self.assertEqual(executions[2]["params"]["pattern"], release.stack_pattern)
 
 
 if __name__ == "__main__":

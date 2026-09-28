@@ -238,6 +238,42 @@ executions = [
 ]
 
 
+# bookbinder-push-deploy — push-to-deploy for the bookbinder stack on bilby.
+#
+# Bound to the Forgejo `deploy` branch webhook with the same three stages as
+# indy-board-push-deploy. Force-deploys: the Docker layer cache rebuilds an
+# unchanged release to the same image id, so an unchanged push recreates
+# nothing.
+
+[[procedure]]
+name = "bookbinder-push-deploy"
+description = "Push-to-deploy for the bookbinder stack."
+tags = ["bookbinder", "podhaus"]
+config.webhook_enabled = true
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Pull green bookbinder release"
+enabled = true
+executions = [
+  { execution.type = "PullRepo", execution.params = { repo = "bookbinder" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Reconcile bookbinder stack definition (sync TOML -> Komodo)"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params = { sync = "bookbinder" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy bookbinder (build + up; layer cache makes an unchanged push a no-op)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "bookbinder" }, enabled = true },
+]
+
+
 # nathanbaxter-deploy — push-to-deploy for nathanbaxter.com.
 #
 # Bound to the nathanbaxter Forgejo push webhook — the repo lives on
