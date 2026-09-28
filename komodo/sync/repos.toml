@@ -27,8 +27,7 @@ branch = "main"
 # Bandicoot clone of the fenwick monorepo. The fenwick repo carries
 # its own stack defs (both the bot and the credential-redactor
 # service) — see fenwick-push-deploy in procedures.toml. It follows
-# the Forgejo `deploy` branch, not `main`: green Forgejo Actions is
-# the only writer that advances this promotion pointer. Moved from
+# `main`, like every service: a push to main deploys. Moved from
 # bilby 2026-09-09 so the Fenwick family can reach op-connect-api on
 # bandicoot's dockernet by name again; git.pod.haus resolves via
 # bandicoot's Periphery extra_hosts entry (see bandicoot/periphery/
@@ -43,7 +42,7 @@ server = "bandicoot"
 git_provider = "git.pod.haus"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/fenwick"
-branch = "deploy"
+branch = "main"
 
 [[repo]]
 name = "podhaus-numbat"
@@ -205,8 +204,7 @@ branch = "main"
 # Bilby clone of the indy-board repo (Indigo's room controller and display
 # panel). Same linked_repo + run_build pattern as fenwick: Komodo builds the
 # image, service and both boards' firmware, on bilby, where the boards
-# connect. It follows the Forgejo `deploy` branch, which only green CI on
-# main advances.
+# connect.
 [[repo]]
 name = "indy-board"
 description = "Komodo-managed clone of the indy-board repo on bilby's Periphery"
@@ -217,12 +215,11 @@ server = "podhaus"             # = bilby
 git_provider = "git.pod.haus"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/indy-board"
-branch = "deploy"
+branch = "main"
 
 # Bilby clone of the bookbinder repo (the Kindle page-data decode service).
 # Same linked_repo + run_build pattern as indy-board: Komodo builds the image
-# on bilby from the Forgejo `deploy` branch, which only green CI on main
-# advances.
+# on bilby.
 [[repo]]
 name = "bookbinder"
 description = "Komodo-managed clone of the bookbinder repo on bilby's Periphery"
@@ -233,11 +230,10 @@ server = "podhaus"             # = bilby
 git_provider = "git.pod.haus"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/bookbinder"
-branch = "deploy"
+branch = "main"
 
 # Bilby clone of the bookcard repo (the Kindle library service beside
-# bookbinder). Same linked_repo + run_build pattern, following the Forgejo
-# `deploy` branch that only green CI on main advances.
+# bookbinder). Same linked_repo + run_build pattern.
 [[repo]]
 name = "bookcard"
 description = "Komodo-managed clone of the bookcard repo on bilby's Periphery"
@@ -248,7 +244,7 @@ server = "podhaus"             # = bilby
 git_provider = "git.pod.haus"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/bookcard"
-branch = "deploy"
+branch = "main"
 
 # Core's sync tree since the move to bandicoot — komodo-sync overlays it
 # the same way it overlays podhaus-deploy below, so on_pull needs the same

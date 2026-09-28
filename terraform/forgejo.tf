@@ -33,32 +33,31 @@ data "forgejo_repository" "nathanbaxter" {
   name  = "nathanbaxter"
 }
 
-data "forgejo_repository" "yiayia_stories" {
-  owner = "LogicWolfe"
-  name  = "yiayia-stories"
+# Push webhooks → Komodo: a push to a repository's main runs its deploy
+# procedure (komodo/sync/procedures.toml), so what is on main is what is live.
+# Forgejo sends GitHub-compatible X-GitHub-Event / X-Hub-Signature-256
+# headers, so Komodo's /listener/github endpoint validates them like GitHub
+# deliveries. The public komodo.pod.haus path rides the Pomerium
+# /listener/github exception and avoids Forgejo's private-address webhook
+# blocking. The URL's trailing /main is Komodo's branch filter;
+# branch_filter trims deliveries at the source too.
+locals {
+  komodo_push_deploys = {
+    "bookbinder"     = "bookbinder-push-deploy"
+    "bookcard"       = "bookcard-push-deploy"
+    "fenwick"        = "fenwick-push-deploy"
+    "indy-board"     = "indy-board-push-deploy"
+    "nathanbaxter"   = "nathanbaxter-deploy"
+    "yiayia-stories" = "yiayia-stories-push-deploy"
+  }
 }
 
-data "forgejo_repository" "indy_board" {
-  owner = "LogicWolfe"
-  name  = "indy-board"
-}
+resource "forgejo_repository_webhook" "komodo_deploy" {
+  for_each = local.komodo_push_deploys
 
-data "forgejo_repository" "bookbinder" {
-  owner = "LogicWolfe"
-  name  = "bookbinder"
-}
-
-data "forgejo_repository" "bookcard" {
-  owner = "LogicWolfe"
-  name  = "bookcard"
-}
-
-# Push webhook → Komodo's yiayia-stories-push-deploy procedure (linked-repo
-# stack defined in that repository; see komodo/sync/procedures.toml).
-resource "forgejo_repository_webhook" "yiayia_stories_deploy" {
-  repository    = data.forgejo_repository.yiayia_stories.full_name
+  repository    = "LogicWolfe/${each.key}"
   type          = "forgejo"
-  url           = "https://komodo.pod.haus/listener/github/procedure/yiayia-stories-push-deploy/main"
+  url           = "https://komodo.pod.haus/listener/github/procedure/${each.value}/main"
   content_type  = "json"
   secret        = var.komodo_webhook_secret
   branch_filter = "main"
@@ -69,53 +68,34 @@ resource "forgejo_repository_webhook" "yiayia_stories_deploy" {
   }
 }
 
-# `deploy` push webhook → Komodo's indy-board-push-deploy procedure. Green CI
-# on main is the only writer of `deploy` (the repo's promote job), so a merge
-# deploys only once its checks pass.
-resource "forgejo_repository_webhook" "indy_board_deploy" {
-  repository    = data.forgejo_repository.indy_board.full_name
-  type          = "forgejo"
-  url           = "https://komodo.pod.haus/listener/github/procedure/indy-board-push-deploy/deploy"
-  content_type  = "json"
-  secret        = var.komodo_webhook_secret
-  branch_filter = "deploy"
-  active        = true
-
-  events {
-    push = true
-  }
+moved {
+  from = forgejo_repository_webhook.bookbinder_deploy
+  to   = forgejo_repository_webhook.komodo_deploy["bookbinder"]
 }
 
-# `deploy` push webhook → Komodo's bookbinder-push-deploy procedure. Green CI
-# on main is the only writer of `deploy` (the repo's promote job).
-resource "forgejo_repository_webhook" "bookbinder_deploy" {
-  repository    = data.forgejo_repository.bookbinder.full_name
-  type          = "forgejo"
-  url           = "https://komodo.pod.haus/listener/github/procedure/bookbinder-push-deploy/deploy"
-  content_type  = "json"
-  secret        = var.komodo_webhook_secret
-  branch_filter = "deploy"
-  active        = true
-
-  events {
-    push = true
-  }
+moved {
+  from = forgejo_repository_webhook.bookcard_deploy
+  to   = forgejo_repository_webhook.komodo_deploy["bookcard"]
 }
 
-# `deploy` push webhook → Komodo's bookcard-push-deploy procedure. Green CI on
-# main is the only writer of `deploy` (the repo's promote job).
-resource "forgejo_repository_webhook" "bookcard_deploy" {
-  repository    = data.forgejo_repository.bookcard.full_name
-  type          = "forgejo"
-  url           = "https://komodo.pod.haus/listener/github/procedure/bookcard-push-deploy/deploy"
-  content_type  = "json"
-  secret        = var.komodo_webhook_secret
-  branch_filter = "deploy"
-  active        = true
+moved {
+  from = forgejo_repository_webhook.fenwick_deploy
+  to   = forgejo_repository_webhook.komodo_deploy["fenwick"]
+}
 
-  events {
-    push = true
-  }
+moved {
+  from = forgejo_repository_webhook.indy_board_deploy
+  to   = forgejo_repository_webhook.komodo_deploy["indy-board"]
+}
+
+moved {
+  from = forgejo_repository_webhook.nathanbaxter_deploy
+  to   = forgejo_repository_webhook.komodo_deploy["nathanbaxter"]
+}
+
+moved {
+  from = forgejo_repository_webhook.yiayia_stories_deploy
+  to   = forgejo_repository_webhook.komodo_deploy["yiayia-stories"]
 }
 
 # Fenwick was migrated through Forgejo's repository migration API, then
@@ -149,8 +129,7 @@ resource "forgejo_repository" "fenwick" {
 }
 
 # Main is review + CI territory. These are the exact contexts emitted by the
-# proven pull-request workflow; the post-merge main workflow independently
-# gates deployment before it may advance `deploy`.
+# proven pull-request workflow; a push to main deploys (see the webhooks above).
 resource "forgejo_repository_branch_rule" "fenwick_main" {
   repository               = forgejo_repository.fenwick.full_name
   protected_branch_pattern = "main"
@@ -167,22 +146,6 @@ resource "forgejo_repository_branch_rule" "fenwick_main" {
   dismiss_stale_approvals  = true
 }
 
-# `deploy` is the auditable promotion pointer. The green main workflow moves it
-# forward without force; this webhook is the sole automatic deploy trigger.
-resource "forgejo_repository_webhook" "fenwick_deploy" {
-  repository    = forgejo_repository.fenwick.full_name
-  type          = "forgejo"
-  url           = "https://komodo.pod.haus/listener/github/procedure/fenwick-push-deploy/deploy"
-  content_type  = "json"
-  secret        = var.komodo_webhook_secret
-  branch_filter = "deploy"
-  active        = true
-
-  events {
-    push = true
-  }
-}
-
 # Read-only deploy key for the nathanbaxter-deploy builder container.
 # The builder clones over dockernet SSH (git@forgejo:2222); HTTP git is
 # disabled instance-wide.
@@ -195,28 +158,6 @@ resource "forgejo_deploy_key" "nathanbaxter_deploy" {
   key           = trimspace(tls_private_key.nathanbaxter_deploy.public_key_openssh)
   title         = "nathanbaxter-deploy"
   read_only     = true
-}
-
-# Push webhook → Komodo's nathanbaxter-deploy procedure. Replaces the
-# github_repository_webhook that lived in github.tf. Forgejo sends
-# GitHub-compatible X-GitHub-Event / X-Hub-Signature-256 headers, so
-# Komodo's /listener/github endpoint validates it exactly like the
-# GitHub original. The public komodo.pod.haus path rides the existing
-# Pomerium /listener/github exception and avoids Forgejo's
-# private-address webhook blocking. /main is Komodo's branch filter;
-# branch_filter trims deliveries at the source too.
-resource "forgejo_repository_webhook" "nathanbaxter_deploy" {
-  repository    = data.forgejo_repository.nathanbaxter.full_name
-  type          = "forgejo"
-  url           = "https://komodo.pod.haus/listener/github/procedure/nathanbaxter-deploy/main"
-  content_type  = "json"
-  secret        = var.komodo_webhook_secret
-  branch_filter = "main"
-  active        = true
-
-  events {
-    push = true
-  }
 }
 
 # Private half of the deploy key, published for komodo-op → Komodo

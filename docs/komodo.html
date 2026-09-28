@@ -369,8 +369,11 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <code>NotFound</code> — there is no working tree there yet to pull
         into. Run <code>CloneRepo</code> on the Repo once, from the Komodo UI
         or API, before the first <code>PullRepo</code> or procedure against
-        it on the new server; every pull after that succeeds normally.
-        Evidence: <code>fenwick-push-deploy</code> failed exactly this way
+        it on the new server; every pull after that succeeds normally. The
+        per-service push-deploy procedures run no <code>PullRepo</code>: their
+        deploy step pulls the clone, or clones it when missing, so this
+        applies only to a direct <code>PullRepo</code>, such as
+        <code>podhaus-push-deploy</code>'s on the two deploy trees. Evidence: <code>fenwick-push-deploy</code> failed exactly this way
         after the fenwick Repo moved from bilby to bandicoot, and succeeded
         once a single <code>CloneRepo</code> had run.
       </blockquote>

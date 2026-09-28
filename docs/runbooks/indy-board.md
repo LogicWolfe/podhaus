@@ -31,9 +31,8 @@ their WiFi links. The code, its stack files and its own docs live in the
 
 ## Deploys
 
-A merge to indy-board's `main` whose CI passes advances `deploy`; the
-webhook fires `indy-board-push-deploy`, which pulls, syncs, builds and
-recreates the container (`--force-recreate`, so every deploy is a fresh
+A push to indy-board's `main` deploys: its Forgejo webhook fires
+`indy-board-push-deploy`, which pulls, syncs, builds and recreates the container (`--force-recreate`, so every deploy is a fresh
 container). Each board is offered its image from the new container when it
 next connects, which is within seconds of the restart. A board runs a new
 image on trial and falls back to its previous image by itself if the new one
@@ -43,9 +42,6 @@ The first cold build is long: it installs both firmware toolchains, ESP-IDF
 included. Its caches (Docker cache mounts `indy-*`) make later builds
 incremental. The compile steps share one locked cache so they run one at a
 time, which keeps the build within bilby's memory.
-
-On a Komodo that has never deployed the stack, run `CloneRepo indy-board`
-once first: the procedure's pull stage fails on a clone that does not exist.
 
 `tools/ship.sh service|controller|panel`, run from any indy-board checkout
 (with `DOCKER_HOST=ssh://bilby.pod.haus` when not on bilby), builds that

@@ -25,7 +25,7 @@ cache:
 container:
   network: ""
   privileged: false
-  # Checkout and promotion run inside job containers, so they need the same
+  # Checkout runs inside job containers, so it needs the same
   # direct-origin resolution as the daemon's Actions protocol. When memory runs
   # out, a CI job is the cheapest thing to lose: the OOM score makes earlyoom
   # and the kernel pick job containers before host services or dev sessions.

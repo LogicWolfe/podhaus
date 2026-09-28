@@ -115,12 +115,12 @@ job limit and the runner cache. Job containers do not receive
 Bandicoot's Docker socket. The runner removes disposable job resources on
 completion and its cache lives under `/opt/forgejo-runner/data/cache`.
 
-Fenwick is the reference release shape. Pull requests and `main` run the same
-three checks. A dependent promotion job advances the repository's `deploy`
-branch with a normal, non-force push only after every check succeeds. A Forgejo
-webhook filters that branch and invokes Komodo. Komodo explicitly pulls its
-managed clone before sync/build, so Bilby's ordinary checkout is not an input.
-Actions validates source; Komodo performs the native ARM64 image build on Bilby.
+A push to a repository's `main` deploys it: a Forgejo push webhook filtered to
+`main` invokes the repository's Komodo procedure, which pulls its managed clone,
+syncs the stack definition, and builds and deploys, so what is on `main` is what
+is live and no working checkout is an input. Actions runs the checks on pull
+requests and on `main`; Komodo performs the native ARM64 image build on the
+deploying host.
 Packages remain disabled until a real durable or multi-host artifact need
 justifies a registry.
 

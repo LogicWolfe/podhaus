@@ -57,12 +57,8 @@ resource "github_repository_webhook" "komodo_deploy" {
   }
 }
 
-# Fenwick lives on Forgejo. Its green workflow advances the `deploy` branch;
-# forgejo_repository_webhook.fenwick_deploy owns the sole deploy trigger.
-
-# The nathanbaxter repo's webhook is NOT here: that repo migrated to
-# Forgejo (git.pod.haus) and its push webhook is
-# forgejo_repository_webhook.nathanbaxter_deploy in forgejo.tf.
+# Fenwick and nathanbaxter live on Forgejo; their push webhooks are
+# forgejo_repository_webhook.komodo_deploy in forgejo.tf.
 
 # Sibling webhook for the pets engine repo. Same global secret +
 # Pomerium machine exception for /listener/github. Fires

@@ -148,20 +148,21 @@ executions = [
 
 # fenwick-push-deploy — push-to-deploy for stacks sourced from the
 # fenwick repo (the bot + the credential-redactor service; both
-# linked_repo + run_build, Komodo builds the images on bilby).
+# linked_repo + run_build, Komodo builds the images on bandicoot).
 #
-# Bound to the Forgejo `deploy` branch webhook. Green CI is the only writer of
-# that promotion pointer; pushes to main do not call Komodo directly.
+# Bound to the fenwick repo's Forgejo push webhook on main
+# (terraform/forgejo.tf): a push to main deploys.
 # Stage shape:
-#   - Stage 0 explicitly pulls the Komodo-owned clone to deploy. Nothing reads
-#     bilby's ordinary checkout, and pull failure aborts before sync/build.
-#   - Stage 1 reconciles the fenwick sync into Komodo (without it,
-#     a push that adds a new [[variable]] reaches the deploy via the
-#     on-disk file but the deploy uses the stored pre-change resource
-#     def — same trap that bit fenwick on 2026-05-17).
-#   - Stage 2 BatchDeployStack "fenwick*" (matches both the bare
+#   - Stage 0 reconciles the fenwick sync into Komodo. RunSync reads the
+#     pushed commit itself (Core clones or pulls its own copy on every run).
+#     Without it, a push that adds a new [[variable]] reaches the deploy via
+#     the on-disk file but the deploy uses the stored pre-change resource
+#     def — same trap that bit fenwick on 2026-05-17.
+#   - Stage 1 BatchDeployStack "fenwick*" (matches both the bare
 #     "fenwick" stack and "fenwick-*") force-deploys every fenwick
-#     stack. Force, not IfChanged: the stale-clone deadlock means
+#     stack. Each deploy pulls the stack host's clone of the repo, or
+#     clones it when missing, before compose, so no working checkout is
+#     ever an input. Force, not IfChanged: the stale-clone deadlock means
 #     BatchDeployStackIfChanged would no-op forever for linked_repo
 #     stacks — the change-check compares the Periphery clone, which
 #     only advances during a deploy. This is the SAME deadlock the
@@ -180,13 +181,6 @@ config.webhook_enabled = true
 config.schedule_enabled = false
 
 [[procedure.config.stage]]
-name = "Pull green Fenwick release"
-enabled = true
-executions = [
-  { execution.type = "PullRepo", execution.params = { repo = "fenwick" }, enabled = true }
-]
-
-[[procedure.config.stage]]
 name = "Reconcile fenwick stack definitions (sync TOML -> Komodo)"
 enabled = true
 executions = [
@@ -203,8 +197,8 @@ executions = [
 
 # indy-board-push-deploy — push-to-deploy for the indy-board stack on bilby.
 #
-# Bound to the Forgejo `deploy` branch webhook, like fenwick-push-deploy, and
-# the same three stages. The image carries the service and both boards'
+# Bound to the repo's Forgejo push webhook on main, like fenwick-push-deploy,
+# with the same two stages. The image carries the service and both boards'
 # firmware; the stack's `--force-recreate` makes every deploy a fresh
 # container, so a custom build shipped into the running one by the repo's
 # tools/ship.sh never outlives a deploy.
@@ -215,13 +209,6 @@ description = "Push-to-deploy for the indy-board stack."
 tags = ["indy-board", "podhaus"]
 config.webhook_enabled = true
 config.schedule_enabled = false
-
-[[procedure.config.stage]]
-name = "Pull green indy-board release"
-enabled = true
-executions = [
-  { execution.type = "PullRepo", execution.params = { repo = "indy-board" }, enabled = true }
-]
 
 [[procedure.config.stage]]
 name = "Reconcile indy-board stack definition (sync TOML -> Komodo)"
@@ -240,9 +227,9 @@ executions = [
 
 # bookbinder-push-deploy — push-to-deploy for the bookbinder stack on bilby.
 #
-# Bound to the Forgejo `deploy` branch webhook with the same three stages as
-# indy-board-push-deploy. Force-deploys: the Docker layer cache rebuilds an
-# unchanged release to the same image id, so an unchanged push recreates
+# Bound to the repo's Forgejo push webhook on main, with the same two stages
+# as indy-board-push-deploy. Force-deploys: the Docker layer cache rebuilds an
+# unchanged commit to the same image id, so an unchanged push recreates
 # nothing.
 
 [[procedure]]
@@ -251,13 +238,6 @@ description = "Push-to-deploy for the bookbinder stack."
 tags = ["bookbinder", "podhaus"]
 config.webhook_enabled = true
 config.schedule_enabled = false
-
-[[procedure.config.stage]]
-name = "Pull green bookbinder release"
-enabled = true
-executions = [
-  { execution.type = "PullRepo", execution.params = { repo = "bookbinder" }, enabled = true }
-]
 
 [[procedure.config.stage]]
 name = "Reconcile bookbinder stack definition (sync TOML -> Komodo)"
@@ -275,7 +255,7 @@ executions = [
 
 
 # bookcard-push-deploy — push-to-deploy for the bookcard stack on bilby, the
-# same three stages as bookbinder-push-deploy.
+# same two stages as bookbinder-push-deploy.
 
 [[procedure]]
 name = "bookcard-push-deploy"
@@ -283,13 +263,6 @@ description = "Push-to-deploy for the bookcard stack."
 tags = ["bookcard", "podhaus"]
 config.webhook_enabled = true
 config.schedule_enabled = false
-
-[[procedure.config.stage]]
-name = "Pull green bookcard release"
-enabled = true
-executions = [
-  { execution.type = "PullRepo", execution.params = { repo = "bookcard" }, enabled = true }
-]
 
 [[procedure.config.stage]]
 name = "Reconcile bookcard stack definition (sync TOML -> Komodo)"
