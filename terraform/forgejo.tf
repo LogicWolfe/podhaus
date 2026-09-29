@@ -68,36 +68,6 @@ resource "forgejo_repository_webhook" "komodo_deploy" {
   }
 }
 
-moved {
-  from = forgejo_repository_webhook.bookbinder_deploy
-  to   = forgejo_repository_webhook.komodo_deploy["bookbinder"]
-}
-
-moved {
-  from = forgejo_repository_webhook.bookcard_deploy
-  to   = forgejo_repository_webhook.komodo_deploy["bookcard"]
-}
-
-moved {
-  from = forgejo_repository_webhook.fenwick_deploy
-  to   = forgejo_repository_webhook.komodo_deploy["fenwick"]
-}
-
-moved {
-  from = forgejo_repository_webhook.indy_board_deploy
-  to   = forgejo_repository_webhook.komodo_deploy["indy-board"]
-}
-
-moved {
-  from = forgejo_repository_webhook.nathanbaxter_deploy
-  to   = forgejo_repository_webhook.komodo_deploy["nathanbaxter"]
-}
-
-moved {
-  from = forgejo_repository_webhook.yiayia_stories_deploy
-  to   = forgejo_repository_webhook.komodo_deploy["yiayia-stories"]
-}
-
 # Fenwick was migrated through Forgejo's repository migration API, then
 # imported into this resource. Terraform owns repository policy but must never
 # be able to destroy source history.
