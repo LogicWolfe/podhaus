@@ -1,8 +1,9 @@
 #!/bin/bash
-# Apply current podhaus + fenwick config to running Komodo state —
-# the local-iteration counterpart to a git push, plus the recovery
-# path for procedure-definition changes that the GitHub push can't
-# self-apply.
+# Apply this podhaus checkout, uncommitted changes included, to running
+# Komodo state — the local-iteration counterpart to a git push, plus the
+# recovery path for procedure-definition changes that the GitHub push
+# can't self-apply. It touches podhaus only: every other repo deploys on
+# its own push to main.
 #
 # Use this when:
 #   - You've edited a stack.toml or compose.yaml locally and want it
@@ -16,13 +17,13 @@
 #     procedure change.
 #
 # Flow:
-#   0. RunAction(podhaus-load-local-tree) — mirrors bilby's working
-#      checkout (~/repos/podhaus, bind-mounted read-only into Komodo
-#      Core at /syncs/podhaus-local) into the Komodo-owned deploy tree
-#      at /etc/komodo/repos/podhaus-deploy (bind-mounted at
-#      /syncs/podhaus). This is what makes every step below deploy
-#      LOCAL state regardless of origin/main — from here on, nothing
-#      reads the working checkout, only the deploy tree it just wrote.
+#   0. RunAction(podhaus-load-local-tree) — mirrors bandicoot's working
+#      checkout (bind-mounted read-only into Komodo Core at
+#      /syncs/podhaus-local) into the Komodo-owned deploy tree
+#      podhaus-bandicoot (bind-mounted at /syncs/podhaus). This is what
+#      makes every step below deploy LOCAL state regardless of
+#      origin/main — from here on, nothing reads the working checkout,
+#      only the deploy tree it just wrote.
 #   1. RunSync(podhaus) DIRECTLY via the API — not wrapped in a
 #      procedure. Out of any procedure context, so Komodo's busy guard
 #      on update::<Procedure> doesn't fire and procedure-definition
@@ -40,13 +41,11 @@
 #      NOT podhaus-push-deploy: that procedure's own Stage 0 is
 #      PullRepo(podhaus-deploy), which would force the deploy tree back
 #      to origin/main and clobber the local overlay step 0 just wrote.
-#   3. RunProcedure(fenwick-push-deploy) — same shape for the fenwick
-#      stack defs.
 #
 # Bootstrap (CreateResourceSync, CreateRepo/PullRepo for the
 # podhaus-deploy tree, first sync, komodo-op wait) lives in
 # `komodo-start` — this script assumes Komodo Core is up and the deploy
-# tree + `podhaus` + `fenwick` ResourceSyncs already exist.
+# tree + `podhaus` ResourceSync already exist.
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -112,9 +111,3 @@ run_action() {
 run_action podhaus-load-local-tree
 run_sync podhaus
 run_procedure podhaus-deploy
-run_procedure fenwick-push-deploy
-run_procedure pets-push-deploy
-run_procedure docs-push-deploy
-run_procedure indy-board-push-deploy
-run_procedure bookbinder-push-deploy
-run_procedure bookcard-push-deploy

@@ -211,8 +211,10 @@
       </ol>
       <p>
         For local iteration without a push, run <code>./komodo-sync</code>. It performs an
-        out-of-procedure sync first, then invokes the same deployment procedures. This is also
-        the recovery path after editing <code>komodo/sync/procedures.toml</code>.
+        out-of-procedure sync first, then invokes the same deployment procedure. It deploys
+        podhaus only, uncommitted changes included; every other repo deploys on its own push
+        to main. This is also the recovery path after editing
+        <code>komodo/sync/procedures.toml</code>.
       </p>
 
       <h2 id="see-also">See also</h2>
