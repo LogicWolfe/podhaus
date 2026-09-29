@@ -49,7 +49,7 @@ stamps content hashes, recreates stacks whose committed content changed,
 deploys compose changes and new stacks, then restarts Ofelia so it re-reads
 job labels.
 
-A push that edits `podhaus-push-deploy` or `podhaus-deploy` in
+A push that edits `podhaus-push-deploy` in
 `komodo/sync/procedures.toml` cannot apply that edit itself: run the `podhaus`
 ResourceSync from the Komodo UI, then run `podhaus-push-deploy`.
 

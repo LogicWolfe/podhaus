@@ -23,14 +23,14 @@ STACK_CONTENT_HASH + per-service BUILD_HASH_<name> into each podhaus \
 stack's stored env, then force-deploy any stack whose running container \
 carries a stale label or baked build hash while its compose text is unchanged — the \
 config-only / build-context changes Komodo's DeployStackIfChanged can't \
-see. Stage 1 of `podhaus-deploy`. See AGENTS.md \"Content-hash \
+see. Stage 1 of `podhaus-push-deploy`. See AGENTS.md \"Content-hash \
 change detection\" for the architectural rationale.\
 """
 tags = ["podhaus"]
 
 [action.config]
-# Triggered only as a stage of `podhaus-deploy` (reached through the
-# podhaus-push-deploy webhook). Never on schedule,
+# Triggered only as a stage of `podhaus-push-deploy` (reached through
+# its webhook). Never on schedule,
 # never at Komodo Core startup (the latter being a chicken-and-egg
 # window where stacks may not yet be loaded).
 run_at_startup = false
@@ -46,7 +46,7 @@ reload_deno_deps = false
 file_contents = """
 // podhaus-inject-content-hashes
 //
-// Two responsibilities, run as Stage 1 of `podhaus-deploy`:
+// Two responsibilities, run as Stage 1 of `podhaus-push-deploy`:
 //   (1) inject per-stack content hashes into stored env, and
 //   (2) force-deploy stacks whose running containers carry a stale hash
 //       label or baked build hash but whose compose text is unchanged (the reconcile at the

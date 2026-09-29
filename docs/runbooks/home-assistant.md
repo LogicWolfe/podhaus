@@ -295,8 +295,7 @@ then an empty body to complete the `link` step). It returns
 ## Deploy
 
 Config changes ship like any stack: commit + push → `podhaus-push-deploy` pulls
-the deploy tree and runs the internal `podhaus-deploy` procedure, whose
-content-hash mechanism sees the changed files in `home-assistant/` and
+the deploy tree, and its content-hash stage sees the changed files in `home-assistant/` and
 recreates the container. Validate first with:
 
 ```sh

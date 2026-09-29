@@ -41,7 +41,7 @@
         <li><strong>Commit and push.</strong> The push fires
           <code>podhaus-push-deploy</code>, which pulls bilby's
           Komodo-managed deploy tree to <code>origin/main</code> and then
-          runs the internal <code>podhaus-deploy</code> procedure: Stage 0
+          runs three stages: Stage 0
           RunSync registers the new stack + any TOML-declared variables
           (config reconcile only — Sync Deploy no-ops because every
           podhaus stack omits <code>deploy = true</code>); Stage 1
@@ -80,8 +80,7 @@
           <code>&lt;service&gt;/&lt;host&gt;/&lt;template&gt;</code> and reference it via the
           per-host overlay's bind mount.</li>
         <li>Commit + push. <code>podhaus-push-deploy</code> pulls the deploy tree
-          to <code>origin/main</code> and runs the internal <code>podhaus-deploy</code>
-          procedure, which reconciles the new stack via Stage&nbsp;0 (RunSync), stamps
+          to <code>origin/main</code>, then reconciles the new stack via Stage&nbsp;0 (RunSync), stamps
           content hashes via Stage&nbsp;1 (RunAction), and deploys via Stage&nbsp;2
           (BatchDeployStackIfChanged) — same path
           for files_on_host and linked_repo hosts. New stacks first-deploy via
@@ -128,7 +127,7 @@
       <h2 id="content-hash-wiring">Content-hash wiring</h2>
       <p>
         Every podhaus stack participates in the content-hash change-detection
-        mechanism. Stage&nbsp;1 of the internal <code>podhaus-deploy</code> procedure
+        mechanism. Stage&nbsp;1 of <code>podhaus-push-deploy</code>
         computes per-stack and per-service hashes from the deploy tree's current state
         and injects them as env vars on
         each stack; compose services consume them via labels and build args so a file
@@ -587,7 +586,7 @@ chmod +x .git/hooks/pre-commit</code></pre>
       <h2 id="checklist">Quick checklist when adding a stack</h2>
       <ul>
         <li>☐ <code>compose.yaml</code> + <code>stack.toml</code> in <code>&lt;name&gt;/</code></li>
-        <li>☐ <code>stack.toml</code> <strong>omits</strong> <code>deploy = true</code> (Komodo's Sync Deploy auto-deploys are not used; Stage 2 of <code>podhaus-deploy</code> is the deploy authority — the pre-commit lint enforces this)</li>
+        <li>☐ <code>stack.toml</code> <strong>omits</strong> <code>deploy = true</code> (Komodo's Sync Deploy auto-deploys are not used; Stage 2 of <code>podhaus-push-deploy</code> is the deploy authority — the pre-commit lint enforces this)</li>
         <li>☐ <code>dockernet</code> external network declared (if reachable from other containers)</li>
         <li>☐ Bind mounts use <code>${PODHAUS_REPO}/...</code>, not relative paths</li>
         <li>☐ All bind mounts are <strong>directory</strong> binds, never single files (see above)</li>

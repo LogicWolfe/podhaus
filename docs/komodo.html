@@ -114,8 +114,8 @@
             <td>Deploy workflow</td>
             <td>Commit + push → the single webhook runs
               <code>podhaus-push-deploy</code>, which force-pulls the
-              deploy tree to <code>origin/main</code> and then runs the
-              internal <code>podhaus-deploy</code> procedure. Its Stage 1
+              deploy tree to <code>origin/main</code> and then deploys
+              it. Its Stage 1
               stamps content hashes and directly reconciles stale
               running stacks when committed config or build context
               changed without a compose-text change. Stage 2's
@@ -164,10 +164,9 @@
         Komodo's native <code>DeployStackIfChanged</code> only considers
         compose text. It does not see a changed value behind a
         <code>${STACK_CONTENT_HASH}</code> or
-        <code>${BUILD_HASH_*}</code> reference. The internal
-        <code>podhaus-deploy</code> procedure — invoked by
-        <code>podhaus-push-deploy</code> after pulling the deploy tree
-        to <code>origin/main</code> — closes that gap via its Stage 1's
+        <code>${BUILD_HASH_*}</code> reference.
+        <code>podhaus-push-deploy</code>, after pulling the deploy tree
+        to <code>origin/main</code>, closes that gap via its Stage 1's
         <code>RunAction&nbsp;"podhaus-inject-content-hashes"</code>:
         the Action computes (a) a content hash of each stack directory
         and (b) per-service hashes for every <code>build:</code>
@@ -275,17 +274,16 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           <code>FENWICK_*</code>) live as inline
           <code>[[variable]]</code> blocks in the relevant
           <code>&lt;stack&gt;/stack.toml</code> instead.</li>
-        <li><code>komodo/sync/procedures.toml</code> — two procedures:
+        <li><code>komodo/sync/procedures.toml</code> —
           <code>podhaus-push-deploy</code>, the GitHub webhook
           entrypoint (pulls the deploy tree to <code>origin/main</code>,
-          then runs the procedure below), and the internal
-          <code>podhaus-deploy</code>, which carries the four-stage
-          fan-out and deploys whatever the deploy tree currently holds
-          — see the Auto-deploy note below.</li>
+          then syncs and deploys it — see the Auto-deploy note below),
+          plus one push-deploy procedure per service repo that holds its
+          own stack.</li>
         <li><code>komodo/sync/actions.toml</code> — Komodo Actions
           referenced by procedures.
           <code>podhaus-inject-content-hashes</code>
-          is Stage 1 of the internal <code>podhaus-deploy</code> procedure. It walks every stack at Komodo Core's
+          is Stage 1 of <code>podhaus-push-deploy</code>. It walks every stack at Komodo Core's
           <code>/syncs/podhaus</code> mount (the deploy tree), hashes each committed stack
           directory plus every build context, stamps the hashes into stored
           env, and directly deploys running stacks whose hash labels are stale
@@ -375,20 +373,15 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         (the procedure's <code>webhook_secret</code> is empty → the global
         secret applies).
         <br><br>
-        <code>podhaus-push-deploy</code> itself is two thin stages: Stage 0
-        force-pulls both Komodo-managed <strong>deploy trees</strong> to
+        <code>podhaus-push-deploy</code>'s first stage force-pulls both
+        Komodo-managed <strong>deploy trees</strong> to
         <code>origin/main</code> —
         <code>PullRepo&nbsp;"podhaus-bandicoot"</code> (Core's own sync
         tree) and <code>PullRepo&nbsp;"podhaus-deploy"</code> (bilby's
-        tree, feeding its outbound Periphery and files_on_host stacks) —
-        then Stage 1 <code>RunProcedure&nbsp;"podhaus-deploy"</code> runs
-        the internal procedure below. Neither host's own working
-        checkout is ever touched by this path.
+        tree, feeding its outbound Periphery and files_on_host stacks).
+        Neither host's own working checkout is ever touched by this path.
         <br><br>
-        The internal <code>podhaus-deploy</code> procedure
-        (<code>komodo/sync/procedures.toml</code>) deploys whatever the
-        deploy tree currently holds, freshly pulled to
-        <code>origin/main</code>:
+        Three numbered stages then deploy what the deploy trees hold:
         <strong>Stage 0</strong>
         <code>RunSync&nbsp;"podhaus"</code> — reconcile stack definitions
         + TOML-declared variables from disk to Komodo's stored resource
@@ -428,8 +421,8 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         Stages run sequentially so each completes before the next
         fires (deterministic, vs the asynchronous polling of
         <code>managed: true</code>).
-        A push that edits <code>podhaus-push-deploy</code> or
-        <code>podhaus-deploy</code> cannot apply that edit itself, because
+        A push that edits <code>podhaus-push-deploy</code> cannot apply
+        that edit itself, because
         Komodo will not change a procedure while it runs; run the
         <code>podhaus</code> ResourceSync from the Komodo UI, then run
         <code>podhaus-push-deploy</code>.

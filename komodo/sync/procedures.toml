@@ -7,18 +7,16 @@
 # (komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main,
 # branch-filtered to main), and the procedure fans out internally.
 #
-# The deploy trees. podhaus-deploy stages below read Core's Komodo-managed
+# The deploy trees. podhaus-push-deploy's stages read Core's Komodo-managed
 # clone, the Repo resource `podhaus-bandicoot` (komodo/sync/repos.toml) at
 # /opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot on bandicoot —
 # Core mounts it at /syncs/podhaus. bilby's own clone, Repo `podhaus-deploy`,
 # feeds bilby's outbound Periphery's /etc/komodo/repo mount and its
 # files_on_host stacks instead; neither host's own working checkout is ever
-# read by the pipeline. podhaus-push-deploy's first stage force-pulls both
-# to origin/main, so a push from any machine deploys main and never touches
-# a working checkout.
-#
-# podhaus-deploy — deploys whatever the deploy tree currently holds, which
-# podhaus-push-deploy has just pulled to origin/main. Three stages:
+# read by the pipeline. The procedure's first stage, the pull, force-pulls
+# both to origin/main, so a push from any machine deploys main and never
+# touches a working checkout. Three numbered stages follow it; the docs
+# refer to them as Stage 0 to Stage 2:
 #
 # Stage 0 — reconcile stack defs from disk (sync TOML → Komodo). Komodo
 # separates the *stack resource definition* (what the env block, server,
@@ -69,26 +67,31 @@
 # Wildcard `*` means new stacks are covered automatically — no repo
 # edit, no list, no 20-cap, ever.
 #
-# podhaus-deploy is internal only — both webhook_enabled and
-# schedule_enabled are pinned false so nothing but podhaus-push-deploy's
-# RunProcedure stage triggers it.
-#
-# Caveat: a push that edits podhaus-push-deploy or podhaus-deploy in
-# this file cannot apply that edit itself. Komodo's
-# `resource::update::<Procedure>` has a busy guard — a procedure can't
-# be modified while it's running — so the in-procedure RunSync can't
-# change either definition mid-run; the sync loop retries and bails, and
-# later stages don't run. Recover by running the `podhaus` ResourceSync
-# from the Komodo UI (outside any procedure, so the guard doesn't fire),
-# then running podhaus-push-deploy. Edits to every other procedure apply
-# on the push as normal.
+# Caveat: a push that edits podhaus-push-deploy in this file cannot apply
+# that edit itself. Komodo's `resource::update::<Procedure>` has a busy
+# guard — a procedure can't be modified while it's running — so the
+# in-procedure RunSync can't change its definition mid-run; the sync loop
+# retries and bails, and later stages don't run. Recover by running the
+# `podhaus` ResourceSync from the Komodo UI (outside any procedure, so the
+# guard doesn't fire), then running podhaus-push-deploy. Edits to every
+# other procedure apply on the push as normal.
 
 [[procedure]]
-name = "podhaus-deploy"
-description = "Deploys whatever the deploy tree currently holds: reconcile stack defs from disk, inject per-stack content hashes, then deploy-if-changed all stacks. Invoked by podhaus-push-deploy after pulling the deploy tree to origin/main."
+name = "podhaus-push-deploy"
+description = "Push-to-deploy entrypoint: force both deploy trees (podhaus-bandicoot, podhaus-deploy) to origin/main, reconcile stack defs, inject per-stack content hashes, then deploy-if-changed all stacks. Triggered by the single GitHub push webhook."
 tags = ["podhaus"]
-config.webhook_enabled = false
+config.webhook_enabled = true
+# Webhook-only — no schedule. (schedule_enabled defaults true in
+# Komodo; pinned false so it's unambiguous this never runs on a timer.)
 config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Pull both deploy trees to origin/main"
+enabled = true
+executions = [
+  { execution.type = "PullRepo", execution.params = { repo = "podhaus-bandicoot" }, enabled = true },
+  { execution.type = "PullRepo", execution.params = { repo = "podhaus-deploy" }, enabled = true }
+]
 
 [[procedure.config.stage]]
 name = "Reconcile stack definitions (sync TOML → Komodo)"
@@ -109,33 +112,6 @@ name = "Deploy changed stacks (surgical, content-hash-aware)"
 enabled = true
 executions = [
   { execution.type = "BatchDeployStackIfChanged", execution.params = { pattern = "*" }, enabled = true }
-]
-
-# podhaus-push-deploy — the GitHub webhook entrypoint. Forces the deploy
-# tree to origin/main, then deploys whatever the deploy tree holds.
-
-[[procedure]]
-name = "podhaus-push-deploy"
-description = "Push-to-deploy entrypoint: force both deploy trees (podhaus-bandicoot, podhaus-deploy) to origin/main, then run podhaus-deploy. Triggered by the single GitHub push webhook."
-tags = ["podhaus"]
-config.webhook_enabled = true
-# Webhook-only — no schedule. (schedule_enabled defaults true in
-# Komodo; pinned false so it's unambiguous this never runs on a timer.)
-config.schedule_enabled = false
-
-[[procedure.config.stage]]
-name = "Pull both deploy trees to origin/main"
-enabled = true
-executions = [
-  { execution.type = "PullRepo", execution.params = { repo = "podhaus-bandicoot" }, enabled = true },
-  { execution.type = "PullRepo", execution.params = { repo = "podhaus-deploy" }, enabled = true }
-]
-
-[[procedure.config.stage]]
-name = "Deploy the deploy tree"
-enabled = true
-executions = [
-  { execution.type = "RunProcedure", execution.params = { procedure = "podhaus-deploy" }, enabled = true }
 ]
 
 
