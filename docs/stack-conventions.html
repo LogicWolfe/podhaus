@@ -54,10 +54,7 @@
           <code>bin/core/src/api/execute/stack.rs:368-447</code>).
           Ofelia follows the target container's Docker events and applies any
           new schedule labels without a scheduler restart.
-          No manual <em>Deploy</em> click. For local debug iteration
-          without pushing, <code>./komodo-sync</code> (overlays the deploy
-          tree with the local checkout, then invokes
-          <code>podhaus-deploy</code> directly).</li>
+          No manual <em>Deploy</em> click.</li>
       </ol>
 
       <h2 id="multi-host">Adding a stack to a multi-host shared service</h2>
@@ -312,9 +309,8 @@ description = "Service port (well-known, not a secret)"</code></pre>
         <code>PODHAUS_REPO</code> is a fixed variable (declared in
         <code>komodo/sync/variables.toml</code>) pointing at bilby's
         Komodo-managed <strong>deploy tree</strong>
-        (<code>/etc/komodo/repos/podhaus-deploy</code>) — a clone fed by
-        the push webhook (pulled to <code>origin/main</code>) or by
-        <code>./komodo-sync</code> (overlaid with the working checkout).
+        (<code>/etc/komodo/repos/podhaus-deploy</code>) — a clone the push
+        webhook pulls to <code>origin/main</code>.
         Every <code>${PODHAUS_REPO}</code> bind in the repo is
         <code>:ro</code> except one: home-assistant's UI-editable config
         mount uses <code>${PODHAUS_CHECKOUT}</code> instead — a
@@ -379,7 +375,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
             that's still a manual choice
             (<code>docker kill -s HUP &lt;container&gt;</code>,
             <code>caddy reload</code>, alloy <code>/-/reload</code>, …).</li>
-          <li>Triggered only by the push procedure / <code>komodo-sync</code>
+          <li>Triggered only by the push procedure
             — not a bare <code>docker compose up -d</code>.</li>
           <li><strong>Not covered:</strong> secret / <code>variables.toml</code>
             value changes — the content hash excludes the deploy-written

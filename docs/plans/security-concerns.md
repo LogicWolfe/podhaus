@@ -104,8 +104,8 @@ plane.
    redeploying `numbat-relay` cuts Numbat's own control path, and that the
    recovery plane is the fallback.
 
-**Verify:** edit a comment in `relay/bilby/numbat-client.toml.tmpl` and run
-`./komodo-sync` — Stage 1 should list `bilby-relay` and not `numbat-relay`.
+**Verify:** edit a comment in `relay/bilby/numbat-client.toml.tmpl` and push
+it to `main` — Stage 1 should list `bilby-relay` and not `numbat-relay`.
 
 ## Fractal has no monitoring coverage
 

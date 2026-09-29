@@ -224,4 +224,4 @@ ok "kangaroo Periphery bootstrap done."
 echo
 echo "Next:"
 echo "  1. Verify in https://komodo.pod.haus that kangaroo shows state=Ok"
-echo "  2. Push or run ./komodo-sync to deploy any changed kangaroo stacks"
+echo "  2. Push to main to deploy any changed kangaroo stacks"

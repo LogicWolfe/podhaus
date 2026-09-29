@@ -255,7 +255,7 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
         <li>Add a plan block to <code>backup/&lt;host&gt;/config.json.tmpl</code> with a
           schedule slotted into the dead-time window (04:00–05:20 AWST), the standard 14d/4w/6m
           retention, and <code>paths: ["/userdata/&lt;stack&gt;"]</code>.</li>
-        <li><code>./komodo-sync</code> + redeploy <code>backup</code>. Backrest's init
+        <li>Push to <code>main</code>, then redeploy <code>backup</code>. Backrest's init
           container re-renders <code>config.json</code> on next start.</li>
         <li>Take a manual snapshot from the Backrest UI to verify the plan works before letting
           the cron run.</li>

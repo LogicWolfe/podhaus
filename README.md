@@ -38,7 +38,6 @@ On bandicoot:
 
 ```sh
 ./komodo-start
-./komodo-sync
 ./komodo-status
 ./komodo-upgrade
 ./komodo-stop
@@ -50,8 +49,9 @@ stamps content hashes, recreates stacks whose committed content changed,
 deploys compose changes and new stacks, then restarts Ofelia so it re-reads
 job labels.
 
-Use `./komodo-sync` for local iteration without a push and after editing
-`komodo/sync/procedures.toml`.
+A push that edits `podhaus-push-deploy` or `podhaus-deploy` in
+`komodo/sync/procedures.toml` cannot apply that edit itself: run the `podhaus`
+ResourceSync from the Komodo UI, then run `podhaus-push-deploy`.
 
 Python repository tools use the current stable Python and Pipenv releases from
 `mise.toml`. Install the unpinned development dependencies once per clone:

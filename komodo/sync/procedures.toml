@@ -13,17 +13,12 @@
 # Core mounts it at /syncs/podhaus. bilby's own clone, Repo `podhaus-deploy`,
 # feeds bilby's outbound Periphery's /etc/komodo/repo mount and its
 # files_on_host stacks instead; neither host's own working checkout is ever
-# read by either pipeline path. The two entrypoints differ only in how they
-# feed the deploy trees: podhaus-push-deploy's first stage force-pulls both
-# to origin/main (so a push from any machine deploys main and never touches
-# a working checkout), while ./komodo-sync instead overlays bandicoot's tree
-# with the local checkout's current state and invokes podhaus-deploy
-# directly, deliberately skipping the pull stage.
+# read by the pipeline. podhaus-push-deploy's first stage force-pulls both
+# to origin/main, so a push from any machine deploys main and never touches
+# a working checkout.
 #
-# podhaus-deploy — deploys whatever the deploy tree currently holds.
-# Source-agnostic: it doesn't care whether the tree just got pulled to
-# origin/main or overlaid with local state, only that it reflects one or
-# the other. Three stages:
+# podhaus-deploy — deploys whatever the deploy tree currently holds, which
+# podhaus-push-deploy has just pulled to origin/main. Three stages:
 #
 # Stage 0 — reconcile stack defs from disk (sync TOML → Komodo). Komodo
 # separates the *stack resource definition* (what the env block, server,
@@ -76,20 +71,21 @@
 #
 # podhaus-deploy is internal only — both webhook_enabled and
 # schedule_enabled are pinned false so nothing but podhaus-push-deploy's
-# RunProcedure stage and ./komodo-sync can trigger it.
+# RunProcedure stage triggers it.
 #
-# Caveat (unchanged): a push that edits procedure definitions in this
-# file still needs a follow-up `./komodo-sync`. Komodo's
+# Caveat: a push that edits podhaus-push-deploy or podhaus-deploy in
+# this file cannot apply that edit itself. Komodo's
 # `resource::update::<Procedure>` has a busy guard — a procedure can't
-# be modified while it's running — so podhaus-push-deploy's own Stage 0
-# RunSync can't apply a change to its own (or podhaus-deploy's)
-# definition mid-run; the sync loop retries and bails, and later stages
-# don't run. `./komodo-sync`'s out-of-procedure RunSync call isn't
-# subject to the guard and applies the change directly.
+# be modified while it's running — so the in-procedure RunSync can't
+# change either definition mid-run; the sync loop retries and bails, and
+# later stages don't run. Recover by running the `podhaus` ResourceSync
+# from the Komodo UI (outside any procedure, so the guard doesn't fire),
+# then running podhaus-push-deploy. Edits to every other procedure apply
+# on the push as normal.
 
 [[procedure]]
 name = "podhaus-deploy"
-description = "Deploys whatever the deploy tree currently holds: reconcile stack defs from disk, inject per-stack content hashes, then deploy-if-changed all stacks. Invoked by podhaus-push-deploy after pulling the deploy tree to origin/main, and by ./komodo-sync after overlaying the local checkout."
+description = "Deploys whatever the deploy tree currently holds: reconcile stack defs from disk, inject per-stack content hashes, then deploy-if-changed all stacks. Invoked by podhaus-push-deploy after pulling the deploy tree to origin/main."
 tags = ["podhaus"]
 config.webhook_enabled = false
 config.schedule_enabled = false
@@ -116,10 +112,7 @@ executions = [
 ]
 
 # podhaus-push-deploy — the GitHub webhook entrypoint. Forces the deploy
-# tree to origin/main, then deploys whatever the deploy tree holds. Kept
-# as two thin stages rather than folded into podhaus-deploy so
-# ./komodo-sync can invoke podhaus-deploy directly and deliberately skip
-# the pull, per the file-level comment above.
+# tree to origin/main, then deploys whatever the deploy tree holds.
 
 [[procedure]]
 name = "podhaus-push-deploy"

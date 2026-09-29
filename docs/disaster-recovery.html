@@ -80,8 +80,8 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
           current, bandicoot-only, behaviour.</li>
         <li>In the Komodo UI: confirm Servers list shows <code>podhaus</code> as healthy.
           <code>komodo-op</code> should already be deployed. After the
-          bootstrap sync registers the stack, run
-          <code>./komodo-sync</code> (or push) — Stage 2's
+          bootstrap sync registers the stack, run <code>podhaus-push-deploy</code> from the Komodo UI
+          (or push) — Stage 2's
           <code>BatchDeployStackIfChanged "*"</code> first-deploys the
           stack via its <code>(None, _) =&gt; FullDeploy</code> arm. If
           somehow it isn't running, deploy it manually — it brings up
@@ -176,7 +176,7 @@ sudo rsync -a --chown=10001:10001 \
               <code>komodo/sync/servers.toml</code>.</li>
           </ul>
         </li>
-        <li>Run <code>./komodo-sync</code> — Komodo Core picks up the new Server and begins
+        <li>Run <code>podhaus-push-deploy</code> from the Komodo UI — Komodo Core picks up the new Server and begins
           polling. Verify kangaroo shows <code>state: Ok</code> in the Komodo UI.</li>
         <li><code>kangaroo_bootstrap</code> has already installed Pomerium SSH CA trust
           (a boot-persistent <code>start.sh</code> invoked by <code>autorun.sh</code>, CA
@@ -189,7 +189,7 @@ sudo rsync -a --chown=10001:10001 \
           <code>[[git_provider]]</code> block in kangaroo's
           <code>periphery.config.toml</code>. <code>kangaroo_bootstrap</code> writes the
           provider config; the repo block is committed in the repo.</li>
-        <li>Run <code>./komodo-sync</code> to deploy kangaroo's stacks: <code>syncthing</code>,
+        <li>Run <code>podhaus-push-deploy</code> from the Komodo UI to deploy kangaroo's stacks: <code>syncthing</code>,
           <code>kangaroo-backup</code>, <code>kangaroo-autoheal</code>, and
           <code>kangaroo-logging</code>, <code>kangaroo-relay</code>, and
           <code>pouch-rustfs</code>.</li>
@@ -265,7 +265,7 @@ op-vault dev -- ansible-playbook playbooks/pinelake.yml \
           empty host path under <code>/Users/Shared/Podhaus</code> with owner
           <code>baxter:staff</code>. Restore Plex as one complete tree; never mix individual
           database or preference files from different snapshots.</li>
-        <li>From bandicoot, run <code>./komodo-sync</code>. The Pinelake pre-deploy gates prove the
+        <li>Run <code>podhaus-push-deploy</code> from the Komodo UI. The Pinelake pre-deploy gates prove the
           mounted media roots before each stateful stack starts. Plex additionally validates
           all four identity fields from
           <code>ansible/roles/pinelake_macos/files/plex-identity.json</code>.</li>

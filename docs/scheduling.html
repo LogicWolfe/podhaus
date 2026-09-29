@@ -104,7 +104,7 @@
   ofelia.job-exec.&lt;name&gt;.schedule: "0 4 * * *"
   ofelia.job-exec.&lt;name&gt;.command: "/path/to/script.sh"</code></pre>
         </li>
-        <li>Push the target stack or run <code>./komodo-sync</code>. Ofelia reads the recreated
+        <li>Push the target stack. Ofelia reads the recreated
           target's labels from the Docker event.</li>
         <li>If the job is critical, add a Gatus push heartbeat — the script should POST
           success/failure to a bearer-token-protected push endpoint, and Gatus's

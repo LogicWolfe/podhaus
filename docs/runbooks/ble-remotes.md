@@ -193,7 +193,7 @@ docker exec esphome sh -c 'cd /config && esphome compile <device>.yaml \
 seeded by `esphome-init` at deploy time — it is *not* a bind mount of the repo.
 Editing a device YAML and compiling straight away silently builds the previously
 deployed config, and the OTA reports success because it did upload something.
-The order is: commit → push (or `./komodo-sync`) → compile → upload. Confirm
+The order is: commit → push → compile → upload. Confirm
 with `docker exec esphome grep <your-change> /config/<device>.yaml` before
 building if there's any doubt.
 

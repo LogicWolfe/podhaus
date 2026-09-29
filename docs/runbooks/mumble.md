@@ -50,8 +50,7 @@ clients already trust.
 
 ## Operations
 
-- Deploy configuration changes through the normal push procedure or
-  `./komodo-sync`.
+- Deploy configuration changes by pushing to `main`.
 - Check `docker logs mumble` for client, TLS, and authentication failures.
 - Check `docker logs cloudflare-ddns` if `voice.pod.haus` no longer resolves
   to the current WAN address.
