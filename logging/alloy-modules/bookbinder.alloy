@@ -1,0 +1,27 @@
+// Per-service log parser — bookbinder
+//
+// See fenwick.alloy: bookbinder (the decode service on bilby) exports its
+// own spans and log records to the ClickStack collector over OTLP, each
+// record on its request's trace. Its docker stdout carries the same records
+// as JSON lines, so this module drops those rather than ingest every record
+// twice. Lines that are not JSON pass through: they are what the process
+// prints when it fails before or after its exporter runs (a bad listen
+// address, an exporter that will not build, a panic). `docker logs
+// bookbinder` still shows everything.
+
+declare "bookbinder" {
+	argument "forward_to" { }
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector = "{service=\"bookbinder\"} |~ \"^\\\\{\""
+			action   = "drop"
+		}
+	}
+
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
+}
