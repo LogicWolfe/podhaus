@@ -111,14 +111,15 @@
         deployment webhooks and Komodo integration. Requests name paths under
         <code>/var/lib/bookwork</code>, a transient work directory on Bilby's
         local disk that every book service mounts at the same path, runs as
-        uid 1000 against, and that is not backed up. bookcard's sign-in state
-        lives in its own Docker volume, and its Amazon credentials in the
-        <code>Bookcard Amazon</code> Homelab item. Each service describes its
-        API at <code>/openapi.json</code> and lists that description at
-        <code>/.well-known/api-catalog</code>.
-        bookbinder exports its own spans and log records to ClickStack, joining
-        a caller's trace when the request carries a <code>traceparent</code>
-        header.
+        uid 1000 against, and that is not backed up. bookcard's state (its
+        Amazon and Audible session, purchase ledgers, and loan record) lives
+        in <code>/var/lib/bookcard</code>, which Backrest snapshots nightly,
+        and its Amazon credentials in the <code>Bookcard Amazon</code> Homelab
+        item. Each service describes its API at <code>/openapi.json</code> and
+        lists that description at <code>/.well-known/api-catalog</code>.
+        Both export their own spans and log records to ClickStack, joining a
+        caller's trace when the request carries a <code>traceparent</code>
+        header, so the log pipeline drops their JSON stdout lines.
       </p>
       <h2 id="design-principles">Design principles</h2>
       <p>These four principles trump local convenience whenever they conflict:</p>
