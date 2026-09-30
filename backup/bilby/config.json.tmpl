@@ -94,6 +94,24 @@
       "skipIfUnchanged": true
     },
     {
+      "id": "bookcard",
+      "repo": "podhaus",
+      "paths": ["/userdata/bookcard"],
+      "schedule": {
+        "cron": "15 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
       "id": "home-assistant",
       "repo": "podhaus",
       "paths": ["/userdata/home-assistant"],
