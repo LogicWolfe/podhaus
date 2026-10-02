@@ -15,6 +15,14 @@ idp_scopes: [openid, email, profile, groups, offline_access]
 # retaining access, and daily re-auth was the real cost.
 cookie_expire: 720h
 
+# The signed-in person's email as a plain header, beside the signed assertion,
+# on routes with pass_identity_headers. fractal's Caddy records it as the
+# caller of llm.pod.haus; stock Caddy cannot read inside the signed assertion.
+# Pomerium overwrites any value a client sends, and removes the header on
+# routes that do not pass identity headers.
+jwt_claims_headers:
+  X-Pomerium-Claim-Email: email
+
 autocert: true
 autocert_dir: /data/autocert
 autocert_email: nathan@nathanbaxter.com
@@ -171,6 +179,34 @@ routes:
   - <<: *family_route
     from: https://fractal.docs.pod.haus
     to: https://127.0.0.1:8444
+  # The local model on fractal, through the same tunnel port as its docs
+  # server. The control page is Nathan's and comes first, so its paths never
+  # fall to the model route below.
+  - <<: *nathan_route
+    from: https://llm.pod.haus
+    to: https://127.0.0.1:8444
+    regex: '^/control(/.*)?$'
+    pass_identity_headers: true
+  # The model itself, for the friends policy. Clients have no browser, so they
+  # send a Pocket ID access token as their API key (llm/client/llm_token.py
+  # fetches one). Pomerium checks each token with Pocket ID's userinfo endpoint
+  # once, at first use, and keeps the result for cookie_expire (30 days):
+  # userinfo carries no expiry. The policy reads the groups stored then, merged
+  # with Pomerium's shared record of the person. So removal from a group takes
+  # effect at the next hourly renewal for people using the token command, and
+  # up to 30 days later for a token already accepted. Userinfo carries no
+  # audience either, so a token Pocket ID issued to any client for an admitted
+  # person is accepted, and an allowed-audiences list would refuse every token.
+  #
+  # A long prompt is read in silence for minutes before the first byte (Claude
+  # Code was seen waiting 330 s), and an answer can stream for many minutes.
+  - <<: *friends_route
+    from: https://llm.pod.haus
+    to: https://127.0.0.1:8444
+    bearer_token_format: idp_access_token
+    pass_identity_headers: true
+    idle_timeout: 10m
+    timeout: 30m
   # bandicoot's and voltaire's docs servers. Same shape as fractal's, each
   # with its own loopback rathole service and its own Caddy mTLS origin.
   - <<: *family_route

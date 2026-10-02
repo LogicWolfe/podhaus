@@ -11,6 +11,7 @@ locals {
     home            = local.numbat_application_ipv4
     kangaroo        = local.numbat_application_ipv4
     kangaroo-backup = local.numbat_application_ipv4
+    llm             = local.numbat_application_ipv4
     komodo          = local.numbat_application_ipv4
     metube          = local.numbat_application_ipv4
     rustfs          = local.numbat_application_ipv4

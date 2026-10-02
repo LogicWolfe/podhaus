@@ -2,8 +2,9 @@
 #
 # Unlike bilby's Caddy this owns no public TLS and issues no certificates, so
 # it runs the stock upstream image — there is no ACME DNS-01 to satisfy and
-# therefore no reason to build the caddy-dns/cloudflare module in. Its only
-# job is to terminate Pomerium's mTLS and dispatch by Host.
+# therefore no reason to build the caddy-dns/cloudflare module in. It
+# terminates Pomerium's mTLS and dispatches by Host, and serves the local
+# model service to callers on fractal itself over a loopback-only port.
 services:
   fractal-caddy-secrets-init:
     build:
@@ -45,6 +46,10 @@ services:
       - fractal-caddy-config:/config
     environment:
       TZ: ${TZ}
+    ports:
+      # The local model service's listener (http://:8085 in the Caddyfile). It
+      # has no sign-in, so it is published on fractal's loopback only.
+      - "127.0.0.1:8085:8085"
     networks:
       - dockernet
     labels:

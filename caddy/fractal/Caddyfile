@@ -7,6 +7,61 @@
 	}
 }
 
+# The local model service's access record, shared by both of its listeners:
+# one JSON line per request on stdout, which the caddy Alloy module keeps whole
+# because its logger name starts with http.log.access. It keeps only the
+# fields llm_routes appends plus status and duration. The request object goes
+# whole, so no header (the sign-in token included) and no body can reach it.
+(llm_access_log) {
+	output stdout
+	format filter {
+		wrap json
+		request delete
+		resp_headers delete
+		bytes_read delete
+		size delete
+		user_id delete
+	}
+}
+
+# The local model service, for both of its listeners. Only the request paths a
+# coding client needs reach the model server, in the OpenAI and Anthropic
+# formats. Its management paths (load, unload, slots, metrics, health) are the
+# watcher's, over dockernet, and are refused here, as are the watcher's own
+# /metrics and /healthz. Each listener defines @llm_control, the control page's
+# paths and who may use them.
+(llm_routes) {
+	@llm_model path /v1/chat/completions /v1/completions /v1/messages /v1/messages/count_tokens /v1/models
+
+	# Claude Code names its session and, from a subagent, the subagent in these
+	# two headers (seen in captured Claude Code 2.1.287 traffic).
+	log_append client {http.request.header.User-Agent}
+	log_append session_id {http.request.header.X-Claude-Code-Session-Id}
+	log_append agent_id {http.request.header.X-Claude-Code-Agent-Id}
+	log_append path {http.request.uri.path}
+
+	handle @llm_model {
+		# Only the watcher may load or unload the model. llama.cpp's router
+		# lets a request load it anyway with an `autoload` parameter, read from
+		# the query string or from a body sent as a form, and re-reads its model
+		# list, unloading any whose definition changed, on `reload` to
+		# /v1/models. Dropping the query and sending every body as JSON leaves
+		# both empty.
+		rewrite {path}?
+		request_header Content-Type application/json
+		# A second request naming the same conversation cancels the first one's
+		# answer. The resumable streams it exists for are not served here.
+		request_header -X-Conversation-Id
+		reverse_proxy llm-server:8080
+	}
+	handle @llm_control {
+		reverse_proxy llm-watcher:8081
+	}
+	handle {
+		respond 404
+	}
+}
+
 # fractal's protected origin. Deliberately a mirror of bilby's :4443 block,
 # not a variation on it: same cert material, same client_auth trust pool, so
 # Pomerium's route config is identical apart from the upstream port.
@@ -17,13 +72,49 @@
 		}
 	}
 
-	@docs host fractal.docs.pod.haus
+	# Only llm.pod.haus is recorded. Caddy records every host on a logged
+	# listener unless told otherwise, so the docs server's requests would
+	# otherwise land in Caddy's own log with their headers.
+	log llm_remote {
+		import llm_access_log
+	}
+	@not_llm not host llm.pod.haus
+	log_skip @not_llm
 
-	route {
-		# `docs`, not `fractal-docs`: the container name comes from the
-		# docs-server repo's own compose, which this host shares with bilby.
-		# Container names are per-host, so there is no collision.
-		reverse_proxy @docs docs:8000
+	@docs host fractal.docs.pod.haus
+	@llm host llm.pod.haus
+
+	# `docs`, not `fractal-docs`: the container name comes from the
+	# docs-server repo's own compose, which this host shares with bilby.
+	# Container names are per-host, so there is no collision.
+	handle @docs {
+		reverse_proxy docs:8000
+	}
+	handle @llm {
+		# Pomerium sets this to the signed-in person's email and overwrites any
+		# value the caller sent, and only Pomerium can reach this listener.
+		log_append caller {http.request.header.X-Pomerium-Claim-Email}
+		# The control page is Nathan's. Pomerium's route already says so; this
+		# holds even for a path Pomerium sends to the model route instead, such
+		# as one it normalises differently.
+		@llm_control {
+			path /control /control/*
+			header X-Pomerium-Claim-Email nathan@nathanbaxter.com
+		}
+		import llm_routes
+	}
+	handle {
 		respond 404
 	}
+}
+
+# The local model service for callers on fractal itself, with no sign-in.
+# compose.yaml publishes this port on fractal's loopback only. No caller field:
+# nothing vouches for an email header sent here.
+http://:8085 {
+	log llm_local {
+		import llm_access_log
+	}
+	@llm_control path /control /control/*
+	import llm_routes
 }

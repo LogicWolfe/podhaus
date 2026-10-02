@@ -206,7 +206,8 @@ networks:
       <p>
         Pomerium's default policy allows members of Pocket ID's <code>family</code> group,
         which it reads from the <code>groups</code> claim of the sign-in token. Gatus, the
-        shared docs site and Forgejo also allow the <code>friends</code> group. Syncthing, Sonarr,
+        shared docs site, Forgejo and the local model service also allow the
+        <code>friends</code> group. Syncthing, Sonarr,
         bookshelf, the development service and the Pine Lake names are Nathan-only, matched
         on his email. Exact public exceptions exist for Forgejo
         LFS, Komodo's GitHub webhook, HyperDX MCP, and the separate Paperless API hostname.
@@ -214,6 +215,19 @@ networks:
         <code>X-Podhaus-Gateway-Token</code> from the
         <code>Pomerium Gateway Tokens</code> 1Password item, followed by the application's
         own credential.
+      </p>
+      <p>
+        <code>llm.pod.haus</code>, the local model service on fractal, is the route for
+        command-line clients. It treats a bearer token as a Pocket ID access token
+        (<code>bearer_token_format: idp_access_token</code>): pi or Claude Code send the
+        token that <code>llm/client/llm_token.py</code> fetches through Pocket ID's device
+        sign-in as their API key, and the friends policy applies to it. Pomerium checks
+        each token with Pocket ID once, at first use, and honours it for 30 days. The
+        <code>/control</code> paths are a separate Nathan-only route, and fractal's Caddy
+        checks the caller's email again before forwarding them. Pomerium passes that
+        email to the origin as <code>X-Pomerium-Claim-Email</code> on every route that
+        passes identity headers. On fractal itself, Caddy serves the same paths with no
+        sign-in at <code>127.0.0.1:8085</code>.
       </p>
       <p>
         Umami's per-site tracker hosts expose only <code>/script.js</code> and
@@ -305,6 +319,7 @@ networks:
           <tr><td><code>docs.pod.haus</code></td><td>This documentation site over Bilby's configured repository sources (friends route)</td></tr>
           <tr><td><code>bilby.docs.pod.haus</code></td><td>Same docs-server as <code>docs.pod.haus</code>, per-host name (family route)</td></tr>
           <tr><td><code>fractal.docs.pod.haus</code></td><td>docs-server over Fractal's configured repository sources (family route)</td></tr>
+          <tr><td><code>llm.pod.haus</code></td><td>Local model service on fractal (friends route, Pocket ID access token as bearer key; <code>/control</code> nathan-only)</td></tr>
           <tr><td><code>voltaire.docs.pod.haus</code></td><td>docs-server over Voltaire's configured repository sources (family route)</td></tr>
           <tr><td><code>bandicoot.docs.pod.haus</code></td><td>docs-server over Bandicoot's configured repository sources (family route)</td></tr>
           <tr><td><code>rustfs.pod.haus</code></td><td>RustFS console (Terraform state backend)</td></tr>
