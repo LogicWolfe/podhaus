@@ -202,6 +202,14 @@ per subsystem (Komodo reporting `state=Ok`, rathole control channels
 established, `sshd -T`), never "the container is healthy": a container
 being up proves it started, not that it is doing its job.
 
+A host gaining `earlyoom` or the Docker GPU switch for the first time cannot
+be dry-run whole. A plain `--check` stops at the earlyoom service task, because
+the unit does not exist until the package is really installed, and at the
+toolkit install, because the repository file does not exist yet. Read that
+first dry run with
+`ansible-playbook playbooks/fractal.yml --check --diff --skip-tags earlyoom,docker-packages`,
+which still shows the repository file and the daemon configuration, then apply.
+
 ## Roles worth knowing about
 
 **`disk_tmp`** configures Bilby, Bandicoot, Voltaire, and Fractal to keep `/tmp`
@@ -222,7 +230,7 @@ as after a full WSL shutdown. `systemctl show tmp.mount -p LoadState` verifies t
 `tmpfs` still mounted means the cutover needs a restart.
 
 **`earlyoom`** runs Fedora's earlyoom on the development hosts Bilby,
-Bandicoot, and Voltaire. When available memory and free swap both fall to 10%,
+Bandicoot, Fractal, and Voltaire. When available memory and free swap both fall to 10%,
 it signals the process with the highest out-of-memory score, before the host
 stalls in swap. Chezmoi sets those scores for dev work, so the order is bash
 commands (+900), then shells and agents (+600), then the tmux server (+300),
@@ -231,6 +239,12 @@ manager, `dbus-broker`, and desktop sessions. systemd-oomd stays at Fedora's
 default and acts only after a sustained stall. `journalctl -u earlyoom` shows
 the thresholds at start-up and names each process it signals. Apply with
 `--tags earlyoom`.
+
+Fractal differs in two ways. Chezmoi does not set the dev-work scores there, so
+earlyoom follows the kernel's own ranking, which in practice picks the process
+using the most memory. And systemd-oomd runs there but monitors no cgroups,
+because the WSL image lacks the `systemd-oomd-defaults` package; earlyoom is the
+only early killer, and the kernel's own killer is what acts after it.
 
 **`base`** opens with a `raw` task that installs `python3-libdnf5` if
 missing. This is the one deliberate `check_mode: false` in the layer:
@@ -258,6 +272,17 @@ save one package. `daemon.json` deliberately carries **no `dns:` key**;
 per-container DNS overrides replace Docker's embedded resolver and
 break service-name resolution, so DNS forwarding is a daemon-wide
 setting where a host needs it.
+
+`podhaus_docker_nvidia_gpu` gives a host's containers the NVIDIA GPU; only
+Fractal sets it, because the GPU belongs to Windows and is exposed to the WSL
+guest. The role adds NVIDIA's own package repository, installs NVIDIA's
+container toolkit from it, and renders the `nvidia` runtime into `daemon.json`,
+so a GPU host's file differs from the others'. It refuses to run unless the
+Windows-provided `/usr/lib/wsl/lib/nvidia-smi` is present, and it installs no
+Linux NVIDIA driver. With the toolkit in place a Compose device request with
+`driver: nvidia` reaches the GPU. Installing the toolkit restarts the Docker
+daemon, which live-restore makes safe for running containers.
+`docker run --rm --gpus all <image> /usr/lib/wsl/lib/nvidia-smi` checks it.
 
 **`storage_binds`** carries the postmortem-hardened defences for any host
 whose containers bind a volume that can arrive late. Each host declares its

@@ -58,10 +58,64 @@
     name: python3-requests
     state: present
 
+- name: Check the Windows-provided NVIDIA driver is visible in the guest
+  tags: [docker-packages]
+  # The GPU reaches a WSL guest through /dev/dxg and a driver stub that
+  # Windows places under /usr/lib/wsl/lib. If it is missing, the toolkit
+  # would install cleanly and every GPU container would then fail to start,
+  # so stop here with the cause.
+  ansible.builtin.stat:
+    path: /usr/lib/wsl/lib/nvidia-smi
+  register: podhaus_docker_wsl_nvidia_smi
+  when: podhaus_docker_nvidia_gpu
+
+- name: Assert the guest sees the GPU
+  tags: [docker-packages]
+  ansible.builtin.assert:
+    that: podhaus_docker_wsl_nvidia_smi.stat.exists
+    fail_msg: >-
+      /usr/lib/wsl/lib/nvidia-smi is missing: Windows is not exposing the
+      GPU to this guest. Install the NVIDIA driver on the Windows host.
+  when: podhaus_docker_nvidia_gpu
+
+- name: Add the NVIDIA container toolkit repository
+  tags: [package-repositories]
+  # NVIDIA's own repository, as published by the install guide. Packages are
+  # unpinned: the first install takes the current stable release, and ordinary
+  # `dnf upgrade` follows NVIDIA's stable channel afterwards. The file signs its
+  # metadata (repo_gpgcheck) rather than each package.
+  ansible.builtin.get_url:
+    url: https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
+    dest: /etc/yum.repos.d/nvidia-container-toolkit.repo
+    mode: "0644"
+  when: podhaus_docker_nvidia_gpu
+
+- name: Install the NVIDIA container toolkit
+  tags: [docker-packages]
+  # The four packages the install guide names. Installing them provides the
+  # `nvidia-container-runtime` binary the runtime in daemon.json points at, the
+  # hooks Docker's nvidia device driver looks for on PATH, and a systemd unit
+  # that writes the GPU's CDI spec before docker.service starts. No Linux
+  # NVIDIA driver is installed or wanted: Windows owns the driver. Docker looks
+  # for those hooks only when the daemon starts, so a reinstall restarts it
+  # even when daemon.json is unchanged.
+  ansible.builtin.dnf:
+    name:
+      - nvidia-container-toolkit
+      - nvidia-container-toolkit-base
+      - libnvidia-container-tools
+      - libnvidia-container1
+    state: present
+  notify: Restart docker
+  when: podhaus_docker_nvidia_gpu
+
 - name: Configure the Docker daemon
   tags: [docker-daemon]
   # `local` log driver with rotation on every podhaus host; live-restore per
-  # podhaus_docker_live_restore. The template's byte layout is load-bearing —
+  # podhaus_docker_live_restore; the `nvidia` runtime per
+  # podhaus_docker_nvidia_gpu (the same entry `nvidia-ctk runtime configure`
+  # writes, kept here so this template stays the only writer of the file).
+  # The template's byte layout is load-bearing —
   # see templates/daemon.json.j2 before touching either. Flipping bilby to
   # live-restore is a deliberate human act in a 04:00 maintenance window (one
   # unprotected daemon restart), never a handler side effect — which is why

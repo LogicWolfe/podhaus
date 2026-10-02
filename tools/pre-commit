@@ -28,6 +28,10 @@
 #                                   halves. The .mount half being missed is
 #                                   what let the 2026-05-30 mount wedge
 #                                   recur on 2026-08-30.
+#   - docker role tests:           daemon.json renders byte-for-byte as before
+#                                   without the GPU switch (a drift would
+#                                   restart Docker on every host) and carries
+#                                   exactly the nvidia runtime with it.
 #   - docs_sources role tests:      source slots remain isolated and every
 #                                   docs host declares both aggregate and
 #                                   canonical chezmoi locations.
@@ -66,6 +70,8 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/docs_sources/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/earlyoom/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/ansible/roles/docker/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/metube/tests"
 mise exec -- pipenv run python -m unittest discover \

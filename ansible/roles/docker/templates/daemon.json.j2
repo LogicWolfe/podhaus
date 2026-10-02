@@ -11,6 +11,10 @@
    - fractal's file (written by this role's old inline content) had compact
      one-line log-opts and no live-restore — fractal takes one planned
      handler restart on its next real run and comes out with live-restore.
+
+   With podhaus_docker_nvidia_gpu the file gains a `runtimes` block after
+   log-opts, the entry `nvidia-ctk runtime configure --runtime=docker` writes.
+   It is rendered here so no tool rewrites the file behind this template.
 #}
 {
 {% if podhaus_docker_live_restore %}
@@ -20,5 +24,13 @@
   "log-opts": {
     "max-size": "50m",
     "max-file": "3"
+  }{{ "," if podhaus_docker_nvidia_gpu }}
+{% if podhaus_docker_nvidia_gpu %}
+  "runtimes": {
+    "nvidia": {
+      "args": [],
+      "path": "nvidia-container-runtime"
+    }
   }
+{% endif %}
 }

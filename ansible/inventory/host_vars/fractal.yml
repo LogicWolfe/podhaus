@@ -68,6 +68,12 @@ podhaus_docs_sources:
     source: /home/nathan/.local/share/chezmoi
     required_path: .git
 
+# GPU in containers -----------------------------------------------------
+# The RTX 5090 belongs to Windows, which exposes it to this guest; the docker
+# role installs NVIDIA's container toolkit and registers its runtime so
+# containers can request the GPU. No Linux driver goes in the guest.
+podhaus_docker_nvidia_gpu: true
+
 # Komodo Periphery ------------------------------------------------------
 # Outbound v2: Periphery dials Core, so nothing listens publicly. Same
 # contract numbat uses.

@@ -20,6 +20,13 @@ podhaus_docker_repo_flavors:
 # see inventory/host_vars/bilby.yml.
 podhaus_docker_live_restore: true
 
+# Whether containers on this host can use the NVIDIA GPU: NVIDIA's container
+# toolkit from NVIDIA's own repository, and the `nvidia` runtime registered in
+# daemon.json. Only fractal sets this. Its GPU belongs to Windows and is
+# exposed to the WSL guest, so the role installs no Linux driver and instead
+# fails if the guest does not carry the driver Windows provides.
+podhaus_docker_nvidia_gpu: false
+
 # Additional external bridge networks this host provisions beyond dockernet,
 # as {name, labels} pairs. Labels only — see the network task for why ipam
 # and attachable must stay unspecified.

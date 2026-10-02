@@ -20,6 +20,8 @@
       tags: [wsl]
     - role: base
       tags: [base]
+    - role: earlyoom
+      tags: [earlyoom]
     - role: docs_sources
       tags: [docs-sources]
     - role: docker
