@@ -124,6 +124,103 @@ game they were measured on. Each has a named fallback under
 <a href="#order-of-work">Order of work and kill criteria</a>.</p>
 </div>
 
+<h2 id="progress">Build progress, 3 October 2026</h2>
+
+<p>The service is live on fractal. Stack <code>fractal-llm</code> runs from
+<code>llm/</code>, the watcher loads and unloads the model unattended, the
+loopback address <code>http://127.0.0.1:8085</code> serves both request
+formats, and <code>llm.pod.haus</code> refuses anyone who is not signed in.
+What is left needs Nathan in person: approving a device sign-in on a phone,
+launching a game, restarting WSL, and making the two dashboards. The runbook is
+<a href="/runbooks/local-llm.md">docs/runbooks/local-llm.md</a>.</p>
+
+<h3>Order of work</h3>
+
+<ol>
+<li>✅ The chosen settings ran at full size on the trial install under the
+17 GiB cap. A 150,000-token main conversation was kept through a
+three-subagent burst and a second session, so the kill criterion did not
+trigger. The first run missed the 5 s bar (12.0 s and 5.07 s, with saves of 20
+to 30 s) in the first hour after the WSL restart that raised the limit. The same
+run later that night met it (2.0 s, a 4.4 s save). The slow hour is not
+explained; see the open items.</li>
+<li>✅ Containers on fractal use the GPU. The Ansible docker role installs
+NVIDIA's container toolkit behind a per-host switch, and fractal joined the
+early out-of-memory role. The stock image is the same llama.cpp commit as the
+trial build (b11347). It generated at 96.3 tokens/s against about 96 on the
+host with the drafter on, and read a long prompt 4.4% slower, so the kill
+criterion did not trigger and the stack does not build its own image.</li>
+<li>✅ The router accepts the preset file as written. Its unload frees the
+GPU 1.7 s after the Yield button, with <code>stop-timeout = 2</code> added to
+the preset (at the default a streaming reply held the VRAM for 10.3 s). With
+no model loaded it answers HTTP 400 "model is not loaded".</li>
+<li>Ingress and sign-in are deployed: the DNS record, the Pocket ID client
+<code>llm-token</code>, the Pomerium routes, the Caddy block and the token
+command. A request with no token is sent to sign-in and one with a bad token
+gets 403; neither reaches fractal. The device sign-in with a real token has not
+been run, because it needs a link approved on a phone.</li>
+<li>✅ The watcher is live with its control page and events. The first
+handoff to a real game has not been run.</li>
+<li>Alloy parses both containers' logs and scrapes both metrics endpoints, and
+two Gatus checks are green. The two dashboards are not made: HyperDX
+dashboards have no as-code path here.</li>
+<li>✅ The runbook carries the addresses, the token command and the client
+notes.</li>
+<li>✅ Docs are updated (runbook, monitoring, hosts, networking,
+architecture, AGENTS.md). The trial install is removed from fractal: the user unit, the hand-built server, its model copy, launch script and templates, the compiler and CUDA packages added for the build (38 packages) and NVIDIA's CUDA package repository. <code>/opt/llm/probe</code> (47 MB) is kept, because it holds the scripts that build this plan's figures and the cost page.</li>
+</ol>
+
+<h3>Verification results</h3>
+
+<table>
+<thead><tr><th>Property</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Watcher rules, blind windows, restart adoption, slot events</td><td>Pass. 65 watcher tests, including the replay of the recorded game session; 178 tests in <code>llm/tests</code> in all, run by the pre-commit hook.</td></tr>
+<tr><td>Request detail is parsed in full</td><td>Pass in tests and live: prompt size, tokens kept, read and output timings, draft acceptance and slot choice appear in ClickStack for real requests.</td></tr>
+<tr><td>Every slow start is explained</td><td>Not run. It needs the dashboards.</td></tr>
+<tr><td>Several conversations behave as drawn</td><td>Pass on the live stack, through Caddy. With a main conversation of 150,539 tokens, its next turn started 3.42 s after a three-subagent burst and 2.36 s after a second session's opening. Saving it took 4.2 to 4.6 s and restoring it 0.5 to 0.8 s. Saved conversations reached 11,846 of 12,288 MiB and none was dropped. Case 3 was not forced.</td></tr>
+<tr><td>Sign-in works</td><td>Half. Unsigned and bad-token requests are refused at Pomerium. The round trip with a real token waits on a phone approval.</td></tr>
+<tr><td>The caller is recorded</td><td>Pass over loopback: each request's Caddy line carries path, status, duration, session id and client. The caller's email is added by Pomerium and waits on the signed-in check.</td></tr>
+<tr><td>No content is stored</td><td>Pass. A request carrying a unique marker string left zero matches in ClickStack across every service.</td></tr>
+<tr><td>Only request paths are exposed</td><td>Pass over loopback: the load, unload, slot, metrics, health, props and tokenize paths answer 404. The same check signed in through <code>llm.pod.haus</code> waits on the token.</td></tr>
+<tr><td>GPU in a container performs like the host</td><td>Pass with the drafter on (96.3 against about 96 tokens/s). The drafter-off half was not measured in the container; the service runs with the drafter on.</td></tr>
+<tr><td>Both request formats work end to end</td><td>Pass over loopback: a streamed tool call completed in the OpenAI and the Anthropic format. Through <code>llm.pod.haus</code> waits on the token.</td></tr>
+<tr><td>A real handoff meets its targets</td><td>Button only: Yield released the GPU in 1.7 s and guest memory in use fell from 11.0 to 7.2 GiB; Resume had the model ready 33 s later. A real game has not been run.</td></tr>
+<tr><td>Unattended start</td><td>Half. After each deploy the model loaded with nobody acting. The restart of the guest with <code>/home</code> locked has not been run.</td></tr>
+<tr><td>Recovery</td><td>Pass. Model process killed: the watcher logged the death within a second and was Serving again 116 s later (a quiet minute, then a 64 s load). Watcher killed: restarted and adopted Serving in one second, and a request sent meanwhile completed.</td></tr>
+<tr><td>A deploy during a game stays out of the way</td><td>Changed, and not run with a game. A button hold is not kept across a watcher restart; after a deploy the watcher waits for a quiet minute, which a running game never gives it.</td></tr>
+<tr><td>Long silent reads survive the path</td><td>Pass over loopback: a 138,360-token uncached prompt, not streamed, returned through Caddy after 70.8 s. The same read through <code>llm.pod.haus</code> waits on the token.</td></tr>
+<tr><td>Building cannot take the guest down</td><td>Pass. Available guest memory never fell below 20.4 GiB during the first image build and the 24-minute model download. There is no build file to read, because the stack uses the stock image. Filling the guest with a throwaway process while the model was loaded made the early out-of-memory service kill the model process and nothing else, once memory and swap were both down to 10%. The session survived and the watcher was Serving again 52 s later.</td></tr>
+<tr><td>Stack wiring</td><td>Pass. The three stack lints run in the pre-commit hook and in CI.</td></tr>
+</tbody>
+</table>
+
+<h3>Where the build departs from this plan</h3>
+
+<ul>
+<li><strong>fractal joined the early out-of-memory role</strong>, which settles the decision that was open under Scope.</li>
+<li><strong>The watcher is about 960 lines of Python, not 300.</strong> The extra is the handling the reviews asked for: loads started by something else, a model that dies while serving, slot reads that go unanswered during a save, retries and giving up.</li>
+<li><strong>The server logs one level above its default.</strong> The default level omits prompt size, tokens kept, forced re-reads and conversation saves. The higher level adds lines that can quote a request, so Alloy stores a server log entry as printed only when it matches a known shape that carries no text, and reduces every other entry to its heading and "text removed".</li>
+<li><strong>A load is not abandoned when a game appears.</strong> The load's own GPU activity cannot be told from a game's. A game that starts during a load shares the GPU until the load ends (33 to 64 s as measured live), then the normal yield happens. The Yield button still cancels a load.</li>
+<li><strong>A button hold is not kept across a watcher restart.</strong></li>
+<li><strong>Callers cannot load the model.</strong> The router honours a request-level <code>autoload</code> switch that overrides its no-autoload setting, so Caddy drops the query string and forces a JSON content type on the model paths, and the watcher unloads any load it did not start while it is keeping the model away. Caddy also removes the <code>X-Conversation-Id</code> header, which let one caller cancel another's reply.</li>
+<li><strong>The watcher has no autoheal label.</strong> Its unhealthy states are ones a restart would hide. It ends its own process when GPU sampling stalls, and Docker restarts it.</li>
+<li><strong>The model file's cache is dropped after every load and unload</strong>, not only at a yield. It frees about 8 GiB of guest memory and made saves faster.</li>
+<li><strong>The load timeout is 300 s.</strong> A reload from disk took 28 to 64 s live, but the first load after the download took 181 s and loads of 104 to 176 s were seen in the first hour after a WSL restart.</li>
+<li><strong>The VRAM alert level is 31,000 MiB</strong> of whole-GPU use, and means the card is full, not that a spill happened: the one spilled run read 31,126 MiB and a larger pool that did not spill read 31,048.</li>
+<li><strong>While the model is away a client gets HTTP 400 "model is not loaded"</strong> from the server. Whether Claude Code and pi show that clearly was not tested; Caddy answering for the model paths remains the fallback.</li>
+<li><strong>Join between a request's Caddy line and its server detail is by finish time</strong>, since the server prints no request id.</li>
+</ul>
+
+<h3>Open</h3>
+
+<ul>
+<li><strong>The model process dies with "CUDA error: unknown error" on long prompt reads.</strong> Seen three times on 2 and 3 October, with the GPU at 520 to 577 W: twice on the trial build and once in the stock image run by hand. A 70 s read at up to 579 W on the live stack did not fault. The watcher reloads the model, but the request in flight fails and every saved conversation is lost. The cause is not known. Windows Event Viewer (System log, source nvlddmkm) at those times is the first thing to read, and a lower GPU power limit set from Windows is the first thing to try.</li>
+<li><strong>Slow saves and loads soon after a WSL restart</strong>, and possibly after a game hands memory back. Time a large save soon after a game ends.</li>
+<li><strong>Sign-in round trip, the signed-in remote checks, the first real game, the guest restart and the dashboards</strong>, as marked above.</li>
+<li><strong>A change to <code>llm/tests</code> or <code>llm/client</code> redeploys the stack</strong> and reloads the model, because the content hash covers the whole stack directory.</li>
+</ul>
+
 <h2 id="decisions">Scope</h2>
 
 <p><strong>In scope:</strong> the model server, the watcher, ingress and sign-in,
@@ -132,7 +229,9 @@ records and alerts, and a command that fetches the sign-in token.
 use the service. Those are Nathan's to set up and tune. What was measured about
 them is kept under <a href="#launcher">Clients</a> so it is to hand later.</p>
 
-<p>No decision is open. Settled and built into the rest of this plan: no
+<p><strong>Decided during the build:</strong> fractal joined the early out-of-memory role the other development hosts run (bilby, bandicoot and voltaire), in the same playbook run that enabled the GPU in containers. It steps in when available memory and free swap are both down to 10%. chezmoi sets no kill-order scores on fractal, so the role follows the kernel's ranking there, and the model server's kill-first mark puts it at the top. The rules in <a href="#build-memory">Memory while building and testing</a> still apply.</p>
+
+<p>Settled and built into the rest of this plan: no
 gateway of our own; idle
 conversations saved to memory by the server itself; a 204,800-token pool with
 four slots and the drafter; memory sized for a main conversation of up to
@@ -772,7 +871,7 @@ that recovery has narrow owners.</p>
 <tr><td>Watcher crashes</td><td>Restarted within seconds; adopts the real state. Requests were never passing through it.</td><td>Docker</td></tr>
 <tr><td>Watcher hangs with the model loaded</td><td>Its healthcheck reports the age of the last GPU sample, so a stalled watcher goes unhealthy within about 30 s and autoheal restarts it. Until then a game would share the GPU with the model. This is the one window where a game does not simply work, and it is the reason the healthcheck is tight.</td><td>Autoheal</td></tr>
 <tr><td>Unload does not free the GPU</td><td>Yielding that lasts longer than 30 s marks the watcher unhealthy and raises the alert, since this directly breaks games.</td><td>Gatus alert</td></tr>
-<tr><td>Guest runs short of memory</td><td>The model server and the watcher each have a hard memory limit, so neither can take the dev session down with it. The existing early out-of-memory ordering on fractal is unchanged.</td><td>Container memory limits</td></tr>
+<tr><td>Guest runs short of memory</td><td>The model server and the watcher each have a hard memory limit, so neither can take the dev session down with it. If the whole guest still runs out, the model server is the process marked to go first, and the watcher reloads it. fractal has no early out-of-memory protection today; see <a href="#build-memory">Memory while building and testing</a>.</td><td>Container memory limits, then the watcher</td></tr>
 <tr><td>Model file missing or damaged</td><td>The download job restores it at the next deploy; until then loads fail and the alert fires.</td><td>Download job</td></tr>
 <tr><td>fractal is switched off</td><td>Remote callers get Pomerium's upstream error. The existing fractal monitor already reports the host.</td><td>Nobody; expected</td></tr>
 </tbody>
@@ -1094,12 +1193,39 @@ is visible in the handoff records. The limit lives in a Windows-side file
 Ansible cannot reach, so Nathan changes it by hand and it is recorded in the
 hosts page.</p>
 
+<h3 id="build-memory">Memory while building and testing</h3>
+
+<p>The trial install's first build ran the guest out of memory. llama.cpp was
+compiling with 28 parallel jobs while the model file downloaded in the
+downloader's high-performance mode, on the 15 GB guest. A compiler asked for
+memory that was not there, the kernel killed the largest process (the
+downloader, holding 4.6 GB), and the working session was lost with it. The
+second attempt, six compile jobs and a plain download, finished.</p>
+
+<p>Raising the guest to 25 GB does not remove the risk, for three reasons. Once
+the model server holds its 17 GiB, 6 to 7 GB is left for everything else, which
+is less than the trial build had. The processor has 32 threads, so a build tool
+left at its default starts 32 or more compilers. And fractal has no early
+out-of-memory protection: the kernel acts only when memory is gone, and every
+process carries the same kill priority, so it takes whatever is largest.</p>
+
+<table>
+<thead><tr><th>When</th><th>Rule</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Any test server before the WSL limit is raised</td><td>Capped at 9 GiB, as it was throughout the trial. The full-size run in step 1 of the order of work starts only once the guest shows 25 GB.</td><td>A cap makes the kernel kill the server alone, inside its own limit, instead of choosing a victim across the guest.</td></tr>
+<tr><td>Compiling llama.cpp, needed only if the stock image proves slower</td><td>Six compile jobs, written as a fixed number in the image's build file and never taken from the thread count. The model is unloaded for the first build, and the guest's lowest available memory during it is recorded. Later builds run beside a loaded model only if that figure shows room.</td><td>Six is the only setting that has completed here, and its peak memory was not recorded. An image build runs under Docker's builder, outside every container limit, so the job count is the only control.</td></tr>
+<tr><td>Downloading the model file</td><td>One plain stream, with the checksum verified afterwards. The downloader's high-performance mode stays off. The download job's container has a 1 GiB memory limit.</td><td>The download was the 4.6 GB process the kernel killed. A plain stream needs a small fraction of the limit.</td></tr>
+<tr><td>Two heavy jobs</td><td>Never at once: no compile while a download runs, and neither during the full-size run.</td><td>The failure was the two together.</td></tr>
+<tr><td>The running service</td><td>Every container has a hard memory limit. The model server is also marked as the first process to go if the whole guest runs out, ahead of anything in a dev session.</td><td>The watcher reloads a killed model in 25 s and the loss is the saved conversations, the same loss as a yield. A killed session does not come back.</td></tr>
+</tbody>
+</table>
+
 <h2 id="files">Repository changes</h2>
 
 <table>
 <thead><tr><th>Path</th><th>New or changed</th><th>Contents</th></tr></thead>
 <tbody>
-<tr><td><code>llm/compose.yaml</code>, <code>llm/stack.toml</code></td><td>New</td><td>Stack <code>fractal-llm</code> on fractal's linked repo: model server, watcher, download job. GPU access for the model server and the watcher, memory limits, healthchecks with the autoheal label, content-hash labels, the download job listed as an ignored one-shot.</td></tr>
+<tr><td><code>llm/compose.yaml</code>, <code>llm/stack.toml</code></td><td>New</td><td>Stack <code>fractal-llm</code> on fractal's linked repo: model server, watcher, download job. GPU access for the model server and the watcher, a memory limit on every container, the model server marked to be killed first when the guest runs out of memory (<code>oom_score_adj</code>), healthchecks with the autoheal label, content-hash labels, the download job listed as an ignored one-shot.</td></tr>
 <tr><td><code>llm/server/</code></td><td>New</td><td>The model preset file (context size, slots, drafter, cache settings, each with the measured reason beside it) and the adjusted chat template next to the original it was derived from.</td></tr>
 <tr><td><code>llm/watcher/</code></td><td>New</td><td>The watcher's image and code. Three classes carry it: one owns the state and its transitions, one reads the GPU, one talks to the model server (load, unload, slot report). The GPU reader is the only part that touches hardware.</td></tr>
 <tr><td><code>llm/tests/</code></td><td>New</td><td>Tests listed under Verification, run by the existing pre-commit test discovery. Includes the recorded game session and a sample of real model-server log lines.</td></tr>
@@ -1141,6 +1267,7 @@ written first and seen to fail for the right reason.</p>
 <tr><td>Recovery</td><td>Live: kill the model process, then the watcher. Each returns to Serving unaided and the events show how long it took. Requests keep working while the watcher is down.</td></tr>
 <tr><td>A deploy during a game stays out of the way</td><td>Live: hold a yield with the button, push a stack change, confirm the model is not loaded afterwards.</td></tr>
 <tr><td>Long silent reads survive the path</td><td>Live: a 140K-token uncached prompt through <code>llm.pod.haus</code> returns a response.</td></tr>
+<tr><td>Building cannot take the guest down</td><td>During the first image build and the first model download, record the guest's lowest available memory: it stays above 2 GB. Read the committed build file: the compile job count is a fixed six. Live: fill the guest's memory with a throwaway process while the model is loaded; the model process is the one killed, the session survives, and the watcher returns to Serving.</td></tr>
 <tr><td>Stack wiring</td><td>The existing pre-commit lints for content-hash labels, environment keys and stack files.</td></tr>
 </tbody>
 </table>
@@ -1152,7 +1279,7 @@ written first and seen to fail for the right reason.</p>
 <ol>
 <li><strong>Prove the chosen settings at full size.</strong> Nathan raises the WSL limit to 25 GB. Then, on the trial install under <code>/opt/llm</code>, run the server under its 17 GiB cap with the settings table above: a 150,000-token main conversation through a three-subagent burst, a second session, and a yield. This needs no new code. <em>Kill criterion:</em> if the main conversation is dropped in the ordinary one-session case, either the stated window comes down or the disk-saving fix is designed, argued from the measured failure, and put to Nathan before anything else is built.</li>
 <li><strong>GPU inside a container on fractal.</strong> Ansible change, then the performance check. <em>Kill criterion:</em> if containers cannot use the GPU or run more than 10% slower than a process on the host, the model server becomes an Ansible-managed systemd unit on the host and the watcher reaches it across the Docker bridge. Everything else stands.</li>
-<li><strong>Model server in router mode.</strong> Confirm that unloading through its API frees VRAM as quickly as stopping the process did, that the preset file accepts every chosen setting, that the stock image is as fast as the trial install's own build, and what it answers while no model is loaded. If the stock image is slower, the stack builds the image itself with compile parallelism capped.</li>
+<li><strong>Model server in router mode.</strong> Confirm that unloading through its API frees VRAM as quickly as stopping the process did, that the preset file accepts every chosen setting, that the stock image is as fast as the trial install's own build, and what it answers while no model is loaded. If the stock image is slower, the stack builds the image itself under the rules in <a href="#build-memory">Memory while building and testing</a>.</li>
 <li><strong>Ingress and sign-in.</strong> The Pocket ID client and the device sign-in round trip first, then DNS, the Pomerium route, the Caddy block and the token command. <em>Kill criterion:</em> if Pomerium will not accept the Pocket ID token on the route, remote use goes over the existing Pomerium SSH sign-in as a tunnel. Usable remotely at this point with no handoff behaviour.</li>
 <li><strong>Watcher: handoff, control page, events.</strong> <em>Kill criterion:</em> if, across the first sessions with different games, the events show wrong calls that no threshold change fixes, detection moves to a small Windows-side watcher that knows which process is a game and calls the same control endpoint. The states, the button and the records stand.</li>
 <li><strong>Telemetry and alerts.</strong> Alloy config, Gatus checks, two dashboards.</li>
