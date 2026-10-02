@@ -335,9 +335,9 @@ endpoints:
       - "[BODY].ok == true"
     alerts: *alerts
 
-  # The book services answer only on dockernet; /health is 200 while each
-  # serves. bookcard's never signs in, so it stays green while Amazon
-  # sessions come and go.
+  # The book services are probed by container name on dockernet; /health is
+  # 200 while each serves. bookcard's never signs in, so it stays green while
+  # Amazon sessions come and go.
   - name: bookbinder (container)
     url: http://bookbinder:8787/health
     <<: *defaults
@@ -345,6 +345,11 @@ endpoints:
 
   - name: bookcard (container)
     url: http://bookcard:8788/health
+    <<: *defaults
+    group: Books
+
+  - name: bookshelf (container)
+    url: http://bookshelf:8789/health
     <<: *defaults
     group: Books
 

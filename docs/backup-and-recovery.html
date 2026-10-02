@@ -38,7 +38,8 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
           <tr><td><code>plex</code></td><td><code>/var/lib/plex-local</code></td><td>04:00</td></tr>
           <tr><td><code>indy-board</code></td><td><code>/var/lib/indy-board</code> (the catch game's SQLite log behind the panel's high score)</td><td>04:05</td></tr>
           <tr><td><code>flood</code></td><td><code>/var/lib/flood-db</code></td><td>04:10</td></tr>
-          <tr><td><code>bookcard</code></td><td><code>/var/lib/bookcard</code> (the Amazon and Audible session, purchase ledgers, and the record of Kindle Unlimited loans Amazon no longer lists)</td><td>04:15</td></tr>
+          <tr><td><code>bookcard</code></td><td><code>/var/lib/bookcard</code> (the Amazon and Audible session, purchase ledgers, and the record of Kindle Unlimited loans Amazon no longer lists), excluding <code>downloads/</code>, page data bookcard removes a day after each download</td><td>04:15</td></tr>
+          <tr><td><code>bookshelf</code></td><td><code>/var/lib/bookshelf</code> (the SQLite file holding books' text, reading history, notes and summaries)</td><td>04:25</td></tr>
           <tr><td><code>home-assistant</code></td><td><code>/var/lib/home-assistant</code></td><td>04:20</td></tr>
           <tr><td><code>paperless</code></td><td><code>/var/lib/paperless-data</code> + <code>/var/lib/paperless-pgdata</code> + Jump documents</td><td>04:30</td></tr>
           <tr><td><code>music-assistant</code></td><td>server state volume</td><td>04:35</td></tr>

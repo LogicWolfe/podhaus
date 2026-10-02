@@ -54,6 +54,7 @@
 	@gatus host edge-canary.pod.haus gatus.pod.haus
 	@bugs host bugs.pod.haus
 	@backup host backup.pod.haus
+	@books host books.pod.haus
 	@fenwick host fenwick.pod.haus
 	@kangaroo_backup host kangaroo-backup.pod.haus
 	@kangaroo host kangaroo.pod.haus
@@ -78,6 +79,7 @@
 		reverse_proxy @gatus gatus:8080
 		reverse_proxy @bugs bugsink:8000
 		reverse_proxy @backup backrest:9898
+		reverse_proxy @books bookshelf:8789
 		# The bot lives on bandicoot; the front door stays here.
 		reverse_proxy @fenwick {$BANDICOOT_LAN_IPV4}:8088
 		reverse_proxy @kangaroo_backup {$KANGAROO_LAN_IPV4}:9898

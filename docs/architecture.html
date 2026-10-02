@@ -103,23 +103,31 @@
         backups and device recovery.
       </p>
       <p>
-        The book services run on Bilby, reachable only on
-        <code>dockernet</code>: bookcard (<code>http://bookcard:8788</code>)
-        signs in to the Kindle library and downloads books' page data, and
-        bookbinder (<code>http://bookbinder:8787</code>) decodes it into EPUB
-        and Markdown. Each repository supplies its own stack; Podhaus owns the
-        deployment webhooks and Komodo integration. Requests name paths under
-        <code>/var/lib/bookwork</code>, a transient work directory on Bilby's
-        local disk that every book service mounts at the same path, runs as
-        uid 1000 against, and that is not backed up. bookcard's state (its
-        Amazon and Audible session, purchase ledgers, and loan record) lives
-        in <code>/var/lib/bookcard</code>, which Backrest snapshots nightly,
-        and its Amazon credentials in the <code>Bookcard Amazon</code> Homelab
-        item. Each service describes its API at <code>/openapi.json</code> and
-        lists that description at <code>/.well-known/api-catalog</code>.
-        Both export their own spans and log records to ClickStack, joining a
-        caller's trace when the request carries a <code>traceparent</code>
-        header, so the log pipeline drops their JSON stdout lines.
+        The book services run on Bilby. bookcard
+        (<code>http://bookcard:8788</code>) signs in to the Kindle and Audible
+        library and downloads books' page data into its own
+        <code>/var/lib/bookcard</code>, handing each download out as a tar
+        archive over HTTP and removing it a day later. bookbinder
+        (<code>http://bookbinder:8787</code>) fetches such an archive by URL
+        and decodes it into EPUB or Markdown; it mounts nothing. Both are
+        reachable only on <code>dockernet</code>. bookshelf
+        (<code>http://bookshelf:8789</code>) sits in front of them: it keeps
+        books' text, reading history, notes and summaries in one SQLite file
+        under <code>/var/lib/bookshelf</code>, serves Nathan's page at
+        <code>books.pod.haus</code> (Pomerium, Nathan only, with bookshelf
+        verifying the signed identity header itself), and publishes port 8789
+        on the home network for Fenwick on Bandicoot, which presents the
+        <code>Bookshelf Token</code> Homelab item as a bearer token. Backrest
+        snapshots <code>/var/lib/bookcard</code> (less its downloads) and
+        <code>/var/lib/bookshelf</code> nightly; bookcard's Amazon credentials
+        live in the <code>Bookcard Amazon</code> Homelab item. Each repository
+        supplies its own stack; Podhaus owns the deployment webhooks and
+        Komodo integration. Each service describes its API at
+        <code>/openapi.json</code> and lists that description at
+        <code>/.well-known/api-catalog</code>. All three export their own spans
+        and log records to ClickStack, joining a caller's trace when the
+        request carries a <code>traceparent</code> header, so the log pipeline
+        drops their JSON stdout lines.
       </p>
       <h2 id="design-principles">Design principles</h2>
       <p>These four principles trump local convenience whenever they conflict:</p>

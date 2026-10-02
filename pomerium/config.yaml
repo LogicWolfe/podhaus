@@ -144,6 +144,11 @@ routes:
   # family surface like MeTube itself — nathan_route, not family_route.
   - <<: *nathan_route
     from: https://sonarr.pod.haus
+  # bookshelf verifies the signed assertion header itself and admits only
+  # Nathan's address, so the route must pass identity headers.
+  - <<: *nathan_route
+    from: https://books.pod.haus
+    pass_identity_headers: true
 
   # Per-host docs servers. Family routes, the same permissions as the shared
   # docs.pod.haus, so anyone in the family can open a page on any host's docs
