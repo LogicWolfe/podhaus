@@ -227,6 +227,7 @@ were in flight when the model was unloaded.
 | The model is | A request gets |
 |---|---|
 | Unloaded (Yielded, Yielding, or the server just restarted) | HTTP 400, "model is not loaded", from the model server itself |
+| Exiting (the second or two after an unload, while the model process ends) | HTTP 500, "proxy error: Could not establish connection" |
 | Loading (Resuming) | HTTP 503, "Loading model" |
 | Unloaded while the request is in flight | The reply is cut. The router gives the model process `stop-timeout` (2 seconds as set in `models.ini`) to exit before killing it, so video memory is free about that long after the unload even with a reply streaming. A game always wins. |
 
