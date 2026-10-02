@@ -594,6 +594,47 @@ endpoints:
       - "[BODY].State.Status == running"
       - "[BODY].State.Health.Status == healthy"
 
+  # Local model service on fractal (llm/). Both checks read the container
+  # through Komodo like the docs checks above. The server's healthcheck is the
+  # router's /health, which answers whether or not a model is loaded, so a
+  # model yielded to a game is healthy here by design; the watcher's own
+  # healthcheck is where the service's real failure states surface.
+  - name: Local model server (fractal, via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Local model
+    interval: 60s
+    alerts:
+      - type: custom
+        description: "The local model server (llm-server on fractal) is not running or its health probe is failing. Its probe passes with no model loaded, so a game holding the GPU is not this alert: it means the server process itself is down or hung, and every local model request fails until it is back. Autoheal restarts it on a failed probe. If it stays down, read `docker logs llm-server` and check the GPU runtime on fractal."
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"fractal","container":"llm-server"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
+  - name: Local model watcher (fractal, via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Local model
+    interval: 60s
+    alerts:
+      - type: custom
+        description: "The local model watcher (llm-watcher on fractal) is unhealthy, not running, or restarting. Read docker logs llm-watcher: the watcher.unhealthy line names the reason. yield_stuck: a yield did not release the GPU within 30 seconds, so a game cannot have the whole GPU. vram_at_limit: GPU memory in use sits at the level where the card is full while serving, so the model has probably spilled into shared memory, where it reads prompts at about a fiftieth of its speed; closing whatever on Windows took the memory is the fix. load_given_up: model loads failed repeatedly, including loads that timed out and a model that died while serving, so the model stays down and local requests fail; the load.failed lines say why. server_unresponsive: the model server has not answered slot reads for five minutes, so it is hung and the watcher cannot tell a game from the model working. Not running or restarting means the watcher keeps exiting, and Docker restarts it each time. It exits when GPU sampling stalls (sample_stale in the log) and when the model server router is unreachable, so every llm-server restart makes it exit until the router answers; if llm-server is down or restarting, look there first."
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"fractal","container":"llm-watcher"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
   # A healthy container proves nothing about what clients are told to connect
   # to. OrbStack hides the Mac's LAN interface from Plex, so the same-house
   # address is published by the `plex-advertise` launch daemon against a DHCP
