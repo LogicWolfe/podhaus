@@ -1,0 +1,1218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local model service on fractal</title>
+<style>
+.doc-page {
+  --doc-paper: rgb(var(--bg, 255 255 255));
+  --doc-panel-color: rgb(var(--bg-soft, 246 250 246));
+  --doc-ink: rgb(var(--text, 15 23 42));
+  --doc-muted-color: rgb(var(--text-muted, 75 85 99));
+  --doc-line: rgb(var(--border, 229 231 235));
+  --doc-accent: rgb(var(--code-text, 17 94 64));
+  color: var(--doc-ink);
+  background: var(--doc-paper);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.6;
+  max-width: 72rem;
+  margin-inline: auto;
+}
+.doc-page .doc-panel,
+.doc-page .doc-callout,
+.doc-page .doc-diagram {
+  background: var(--doc-panel-color);
+  border: 1px solid var(--doc-line);
+  border-radius: .5rem;
+  padding: .75rem 1rem;
+  margin-block: 1rem;
+}
+.doc-page .doc-callout { border-inline-start: .25rem solid var(--doc-accent); }
+.doc-page .doc-muted { color: var(--doc-muted-color); }
+.doc-page .doc-badge {
+  display: inline-block;
+  color: var(--doc-ink);
+  background: var(--doc-panel-color);
+  border: 1px solid var(--doc-line);
+  border-radius: .25rem;
+  padding: .1em .45em;
+  font-size: .8em;
+}
+.doc-page .doc-diagram { overflow-x: auto; }
+.doc-page .doc-diagram svg { display: block; max-width: 100%; height: auto; }
+.doc-page .doc-diagram svg text { fill: currentColor; }
+
+/* Page-specific: diagram parts. New components carry a heavier accent border and the word "new". */
+.doc-page .doc-diagram svg { font-size: 13px; min-width: 760px; }
+.doc-page .doc-diagram svg .llm-zone { fill: var(--doc-paper); stroke: var(--doc-line); stroke-dasharray: 5 4; }
+.doc-page .doc-diagram svg .llm-box { fill: var(--doc-panel-color); stroke: var(--doc-ink); stroke-width: 1.2; }
+.doc-page .doc-diagram svg .llm-new { stroke: var(--doc-accent); stroke-width: 2.5; }
+.doc-page .doc-diagram svg .llm-line { fill: none; stroke: var(--doc-ink); stroke-width: 1.3; }
+.doc-page .doc-diagram svg .llm-dash { stroke-dasharray: 5 4; }
+.doc-page .doc-diagram svg .llm-head { fill: var(--doc-ink); stroke: none; }
+.doc-page .doc-diagram svg text.llm-title { font-weight: 600; }
+.doc-page .doc-diagram svg text.llm-small { font-size: 11.5px; }
+.doc-page .doc-diagram svg text.llm-muted { fill: var(--doc-muted-color); font-size: 11.5px; }
+.doc-page .doc-diagram svg .llm-step { fill: var(--doc-paper); stroke: var(--doc-ink); }
+
+/* Page-specific: timing figures. */
+.doc-page .doc-diagram svg .cost-grid { stroke: var(--doc-line); stroke-width: 1; }
+.doc-page .doc-diagram svg .cost-marker { stroke: var(--doc-muted-color); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.doc-page .doc-diagram svg .cost-local { fill: var(--doc-accent); stroke: var(--doc-paper); stroke-width: 1.5; }
+.doc-page .doc-diagram svg .t-work { fill: var(--doc-accent); opacity: .55; }
+.doc-page .doc-diagram svg .t-warm { fill: var(--doc-accent); }
+.doc-page .doc-diagram svg .t-read { fill: var(--doc-ink); }
+.doc-page .doc-diagram svg .t-move { fill: var(--doc-muted-color); opacity: .6; }
+.doc-page .doc-diagram svg .t-idle { stroke: var(--doc-muted-color); stroke-width: 2; stroke-dasharray: 2 5; }
+.doc-page .doc-diagram svg .t-limit { stroke: var(--doc-ink); stroke-width: 1.4; stroke-dasharray: 7 4; }
+.doc-page .doc-diagram svg .t-curve { fill: none; stroke: var(--doc-accent); stroke-width: 2.5; }
+.doc-page .doc-diagram svg text.t-mark { font-size: 18px; font-weight: 700; }
+.doc-page .doc-diagram svg text.t-halo { paint-order: stroke; stroke: var(--doc-panel-color); stroke-width: 5px; stroke-linejoin: round; }
+
+@media print {
+  .doc-page {
+    --doc-paper: #fff;
+    --doc-panel-color: #f6f6f6;
+    --doc-ink: #111;
+    --doc-muted-color: #555;
+    --doc-line: #ccc;
+    --doc-accent: #245c40;
+    color-scheme: light;
+    --tw-prose-body: var(--doc-ink);
+    --tw-prose-headings: var(--doc-ink);
+    --tw-prose-lead: var(--doc-muted-color);
+    --tw-prose-links: var(--doc-accent);
+    --tw-prose-bold: var(--doc-ink);
+    --tw-prose-captions: var(--doc-muted-color);
+    --tw-prose-code: var(--doc-ink);
+    --tw-prose-th-borders: var(--doc-line);
+    --tw-prose-td-borders: var(--doc-line);
+  }
+  .doc-page .doc-panel,
+  .doc-page .doc-callout,
+  .doc-page .doc-diagram { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<main>
+<div class="doc-page">
+
+<h1>Local model service on fractal</h1>
+
+<p><strong>Goal.</strong> fractal's RTX 5090 serves a local coding model to
+Nathan, on the machine and away from it, and to friends he lets in. It gets
+out of the way within seconds whenever a game starts, comes back unattended
+when the game ends, and records enough to answer what happened to any request
+and how well each handoff to a game went.</p>
+
+<div class="doc-callout">
+<p><strong>What this costs.</strong> One new stack on fractal (two
+long-running containers and a one-shot download job), one small service we
+write and own (the watcher, about 300 lines of Python plus tests), one
+protected hostname, one Ansible change to let containers use the GPU, and
+10 GB more of the host's memory given to WSL. Nothing we write sits between a
+client and the model: the model server is stock llama.cpp, configured.
+Electricity is about 37 cents for a heavy day of agent coding.</p>
+<p><strong>What would stop it.</strong> Three things, each checked before the
+rest is built: the chosen server settings, run at full size under their real
+memory cap, do not behave as the smaller measurements predict; containers on
+this WSL guest cannot use the GPU or run more than 10% slower than a process on
+the host; or the game-detection thresholds do not generalise beyond the one
+game they were measured on. Each has a named fallback under
+<a href="#order-of-work">Order of work and kill criteria</a>.</p>
+</div>
+
+<h2 id="decisions">Scope</h2>
+
+<p><strong>In scope:</strong> the model server, the watcher, ingress and sign-in,
+records and alerts, and a command that fetches the sign-in token.
+<strong>Out of scope:</strong> how Claude Code, pi or Fenwick are configured to
+use the service. Those are Nathan's to set up and tune. What was measured about
+them is kept under <a href="#launcher">Clients</a> so it is to hand later.</p>
+
+<p>No decision is open. Settled and built into the rest of this plan: no
+gateway of our own; idle
+conversations saved to memory by the server itself; a 204,800-token pool with
+four slots and the drafter; memory sized for a main conversation of up to
+150,000 tokens; WSL raised
+from 15 GB to 25 GB; 60 seconds of quiet before the model returns after a game,
+with any Windows use of the GPU counting, video included; coding sessions
+dropped freely for a game; sign-in by device link through
+Pocket ID and Pomerium, built and proven during the build, open to Pocket ID's
+family and friends groups; the server's known faults are worked around, not
+reported to llama.cpp.</p>
+
+<h2 id="architecture">Components and how a request reaches the model</h2>
+
+<p>Two terms first. The <strong>model server</strong> is llama.cpp's own server
+running in its router mode, where it holds no model until told to load one and
+frees the VRAM when told to unload. The <strong>watcher</strong> is the one
+service we write. It stands beside the request path, never in it: it watches
+the GPU, tells the model server to load or unload, serves the control page, and
+writes the records that the model server does not write itself.</p>
+
+<div class="doc-diagram">
+<svg viewBox="0 0 1000 600" role="img" aria-labelledby="arch-title arch-desc">
+<title id="arch-title">Request path and components</title>
+<desc id="arch-desc">Remote clients reach Pomerium on Numbat, which forwards through the rathole tunnel to fractal's Caddy origin, which forwards to the new model server, which uses the GPU. Clients on fractal reach Caddy through a local listener. The new watcher sits beside that path: it reads GPU utilisation and the model server's slot state, and tells the model server to load or unload. A Windows game shares the same GPU.</desc>
+<defs>
+<marker id="llm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="llm-head" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+
+<rect class="llm-zone" x="10" y="20" width="190" height="340" rx="6"/>
+<text class="llm-title" x="22" y="42">Clients</text>
+<rect class="llm-box" x="25" y="60" width="160" height="60" rx="4"/>
+<text x="37" y="84">Nathan, away</text>
+<text class="llm-small" x="37" y="103">pi, Claude Code</text>
+<rect class="llm-box" x="25" y="140" width="160" height="60" rx="4"/>
+<text x="37" y="164">Friends</text>
+<text class="llm-small" x="37" y="183">sign in as themselves</text>
+<rect class="llm-box" x="25" y="275" width="160" height="60" rx="4"/>
+<text x="37" y="299">Nathan, on fractal</text>
+<text class="llm-small" x="37" y="318">pi, Claude Code</text>
+
+<rect class="llm-zone" x="230" y="20" width="190" height="220" rx="6"/>
+<text class="llm-title" x="242" y="42">Numbat (exists)</text>
+<rect class="llm-box" x="245" y="60" width="160" height="160" rx="4"/>
+<text x="257" y="84">Pomerium</text>
+<text class="llm-small" x="257" y="106">llm.pod.haus</text>
+<text class="llm-small" x="257" y="134">checks the sign-in</text>
+<text class="llm-small" x="257" y="150">token on every request</text>
+<text class="llm-small" x="257" y="178">passes on who</text>
+<text class="llm-small" x="257" y="194">is calling</text>
+
+<rect class="llm-zone" x="450" y="20" width="540" height="340" rx="6"/>
+<text class="llm-title" x="462" y="42">fractal, WSL2 guest: stack fractal-llm</text>
+<rect class="llm-box" x="465" y="95" width="130" height="70" rx="4"/>
+<text x="477" y="122">Caddy origin</text>
+<text class="llm-small" x="477" y="142">exists; logs requests</text>
+<rect class="llm-box llm-new" x="660" y="60" width="310" height="140" rx="4"/>
+<text class="llm-title" x="672" y="84">Model server (new)</text>
+<text class="llm-small" x="672" y="108">llama.cpp, stock image</text>
+<text class="llm-small" x="672" y="126">holds the model in VRAM only when told to</text>
+<text class="llm-small" x="672" y="144">shares one context pool among its slots</text>
+<rect class="llm-box llm-new" x="640" y="240" width="220" height="100" rx="4"/>
+<text class="llm-title" x="652" y="264">Watcher (new)</text>
+<text class="llm-small" x="652" y="286">reads GPU and slot state</text>
+<text class="llm-small" x="652" y="304">loads and unloads the model</text>
+<text class="llm-small" x="652" y="322">control page, event records</text>
+
+<rect class="llm-zone" x="450" y="390" width="540" height="190" rx="6"/>
+<text class="llm-title" x="462" y="412">Windows host</text>
+<rect class="llm-box" x="465" y="440" width="110" height="70" rx="4"/>
+<text x="477" y="468">A game</text>
+<text class="llm-small" x="477" y="488">any launcher</text>
+<rect class="llm-box" x="610" y="440" width="370" height="70" rx="4"/>
+<text x="622" y="468">RTX 5090</text>
+<text class="llm-small" x="622" y="488">one GPU, 31.8 GiB, shared by Windows and the WSL guest</text>
+
+<path class="llm-line" marker-end="url(#llm-arrow)" d="M185,90 L245,110"/>
+<path class="llm-line" marker-end="url(#llm-arrow)" d="M185,170 L245,150"/>
+<path class="llm-line" marker-end="url(#llm-arrow)" d="M405,130 L465,130"/>
+<text class="llm-muted" x="435" y="84" text-anchor="middle">rathole</text>
+<text class="llm-muted" x="435" y="99" text-anchor="middle">tunnel</text>
+<path class="llm-line" marker-end="url(#llm-arrow)" d="M595,130 L660,130"/>
+<text class="llm-muted" x="627" y="122" text-anchor="middle">requests</text>
+<path class="llm-line" marker-end="url(#llm-arrow)" d="M185,305 L530,305 L530,165"/>
+<text class="llm-muted" x="215" y="297">local listener, logged the same way</text>
+<path class="llm-line" marker-end="url(#llm-arrow)" d="M560,165 L560,290 L640,290"/>
+<text class="llm-muted" x="567" y="262">control</text>
+<text class="llm-muted" x="567" y="277">page</text>
+<path class="llm-line" marker-end="url(#llm-arrow)" d="M750,240 L750,200"/>
+<text class="llm-muted" x="758" y="225">load, unload, read slots</text>
+<path class="llm-line llm-dash" marker-end="url(#llm-arrow)" d="M700,340 L700,440"/>
+<text class="llm-muted" x="708" y="380">reads GPU utilisation</text>
+<path class="llm-line" marker-end="url(#llm-arrow)" d="M940,200 L940,440"/>
+<text class="llm-muted" x="932" y="300" text-anchor="end">inference</text>
+<path class="llm-line" marker-end="url(#llm-arrow)" d="M575,475 L610,475"/>
+</svg>
+</div>
+
+<table>
+<thead><tr><th>Component</th><th>Status</th><th>What it does</th><th>Lifetime and state</th></tr></thead>
+<tbody>
+<tr><td>Model server, container <code>llm-server</code></td><td>New, stock llama.cpp image</td><td>Serves the OpenAI and Anthropic request formats. Loads or unloads the model through its own management API. Never loads by itself.</td><td>Starts with the guest and stays up. The model process is its child and exists only between a load and an unload. Settings come from a committed preset file.</td></tr>
+<tr><td>Watcher, container <code>llm-watcher</code></td><td>New, our code under <code>llm/watcher/</code></td><td>Samples the GPU and the model server's slot report once a second. Decides when to yield to a game and when to resume. Serves the control page. Writes handoff events and slot-change events.</td><td>One process. Its state (who holds the GPU) lives in memory and is re-derived at every start from what the model server reports. If it dies, requests keep flowing; only handoffs and its records stop.</td></tr>
+<tr><td>Model download job, <code>llm-model</code></td><td>New, one-shot</td><td>Fetches the model file into a Docker volume and verifies its checksum.</td><td>Runs at deploy and exits. The volume sits on the root filesystem, never under <code>/home</code>.</td></tr>
+<tr><td>Caddy origin on fractal</td><td>Exists; one host block and one local listener added</td><td>Receives Pomerium's traffic over mutual TLS and local traffic on a loopback port. Forwards only the model's request paths to the model server, and the control page to the watcher. Its access log is the record of who called.</td><td>Unchanged.</td></tr>
+<tr><td>Pomerium on Numbat</td><td>Exists; one protected route added</td><td>Checks every request's sign-in token and passes the caller's email on to fractal.</td><td>Unchanged.</td></tr>
+<tr><td>Alloy on fractal</td><td>Exists; config added</td><td>Ships the new logs and metrics to ClickStack.</td><td>Unchanged.</td></tr>
+</tbody>
+</table>
+
+<h3>One request, from sign-in to response</h3>
+
+<ol>
+<li>A remote client calls <code>https://llm.pod.haus/v1/...</code> carrying its Pocket ID sign-in token as its API key. Pomerium checks the token and that the caller is in Pocket ID's family or friends group, then forwards through fractal's existing outbound tunnel to Caddy, adding the caller's email as a header. A client on fractal skips those hops and calls Caddy's loopback listener.</li>
+<li>Caddy forwards the request unchanged to the model server and writes one access-log line when it ends: caller, client program, Claude Code's session identifier if present, path, status and duration.</li>
+<li>The model server picks a slot, reuses whatever part of the prompt that slot already holds, reads the rest, and streams the answer. Its log records the token counts, the timings and why it chose that slot.</li>
+<li>If a game holds the GPU, no model is loaded and the model server itself answers with an error. What that error looks like to pi and Claude Code is one of the <a href="#unproven">unproven assumptions</a>.</li>
+</ol>
+
+<p>No translation between request formats happens anywhere, because the model
+server speaks both natively.</p>
+
+<h2 id="timing">What is fast and what is slow</h2>
+
+<p>How this service feels comes down to one thing: whether the conversation
+being continued is still held by the server. A conversation is
+<strong>warm</strong> while the server holds its working state, and its next
+turn starts in under a second. It is <strong>cold</strong> when nothing holds
+it and the whole conversation has to be read again, at 1,500 to 3,900 tokens a
+second. The bar used throughout: under a second is fine, 45 s is unusable,
+120 s is a total failure.</p>
+
+<div class="doc-diagram">
+<svg viewBox="0 0 1000 390" role="img" aria-labelledby="cold-t cold-d">
+<title id="cold-t">Time to read a conversation from nothing, by size</title>
+<desc id="cold-d">Line chart. Reading time rises from 3.5 seconds at 12,700 tokens to 40 seconds at 99,000, 75 seconds at 150,000 and 136 seconds at 205,000. Horizontal lines mark 45 seconds, called unusable, and 120 seconds, called a total failure. The 45 second line is crossed at about 106,000 tokens and the 120 second line at about 190,000.</desc>
+<line class="cost-grid" x1="80" y1="330.0" x2="950" y2="330.0"/>
+<text class="llm-muted" x="70" y="334.0" text-anchor="end">0 s</text>
+<line class="cost-grid" x1="80" y1="270.0" x2="950" y2="270.0"/>
+<text class="llm-muted" x="70" y="274.0" text-anchor="end">30 s</text>
+<line class="cost-grid" x1="80" y1="210.0" x2="950" y2="210.0"/>
+<text class="llm-muted" x="70" y="214.0" text-anchor="end">60 s</text>
+<line class="cost-grid" x1="80" y1="150.0" x2="950" y2="150.0"/>
+<text class="llm-muted" x="70" y="154.0" text-anchor="end">90 s</text>
+<line class="cost-grid" x1="80" y1="90.0" x2="950" y2="90.0"/>
+<text class="llm-muted" x="70" y="94.0" text-anchor="end">120 s</text>
+<line class="cost-grid" x1="80" y1="30.0" x2="950" y2="30.0"/>
+<text class="llm-muted" x="70" y="34.0" text-anchor="end">150 s</text>
+<text class="llm-muted" x="80.0" y="350" text-anchor="middle">0</text>
+<text class="llm-muted" x="204.3" y="350" text-anchor="middle">30,000</text>
+<text class="llm-muted" x="328.6" y="350" text-anchor="middle">60,000</text>
+<text class="llm-muted" x="452.9" y="350" text-anchor="middle">90,000</text>
+<text class="llm-muted" x="577.1" y="350" text-anchor="middle">120,000</text>
+<text class="llm-muted" x="701.4" y="350" text-anchor="middle">150,000</text>
+<text class="llm-muted" x="825.7" y="350" text-anchor="middle">180,000</text>
+<text class="llm-muted" x="950.0" y="350" text-anchor="middle">210,000</text>
+<text class="llm-muted" x="515.0" y="374" text-anchor="middle">tokens in the conversation</text>
+<line class="t-limit" x1="80" y1="240.0" x2="950" y2="240.0"/>
+<text class="llm-small t-halo" x="90" y="234.0">45 s: unusable</text>
+<line class="t-limit" x1="80" y1="90.0" x2="950" y2="90.0"/>
+<text class="llm-small t-halo" x="90" y="84.0">120 s: total failure</text>
+<line class="cost-marker" x1="701.4" y1="30" x2="701.4" y2="330"/>
+<text class="llm-small t-halo" x="693.4" y="42" text-anchor="end">stated window: 150,000</text>
+<text class="llm-small t-halo" x="693.4" y="172.0" text-anchor="end">about 75 s</text>
+<polyline class="t-curve" points="132.6,323.0 204.3,314.8 244.9,310.0 490.1,250.0 519.1,240.0 689.0,182.0 838.1,110.0 869.2,90.0 900.3,72.0 929.3,58.0"/>
+<circle class="cost-local" cx="132.6" cy="323.0" r="4.5"/>
+<circle class="cost-local" cx="204.3" cy="314.8" r="4.5"/>
+<circle class="cost-local" cx="244.9" cy="310.0" r="4.5"/>
+<circle class="cost-local" cx="490.1" cy="250.0" r="4.5"/>
+<circle class="cost-local" cx="519.1" cy="240.0" r="4.5"/>
+<circle class="cost-local" cx="689.0" cy="182.0" r="4.5"/>
+<circle class="cost-local" cx="838.1" cy="110.0" r="4.5"/>
+<circle class="cost-local" cx="869.2" cy="90.0" r="4.5"/>
+<circle class="cost-local" cx="900.3" cy="72.0" r="4.5"/>
+<circle class="cost-local" cx="929.3" cy="58.0" r="4.5"/>
+</svg>
+</div>
+
+<p class="doc-muted">Measured on fractal. A cold read crosses 45 s at about
+106,000 tokens and 120 s at about 190,000, so a large conversation must never
+go cold in ordinary use.</p>
+
+<div class="doc-diagram">
+<svg viewBox="0 0 1000 426" role="img" aria-labelledby="ops-t ops-d">
+<title id="ops-t">How long each operation takes</title>
+<desc id="ops-d">Each operation is a bar on a logarithmic axis of seconds from a tenth of a second to two hundred. Warm turns, restoring and saving take between 0.3 and 4 seconds. A new session reads its prompt in about 10 seconds and the model loads in 25. Re-reading a dropped 150,000-token conversation takes about 75 seconds and reading a full pool 110, past the 45 second line.</desc>
+<line class="cost-grid" x1="400.0" y1="38" x2="400.0" y2="386"/>
+<text class="llm-muted" x="400.0" y="30" text-anchor="middle">0.1 s</text>
+<line class="cost-grid" x1="521.2" y1="38" x2="521.2" y2="386"/>
+<text class="llm-muted" x="521.2" y="30" text-anchor="middle">1 s</text>
+<line class="cost-grid" x1="642.3" y1="38" x2="642.3" y2="386"/>
+<text class="llm-muted" x="642.3" y="30" text-anchor="middle">10 s</text>
+<line class="cost-grid" x1="763.5" y1="38" x2="763.5" y2="386"/>
+<text class="llm-muted" x="763.5" y="30" text-anchor="middle">100 s</text>
+<line class="t-limit" x1="721.5" y1="38" x2="721.5" y2="392"/>
+<text class="llm-small" x="721.5" y="408" text-anchor="middle">45 s</text>
+<line class="t-limit" x1="773.1" y1="38" x2="773.1" y2="392"/>
+<text class="llm-small" x="773.1" y="408" text-anchor="middle">120 s</text>
+<text x="386" y="67.0" text-anchor="end">Next turn of a warm conversation</text>
+<rect class="t-warm" x="457.8" y="56.0" width="57.8" height="14" rx="7"/>
+<text class="llm-small" x="814" y="67.0">0.3 to 0.9 s</text>
+<text x="386" y="101.0" text-anchor="end">Bringing a saved conversation back</text>
+<rect class="t-warm" x="526.2" y="90.0" width="19.7" height="14" rx="7"/>
+<text class="llm-small" x="814" y="101.0">1.1 s at 100,000 tokens</text>
+<text x="386" y="135.0" text-anchor="end">Saving an idle conversation to memory</text>
+<rect class="t-warm" x="562.7" y="124.0" width="24.4" height="14" rx="7"/>
+<text class="llm-small" x="814" y="135.0">2.5 s at 100,000</text>
+<text x="386" y="169.0" text-anchor="end">Unloading for a game, once noticed</text>
+<rect class="t-warm" x="521.2" y="158.0" width="36.5" height="14" rx="7"/>
+<text class="llm-small" x="814" y="169.0">1 to 2 s</text>
+<text x="386" y="203.0" text-anchor="end">Noticing a game</text>
+<rect class="t-warm" x="594.1" y="192.0" width="9.0" height="14" rx="7"/>
+<text class="llm-small" x="814" y="203.0">about 4 s</text>
+<text x="386" y="237.0" text-anchor="end">A subagent's first read</text>
+<rect class="t-warm" x="587.1" y="226.0" width="18.8" height="14" rx="7"/>
+<text class="llm-small" x="814" y="237.0">3.5 s for 12,000</text>
+<text x="386" y="271.0" text-anchor="end">A new session's first read</text>
+<rect class="t-warm" x="642.3" y="260.0" width="9.0" height="14" rx="7"/>
+<text class="llm-small" x="814" y="271.0">10 s for 40,000</text>
+<text x="386" y="305.0" text-anchor="end">Loading the model</text>
+<rect class="t-warm" x="686.2" y="294.0" width="9.0" height="14" rx="7"/>
+<text class="llm-small" x="814" y="305.0">25 s</text>
+<text x="386" y="339.0" text-anchor="end">Re-reading a dropped main conversation</text>
+<rect class="t-read" x="715.3" y="328.0" width="33.1" height="14" rx="7"/>
+<text class="llm-small" x="814" y="339.0">40 s at 97,000, 75 s at 150,000</text>
+<text x="386" y="373.0" text-anchor="end">Reading a full pool from nothing</text>
+<rect class="t-read" x="768.5" y="362.0" width="11.2" height="14" rx="7"/>
+<text class="llm-small" x="814" y="373.0">110 s at 183,000</text>
+</svg>
+</div>
+
+<p class="doc-muted">The same operations on one scale; each gridline is ten
+times the one before. Green is routine. Black is the cost of a conversation
+going cold. Times at 150,000 tokens are scaled from measurements at 97,000 to
+100,000.</p>
+
+<p>Generation speed, once a turn has started:</p>
+
+<table>
+<thead><tr><th>Situation</th><th>Speed</th></tr></thead>
+<tbody>
+<tr><td>One conversation, short</td><td>About 100 tokens/s</td></tr>
+<tr><td>One conversation at 32,000 tokens</td><td>87 tokens/s</td></tr>
+<tr><td>One conversation at 110,000 tokens</td><td>64 tokens/s</td></tr>
+<tr><td>One conversation at 183,000 tokens</td><td>51 tokens/s</td></tr>
+<tr><td>Two generating at once</td><td>About 79 tokens/s each</td></tr>
+<tr><td>Four generating at once</td><td>About 60 tokens/s each, 237 in total</td></tr>
+</tbody>
+</table>
+
+<h2 id="threads">Several conversations at once</h2>
+
+<p>A <strong>slot</strong> holds one conversation's working state in VRAM;
+there are four. All slots draw on one shared <strong>pool</strong> of 204,800
+tokens. Left to itself with idle conversations kept in VRAM, the server makes
+room badly: a newcomer takes over an idle conversation's slot and the idle one
+goes cold (67 s measured for a 97,000-token conversation).</p>
+
+<p>So the server is set to do what it does by default: whenever a request
+starts, it copies every idle conversation out of VRAM into the guest's memory,
+where it is a <strong>saved conversation</strong>, and copies it back when
+that conversation's next turn arrives. Saving a 100,000-token conversation
+takes about 2.5 s, paid by whichever request starts next; bringing it back
+takes about 1.1 s. Only conversations generating at the same moment occupy the
+pool. Up to 12 GiB of saved conversations are kept; when that is full, the
+oldest is discarded.</p>
+
+<div class="doc-diagram">
+<svg viewBox="0 0 1000 732" role="img" aria-labelledby="cong-t cong-d">
+<title id="cong-t">What several conversations at once look like, second by second</title>
+<desc id="cong-d">Four timelines on a shared axis of 135 seconds. One: a main conversation hands work to three subagents and comes back 1.6 seconds late. Two: a second session starts, reads its own prompt, and the main conversation comes back 1.6 seconds late. Three: more is saved after the main conversation than memory holds, it is dropped, and its next turn re-reads for 75 seconds. Four: two conversations generating at once outgrow the pool, both fail, and the main one re-reads for 75 seconds.</desc>
+<line class="cost-grid" x1="190.0" y1="66" x2="190.0" y2="706"/>
+<text class="llm-muted" x="190.0" y="722" text-anchor="middle">0 s</text>
+<line class="cost-grid" x1="276.7" y1="66" x2="276.7" y2="706"/>
+<text class="llm-muted" x="276.7" y="722" text-anchor="middle">15 s</text>
+<line class="cost-grid" x1="363.3" y1="66" x2="363.3" y2="706"/>
+<text class="llm-muted" x="363.3" y="722" text-anchor="middle">30 s</text>
+<line class="cost-grid" x1="450.0" y1="66" x2="450.0" y2="706"/>
+<text class="llm-muted" x="450.0" y="722" text-anchor="middle">45 s</text>
+<line class="cost-grid" x1="536.7" y1="66" x2="536.7" y2="706"/>
+<text class="llm-muted" x="536.7" y="722" text-anchor="middle">60 s</text>
+<line class="cost-grid" x1="623.3" y1="66" x2="623.3" y2="706"/>
+<text class="llm-muted" x="623.3" y="722" text-anchor="middle">75 s</text>
+<line class="cost-grid" x1="710.0" y1="66" x2="710.0" y2="706"/>
+<text class="llm-muted" x="710.0" y="722" text-anchor="middle">90 s</text>
+<line class="cost-grid" x1="796.7" y1="66" x2="796.7" y2="706"/>
+<text class="llm-muted" x="796.7" y="722" text-anchor="middle">105 s</text>
+<line class="cost-grid" x1="883.3" y1="66" x2="883.3" y2="706"/>
+<text class="llm-muted" x="883.3" y="722" text-anchor="middle">120 s</text>
+<line class="cost-grid" x1="970.0" y1="66" x2="970.0" y2="706"/>
+<text class="llm-muted" x="970.0" y="722" text-anchor="middle">135 s</text>
+<rect class="t-work" x="190" y="13" width="26" height="14" rx="2"/>
+<text class="llm-small" x="223" y="24">generating</text>
+<rect class="t-read" x="311.0" y="13" width="26" height="14" rx="2"/>
+<text class="llm-small" x="344.0" y="24">reading a prompt</text>
+<rect class="t-move" x="471.6" y="13" width="26" height="14" rx="2"/>
+<text class="llm-small" x="504.6" y="24">saving, restoring, loading</text>
+<line class="t-idle" x1="698.2" y1="20" x2="724.2" y2="20"/>
+<text class="llm-small" x="731.2" y="24">waiting</text>
+<text class="llm-small" x="799.4000000000001" y="24">✕ a failure</text>
+<text class="llm-title" x="20" y="58">1. The ordinary case: the main conversation hands work to three subagents</text>
+<text x="178" y="99" text-anchor="end">Main conversation</text>
+<rect class="t-work" x="190.0" y="86" width="46.2" height="17" rx="2"/>
+<line class="t-idle" x1="236.2" y1="94" x2="478.9" y2="94"/>
+<text class="llm-small" x="236.2" y="81">saved in memory while it waits</text>
+<rect class="t-move" x="478.9" y="86" width="9.2" height="17" rx="2"/>
+<text class="llm-small" x="478.9" y="81">back in 1.6 s</text>
+<rect class="t-work" x="488.1" y="86" width="106.3" height="17" rx="2"/>
+<text x="178" y="139" text-anchor="end">Subagent 1</text>
+<rect class="t-move" x="236.2" y="126" width="20.2" height="17" rx="2"/>
+<text class="llm-small" x="236.2" y="121">saves main: 3.5 s</text>
+<rect class="t-read" x="256.4" y="126" width="20.2" height="17" rx="2"/>
+<rect class="t-work" x="276.7" y="126" width="167.6" height="17" rx="2"/>
+<text x="178" y="179" text-anchor="end">Subagent 2</text>
+<rect class="t-read" x="236.2" y="166" width="75.1" height="17" rx="2"/>
+<text class="llm-small" x="236.2" y="161">each reads its own 12,000-token prompt</text>
+<rect class="t-work" x="311.3" y="166" width="156.0" height="17" rx="2"/>
+<text x="178" y="219" text-anchor="end">Subagent 3</text>
+<rect class="t-read" x="236.2" y="206" width="92.4" height="17" rx="2"/>
+<rect class="t-work" x="328.7" y="206" width="150.2" height="17" rx="2"/>
+<text class="llm-muted" x="190" y="252">Cost to the main conversation: 1.6 s. The subagents' first answers come 7, 13 and 16 s after they start.</text>
+<text class="llm-title" x="20" y="284">2. A second Claude Code session starts while the main one is idle</text>
+<text x="178" y="325" text-anchor="end">Main conversation</text>
+<rect class="t-work" x="190.0" y="312" width="46.2" height="17" rx="2"/>
+<line class="t-idle" x1="236.2" y1="320" x2="421.1" y2="320"/>
+<text class="llm-small" x="236.2" y="307">saved in memory</text>
+<rect class="t-move" x="421.1" y="312" width="9.2" height="17" rx="2"/>
+<text class="llm-small" x="421.1" y="307">back in 1.6 s</text>
+<rect class="t-work" x="430.4" y="312" width="106.3" height="17" rx="2"/>
+<text x="178" y="365" text-anchor="end">Second session</text>
+<rect class="t-move" x="259.3" y="352" width="20.2" height="17" rx="2"/>
+<text class="llm-small" x="259.3" y="347">saves main, then reads its own 40,000-token prompt: 13.5 s to its first answer</text>
+<rect class="t-read" x="279.6" y="352" width="57.8" height="17" rx="2"/>
+<rect class="t-work" x="337.3" y="352" width="83.8" height="17" rx="2"/>
+<text class="llm-muted" x="190" y="398">Cost to the main conversation: 1.6 s. The newcomer pays for its own first read, as any new session does.</text>
+<text class="llm-title" x="20" y="430">3. The worst case: more is saved after the main conversation than memory holds</text>
+<text x="178" y="471" text-anchor="end">Main conversation</text>
+<rect class="t-work" x="190.0" y="458" width="46.2" height="17" rx="2"/>
+<line class="t-idle" x1="236.2" y1="466" x2="317.1" y2="466"/>
+<rect class="t-read" x="478.9" y="458" width="433.3" height="17" rx="2"/>
+<text class="llm-small" x="478.9" y="453">re-reads all 150,000 tokens: about 75 s</text>
+<rect class="t-work" x="912.2" y="458" width="57.8" height="17" rx="2"/>
+<text class="t-mark" x="317.1" y="473" text-anchor="middle">✕</text>
+<text class="llm-small" x="327.1" y="453">dropped: memory full</text>
+<text x="178" y="511" text-anchor="end">Subagents, four or more</text>
+<rect class="t-move" x="236.2" y="498" width="20.2" height="17" rx="2"/>
+<rect class="t-read" x="256.4" y="498" width="72.2" height="17" rx="2"/>
+<rect class="t-work" x="328.7" y="498" width="150.2" height="17" rx="2"/>
+<text class="llm-small" x="328.7" y="493">each is saved behind the main conversation when it pauses</text>
+<text class="llm-muted" x="190" y="544">Nothing fails and nothing warns the user. The main conversation's next turn is simply 75 s late.</text>
+<text class="llm-title" x="20" y="576">4. Conversations generating at the same moment outgrow the pool</text>
+<text x="178" y="617" text-anchor="end">Main conversation</text>
+<rect class="t-work" x="190.0" y="604" width="104.0" height="17" rx="2"/>
+<rect class="t-read" x="296.9" y="604" width="433.3" height="17" rx="2"/>
+<text class="llm-small" x="296.9" y="599">retries by itself and re-reads: about 75 s</text>
+<rect class="t-work" x="730.2" y="604" width="95.3" height="17" rx="2"/>
+<text class="t-mark" x="294.0" y="619" text-anchor="middle">✕</text>
+<text class="llm-small" x="304.0" y="599"></text>
+<text x="178" y="657" text-anchor="end">Another conversation</text>
+<rect class="t-work" x="190.0" y="644" width="104.0" height="17" rx="2"/>
+<rect class="t-read" x="296.9" y="644" width="83.8" height="17" rx="2"/>
+<text class="llm-small" x="296.9" y="639">re-reads its own</text>
+<rect class="t-work" x="380.7" y="644" width="156.0" height="17" rx="2"/>
+<text class="t-mark" x="294.0" y="659" text-anchor="middle">✕</text>
+<text class="llm-small" x="304.0" y="639"></text>
+<text class="llm-muted" x="190" y="690">Both fail and lose their state. Needs the main conversation near its window and over 55,000 tokens generating beside it.</text>
+</svg>
+</div>
+
+<p class="doc-muted">Times for a 150,000-token main conversation. Cases 1 and
+2 were measured at 97,000 tokens (1.4 to 2.0 s extra on the main conversation)
+and scaled. Subagent working times are illustrative.</p>
+
+<h3 id="failures">What failure looks like</h3>
+
+<p>Under congestion nothing crashes and, with one exception, nothing reports an
+error. A failure here is a turn that starts late because its conversation went
+cold. The person sees the tool sit silent for a minute and then carry on.</p>
+
+<table>
+<thead><tr><th>What goes wrong</th><th>What the person sees</th><th>What triggers it</th><th>How often for one person</th></tr></thead>
+<tbody>
+<tr><td><strong>The main conversation is discarded from memory.</strong> Saved conversations are discarded oldest first, and the main one is always the oldest, because it is saved the moment its subagents start.</td><td>Its next turn is silent for a full re-read: 40 s at 97,000 tokens, about 75 s at 150,000</td><td>More is saved after the main conversation than fits beside it in 12 GiB: four or more subagents, three subagents averaging over 30,000 tokens each, or a second session running subagents of its own</td><td>Rare. The largest burst seen in real sessions, three subagents ending at 46,500, 24,200 and 19,500 tokens, fits.</td></tr>
+<tr><td><strong>Conversations generating at the same moment outgrow the pool.</strong></td><td>Every request in flight fails. Claude Code retries by itself after half a second, and the main conversation then re-reads in full.</td><td>The main conversation near its window, generating, while others generate more than about 55,000 tokens between them</td><td>Unusual. Not yet run end to end.</td></tr>
+<tr><td><strong>A new session overwrites a small idle one.</strong> It lands on that conversation's slot because both start with the same tools, and the server does not save the idle one first.</td><td>The small session's next turn re-reads for 6 to 15 s</td><td>Two Claude Code sessions at once, the idle one under about 50,000 to 80,000 tokens</td><td>Only with two sessions open</td></tr>
+<tr><td><strong>One request is larger than the pool.</strong></td><td>The turn fails with an error Claude Code does not act on</td><td>A conversation outgrowing the pool before Claude Code summarises it</td><td>Only if the client lets a conversation grow past the pool; summarising by hand recovers</td></tr>
+<tr><td><strong>A game was played.</strong> Saved conversations live in the model's memory and go when it unloads.</td><td>The first turn after the game re-reads its whole conversation</td><td>Every yield</td><td>Every time a game is played with a session open. Accepted; see <a href="#handoff">GPU handoff</a>.</td></tr>
+</tbody>
+</table>
+
+<p>Separately, and not a failure: a new conversation reads its own prompt
+once. That is 3.5 s for a 12,000-token subagent and about 10 s for a session
+that opens with 40,000 tokens. An agent that starts many
+threads from one fixed opening can avoid it; see
+<a href="#opening">below</a>.</p>
+
+<p>The server writes a distinct warning for each row above, and any request
+whose prompt took more than 20 s to read is kept as a <strong>slow
+start</strong> with its cause (see <a href="#telemetry">Metrics and logs</a>).
+Those records decide whether any of the fixes below is worth building.</p>
+
+<h3 id="disk">Saving to memory, and the disk alternative</h3>
+
+<p>Both do the same job: move an idle conversation's state out of VRAM so it
+can come back without being read again. They differ in who does the moving and
+what the state outlives.</p>
+
+<table>
+<thead><tr><th></th><th>Saved to memory (the plan)</th><th>Saved to disk (not built)</th></tr></thead>
+<tbody>
+<tr><td>Who does it</td><td>The server, by itself, every time a request starts</td><td>Nobody, by default. The server only offers two commands, "write this slot to a file" and "load this file into a slot". Something of ours has to call them at the right moments.</td></tr>
+<tr><td>What that something must know</td><td>Nothing; there is no such thing</td><td>Which conversation each incoming request belongs to, and which file holds it. To help under congestion it must sit in the request path: hold the request, load the file, then pass the request on.</td></tr>
+<tr><td>Speed at about 100,000 tokens</td><td>Save 2.5 s, restore 1.1 s</td><td>Save 2.4 s, restore 1.8 s</td></tr>
+<tr><td>Speed at 189,000 tokens</td><td>Not measured; about 4.5 s and 2 s by scaling</td><td>Save 3.9 s, restore 3.6 s</td></tr>
+<tr><td>How much it can hold</td><td>12 GiB in total, shared by everything saved; the oldest is discarded when it fills</td><td>Whatever the disk has: 3.6 GB a conversation at 99,000 tokens, 6.8 GB at 189,000</td></tr>
+<tr><td>What it costs the machine</td><td>17 GiB of the guest's memory, the reason WSL goes to 25 GB</td><td>Disk writes. Saving a 150,000-token conversation writes about 5.4 GB; done at every switch between conversations that is tens to hundreds of GB a day onto the SSD.</td></tr>
+<tr><td>Survives the model unloading for a game</td><td>No</td><td>Yes. The file outlives the process.</td></tr>
+<tr><td>Carries rewind points</td><td>Yes</td><td>No. This model can only step back in a conversation to a snapshot, and the file holds none. A turn that continues exactly where the file ends reuses everything (0.97 s at 189,000 tokens). Claude Code's follow-up turns step back 42 to 263 tokens, which is expected to force a full re-read after a restore from disk. Not tested.</td></tr>
+</tbody>
+</table>
+
+<p>So disk is not a replacement for memory in the routine case: it needs our
+own code where the plan has none, it would write heavily to the SSD, and it
+may not work for Claude Code's turns at all. Where it would earn a place is
+the one rare event memory handles worst, the main conversation being discarded
+while its subagents run. It would also let a conversation survive a game, but
+that is not wanted.</p>
+
+<table>
+<thead><tr><th>Fix kept for later</th><th>What it removes</th><th>What must be proven first</th><th>Needs code in the request path</th></tr></thead>
+<tbody>
+<tr><td>Write the main conversation to disk when memory is about to discard it, and refuse or queue a request that would overflow the pool</td><td>The 75-second worst case and the overflow failure</td><td>That a Claude Code turn can continue from a disk restore</td><td>Yes</td></tr>
+<tr><td>Mark each Claude Code session's requests so two sessions never match each other's slot</td><td>The 6 to 15 s overwrite between two sessions</td><td>Nothing; this worked when tried by hand</td><td>Yes</td></tr>
+<tr><td>Reword the server's too-long error into the wording Anthropic's service uses</td><td>The failed turn when a request outgrows the pool; Claude Code then summarises and carries on</td><td>Nothing; this worked when tried by hand</td><td>Yes</td></tr>
+</tbody>
+</table>
+
+<h3 id="opening">Agents that start many threads from one fixed opening</h3>
+
+<p>A chat agent whose every thread begins with the same system prompt and tools
+need not read that opening each time. The server can reuse it for a new thread
+whenever a rewind point sits at the end of the shared part. An ordinary first
+message leaves its rewind point just past that, so the next thread reads cold.
+One <strong>warm-up request</strong>, the opening followed by a one-character
+message and one token of output, puts the rewind point in the right place, and
+it then stays there from thread to thread. Measured with an 8,850-token opening
+under the chosen settings, thinking off:</p>
+
+<table>
+<thead><tr><th>Request</th><th>Time to first token</th><th>Whole short reply</th></tr></thead>
+<tbody>
+<tr><td>New thread, opening read cold</td><td>2.1 to 2.3 s</td><td>about 3 s</td></tr>
+<tr><td>New thread after a warm-up, including after the warm-up had been saved to memory</td><td>0.17 s</td><td>0.8 to 1.1 s</td></tr>
+<tr><td>Next turn of a thread</td><td>0.22 s</td><td>1.0 s</td></tr>
+<tr><td>A thread returning after a newer thread took its place</td><td>0.28 s; it re-reads only its own messages</td><td>0.5 s</td></tr>
+<tr><td>The warm-up request itself</td><td colspan="2">2.1 s when the opening is cold, 0.3 s when it is already warm</td></tr>
+</tbody>
+</table>
+
+<p>The warm-up is the client's job, since only the client knows its own
+opening, and so is not part of this build. Such a client also needs somewhere
+else to go while a game holds the GPU, so both belong to one small piece of
+client logic. Fenwick's chat is the case in view:</p>
+
+<ol>
+<li>While the local model answers, chat goes to it.</li>
+<li>When a request fails because no model is loaded, or does not start within a few seconds, that request and those after it go to Sonnet.</li>
+<li>When the local model answers again, the client sends one warm-up, then routes chat back. Nobody sees the cold read.</li>
+<li>If a reply ever shows the opening was not reused, which the server reports with every response, the client sends a warm-up in the background.</li>
+</ol>
+
+<table>
+<thead><tr><th>What a warm-up costs</th><th>Amount</th></tr></thead>
+<tbody>
+<tr><td>GPU time</td><td>2.1 s when the opening is cold, 0.3 s when it is already warm. Other requests share the GPU for that long.</td></tr>
+<tr><td>How often</td><td>Once after each model load, so once per game or restart, and again only if the opening is discarded from memory</td></tr>
+<tr><td>Electricity</td><td>About a hundredth of a cent each</td></tr>
+<tr><td>Guest memory</td><td>About 0.8 GiB held for the opening. The 12 GiB for saved conversations allows for it, so Claude Code's stated window stays at 150,000.</td></tr>
+<tr><td>Effect on a coding session</td><td>None of its own. Any chat request, warm-up or real, that arrives while a large coding conversation sits idle in VRAM causes that conversation to be saved, and its next turn then starts about 1.6 s later.</td></tr>
+</tbody>
+</table>
+
+<p>The opening must be identical byte for byte, so anything that varies, such
+as the date, has to come after it. Loading the opening from a disk file works
+too (0.06 s to load a 443 MiB file, then 0.17 s) but gains nothing over the
+warm-up. Not yet tried with Fenwick's real prompt and tools.</p>
+
+<h2 id="handoff">GPU handoff between the model and a game</h2>
+
+<p>To <strong>yield</strong> is to unload the model so a game has the whole
+GPU; to <strong>resume</strong> is to load it again. The watcher samples
+whole-GPU utilisation and the model server's slot report at least once a
+second. It counts a GPU sample only when no slot was busy at that sample or
+the one before, because during reading or generation the model's own load
+hides everything else. Any activity seen while the model is idle is Windows
+wanting the GPU, and Windows always wins. That is meant to include lighter uses
+than games: video playing in a browser is expected to cross the threshold, and
+yielding to it is the intended behaviour.</p>
+
+<div class="doc-diagram">
+<svg viewBox="0 0 1000 300" role="img" aria-labelledby="hand-title hand-desc">
+<title id="hand-title">Watcher states and transitions</title>
+<desc id="hand-desc">Four states in a cycle: serving, yielding, yielded, resuming. Numbered transitions are explained in the table below. A load in progress is abandoned if a game appears.</desc>
+<defs>
+<marker id="llm-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="llm-head" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="llm-box" x="20" y="110" width="200" height="90" rx="4"/>
+<text class="llm-title" x="34" y="138">Serving</text>
+<text class="llm-small" x="34" y="160">model in VRAM</text>
+<text class="llm-small" x="34" y="178">requests answered</text>
+<rect class="llm-box" x="280" y="110" width="200" height="90" rx="4"/>
+<text class="llm-title" x="294" y="138">Yielding</text>
+<text class="llm-small" x="294" y="160">model unloading</text>
+<text class="llm-small" x="294" y="178">requests in flight are cut</text>
+<rect class="llm-box" x="540" y="110" width="200" height="90" rx="4"/>
+<text class="llm-title" x="554" y="138">Yielded</text>
+<text class="llm-small" x="554" y="160">the game has the GPU</text>
+<text class="llm-small" x="554" y="178">server answers: no model</text>
+<rect class="llm-box" x="800" y="110" width="180" height="90" rx="4"/>
+<text class="llm-title" x="814" y="138">Resuming</text>
+<text class="llm-small" x="814" y="160">model loading</text>
+<text class="llm-small" x="814" y="178">server answers: no model</text>
+
+<path class="llm-line" marker-end="url(#llm-arrow2)" d="M220,155 L280,155"/>
+<circle class="llm-step" cx="250" cy="155" r="11"/><text x="250" y="160" text-anchor="middle">1</text>
+<path class="llm-line" marker-end="url(#llm-arrow2)" d="M480,155 L540,155"/>
+<circle class="llm-step" cx="510" cy="155" r="11"/><text x="510" y="160" text-anchor="middle">2</text>
+<path class="llm-line" marker-end="url(#llm-arrow2)" d="M740,155 L800,155"/>
+<circle class="llm-step" cx="770" cy="155" r="11"/><text x="770" y="160" text-anchor="middle">3</text>
+<path class="llm-line" marker-end="url(#llm-arrow2)" d="M890,200 L890,255 L120,255 L120,200"/>
+<circle class="llm-step" cx="505" cy="255" r="11"/><text x="505" y="260" text-anchor="middle">4</text>
+<path class="llm-line llm-dash" marker-end="url(#llm-arrow2)" d="M860,110 L860,60 L680,60 L680,110"/>
+<circle class="llm-step" cx="770" cy="60" r="11"/><text x="770" y="65" text-anchor="middle">5</text>
+<text class="llm-muted" x="20" y="40">At start the watcher adopts whichever state the model server is really in: Serving if a model is loaded, Yielded if not.</text>
+</svg>
+</div>
+
+<table>
+<thead><tr><th>Step</th><th>Trigger</th><th>What happens</th><th>Expected time</th></tr></thead>
+<tbody>
+<tr><td>1. Serving to Yielding</td><td>Three samples at or above 3% within five seconds while no slot is busy, or the Yield button</td><td>The model server is told to unload, which cuts any request in flight and ends the model process, freeing its VRAM and every saved conversation. The watcher then tells the guest to drop the model file from its file cache, so that memory can return to Windows too.</td><td>Decision about 4 s after a game's first GPU activity</td></tr>
+<tr><td>2. Yielding to Yielded</td><td>The model server reports the model gone</td><td>The handoff event is logged with its timings</td><td>About 2 s</td></tr>
+<tr><td>3. Yielded to Resuming</td><td>No sample at or above 3% for 60 seconds, and any button hold has run out</td><td>The model server is told to load</td><td>The longest quiet stretch inside the recorded game session was 17 s</td></tr>
+<tr><td>4. Resuming to Serving</td><td>The model server reports the model ready</td><td>The resume event is logged</td><td>About 25 s, reading the model file from disk</td></tr>
+<tr><td>5. Resuming to Yielded</td><td>The same activity rule as step 1, with the load's own GPU activity excluded</td><td>The load is abandoned</td><td>Not measured</td></tr>
+</tbody>
+</table>
+
+<p><strong>The button.</strong> A page at <code>llm.pod.haus/control</code>,
+served by the watcher and allowed for Nathan only, shows the current state
+with two buttons: Yield now, which also holds the model away for at least ten
+minutes so there is time to launch something, and Resume now. It works from
+the gaming PC's browser and from a phone. It is the answer to the watcher's one
+blind spot: a game launched while the model is busy is not seen until the next
+pause between requests.</p>
+
+<p><strong>Thresholds are configuration with evidence attached.</strong> The
+3% line, the five-second window and the 60-second quiet period come from one
+session with one light game. Every handoff event therefore carries the raw
+samples from the 30 seconds before the decision, so the numbers can be
+corrected from real sessions without another trial.</p>
+
+<div class="doc-diagram">
+<svg viewBox="0 0 1000 320" role="img" aria-labelledby="hand-time-t hand-time-d">
+<title id="hand-time-t">A game starting and ending, second by second</title>
+<desc id="hand-time-d">Two timelines on an axis of 170 seconds. A game starts: noticed in 4 seconds, model unloaded 2 seconds later. A game ends: 60 seconds of quiet, 25 seconds to load, then the first turn re-reads the conversation for about 75 seconds.</desc>
+<line class="cost-grid" x1="190.0" y1="66" x2="190.0" y2="294"/>
+<text class="llm-muted" x="190.0" y="310" text-anchor="middle">0 s</text>
+<line class="cost-grid" x1="281.8" y1="66" x2="281.8" y2="294"/>
+<text class="llm-muted" x="281.8" y="310" text-anchor="middle">20 s</text>
+<line class="cost-grid" x1="373.5" y1="66" x2="373.5" y2="294"/>
+<text class="llm-muted" x="373.5" y="310" text-anchor="middle">40 s</text>
+<line class="cost-grid" x1="465.3" y1="66" x2="465.3" y2="294"/>
+<text class="llm-muted" x="465.3" y="310" text-anchor="middle">60 s</text>
+<line class="cost-grid" x1="557.1" y1="66" x2="557.1" y2="294"/>
+<text class="llm-muted" x="557.1" y="310" text-anchor="middle">80 s</text>
+<line class="cost-grid" x1="648.8" y1="66" x2="648.8" y2="294"/>
+<text class="llm-muted" x="648.8" y="310" text-anchor="middle">100 s</text>
+<line class="cost-grid" x1="740.6" y1="66" x2="740.6" y2="294"/>
+<text class="llm-muted" x="740.6" y="310" text-anchor="middle">120 s</text>
+<line class="cost-grid" x1="832.4" y1="66" x2="832.4" y2="294"/>
+<text class="llm-muted" x="832.4" y="310" text-anchor="middle">140 s</text>
+<line class="cost-grid" x1="924.1" y1="66" x2="924.1" y2="294"/>
+<text class="llm-muted" x="924.1" y="310" text-anchor="middle">160 s</text>
+<rect class="t-work" x="190" y="13" width="26" height="14" rx="2"/>
+<text class="llm-small" x="223" y="24">generating</text>
+<rect class="t-read" x="311.0" y="13" width="26" height="14" rx="2"/>
+<text class="llm-small" x="344.0" y="24">reading a prompt</text>
+<rect class="t-move" x="471.6" y="13" width="26" height="14" rx="2"/>
+<text class="llm-small" x="504.6" y="24">saving, restoring, loading</text>
+<line class="t-idle" x1="698.2" y1="20" x2="724.2" y2="20"/>
+<text class="llm-small" x="731.2" y="24">waiting</text>
+<text class="llm-small" x="799.4000000000001" y="24">✕ a failure</text>
+<text class="llm-title" x="20" y="58">A game starts</text>
+<text x="178" y="99" text-anchor="end">GPU</text>
+<line class="t-idle" x1="190.0" y1="94" x2="208.4" y2="94"/>
+<text class="llm-small" x="190.0" y="81">noticed in 4 s, unloaded 2 s later; from then the game has the whole GPU and the memory is released</text>
+<rect class="t-move" x="208.4" y="86" width="9.2" height="17" rx="2"/>
+<line class="t-idle" x1="217.5" y1="94" x2="465.3" y2="94"/>
+<text class="llm-muted" x="190" y="132">A request in flight is cut. If the model was busy when the game started, noticing waits for the next pause, or for the button.</text>
+<text class="llm-title" x="20" y="164">The game ends</text>
+<text x="178" y="205" text-anchor="end">GPU</text>
+<line class="t-idle" x1="190.0" y1="200" x2="465.3" y2="200"/>
+<text class="llm-small" x="190.0" y="187">must stay quiet: 60 s</text>
+<rect class="t-move" x="465.3" y="192" width="114.7" height="17" rx="2"/>
+<text class="llm-small" x="465.3" y="187">model loads: 25 s</text>
+<text x="178" y="245" text-anchor="end">First turn afterwards</text>
+<rect class="t-read" x="580.0" y="232" width="344.1" height="17" rx="2"/>
+<text class="llm-small" x="580.0" y="227">re-reads the conversation: 75 s at 150,000 tokens</text>
+<rect class="t-work" x="924.1" y="232" width="45.9" height="17" rx="2"/>
+<text class="llm-muted" x="190" y="278">Every conversation is cold after a game. That is accepted: a coding session need not survive one.</text>
+</svg>
+</div>
+
+<p><strong>Conversations do not survive a yield.</strong> Unloading ends the
+model process, and with it every slot and every saved conversation. The first
+turn after a game re-reads its conversation from nothing, which for a large
+one is the longest wait this service produces in ordinary use. That is
+accepted: a coding session may be dropped freely for a game and nothing is
+saved on its behalf. It is recorded as a slow start whose cause is a handoff.
+A client that cannot wait, such as a chat agent, switches to another model
+while the local one is away; see <a href="#opening">agents with a fixed
+opening</a>.</p>
+
+<h2 id="lifecycle">Launch and recovery</h2>
+
+<p>Each row names the single owner of recovery, following the podhaus rule
+that recovery has narrow owners.</p>
+
+<table>
+<thead><tr><th>Event</th><th>What happens</th><th>Owner</th></tr></thead>
+<tbody>
+<tr><td>Windows boots, or restarts WSL</td><td>The existing Windows autostart task starts the guest; systemd starts Docker; both containers start. Nothing depends on <code>/home</code>, which stays locked until Nathan logs in, so the service comes up unattended.</td><td>Docker restart policy</td></tr>
+<tr><td>Containers start</td><td>The model server starts empty. The watcher adopts Yielded and loads the model only after the quiet period, so a boot straight into a game never loads it.</td><td>Watcher</td></tr>
+<tr><td>Push to <code>main</code> changes the stack</td><td>Komodo recreates what changed. A recreated model server comes back empty and the watcher reloads it when the GPU is quiet. A recreated watcher adopts the state it finds. Requests in flight are dropped only if the model server was recreated.</td><td>Komodo push procedure, then watcher</td></tr>
+<tr><td>Model process dies while Serving</td><td>The watcher sees the model gone, retries the load with growing delays, and after repeated failures stays down and reports unhealthy.</td><td>Watcher, then Gatus alert</td></tr>
+<tr><td>Model server container crashes or hangs</td><td>Restarted by Docker on a crash, by autoheal when its healthcheck fails.</td><td>Docker, autoheal</td></tr>
+<tr><td>Watcher crashes</td><td>Restarted within seconds; adopts the real state. Requests were never passing through it.</td><td>Docker</td></tr>
+<tr><td>Watcher hangs with the model loaded</td><td>Its healthcheck reports the age of the last GPU sample, so a stalled watcher goes unhealthy within about 30 s and autoheal restarts it. Until then a game would share the GPU with the model. This is the one window where a game does not simply work, and it is the reason the healthcheck is tight.</td><td>Autoheal</td></tr>
+<tr><td>Unload does not free the GPU</td><td>Yielding that lasts longer than 30 s marks the watcher unhealthy and raises the alert, since this directly breaks games.</td><td>Gatus alert</td></tr>
+<tr><td>Guest runs short of memory</td><td>The model server and the watcher each have a hard memory limit, so neither can take the dev session down with it. The existing early out-of-memory ordering on fractal is unchanged.</td><td>Container memory limits</td></tr>
+<tr><td>Model file missing or damaged</td><td>The download job restores it at the next deploy; until then loads fail and the alert fires.</td><td>Download job</td></tr>
+<tr><td>fractal is switched off</td><td>Remote callers get Pomerium's upstream error. The existing fractal monitor already reports the host.</td><td>Nobody; expected</td></tr>
+</tbody>
+</table>
+
+<h2 id="telemetry">Metrics and logs</h2>
+
+<p>The aim is that a question nobody thought of today can be answered later
+from what was recorded, and that any custom work is argued from those records.
+Nothing we write sees a request, so the records come from the two stock
+components that do, plus the watcher's view of the server's state.</p>
+
+<div class="doc-diagram">
+<svg viewBox="0 0 1000 330" role="img" aria-labelledby="tele-title tele-desc">
+<title id="tele-title">Telemetry path</title>
+<desc id="tele-desc">The model server, the watcher and Caddy on fractal produce logs and metrics that the existing Alloy ships over the existing mutual TLS path to ClickStack on bandicoot. Gatus on bilby checks container health through Komodo and alerts through Fenwick.</desc>
+<defs>
+<marker id="llm-arrow3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="llm-head" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="llm-zone" x="10" y="20" width="480" height="290" rx="6"/>
+<text class="llm-title" x="22" y="42">fractal</text>
+<rect class="llm-box llm-new" x="25" y="52" width="220" height="76" rx="4"/>
+<text class="llm-title" x="37" y="74">Model server (new)</text>
+<text class="llm-small" x="37" y="94">log: every request's tokens,</text>
+<text class="llm-small" x="37" y="110">reuse, timings, slot choice</text>
+<rect class="llm-box llm-new" x="25" y="138" width="220" height="76" rx="4"/>
+<text class="llm-title" x="37" y="160">Watcher (new)</text>
+<text class="llm-small" x="37" y="180">handoff and slot-change events</text>
+<text class="llm-small" x="37" y="196">GPU and memory metrics</text>
+<rect class="llm-box" x="25" y="224" width="220" height="76" rx="4"/>
+<text class="llm-title" x="37" y="246">Caddy (exists)</text>
+<text class="llm-small" x="37" y="266">access log: who called, from</text>
+<text class="llm-small" x="37" y="282">what, in which session</text>
+<rect class="llm-box" x="290" y="105" width="185" height="130" rx="4"/>
+<text class="llm-title" x="302" y="129">Alloy (exists)</text>
+<text class="llm-small" x="302" y="153">added: two scrape jobs</text>
+<text class="llm-small" x="302" y="171">added: two log parsers</text>
+<text class="llm-small" x="302" y="195">container logs: as today</text>
+
+<rect class="llm-zone" x="530" y="20" width="210" height="290" rx="6"/>
+<text class="llm-title" x="542" y="42">bandicoot</text>
+<rect class="llm-box" x="545" y="105" width="180" height="130" rx="4"/>
+<text class="llm-title" x="557" y="129">ClickStack (exists)</text>
+<text class="llm-small" x="557" y="153">logs and metrics</text>
+<text class="llm-small" x="557" y="171">two new dashboards:</text>
+<text class="llm-small" x="557" y="189">model usage,</text>
+<text class="llm-small" x="557" y="207">game handoffs</text>
+
+<rect class="llm-zone" x="780" y="20" width="210" height="290" rx="6"/>
+<text class="llm-title" x="792" y="42">bilby</text>
+<rect class="llm-box" x="795" y="60" width="180" height="100" rx="4"/>
+<text class="llm-title" x="807" y="84">Gatus (exists)</text>
+<text class="llm-small" x="807" y="106">added: container health</text>
+<text class="llm-small" x="807" y="124">for both containers,</text>
+<text class="llm-small" x="807" y="142">read through Komodo</text>
+<rect class="llm-box" x="795" y="210" width="180" height="70" rx="4"/>
+<text class="llm-title" x="807" y="238">Fenwick (exists)</text>
+<text class="llm-small" x="807" y="258">alert to Signal</text>
+
+<path class="llm-line" marker-end="url(#llm-arrow3)" d="M245,90 L290,135"/>
+<path class="llm-line" marker-end="url(#llm-arrow3)" d="M245,176 L290,172"/>
+<path class="llm-line" marker-end="url(#llm-arrow3)" d="M245,262 L290,210"/>
+<path class="llm-line" marker-end="url(#llm-arrow3)" d="M475,170 L545,170"/>
+<text class="llm-muted" x="510" y="92" text-anchor="middle">existing</text>
+<text class="llm-muted" x="510" y="107" text-anchor="middle">mTLS path</text>
+<path class="llm-line" marker-end="url(#llm-arrow3)" d="M885,160 L885,210"/>
+</svg>
+</div>
+
+<h3>What is recorded, and by what</h3>
+
+<table>
+<thead><tr><th>Record</th><th>Written by</th><th>One per</th><th>Carries</th></tr></thead>
+<tbody>
+<tr><td>Request detail</td><td>The model server's own log, parsed by Alloy. Its lines for one request share a slot number and a task number.</td><td>Request</td><td>Prompt size, tokens reused from the slot, tokens read and how long that took (the time to first token), output tokens, generation speed, drafted against accepted tokens, which slot was chosen and why, whether a full re-read was forced, any conversation saved, restored or discarded, request path and status</td></tr>
+<tr><td>Caller</td><td>Caddy's access log, switched on for this host and limited to the listed fields</td><td>Request</td><td>The caller's email from Pomerium (absent for local calls), client program, Claude Code's session identifier and subagent identifier where sent, path, status, total duration</td></tr>
+<tr><td>Slot change</td><td>Watcher, as a JSON log line</td><td>Change in any slot's contents or busy state</td><td>For each slot the tokens held and whether it is busy; the pool total and its limit</td></tr>
+<tr><td>Handoff event</td><td>Watcher, as a JSON log line</td><td>Yield and resume</td><td>See the handoff table below</td></tr>
+<tr><td>Running totals</td><td>The model server's metrics endpoint; the watcher's metrics endpoint</td><td>Scrape</td><td>Requests in progress and waiting, token totals; GPU utilisation, VRAM, power and temperature; guest memory; the watcher's state</td></tr>
+</tbody>
+</table>
+
+<p>A request's two records are matched by path and finish time. That is exact
+while only a few requests finish in any second, which is the expected load.</p>
+
+<p>A <strong>slow start</strong> is a request whose prompt read took more than
+20 s. The usage dashboard lists every one with its tokens read and reused, its
+slot, the server's stated reason, what else was running, and whether a handoff
+or a restart came just before. It is the measure of whether the simple design
+is good enough. The server names each cause in a warning of its own at its
+normal log level: a saved conversation too large for the memory set aside, the
+oldest saved conversation removed to make room, an idle slot purged because
+the pool was full, the pool exceeded with every slot busy, and a full re-read
+forced for want of a rewind point. The server's slot report does not say which
+conversation a slot holds or what is saved in memory, so those warnings are
+the only record of the saved conversations.</p>
+
+<h3>Questions about model usage and where each answer comes from</h3>
+
+<table>
+<thead><tr><th>Question</th><th>Answered from</th></tr></thead>
+<tbody>
+<tr><td>Who used it and how much, per day or month?</td><td>Caller records grouped by email, joined to request detail for tokens</td></tr>
+<tr><td>Which program and which session used it?</td><td>Caller records: client program and session identifier</td></tr>
+<tr><td>How fast is it for the person using it?</td><td>Request detail: read time, generation speed, total duration, as percentiles</td></tr>
+<tr><td>How does speed fall as conversations grow?</td><td>Request detail: speed and read time against prompt size</td></tr>
+<tr><td>Is conversation reuse working?</td><td>Request detail: reused share of the prompt; count of forced full re-reads</td></tr>
+<tr><td>How often did one thread hurt another, and how badly?</td><td>Slow starts by cause; slot changes showing a conversation leaving a slot it had not finished with</td></tr>
+<tr><td>How often do two or more conversations run at once?</td><td>Slot changes: time with more than one slot holding tokens, and with more than one busy</td></tr>
+<tr><td>How full does the pool get?</td><td>Slot changes: pool total against its limit, daily maximum</td></tr>
+<tr><td>Is the drafter earning its keep?</td><td>Request detail: drafted against accepted tokens</td></tr>
+<tr><td>Are requests failing, and how?</td><td>Caller records by status; request detail for the server's error</td></tr>
+<tr><td>What is the GPU doing, and what does it cost in power?</td><td>Watcher metrics: utilisation, VRAM, power, temperature</td></tr>
+</tbody>
+</table>
+
+<h3>Questions about handoffs to games and where each answer comes from</h3>
+
+<p>The <strong>handoff event</strong> is one JSON log line the watcher writes
+per yield and per resume. A yield carries: trigger (automatic or button), when
+foreign GPU activity was first sampled, when the decision was made, when the
+VRAM was released, how many requests were cut, how long the model had been
+busy just before (the upper bound on how long the watcher was blind), guest
+memory before and after, and the raw samples from the preceding 30 seconds. A
+resume carries: when the GPU went quiet, when loading started, and when the
+model was ready.</p>
+
+<table>
+<thead><tr><th>Question</th><th>Answered from</th></tr></thead>
+<tbody>
+<tr><td>How long from a game touching the GPU to the VRAM being free?</td><td>Yield events: first activity to released. Target 6 s.</td></tr>
+<tr><td>How long after a game until the model is usable again?</td><td>Resume events: quiet to ready. Target 60 s plus the load.</td></tr>
+<tr><td>How often does it happen, and by which trigger?</td><td>Count of yield events by trigger</td></tr>
+<tr><td>How often was the watcher wrong?</td><td>Yields whose activity ended within a minute (probably not a game), and resumes followed by a yield within five minutes (the game was still open)</td></tr>
+<tr><td>How often was it blind at launch?</td><td>Yield events where the model was busy just before, with that duration</td></tr>
+<tr><td>What did it cost the people using the model?</td><td>Requests cut per yield; slow starts caused by a handoff; total time not Serving per day</td></tr>
+<tr><td>Does the guest give memory back when the model unloads?</td><td>Yield events: guest memory before and after</td></tr>
+<tr><td>Should the thresholds move?</td><td>The raw samples attached to each event</td></tr>
+</tbody>
+</table>
+
+<h3>Logging rules</h3>
+
+<ul>
+<li><strong>No prompt or response text is stored anywhere.</strong> The model server runs at the log level that prints counts and timings, not content. Caddy logs no request bodies, redacts the sign-in token, and keeps only the listed headers. Friends' conversations are theirs.</li>
+<li>Both containers log to stdout and take the existing path: Docker logs, Alloy, ClickStack. Each gets one parsing module beside the existing ones, so levels and timestamps are normalised like every other service.</li>
+<li>No traces. With nothing of ours in the request path there is nothing to emit a span; the two per-request records carry the same facts.</li>
+<li>Alerts stay with Gatus and stay few: either container unhealthy, which includes a stalled watcher, a yield that does not release the GPU, and the model spilling out of VRAM (the watcher reports unhealthy when VRAM sits at the card's limit while Serving). Slow starts and failed requests are dashboard material, not pages.</li>
+</ul>
+
+<h2 id="access">Remote access</h2>
+
+<p>Remote use must work from a machine with no browser, and getting signed in
+must not take more than opening a link. The flow is the standard device
+sign-in, built from what already runs: Pocket ID issues the token and Pomerium
+checks it.</p>
+
+<ol>
+<li>A small token command, shipped with the service, asks Pocket ID to start a device sign-in and prints one link with the code already in it. On a machine with a browser it opens the link itself.</li>
+<li>The person opens the link on any device, a phone included, and approves with Pocket ID as for any other service.</li>
+<li>The command, which has been waiting on Pocket ID, receives the token, caches it and prints it. Nothing is pasted back.</li>
+<li>pi and Claude Code send the token as their API key, in the standard bearer header both already use. The route is set to treat a bearer token as a Pocket ID token, so Pomerium checks it and applies the route's policy: the caller must be in Pocket ID's family or friends group.</li>
+<li>Renewal is silent, using the refresh token Pocket ID issued, until the session ends.</li>
+</ol>
+
+<p>Pocket ID at <code>id.pod.haus</code> advertises the device sign-in
+endpoint and grant. Pomerium's acceptance of an identity
+provider's token as a bearer key is documented for every provider since
+version 0.30 and can be set for one route. The round trip has not been run; it
+needs a client entry in Pocket ID and the route, and is the first thing the
+ingress step proves. <strong>Fallback:</strong> the client opens a tunnel to
+fractal over the existing Pomerium SSH sign-in, which already handles remote
+machines with a link. It covers Nathan's machines only, since it needs a
+registered SSH key.</p>
+
+<table>
+<thead><tr><th>Concern</th><th>Design</th></tr></thead>
+<tbody>
+<tr><td>Hostname</td><td><code>llm.pod.haus</code>, an A record to Numbat's application address like every protected service</td></tr>
+<tr><td>Who may reach it</td><td>An ordinary protected route on the existing friends policy: members of Pocket ID's <code>family</code> and <code>friends</code> groups. Who is in each group is Pocket ID's to say. No public route and no shared key. The control page is a second route for Nathan only.</td></tr>
+<tr><td>What reaches the model server</td><td>Caddy forwards only the model's request paths. The server's management paths (load, unload, slot report) are reachable only by the watcher on the Docker network.</td></tr>
+<tr><td>How often someone signs in</td><td>Once per machine until the refresh token expires. How long Pocket ID lets that be is to be confirmed; the aim is a month.</td></tr>
+<tr><td>A token expiring mid-session</td><td>Both tools can run a command to fetch their key instead of storing one. pi runs it for each request; Claude Code runs it again when a request is refused. The command returns the cached token, renews it silently, or prints a fresh link.</td></tr>
+<tr><td>A machine with no browser</td><td>The same flow: the link is opened on any other device and the command carries on by itself.</td></tr>
+<tr><td>Nathan on fractal</td><td>Caddy's loopback listener, with no sign-in. Local use is logged like any other and does not depend on Numbat.</td></tr>
+<tr><td>Client setup</td><td>Not part of this build. The service provides the hostname, the loopback address and the token command; pointing each tool at them is Nathan's.</td></tr>
+<tr><td>When a game is running</td><td>No model is loaded and the server answers with an error. A game always wins, including over a request in flight.</td></tr>
+<tr><td>Long silent waits</td><td>The route's timeout is raised to cover the two-minute read of a very large uncached prompt. Claude Code itself waited through 330 s of silence in testing.</td></tr>
+</tbody>
+</table>
+
+<h2 id="sizing">Settings and sizing</h2>
+
+<h3 id="settings">Model server settings</h3>
+
+<table>
+<thead><tr><th>Setting</th><th>Value</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Context pool</td><td>204,800 tokens, shared by all slots</td><td>The model takes 27.4 GiB of VRAM with four slots and the drafter, leaving the desktop about 3.1 GiB. See <a href="#pool">the context pool</a>.</td></tr>
+<tr><td>Slots</td><td>4</td><td>A main conversation and three subagents never wait for one another. Each slot beyond the first costs about 0.45 GiB of VRAM.</td></tr>
+<tr><td>Idle conversations</td><td>Saved to guest memory whenever a request starts (the server's default)</td><td>See <a href="#threads">Several conversations at once</a>. It also keeps other requests fast: a 99,000-token conversation left in VRAM made every other request read 2.3 to 2.9 times slower.</td></tr>
+<tr><td>Memory for saved conversations</td><td>12 GiB</td><td>Holds the main conversation at 150,000 tokens (6.2 GiB), the largest subagent burst seen in real sessions (4.8 GiB) and a chat agent's fixed opening (0.8 GiB). A saved conversation that does not fit is dropped without warning.</td></tr>
+<tr><td>Server memory cap</td><td>17 GiB</td><td>The 12 GiB above plus about 4.5 GiB, rounded up: 1 for the server itself, 1.5 for the rewind points of running conversations, 0.9 while a large conversation is being saved, 1 spare.</td></tr>
+<tr><td>Rewind points per conversation</td><td>2, at least 8,192 tokens apart</td><td>This model can reuse part of a conversation only from a snapshot. Two are enough for follow-up turns, which re-read 42 to 263 tokens. Each costs about 150 MiB plus 2 KiB per token and is carried inside every saved conversation; eight would cut the stated window to about 85,000.</td></tr>
+<tr><td>Slot matching threshold</td><td>0.5</td><td>At the default of 0.1, a returning conversation is pulled into a newer conversation's slot because both begin with the same tools, and re-reads itself (measured: 18,200 tokens, 5.1 s).</td></tr>
+<tr><td>Drafter</td><td>On, two tokens on every step</td><td>96 to 104 tokens/s against 75 without. Its 2.3 GiB of VRAM would otherwise carry about 50,000 more tokens of pool.</td></tr>
+<tr><td>Chat template</td><td>The model's own, with a later system message treated as a user turn</td><td>Claude Code sends system messages mid-conversation; the original template rejects them.</td></tr>
+</tbody>
+</table>
+
+<h3 id="launcher">Clients are outside this build</h3>
+
+<p>The service is sized on one assumption about its clients: a main
+conversation stays at or under about 150,000 tokens. Claude Code keeps to
+whatever window it is told it has, the <strong>stated window</strong>, and
+summarises a little before reaching it. A client told a larger window still
+works; its main conversation is then more likely to be discarded from memory
+while its subagents run.</p>
+
+<p>Nothing below is built or decided here. It is what was measured about
+Claude Code 2.1.287 against this server, kept for when the client is tuned.</p>
+
+<table>
+<thead><tr><th>Client behaviour</th><th>Measured</th></tr></thead>
+<tbody>
+<tr><td>Thinking effort</td><td>The server ignores Claude Code's own thinking settings and runs every request at the model's highest effort unless the request says otherwise. Same small coding task, tests passing each time: highest 74 s and 6,800 output tokens, medium 50 s and 4,282, low 27 s and 1,867.</td></tr>
+<tr><td>Size of the first request</td><td>With all of Nathan's connectors, 63 tools and 98,614 tokens: about 40 s of reading. Without them, 30 tools and 39,803 tokens: about 10 s. Deferring tool definitions is smaller still, but loading a deferred tool makes the server re-read the whole conversation.</td></tr>
+<tr><td>Auto mode</td><td>Before every tool call Claude Code sends a separate permission check with a 34,000-token prompt: 20 to 35 s per tool call, and each check adds a saved conversation behind the main one.</td></tr>
+<tr><td>Side requests</td><td>The session title and the prompt suggestion each take a slot and add a saved conversation. Both can be switched off.</td></tr>
+<tr><td>Where it summarises</td><td>At roughly the stated window less 33,000 tokens, measured only at a stated window of 60,000</td></tr>
+<tr><td>Waiting</td><td>It waited through 330 s of silence before a first byte, and retries a refused request 11 times over about three minutes</td></tr>
+</tbody>
+</table>
+
+<h3 id="names">Exact names, for whoever builds this</h3>
+
+<p>These are the names that find each setting, as measured with llama.cpp
+build <code>b11347</code> and Claude Code 2.1.287.</p>
+
+<table>
+<thead><tr><th>Where</th><th>Setting</th></tr></thead>
+<tbody>
+<tr><td>Model</td><td><code>qwen3.8-27b-text-nvfp4-mtp.gguf</code> from <code>felippeburk/Qwen3.8-27B-NVFP4-MTP-GGUF</code>, 19.7 GB, served under the name <code>qwen3.8-27b</code></td></tr>
+<tr><td>Server: pool and slots</td><td><code>--ctx-size 204800 --parallel 4 --kv-unified</code></td></tr>
+<tr><td>Server: saved conversations</td><td><code>--cache-idle-slots --cache-ram 12288 --ctx-checkpoints 2 --checkpoint-min-step 8192 --slot-prompt-similarity 0.5</code></td></tr>
+<tr><td>Server: model and drafter</td><td><code>--n-gpu-layers all --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0 --spec-draft-ngl all --spec-draft-type-k q8_0 --spec-draft-type-v q8_0</code></td></tr>
+<tr><td>Server: template and metrics</td><td><code>--jinja --chat-template-file</code> pointing at the adjusted template; <code>--metrics</code></td></tr>
+<tr><td>Server: router mode</td><td><code>--models-dir</code> or <code>--models-preset</code> with <code>--no-models-autoload</code>; the watcher calls <code>POST /models/load</code> and <code>POST /models/unload</code> and reads <code>GET /slots</code></td></tr>
+<tr><td>Server: memory</td><td>Container limit 17 GiB, swap 1 GiB</td></tr>
+<tr><td>Claude Code, for later: where and which model</td><td><code>ANTHROPIC_BASE_URL</code>, <code>ANTHROPIC_AUTH_TOKEN</code>, an empty <code>ANTHROPIC_API_KEY</code>, and <code>ANTHROPIC_MODEL</code> plus <code>ANTHROPIC_DEFAULT_OPUS_MODEL</code>, <code>_SONNET_</code>, <code>_HAIKU_</code> and <code>_FABLE_</code> all set to <code>qwen3.8-27b</code></td></tr>
+<tr><td>Claude Code, for later: behaviour</td><td><code>CLAUDE_CODE_MAX_CONTEXT_TOKENS=150000</code>, <code>CLAUDE_CODE_EXTRA_BODY={"chat_template_kwargs":{"reasoning_effort":"medium"}}</code>, <code>CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1</code>, <code>CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false</code>, <code>CLAUDE_CODE_TOTAL_TOKENS_REMINDER=off</code>; started with <code>--strict-mcp-config --permission-mode acceptEdits</code>. <code>ENABLE_TOOL_SEARCH</code> stays unset.</td></tr>
+<tr><td>Thinking effort values</td><td>The template accepts only <code>xhigh</code>, <code>medium</code> and <code>low</code>. A chat agent turns thinking off with <code>chat_template_kwargs: {"enable_thinking": false}</code>.</td></tr>
+<tr><td>Whether a prompt was reused</td><td><code>timings.cache_n</code> and <code>timings.prompt_n</code> in every response</td></tr>
+<tr><td>Files on fractal the build takes with it</td><td>The adjusted template and its original under <code>/opt/llm/templates/</code>; the recorded game session <code>/opt/llm/probe/gpu-probe.csv</code>; captured server logs under <code>/opt/llm/probe/cc-research/runs/</code>; the measurement scripts under <code>/opt/llm/probe/scripts/</code></td></tr>
+</tbody>
+</table>
+
+<h3 id="pool">The context pool</h3>
+
+<p>Four pool sizes were measured with the chosen settings: four slots, the
+drafter, and one conversation filled to 90% of the pool. The
+card has 31.8 GiB, but total use has never risen above about 30.5 GiB
+(31,200 MiB), even in a run that spilled, so that is treated as the
+ceiling. The Windows desktop held 1.5 GiB during this test; left alone with
+more open it has held 2.9 to 3.9 GiB.</p>
+
+<table>
+<thead><tr><th>Pool, tokens</th><th>VRAM for the model</th><th>Room left for the desktop under the ceiling</th><th>Cold read of a 90% full pool</th><th>Generation at that depth</th></tr></thead>
+<tbody>
+<tr><td><strong>204,800 (recommended)</strong></td><td>27.4 GiB</td><td>3.1 GiB</td><td>110 s for 182,845 tokens</td><td>51 tokens/s</td></tr>
+<tr><td>212,992</td><td>27.8 GiB</td><td>2.7 GiB</td><td>120 s for 190,515</td><td>51 tokens/s</td></tr>
+<tr><td>221,184</td><td>28.1 GiB</td><td>2.3 GiB</td><td>129 s for 197,820</td><td>47 tokens/s</td></tr>
+<tr><td>229,376</td><td>28.5 GiB</td><td>2.0 GiB</td><td>136 s for 205,363</td><td>49 tokens/s</td></tr>
+<tr><td>262,144 (the model's maximum)</td><td>Does not fit</td><td>Under 1 GiB</td><td colspan="2">The model spilled out of VRAM into shared memory and prompt reading fell from about 1,500 tokens/s to about 30.</td></tr>
+</tbody>
+</table>
+
+<p>None of the four sizes spilled. The choice between them is how much VRAM
+the desktop keeps. 204,800 leaves it about 3 GiB, the amount it holds when
+nothing is pressing on it, and is the size every multi-conversation
+measurement was made at. A larger pool would not lengthen a conversation,
+because the stated window is set by guest memory (<a href="#memory">below</a>); it would only add
+room for conversations generating at the same moment, about 8,000 tokens per
+step up. Spill is the failure to stay clear of: the model keeps working at
+about one fiftieth of its speed, with no warning before it. It is alerted on.</p>
+
+<p>The drafter stays. It holds about
+2.3 GiB that would otherwise carry roughly 50,000 more tokens of pool, and
+it cannot be dropped and restored while the model is loaded.</p>
+
+<h3 id="memory">Guest memory, and how the stated window follows from it</h3>
+
+<p>A saved
+conversation with two rewind points costs about 440 MiB plus 40.5 KiB per
+token, which matched seven measured sizes within 2%: 0.9 GiB at 12,000 tokens,
+2.2 GiB at 45,000, 4.3 GiB at 100,000, 6.2 GiB at 150,000, 8.2 GiB at 200,000.
+The memory set aside has to hold the main conversation and everything saved
+after it. With 12 GiB, a 4.8 GiB burst and 0.8 GiB for a chat agent's opening,
+the main conversation can be 150,000 tokens. The pool does not bound the window; a larger pool only gives
+more room for conversations generating at the same moment, about 55,000 tokens
+beside a full main conversation at 204,800.</p>
+
+<p><strong>WSL memory.</strong> The host has 32 GB. The guest goes from 15 GB
+to 25 GB: 17 GiB for the model server, 6 to 7 GB for dev work, the rest for the
+kernel. That leaves Windows a guaranteed 7 GB, and games need the rest back
+whenever they start. Two kinds of memory have to be let go at a yield:</p>
+
+<table>
+<thead><tr><th>Memory</th><th>Size</th><th>How it is released</th></tr></thead>
+<tbody>
+<tr><td>The model process: saved conversations and rewind points</td><td>Up to 17 GiB</td><td>Freed the moment the process ends at unload. The guest's kernel reports freed pages to Windows without help.</td></tr>
+<tr><td>The model file held in the guest's file cache</td><td>Up to 19.7 GB, as much as fits</td><td>Not returned by itself. The watcher asks the guest to drop this one file's cache at each yield, which needs no special privilege (measured: the guest's file cache fell from 8.2 to 1.4 GiB). The next load then reads the file from disk: 25 s, against 23 s with the file cached.</td></tr>
+</tbody>
+</table>
+
+<p>Windows is assumed to take the memory back once the service has released
+it; no Windows-side test gates the build. Each yield event records guest memory before and after, so the release
+is visible in the handoff records. The limit lives in a Windows-side file
+Ansible cannot reach, so Nathan changes it by hand and it is recorded in the
+hosts page.</p>
+
+<h2 id="files">Repository changes</h2>
+
+<table>
+<thead><tr><th>Path</th><th>New or changed</th><th>Contents</th></tr></thead>
+<tbody>
+<tr><td><code>llm/compose.yaml</code>, <code>llm/stack.toml</code></td><td>New</td><td>Stack <code>fractal-llm</code> on fractal's linked repo: model server, watcher, download job. GPU access for the model server and the watcher, memory limits, healthchecks with the autoheal label, content-hash labels, the download job listed as an ignored one-shot.</td></tr>
+<tr><td><code>llm/server/</code></td><td>New</td><td>The model preset file (context size, slots, drafter, cache settings, each with the measured reason beside it) and the adjusted chat template next to the original it was derived from.</td></tr>
+<tr><td><code>llm/watcher/</code></td><td>New</td><td>The watcher's image and code. Three classes carry it: one owns the state and its transitions, one reads the GPU, one talks to the model server (load, unload, slot report). The GPU reader is the only part that touches hardware.</td></tr>
+<tr><td><code>llm/tests/</code></td><td>New</td><td>Tests listed under Verification, run by the existing pre-commit test discovery. Includes the recorded game session and a sample of real model-server log lines.</td></tr>
+<tr><td><code>ansible/roles/docker</code>, fractal host variables</td><td>Changed</td><td>NVIDIA's container toolkit and Docker's GPU runtime on fractal. Root state, applied by playbook from bandicoot, not by a push.</td></tr>
+<tr><td><code>caddy/fractal/Caddyfile</code></td><td>Changed</td><td>Host block for <code>llm.pod.haus</code>: the model's request paths to the model server, the control page to the watcher, everything else refused. A loopback listener with the same routing for local callers. Access logging for both, limited to the listed fields.</td></tr>
+<tr><td><code>pomerium/config.yaml</code></td><td>Changed</td><td>A protected route for <code>llm.pod.haus</code> on the existing friends policy, bearer tokens treated as Pocket ID tokens, and identity headers passed on; and a Nathan-only route for the control page. Both go to fractal's existing tunnel port.</td></tr>
+<tr><td><code>terraform/</code></td><td>Changed</td><td>The <code>llm</code> DNS entry and the Pocket ID client entry for the command-line sign-in. Applied by hand, with authorisation.</td></tr>
+<tr><td><code>logging/alloy-modules/</code>, <code>logging/fractal/alloy-conf/config.alloy</code></td><td>Changed</td><td>Two parsing modules added to the chain, one for the model server's request lines and one for the watcher's events; on fractal, scrape jobs for the two metrics endpoints.</td></tr>
+<tr><td><code>gatus/conf/config.yaml</code></td><td>Changed</td><td>Health of both containers, read through Komodo like fractal's docs check.</td></tr>
+<tr><td><code>docs/</code></td><td>Changed</td><td>A runbook for the service; hosts, monitoring and networking pages updated in the same commits. This plan is deleted when the work ships.</td></tr>
+<tr><td><code>llm/client/</code></td><td>New</td><td>The token command: runs the device sign-in and prints the token. A single script with no dependencies beyond the standard library, so it can be copied to any machine.</td></tr>
+</tbody>
+</table>
+
+<h2 id="verification">Verification</h2>
+
+<p>Nothing below has been run against the planned service; the measurements in
+this plan are the baselines these checks compare against. Tests are
+written first and seen to fail for the right reason.</p>
+
+<table>
+<thead><tr><th>Property</th><th>How it is proven</th></tr></thead>
+<tbody>
+<tr><td>The watcher's rules match the recorded game session</td><td>Replay test: the 883-sample recording of a real game session is fed through the watcher in place of the GPU reader. It must decide to yield within 6 s of the launch, never resume during the nine-minute load screen, and resume within 75 s of the quit.</td></tr>
+<tr><td>The watcher is blind only while the model is busy</td><td>Replay test with the stand-in server reporting a busy slot during the launch: no yield until the slot goes idle, then a yield within the window.</td></tr>
+<tr><td>A restart adopts reality</td><td>Test against a stand-in model server speaking the router's management API over real HTTP: started with a model loaded the watcher is Serving, started empty it is Yielded.</td></tr>
+<tr><td>Slot-change events are right</td><td>Same harness, with the stand-in changing its slot report: one event per change, carrying each slot's tokens and the pool total; no event when nothing changed.</td></tr>
+<tr><td>Request detail is parsed in full</td><td>The sample of real model-server log lines, including a forced re-read, a save, a restore and a discard, goes through the parsing module and yields every field in the record table. Live: one request of each kind appears in ClickStack with those fields.</td></tr>
+<tr><td>Every slow start is explained</td><td>Live: cause one of each kind on purpose (a new conversation, a displaced conversation, the first turn after a yield) and confirm the dashboard lists each with the right cause.</td></tr>
+<tr><td>Several conversations behave as drawn</td><td>Live, at full size: run cases 1 and 2 of <a href="#threads">the timelines</a> with a 150,000-token main conversation. Its next turn starts within 5 s in both. Then force case 3 and confirm it is recorded as a slow start with the right cause.</td></tr>
+<tr><td>Sign-in works</td><td>Live, from a machine other than fractal and over a shell with no browser: the token command prints one link, the link is approved on a phone, and a request carrying the printed token as its bearer key completes, in each of the two request formats, with nothing pasted back. A second run asks for nothing. A request with no token, and one from a person in neither group, are refused by Pomerium and never reach fractal.</td></tr>
+<tr><td>The caller is recorded</td><td>Live: the request above appears in ClickStack with the caller's email and the session identifier, matched to its request detail.</td></tr>
+<tr><td>No content is stored</td><td>Live: send a request containing a unique marker string, then search ClickStack for it. Zero results.</td></tr>
+<tr><td>Only request paths are exposed</td><td>Live: a signed-in call to the server's load, unload and slot-report paths through <code>llm.pod.haus</code> is refused by Caddy.</td></tr>
+<tr><td>GPU in a container performs like a process on the host</td><td>Live, first: 90% or more of 75 tokens/s with the drafter off and of 96 with it on.</td></tr>
+<tr><td>Both request formats work end to end</td><td>Live: a streamed request with a tool call completes in the OpenAI format and in the Anthropic format, once over loopback and once through <code>llm.pod.haus</code>.</td></tr>
+<tr><td>A real handoff meets its targets</td><td>Live: launch a light game with the model idle; the yield event shows 6 s or less from first activity to released, and guest memory in use falls by the size of the model process and the cached model file. Quit; the resume event shows the model ready within 60 s plus the load.</td></tr>
+<tr><td>Unattended start</td><td>Live: restart the guest and leave <code>/home</code> locked. The service answers a request without anyone logging in.</td></tr>
+<tr><td>Recovery</td><td>Live: kill the model process, then the watcher. Each returns to Serving unaided and the events show how long it took. Requests keep working while the watcher is down.</td></tr>
+<tr><td>A deploy during a game stays out of the way</td><td>Live: hold a yield with the button, push a stack change, confirm the model is not loaded afterwards.</td></tr>
+<tr><td>Long silent reads survive the path</td><td>Live: a 140K-token uncached prompt through <code>llm.pod.haus</code> returns a response.</td></tr>
+<tr><td>Stack wiring</td><td>The existing pre-commit lints for content-hash labels, environment keys and stack files.</td></tr>
+</tbody>
+</table>
+
+<h2 id="order-of-work">Order of work and kill criteria</h2>
+
+<p>Ordered by dependency. The first three items exist to fail early.</p>
+
+<ol>
+<li><strong>Prove the chosen settings at full size.</strong> Nathan raises the WSL limit to 25 GB. Then, on the trial install under <code>/opt/llm</code>, run the server under its 17 GiB cap with the settings table above: a 150,000-token main conversation through a three-subagent burst, a second session, and a yield. This needs no new code. <em>Kill criterion:</em> if the main conversation is dropped in the ordinary one-session case, either the stated window comes down or the disk-saving fix is designed, argued from the measured failure, and put to Nathan before anything else is built.</li>
+<li><strong>GPU inside a container on fractal.</strong> Ansible change, then the performance check. <em>Kill criterion:</em> if containers cannot use the GPU or run more than 10% slower than a process on the host, the model server becomes an Ansible-managed systemd unit on the host and the watcher reaches it across the Docker bridge. Everything else stands.</li>
+<li><strong>Model server in router mode.</strong> Confirm that unloading through its API frees VRAM as quickly as stopping the process did, that the preset file accepts every chosen setting, that the stock image is as fast as the trial install's own build, and what it answers while no model is loaded. If the stock image is slower, the stack builds the image itself with compile parallelism capped.</li>
+<li><strong>Ingress and sign-in.</strong> The Pocket ID client and the device sign-in round trip first, then DNS, the Pomerium route, the Caddy block and the token command. <em>Kill criterion:</em> if Pomerium will not accept the Pocket ID token on the route, remote use goes over the existing Pomerium SSH sign-in as a tunnel. Usable remotely at this point with no handoff behaviour.</li>
+<li><strong>Watcher: handoff, control page, events.</strong> <em>Kill criterion:</em> if, across the first sessions with different games, the events show wrong calls that no threshold change fixes, detection moves to a small Windows-side watcher that knows which process is a game and calls the same control endpoint. The states, the button and the records stand.</li>
+<li><strong>Telemetry and alerts.</strong> Alloy config, Gatus checks, two dashboards.</li>
+<li><strong>Hand-over.</strong> The addresses, the token command and the client notes go into the runbook. Friends get in by being in Pocket ID's friends group; nothing in this stack names a person.</li>
+<li><strong>Docs and teardown of the trial install.</strong></li>
+</ol>
+
+<h3 id="unproven">Unproven assumptions</h3>
+
+<ul>
+<li>Docker on this WSL guest can hand the GPU to a container. The toolkit is not installed today.</li>
+<li>The router's unload frees VRAM in about 2 s. The measurement stopped the whole process instead.</li>
+<li>Utilisation can be sampled from inside a container, and faster than once a second.</li>
+<li>What the model server answers while no model is loaded, and whether pi and Claude Code show that as a clear "in use, try later" or as a confusing failure. If it is confusing, Caddy can answer for the model's paths while the watcher reports Yielded.</li>
+<li>The device sign-in works end to end with both tools: Pocket ID issues a token to a command-line client, that token carries the person's groups, Pomerium accepts it as a bearer key on this route and applies the friends policy to it, and renewal stays silent for about a month.</li>
+<li>Streaming responses survive Pomerium, the tunnel and Caddy with long gaps before the first byte.</li>
+<li>The model server's log at its normal level carries every field in the record table, and none of the prompt.</li>
+<li>The thresholds hold for games other than the one measured.</li>
+<li>The chosen settings at full size. The 17 GiB cap with 12 GiB for saved conversations has not been run; every measurement so far was under a 9 GiB cap. The 150,000-token window rests on the size formula and on two real three-subagent bursts; subagents that grow larger will push the main conversation out.</li>
+<li>What happens after a pool overflow: whether Claude Code's retries settle or collide again.</li>
+<li>That the server never restores the wrong conversation from memory. An open llama.cpp report describes this under concurrent load; it was not seen here, and not tested for.</li>
+</ul>
+
+<h2 id="rejected">Approaches considered and set aside</h2>
+
+<table>
+<thead><tr><th>Approach</th><th>Why not</th></tr></thead>
+<tbody>
+<tr><td>A gateway of our own in the request path</td><td>An internet-facing service to maintain, mostly to patch behaviour the server's own settings cover. Checking who is calling goes to Pomerium, usage records to the logs, and per-person limits are dropped. Kept as the last resort for the narrow fixes listed under <a href="#disk">the disk alternative</a>, if recorded use shows the need.</td></tr>
+<tr><td>LiteLLM or Bifrost, the open-source model gateways</td><td>They solve keys, budgets and per-person usage, which Pomerium's sign-in and the logs now cover. Neither knows anything about the model server's slots, which is where the real problems are. LiteLLM also needs Postgres and about 1 GB of the guest, and its PyPI package shipped credential-stealing releases on 2026-03-24.</td></tr>
+<tr><td>llama-swap, a stock proxy for llama.cpp</td><td>Not needed yet: the model server's router mode already loads and unloads on request. Worth adding if a request cap or a request rewrite turns out to be needed; it is one binary with no database.</td></tr>
+<tr><td>Pomerium's own command-line sign-in</td><td>Enabled here and it works, but it hands the token back to a local port on the machine that started it. From a remote shell that means copying an address out of a browser by hand.</td></tr>
+<tr><td>Reporting the server's faults to llama.cpp</td><td>Seven faults were found and fixes in llama.cpp would remove most of the remaining failures at their source. Not pursued; the settings in this plan work around them.</td></tr>
+<tr><td>A shared API key on a public route</td><td>Works with no sign-in at all, but puts llama.cpp's own key check on the open internet and identifies nobody.</td></tr>
+<tr><td>Keeping 128 rewind points, as one published setup recommends</td><td>Each costs about 150 MB plus 2 KB per token of host memory here, so 20 to 70 GB per slot.</td></tr>
+<tr><td>An inference engine built for many users</td><td>Such engines share identical prompt openings across conversations by design, which removes the slot problems. Whether one runs this model, in this compact form, with its drafter, inside 32 GiB is unknown. Worth its own trial if recorded use shows several simultaneous users.</td></tr>
+<tr><td>Keep the trial install and add to it</td><td>It is a hand-built binary, a user systemd unit and shell functions outside every podhaus convention: no push-to-deploy, no log parsing, no recovery owner.</td></tr>
+<tr><td>Stop and start the container to yield</td><td>A stopped container reads as a failure to Komodo and Gatus, and any deploy during a game would start it again. Unloading inside a running server keeps one honest health state.</td></tr>
+<tr><td>Let the model server unload itself when idle</td><td>Any forgotten agent session would reload the model mid-game, and a second owner of the load decision would fight the watcher.</td></tr>
+<tr><td>Detect games from Windows</td><td>More exact, and kept as the fallback. It needs a second component on a side of the machine podhaus does not manage and this guest is deliberately cut off from.</td></tr>
+<tr><td>Trigger on VRAM or power</td><td>Measured not to work. A light game added under 1 GiB of VRAM, and power rose on launch but stayed high after the game closed.</td></tr>
+<tr><td>A different inference engine for the full 262K window</td><td>The only route found is a community-patched build tested on bare Linux. Worth its own trial later; not part of this service.</td></tr>
+</tbody>
+</table>
+
+<h3>Teardown of the trial install</h3>
+
+<p>The game-session recording and a sample of the model server's log lines are
+copied into <code>llm/tests/</code> first, since tests depend on them. Then,
+once the service is live, these are removed from fractal. The <code>claude-qwen</code> and <code>pi-qwen</code> shell functions and pi's model entry are
+Nathan's and are left alone; they point at the trial install's port and will
+need the new address.</p>
+
+<ul>
+<li>the <code>/opt/llm</code> tree: the hand-built server, the model copy, the launch script, the recordings and the measurement scratch files;</li>
+<li>the user unit <code>qwen-llama.service</code>;</li>
+<li>the compiler packages and the NVIDIA package repository added for the trial build. Any image build the stack does happens inside a container and needs none of them.</li>
+</ul>
+
+</div>
+</main>
+</body>
+</html>
