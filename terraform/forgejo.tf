@@ -45,6 +45,7 @@ locals {
   komodo_push_deploys = {
     "bookbinder"     = "bookbinder-push-deploy"
     "bookcard"       = "bookcard-push-deploy"
+    "bookshelf"      = "bookshelf-push-deploy"
     "fenwick"        = "fenwick-push-deploy"
     "indy-board"     = "indy-board-push-deploy"
     "nathanbaxter"   = "nathanbaxter-deploy"

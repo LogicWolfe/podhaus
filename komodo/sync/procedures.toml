@@ -248,6 +248,31 @@ executions = [
 ]
 
 
+# bookshelf-push-deploy — push-to-deploy for the bookshelf stack on bilby, the
+# same two stages as bookbinder-push-deploy.
+
+[[procedure]]
+name = "bookshelf-push-deploy"
+description = "Push-to-deploy for the bookshelf stack."
+tags = ["bookshelf", "podhaus"]
+config.webhook_enabled = true
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Reconcile bookshelf stack definition (sync TOML -> Komodo)"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params = { sync = "bookshelf" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy bookshelf (build + up; layer cache makes an unchanged push a no-op)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "bookshelf" }, enabled = true },
+]
+
+
 # nathanbaxter-deploy — push-to-deploy for nathanbaxter.com.
 #
 # Bound to the nathanbaxter Forgejo push webhook — the repo lives on

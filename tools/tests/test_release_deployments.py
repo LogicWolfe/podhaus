@@ -19,6 +19,7 @@ REPO_DEPLOYMENTS = [
     RepoDeployment("indy-board-push-deploy", "LogicWolfe/indy-board", "indy-board"),
     RepoDeployment("bookbinder-push-deploy", "LogicWolfe/bookbinder", "bookbinder"),
     RepoDeployment("bookcard-push-deploy", "LogicWolfe/bookcard", "bookcard"),
+    RepoDeployment("bookshelf-push-deploy", "LogicWolfe/bookshelf", "bookshelf"),
 ]
 
 

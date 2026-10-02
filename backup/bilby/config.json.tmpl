@@ -97,8 +97,27 @@
       "id": "bookcard",
       "repo": "podhaus",
       "paths": ["/userdata/bookcard"],
+      "excludes": ["/userdata/bookcard/downloads"],
       "schedule": {
         "cron": "15 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": true
+    },
+    {
+      "id": "bookshelf",
+      "repo": "podhaus",
+      "paths": ["/userdata/bookshelf"],
+      "schedule": {
+        "cron": "25 4 * * *",
         "clock": "CLOCK_LOCAL"
       },
       "retention": {

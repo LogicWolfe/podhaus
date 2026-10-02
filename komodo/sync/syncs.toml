@@ -121,3 +121,18 @@ include_variables = true
 include_resources = true
 delete = false
 managed = false
+
+# The bookshelf sync reads only the root stack.toml, as for bookcard. Stage 1
+# of bookshelf-push-deploy runs it explicitly.
+[[resource_sync]]
+name = "bookshelf"
+description = "ResourceSync for the stack def that lives in the bookshelf repo."
+tags = ["bookshelf", "podhaus"]
+
+[resource_sync.config]
+linked_repo = "bookshelf"
+resource_path = ["stack.toml"]
+include_variables = true
+include_resources = true
+delete = false
+managed = false

@@ -67,6 +67,7 @@
           <tr><td><code>lumen-sweep</code></td><td>lumen-sweep on Bilby, Fractal and Voltaire</td><td>every 10 min</td><td>Discovers repositories and linked worktrees from the shared repository sources and refreshes their semantic indexes. Overlapping scheduled runs are skipped.</td></tr>
           <tr><td><code>search-index</code></td><td>search-indexer</td><td>every minute</td><td>Refreshes the cross-repository documentation search index.</td></tr>
           <tr><td><code>streamfab-publish</code></td><td>streamfab-publish</td><td>every minute</td><td>Publishes completed StreamFab output into the media library.</td></tr>
+          <tr><td><code>bookshelf-library-check</code></td><td>bookshelf</td><td>02:00 daily</td><td>Starts bookshelf's nightly library check, finishing before the 03:45 backup window. Defined in the bookshelf repository's <code>compose.yaml</code>.</td></tr>
           <tr><td><code>sky-cache-invalidate</code></td><td>caddy</td><td>every minute</td><td>Purges Sky's Cloudflare cache tag when RustFS reports a new version of Publii's completed <code>files.publii.json</code> manifest. See <a href="/caching.md">Public site caching</a>.</td></tr>
         </tbody>
       </table>

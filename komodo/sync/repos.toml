@@ -243,6 +243,20 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/bookcard"
 branch = "main"
 
+# Bilby clone of the bookshelf repo (the book text, history and API service
+# in front of bookcard and bookbinder). Same linked_repo + run_build pattern.
+[[repo]]
+name = "bookshelf"
+description = "Komodo-managed clone of the bookshelf repo on bilby's Periphery"
+tags = ["podhaus", "bilby", "bookshelf"]
+
+[repo.config]
+server = "podhaus"             # = bilby
+git_provider = "git.pod.haus"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/bookshelf"
+branch = "main"
+
 # Core's sync tree since the move to bandicoot. on_pull runs the same
 # `git clean -fd` as podhaus-deploy, for the same reason (see the
 # podhaus-deploy comment above it).

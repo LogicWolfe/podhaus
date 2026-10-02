@@ -3,6 +3,7 @@
 locals {
   pod_haus_service_dns = {
     backup          = local.numbat_application_ipv4
+    books           = local.numbat_application_ipv4
     bugs            = local.numbat_application_ipv4
     docs            = local.numbat_application_ipv4
     fenwick         = local.numbat_application_ipv4
