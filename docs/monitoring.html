@@ -100,7 +100,11 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           host through <code>GetServerState</code>. Remote-container checks use
           <code>InspectDockerContainer</code> and require both running state and healthy
           Docker health; this covers kangaroo services and the Fractal/Voltaire docs
-          instances. Bilby's docs health is probed directly over dockernet.</li>
+          instances. Bilby's docs health is probed directly over dockernet. The
+          <code>Komodo Alerts</code> check asserts no unresolved CRITICAL alert, which
+          in Komodo 2.3 means server health only (unreachable, CPU, memory, disk).
+          Komodo never stores a failed procedure, action or build as an alert, so no
+          Gatus check sees a failed push deploy.</li>
       </ul>
       <p>
         Live monitors today cover every podhaus service plus the Backrest, RAR-extraction

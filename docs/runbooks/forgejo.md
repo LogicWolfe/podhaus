@@ -98,7 +98,9 @@ every repository owned by LogicWolfe. It is provisioned by
   takes several GiB;
 - job containers start with an OOM score adjustment of 900, so when memory
   runs out earlyoom and the kernel kill CI jobs before host services or
-  interactive sessions;
+  interactive sessions; a job's service containers get the same adjustment;
+- job and service containers run privileged, so a job can build its
+  repository's Docker image through a `docker:dind` service (see below);
 - no Bilby runner exists. A future runner elsewhere must justify itself
   explicitly.
 
@@ -111,16 +113,33 @@ The runner's user registration is durable under `/opt/forgejo-runner/data`,
 while Ansible fetches a short-lived registration token from the LogicWolfe
 account only for first registration. Repository workflows select the existing
 labels, so adding a repository needs no new runner; all repositories share the
-job limit and the runner cache. Job containers do not receive
-Bandicoot's Docker socket. The runner removes disposable job resources on
-completion and its cache lives under `/opt/forgejo-runner/data/cache`.
+job limit and the runner cache. The runner removes disposable job resources,
+including each container's anonymous volumes, on completion and its cache
+lives under `/opt/forgejo-runner/data/cache`.
+
+CI builds images so that a Dockerfile which cannot build fails the pull
+request instead of the Komodo deploy on `main`. A job that builds declares a
+`docker:dind` service with TLS turned off, because no volume can carry the
+daemon's generated client certificates into the job container, and reaches
+it at `tcp://docker:2375` on the per-job network. That daemon and its images
+exist only for the job, so every build starts without layer cache.
+
+Privilege is what DinD needs, and it is also root on Bandicoot for any code a
+job runs. Bandicoot hosts Komodo Core and 1Password Connect, so a hostile
+action reaches the fleet's secrets. Two controls bound that. Job containers
+never receive Bandicoot's own Docker socket (`container.docker_host: "-"` and
+an empty `valid_volumes`). And every workflow on these labels must pin each
+action, `checkout` included, by full commit SHA rather than a tag that can be
+moved; an unqualified `actions/checkout@v4` resolves to a movable tag on
+`data.forgejo.org`.
 
 A push to a repository's `main` deploys it: a Forgejo push webhook filtered to
 `main` invokes the repository's Komodo procedure, which pulls its managed clone,
 syncs the stack definition, and builds and deploys, so what is on `main` is what
 is live and no working checkout is an input. Actions runs the checks on pull
 requests and on `main`; Komodo performs the native ARM64 image build on the
-deploying host.
+deploying host. A CI image build is only a check: its image is discarded with
+the job, and what runs is always Komodo's build.
 Packages remain disabled until a real durable or multi-host artifact need
 justifies a registry.
 
