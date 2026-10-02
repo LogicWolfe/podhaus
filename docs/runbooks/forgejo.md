@@ -131,7 +131,15 @@ never receive Bandicoot's own Docker socket (`container.docker_host: "-"` and
 an empty `valid_volumes`). And every workflow on these labels must pin each
 action, `checkout` included, by full commit SHA rather than a tag that can be
 moved; an unqualified `actions/checkout@v4` resolves to a movable tag on
-`data.forgejo.org`.
+`data.forgejo.org`. The pinned form already in use is
+`https://data.forgejo.org/actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803`.
+
+These workflows still pin `checkout` by a movable tag and need the SHA form:
+
+- bookcard `.forgejo/workflows/ci.yml`: `actions/checkout@v4` (fix in flight
+  in its own pull request);
+- dotfiles `.forgejo/workflows/ci.yaml`: `actions/checkout@v6`;
+- flood `.forgejo/workflows/check.yml`: `actions/checkout@v4`.
 
 A push to a repository's `main` deploys it: a Forgejo push webhook filtered to
 `main` invokes the repository's Komodo procedure, which pulls its managed clone,

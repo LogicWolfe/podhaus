@@ -683,8 +683,8 @@ endpoints:
   # state change. Komodo raises those as WARNING alerts already marked
   # resolved, and a procedure, action or build failure is never stored at
   # all: it exists only as a push to an enabled Alerter resource (see
-  # `bin/core/src/api/execute/procedure.rs` in Komodo). A failed push
-  # deploy is therefore invisible here.
+  # `bin/core/src/api/execute/procedure.rs` in Komodo). The two summary
+  # checks after this one cover failed procedures and unhealthy stacks.
   #
   # We poll instead of using Komodo's webhook Alerter because the Custom
   # alerter only POSTs JSON to a URL; it can't add the Authorization
@@ -705,6 +705,65 @@ endpoints:
     alerts:
       - type: custom
         description: "Komodo has an unresolved CRITICAL server alert (server unreachable, or CPU, memory or disk past its critical threshold). Check komodo.pod.haus → Alerts for the server and reason."
+        failure-threshold: 3
+        success-threshold: 2
+        send-on-resolved: true
+
+  # Failed deploys → Gatus. Every push deploy, podhaus's and each service
+  # repo's, runs as a Komodo procedure, so a failed deploy, image build or
+  # sync shows up as a procedure whose last run failed. Komodo keeps that
+  # state until the procedure next succeeds, so this check stays red (and
+  # alerts once) until a later run is green. A procedure that is re-running
+  # counts as running, not failed. The summary carries counts only: the
+  # alert says that a procedure failed, and komodo.pod.haus → Procedures
+  # says which. While one procedure is failing, a second failure raises no
+  # new alert.
+  #
+  # `total > 0` keeps a key that can see no procedures from passing as
+  # healthy.
+  - name: Komodo procedures
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Komodo
+    interval: 60s
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"GetProceduresSummary","params":{}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].total > 0"
+      - "[BODY].failed == 0"
+    alerts:
+      - type: custom
+        description: "A Komodo procedure's last run failed, most likely a push deploy. Check komodo.pod.haus → Procedures for which one and its failed stage."
+        failure-threshold: 3
+        success-threshold: 2
+        send-on-resolved: true
+
+  # Unhealthy stacks → Gatus. Komodo counts a stack as unhealthy when it is
+  # Unhealthy, Restarting, Dead, Created or Removing; Running, Stopped,
+  # Down and Unknown are counted apart. Three one-minute failures before
+  # alerting rides out the brief states a deploy passes through. Counts
+  # only, as above: komodo.pod.haus → Stacks says which stack.
+  - name: Komodo stacks
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Komodo
+    interval: 60s
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"GetStacksSummary","params":{}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].total > 0"
+      - "[BODY].unhealthy == 0"
+    alerts:
+      - type: custom
+        description: "A Komodo stack is unhealthy, restarting or dead. Check komodo.pod.haus → Stacks for which one."
         failure-threshold: 3
         success-threshold: 2
         send-on-resolved: true

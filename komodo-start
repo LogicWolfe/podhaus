@@ -175,9 +175,8 @@ poll_until_complete "$pull_update_id" "podhaus-bandicoot pull"
 # Pending-update alerts are disabled only for this sync. The deploy action
 # deliberately enriches every stored stack environment with generated content
 # hashes after each sync, so source and stored state cannot compare equal.
-# Komodo still exposes the pending diff for diagnosis. Service health has its
-# own Gatus alert path; procedure and action failures reach no one until an
-# Alerter resource exists.
+# Komodo still exposes the pending diff for diagnosis. Service health and
+# failed procedures have their own Gatus checks (docs/monitoring.html).
 echo "Ensuring podhaus ResourceSync exists..."
 if komodo_api read '{"type":"GetResourceSync","params":{"sync":"podhaus"}}' > /dev/null 2>&1; then
   echo "  podhaus ResourceSync already exists"

@@ -103,9 +103,26 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           instances. Bilby's docs health is probed directly over dockernet. The
           <code>Komodo Alerts</code> check asserts no unresolved CRITICAL alert, which
           in Komodo 2.3 means server health only (unreachable, CPU, memory, disk).
-          Komodo never stores a failed procedure, action or build as an alert, so no
-          Gatus check sees a failed push deploy.</li>
+          Komodo never stores a failed procedure, action or build as an alert, so
+          deploys are watched through Komodo's summary counts instead (below).</li>
       </ul>
+      <p id="failed-deploys">
+        <strong>Failed deploys.</strong> Every push deploy, podhaus's and each service
+        repo's, is a Komodo procedure. The <code>Komodo procedures</code> check reads
+        <code>GetProceduresSummary</code> every minute and fails while any procedure's
+        last run failed; <code>Komodo stacks</code> reads <code>GetStacksSummary</code>
+        and fails while any stack is unhealthy, restarting, dead, created or removing.
+        After three failed checks Gatus sends a <code>service_alert</code> to Fenwick,
+        which tells Nathan on Signal, and a resolution notice follows two passing
+        checks later. Both checks also fail if the API key can see no procedures or
+        stacks. The limits come from the counts: the alert says that a procedure
+        failed or a stack is unhealthy, never which one, so the next step is
+        <code>komodo.pod.haus</code>. A failed procedure stays failed until it next
+        succeeds, so the check stays red until then, and a second failure during that
+        time raises no new alert. A failed Fenwick deploy also reports through
+        Fenwick; if it leaves Fenwick down, the Fenwick-health email checks are the
+        backstop.
+      </p>
       <p>
         Live monitors today cover every podhaus service plus the Backrest, RAR-extraction
         (cron safety-net), and kangaroo-backrest heartbeats. <code>gatus.pod.haus</code>
