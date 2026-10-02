@@ -24,7 +24,14 @@ cache:
 
 container:
   network: ""
-  privileged: false
+  # CI builds a repository's Docker image so a broken Dockerfile fails the
+  # pull request rather than the Komodo deploy. Jobs build through a
+  # `docker:dind` service on their per-job network, and the in-container
+  # daemon needs privilege. Privilege applies to the job container and its
+  # services alike, so a hostile action can take over Bandicoot; workflows
+  # must therefore pin every action by commit SHA, never by a movable tag.
+  # Bandicoot's own Docker socket stays withheld (`docker_host`, `valid_volumes`).
+  privileged: true
   # Checkout runs inside job containers, so it needs the same
   # direct-origin resolution as the daemon's Actions protocol. When memory runs
   # out, a CI job is the cheapest thing to lose: the OOM score makes earlyoom
@@ -34,7 +41,8 @@ container:
     --oom-score-adj=900
   valid_volumes: []
   # The daemon uses the mounted socket to create job containers; jobs never
-  # receive the socket themselves.
+  # receive the socket themselves, and build images through their own DinD
+  # service instead.
   docker_host: "-"
   force_pull: false
   force_rebuild: false

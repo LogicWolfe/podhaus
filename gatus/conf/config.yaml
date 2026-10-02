@@ -674,13 +674,17 @@ endpoints:
       - "[BODY].State.Status == running"
       - "[BODY].State.Health.Status == healthy"
 
-  # Komodo alert pipeline → Gatus. Komodo emits an alert for a range of
-  # conditions: a stack deploy/build/procedure/action failure, a server
-  # going unreachable, a host CPU/mem threshold breach, or an unexpected
-  # state transition (Down/Restarting). This poll asserts zero unresolved
-  # CRITICAL alerts, so Postmark fires whenever Komodo itself flags a
-  # CRITICAL-grade problem. (WARNING-level alerts — image-update-
-  # available, elevated-but-not-pegged CPU, etc. — don't trip this.)
+  # Komodo server health → Gatus. This poll asserts zero unresolved
+  # CRITICAL alerts in Komodo's alert store. In Komodo 2.3 only server
+  # checks write those: a server going unreachable, or CPU, memory or disk
+  # past its critical threshold.
+  #
+  # It cannot see a failed procedure, action, build or deploy, nor a stack
+  # state change. Komodo raises those as WARNING alerts already marked
+  # resolved, and a procedure, action or build failure is never stored at
+  # all: it exists only as a push to an enabled Alerter resource (see
+  # `bin/core/src/api/execute/procedure.rs` in Komodo). A failed push
+  # deploy is therefore invisible here.
   #
   # We poll instead of using Komodo's webhook Alerter because the Custom
   # alerter only POSTs JSON to a URL; it can't add the Authorization
@@ -700,7 +704,7 @@ endpoints:
       - "len([BODY].alerts) == 0"
     alerts:
       - type: custom
-        description: "Komodo has an unresolved CRITICAL alert (deploy/build/procedure failure, server unreachable, CPU/mem threshold, or unexpected state change). Check komodo.pod.haus → Alerts for the specific resource + failure reason."
+        description: "Komodo has an unresolved CRITICAL server alert (server unreachable, or CPU, memory or disk past its critical threshold). Check komodo.pod.haus → Alerts for the server and reason."
         failure-threshold: 3
         success-threshold: 2
         send-on-resolved: true
