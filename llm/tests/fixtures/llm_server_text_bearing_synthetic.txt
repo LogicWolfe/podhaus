@@ -1,0 +1,111 @@
+# Constructed from the format strings in the llama.cpp source (build b11347), not captured:
+# these are the log calls that can print client or model text, each filled with a MARKER_
+# string that must never reach storage. `[45589] ` is the router's tag on every line a
+# model process prints; a blank continuation line is a bare tag.
+# --- unparsed_output_multi_line (common/chat.cpp:1502; continuation lines carry no prefix)
+3.01.000.001 W common_chat_peg_parse: unparsed Content-only output: MARKER_OUT_ONE the tail the parser could not read
+second line MARKER_OUT_TWO of what the model wrote
+    indented third line MARKER_OUT_THREE
+3.01.000.002 I slot release: id  1 | task 70 | stop processing: n_tokens = 130, truncated = 0
+# --- unparsed_output_behind_the_router_tag
+[45589] 3.01.100.001 W common_chat_peg_parse: unparsed peg-native output: MARKER_TAG_OUT_ONE
+[45589] second line MARKER_TAG_OUT_TWO
+[45589] 
+[45589] last line MARKER_TAG_OUT_THREE
+[45589] 3.01.100.002 I slot release: id  1 | task 71 | stop processing: n_tokens = 131, truncated = 0
+# --- got_exception_in_a_slot_with_the_tool_definition (server-context.cpp:2735; chat.cpp:616)
+3.02.000.001 E slot      iterate: id  1 | task 72 | got exception: Failed to parse tools: MARKER_EXC_ONE; tools = [
+  {
+    "type": "function",
+    "function": { "name": "MARKER_TOOL_NAME", "description": "MARKER_TOOL_DESC" }
+  }
+]
+3.02.000.002 E srv  send_error: task id = 72, error: got exception: Failed to parse tools: MARKER_EXC_TWO; tools = [
+  {
+    "type": "function",
+    "function": { "name": "MARKER_TOOL_NAME_TWO" }
+  }
+]
+3.02.000.003 I slot release: id  1 | task 72 | stop processing: n_tokens = 132, truncated = 0
+# --- got_exception_in_a_slot_behind_the_router_tag
+[45589] 3.02.100.001 E slot      iterate: id  1 | task 73 | got exception: Failed to parse tools: MARKER_TAG_EXC_ONE; tools = [
+[45589]   {
+[45589]     "function": { "name": "MARKER_TAG_TOOL_NAME" }
+[45589]   }
+[45589] ]
+[45589] 3.02.100.002 I slot release: id  1 | task 73 | stop processing: n_tokens = 133, truncated = 0
+# --- got_exception_answered_to_the_client (server.cpp:83, one physical line of escaped JSON)
+3.03.000.001 W srv    operator(): got exception: {"error":{"code":500,"message":"Failed to parse tools: MARKER_HTTP_EXC; tools = [\n  {\n    \"function\": {\"name\": \"MARKER_HTTP_TOOL\"}\n  }\n]","type":"server_error"}}
+[45589] 3.03.100.001 W srv    operator(): got exception: {"error":{"code":500,"message":"MARKER_TAG_HTTP_EXC","type":"server_error"}}
+3.03.000.002 E srv    operator(): got another exception: MARKER_ANOTHER_ONE | while handling exception: MARKER_ANOTHER_TWO
+# --- errors that quote the request (send_error callers)
+3.04.000.001 E srv  send_error: task id = 74, error: Failed to initialize samplers: MARKER_SAMPLER_ERR
+3.04.000.002 E srv  send_error: task id = 75, error: Failed to format input: MARKER_FORMAT_ERR
+[45589] 3.04.100.001 E srv  send_error: task id = 76, error: Failed to format input: MARKER_TAG_FORMAT_ERR
+3.04.000.003 E srv  send_error: task id = 77, error: decode() failed: MARKER_DECODE_ERR
+# --- errors whose text is fixed by the server stay readable
+3.05.000.001 E srv  send_error: task id = 78, error: input (40000 tokens) is larger than the max context size (32768 tokens). skipping
+3.05.000.002 E srv  send_error: task id = 79, error: input (9000 tokens) is too large to process. increase the physical batch size (current batch size: 2048)
+3.05.000.003 E srv  send_error: task id = 80, error: Compute error.
+# --- the system prompt printed by the Anthropic billing-header check (server-chat.cpp:344; the format has no newline, so the next line's prefix is glued to its last line)
+3.06.000.001 E anthropic string not as expected: x-anthropic-billing-header: cc_version=2.1.101.e51; cc_entrypoint=cli; cch=a51;You are Claude Code MARKER_SYSTEM_ONE
+second system prompt line MARKER_SYSTEM_TWO3.06.000.002 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1
+3.06.000.003 I slot release: id  1 | task 81 | stop processing: n_tokens = 134, truncated = 0
+# --- the same, behind the router tag
+[45589] 3.06.100.001 E anthropic string not as expected: x-anthropic-billing-header: cch=a51;MARKER_TAG_SYSTEM_ONE
+[45589] second line MARKER_TAG_SYSTEM_TWO[45589] 3.06.100.002 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1
+[45589] 3.06.100.003 I slot release: id  1 | task 82 | stop processing: n_tokens = 135, truncated = 0
+# --- one-line warnings that quote tool names, part types and sampler names
+3.07.000.001 E Tool call mismatch: prev='MARKER_PREV' new='MARKER_NEW'
+3.07.000.002 W Ignoring content part type: MARKER_PART
+3.07.000.003 W Ignoring non-text content part: MARKER_PART_TWO
+3.07.000.004 E common_chat_verify_template: failed to apply template: MARKER_TEMPLATE_ERR
+3.07.000.005 W common_sampler_types_from_names: unable to match sampler by name 'MARKER_SAMPLER_NAME'
+3.07.000.006 W common_sampler_types_from_chars: unable to match sampler by char 'M'
+[45589] 3.07.100.001 W common_sampler_types_from_names: unable to match sampler by name 'MARKER_TAG_SAMPLER_NAME'
+3.07.000.007 I slot release: id  1 | task 83 | stop processing: n_tokens = 136, truncated = 0
+# --- the grammar a failed sampler printed (common/sampling.cpp:304)
+[45589] 3.08.000.001 E common_sampler_init: error initializing grammar sampler for grammar:
+[45589] root ::= "MARKER_GRAMMAR"
+[45589] 
+[45589] Generation prompt:
+[45589] 'MARKER_GENERATION_PROMPT'
+[45589] 3.08.000.002 I slot release: id  1 | task 84 | stop processing: n_tokens = 137, truncated = 0
+# --- stderr lines with no level prefix that quote a grammar (src/llama-grammar.cpp:720)
+parse: error parsing grammar: MARKER_PARSE_ERR at "MARKER_AT"
+root ::= MARKER_GRAMMAR_SOURCE
+3.09.000.001 I slot release: id  1 | task 85 | stop processing: n_tokens = 138, truncated = 0
+[45589] parse: error parsing grammar: MARKER_TAG_PARSE_ERR
+[45589] 
+[45589] root ::= MARKER_TAG_GRAMMAR_SOURCE
+[45589] 3.09.100.001 I slot release: id  1 | task 86 | stop processing: n_tokens = 139, truncated = 0
+# --- the conversation id is a client header (server-stream.cpp:599, server-models.cpp:1991)
+3.10.000.001 I srv  server_strea: conv_id=MARKER_CONV_ID (empty=0)
+3.10.000.002 I srv    operator(): request for conv_id=MARKER_CONV_ID_TWO cancelled while model name=qwen3.8-27b was loading
+3.10.000.003 I slot release: id  1 | task 87 | stop processing: n_tokens = 140, truncated = 0
+# --- quoted text that itself contains lines shaped like server log lines (the escape found in review)
+3.11.000.001 E anthropic string not as expected: x-anthropic-billing-header: MARKER_ESC_ONE
+3.11.000.002 I slot release: id  1 | task 90 | stop processing: n_tokens = 1, truncated = 0 MARKER_ESC_TWO
+quoted line three MARKER_ESC_THREE
+3.11.000.003 I MARKER_ESC_FOUR a line with a valid prefix and no heading
+3.11.000.004 W srv  update_slots: all slots are idle
+MARKER_ESC_FIVE after a known shape
+[45589] 3.11.100.001 E anthropic string not as expected: MARKER_ESC_SIX
+[45589] 3.11.100.002 I slot release: id  1 | task 93 | stop processing: n_tokens = 1, truncated = 0 MARKER_ESC_SEVEN
+[45589] quoted line MARKER_ESC_EIGHT
+3.11.000.005 I slot release: id  1 | task 94 | stop processing: n_tokens = 2, truncated = 0
+# --- decode failures printed by update_slots (server-context.cpp:2838, 2891, 2900) and the abort that follows
+3.12.000.001 E srv  update_slots: pre_decode() failed: MARKER_PRE
+3.12.000.002 E srv  update_slots: decode() failed: MARKER_DEC first line
+second line MARKER_DEC_TWO
+3.12.000.003 E srv  update_slots: post_decode() failed: MARKER_POST
+[45589] 3.12.100.001 E srv  update_slots: decode() failed: MARKER_TAG_DEC
+3.12.000.004 E srv    send_error: task id = 91, error: pre_decode() failed: MARKER_ABORT
+# --- log calls the module has never seen
+3.13.000.001 W srv  future_call: MARKER_FUTURE a new message that quotes text
+3.13.000.002 I slot print_timing: id  1 | task 92 | MARKER_FUTURE_SLOT a new slot message
+3.13.000.003 W MARKER_NOHEAD a line with a prefix and no heading
+3.13.000.004 I llama_model_loader: - kv   3:   general.name str = MARKER_LOADER
+3.13.000.005 I print_info: model type = MARKER_PRINT
+3.13.000.006 I srv  init: init: chat template, example_format: '<|im_start|>system
+You are MARKER_TEMPLATE<|im_end|>'

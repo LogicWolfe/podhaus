@@ -1,0 +1,1573 @@
+{
+ "llm_server_trace_sample.txt": [
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_select_by": "LCP",
+    "llm_f_sim": "1.000",
+    "llm_f_keep": "0.798"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "5398"
+   }
+  },
+  {
+   "kind": "prompt",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "5398",
+    "llm_prompt_tokens": "103"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "5398",
+    "llm_cached_tokens": "99"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "5398",
+    "llm_read_ms": "87.68",
+    "llm_read_tokens": "4",
+    "llm_read_tps": "45.62"
+   }
+  },
+  {
+   "kind": "output_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "5398",
+    "llm_output_ms": "205.19",
+    "llm_output_tokens": "27",
+    "llm_output_tps": "126.71"
+   }
+  },
+  {
+   "kind": "total_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "5398",
+    "llm_total_ms": "292.87",
+    "llm_total_tokens": "31"
+   }
+  },
+  {
+   "kind": "draft",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "5398",
+    "llm_draft_accepted": "18",
+    "llm_draft_generated": "18"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "5398",
+    "llm_final_tokens": "130",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "conversation_restored",
+   "level": "INFO",
+   "fields": {
+    "llm_restored_f_keep": "1.000",
+    "llm_restored_f_sim": "0.999"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50"
+   }
+  },
+  {
+   "kind": "conversation_saved",
+   "level": "INFO",
+   "fields": {
+    "llm_saved_tokens": "467",
+    "llm_saved_mib": "166.123"
+   }
+  },
+  {
+   "kind": "prompt",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50",
+    "llm_prompt_tokens": "29867"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50",
+    "llm_cached_tokens": "29850"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50",
+    "llm_cached_tokens": "29851"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50",
+    "llm_cached_tokens": "29863"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50",
+    "llm_read_ms": "293.64",
+    "llm_read_tokens": "17",
+    "llm_read_tps": "57.89"
+   }
+  },
+  {
+   "kind": "output_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50",
+    "llm_output_ms": "35.88",
+    "llm_output_tokens": "2",
+    "llm_output_tps": "27.87"
+   }
+  },
+  {
+   "kind": "total_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50",
+    "llm_total_ms": "329.52",
+    "llm_total_tokens": "19"
+   }
+  },
+  {
+   "kind": "draft",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50",
+    "llm_draft_accepted": "0",
+    "llm_draft_generated": "2"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "50",
+    "llm_final_tokens": "29868",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_select_by": "LCP",
+    "llm_f_sim": "0.918",
+    "llm_f_keep": "0.904"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441"
+   }
+  },
+  {
+   "kind": "prompt",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_prompt_tokens": "24713"
+   }
+  },
+  {
+   "kind": "full_reread",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "0"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "2048"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "4096"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "6144"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "8192"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "10240"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "12288"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_read_tokens": "14336",
+    "llm_progress": "0.58",
+    "llm_read_seconds": "3.26"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "14336"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_read_tokens": "16384",
+    "llm_progress": "0.66",
+    "llm_read_seconds": "3.74"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "16384"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_read_tokens": "18432",
+    "llm_progress": "0.75",
+    "llm_read_seconds": "4.23"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "18432"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_read_tokens": "18874",
+    "llm_progress": "0.76",
+    "llm_read_seconds": "4.38"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "18874"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_read_tokens": "20922",
+    "llm_progress": "0.85",
+    "llm_read_seconds": "4.90"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "20922"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_read_tokens": "22651",
+    "llm_progress": "0.92",
+    "llm_read_seconds": "5.38"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "22651"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_read_tokens": "24197",
+    "llm_progress": "0.98",
+    "llm_read_seconds": "5.88"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "24197"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_read_tokens": "24709",
+    "llm_progress": "1.00",
+    "llm_read_seconds": "6.05"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_cached_tokens": "24709"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_read_ms": "6192.22",
+    "llm_read_tokens": "24713",
+    "llm_read_tps": "3990.98"
+   }
+  },
+  {
+   "kind": "output_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_output_ms": "6593.97",
+    "llm_output_tokens": "701",
+    "llm_output_tps": "106.16"
+   }
+  },
+  {
+   "kind": "total_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_total_ms": "12786.19",
+    "llm_total_tokens": "25414"
+   }
+  },
+  {
+   "kind": "draft",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_draft_accepted": "424",
+    "llm_draft_generated": "554"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "3441",
+    "llm_final_tokens": "25414",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "conversation_saved",
+   "level": "INFO",
+   "fields": {
+    "llm_saved_tokens": "12857",
+    "llm_saved_mib": "603.788"
+   }
+  },
+  {
+   "kind": "conversation_discarded",
+   "level": "WARN",
+   "fields": {
+    "llm_discarded_mib": "951.777"
+   }
+  },
+  {
+   "kind": "conversation_saved",
+   "level": "INFO",
+   "fields": {
+    "llm_saved_tokens": "31588",
+    "llm_saved_mib": "1265.444"
+   }
+  },
+  {
+   "kind": "conversation_unsaved",
+   "level": "WARN",
+   "fields": {
+    "llm_unsaved_mib": "2090.777",
+    "llm_unsaved_limit_mib": "1024.000"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "34",
+    "llm_final_tokens": "12805",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "33",
+    "llm_cached_tokens": "7202"
+   }
+  },
+  {
+   "kind": "slot_purged",
+   "level": "WARN",
+   "fields": {
+    "llm_slot": "0",
+    "llm_purged_tokens": "12761"
+   }
+  },
+  {
+   "kind": "pool_full",
+   "level": "WARN",
+   "fields": {
+    "llm_batch_size": "2048"
+   }
+  },
+  {
+   "kind": "reuse",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "33",
+    "llm_cached_tokens": "9250"
+   }
+  },
+  {
+   "kind": "pool_full",
+   "level": "ERROR",
+   "fields": {
+    "llm_batch_size": "1"
+   }
+  },
+  {
+   "kind": "request_error",
+   "level": "ERROR",
+   "fields": {
+    "llm_task": "59",
+    "llm_error": "Context size has been exceeded."
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "59",
+    "llm_final_tokens": "13540",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "request_error",
+   "level": "ERROR",
+   "fields": {
+    "llm_task": "60",
+    "llm_error": "Context size has been exceeded."
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "60",
+    "llm_final_tokens": "13423",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "83"
+   }
+  },
+  {
+   "kind": "prompt",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "83",
+    "llm_prompt_tokens": "36728"
+   }
+  },
+  {
+   "kind": "request_error",
+   "level": "ERROR",
+   "fields": {
+    "llm_task": "83",
+    "llm_error": "request (36728 tokens) exceeds the available context size (32768 tokens), try increasing it"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "83",
+    "llm_final_tokens": "0",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_read_ms": "1124.38",
+    "llm_read_tokens": "50",
+    "llm_read_tps": "44.47"
+   }
+  },
+  {
+   "kind": "output_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_output_ms": "145.36",
+    "llm_output_tokens": "15",
+    "llm_output_tps": "96.31"
+   }
+  },
+  {
+   "kind": "total_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_total_ms": "1269.74",
+    "llm_total_tokens": "65"
+   }
+  },
+  {
+   "kind": "draft",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_draft_accepted": "9",
+    "llm_draft_generated": "10"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_final_tokens": "64",
+    "llm_truncated": "0"
+   }
+  }
+ ],
+ "llm_server_router_sample.txt": [
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_read_ms": "1124.38",
+    "llm_read_tokens": "50",
+    "llm_read_tps": "44.47"
+   }
+  },
+  {
+   "kind": "output_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_output_ms": "145.36",
+    "llm_output_tokens": "15",
+    "llm_output_tps": "96.31"
+   }
+  },
+  {
+   "kind": "total_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_total_ms": "1269.74",
+    "llm_total_tokens": "65"
+   }
+  },
+  {
+   "kind": "draft",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_draft_accepted": "9",
+    "llm_draft_generated": "10"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "107",
+    "llm_final_tokens": "64",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_read_tokens": "14346",
+    "llm_progress": "0.59",
+    "llm_read_seconds": "3.26"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_read_tokens": "16394",
+    "llm_progress": "0.68",
+    "llm_read_seconds": "3.75"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_read_tokens": "18442",
+    "llm_progress": "0.76",
+    "llm_read_seconds": "4.25"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_read_tokens": "20490",
+    "llm_progress": "0.85",
+    "llm_read_seconds": "4.75"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_read_tokens": "22538",
+    "llm_progress": "0.93",
+    "llm_read_seconds": "5.27"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_read_tokens": "23669",
+    "llm_progress": "0.98",
+    "llm_read_seconds": "5.62"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_read_tokens": "24181",
+    "llm_progress": "1.00",
+    "llm_read_seconds": "6.28"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_read_ms": "6716.80",
+    "llm_read_tokens": "24185",
+    "llm_read_tps": "3600.67"
+   }
+  },
+  {
+   "kind": "output_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_output_ms": "223.20",
+    "llm_output_tokens": "16",
+    "llm_output_tps": "67.21"
+   }
+  },
+  {
+   "kind": "total_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_total_ms": "6939.99",
+    "llm_total_tokens": "24201"
+   }
+  },
+  {
+   "kind": "draft",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_draft_accepted": "7",
+    "llm_draft_generated": "15"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "119",
+    "llm_final_tokens": "24200",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_read_tokens": "14346",
+    "llm_progress": "0.57",
+    "llm_read_seconds": "3.29"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_read_tokens": "16394",
+    "llm_progress": "0.65",
+    "llm_read_seconds": "3.78"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_read_tokens": "18442",
+    "llm_progress": "0.74",
+    "llm_read_seconds": "4.27"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_read_tokens": "20490",
+    "llm_progress": "0.82",
+    "llm_read_seconds": "4.78"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_read_tokens": "22538",
+    "llm_progress": "0.90",
+    "llm_read_seconds": "5.29"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_read_tokens": "24528",
+    "llm_progress": "0.98",
+    "llm_read_seconds": "5.82"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_read_tokens": "25040",
+    "llm_progress": "1.00",
+    "llm_read_seconds": "6.50"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_read_ms": "6917.34",
+    "llm_read_tokens": "25044",
+    "llm_read_tps": "3620.47"
+   }
+  },
+  {
+   "kind": "output_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_output_ms": "173.30",
+    "llm_output_tokens": "16",
+    "llm_output_tps": "86.56"
+   }
+  },
+  {
+   "kind": "total_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_total_ms": "7090.64",
+    "llm_total_tokens": "25060"
+   }
+  },
+  {
+   "kind": "draft",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_draft_accepted": "9",
+    "llm_draft_generated": "11"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "151",
+    "llm_final_tokens": "25059",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "185"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "185",
+    "llm_read_ms": "407.38",
+    "llm_read_tokens": "22",
+    "llm_read_tps": "54.00"
+   }
+  },
+  {
+   "kind": "output_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "185",
+    "llm_output_ms": "228.95",
+    "llm_output_tokens": "16",
+    "llm_output_tps": "65.52"
+   }
+  },
+  {
+   "kind": "total_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "185",
+    "llm_total_ms": "636.33",
+    "llm_total_tokens": "38"
+   }
+  },
+  {
+   "kind": "draft",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "185",
+    "llm_draft_accepted": "7",
+    "llm_draft_generated": "14"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "185",
+    "llm_final_tokens": "24237",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_select_by": "LCP",
+    "llm_f_sim": "0.999",
+    "llm_f_keep": "0.737"
+   }
+  },
+  {
+   "kind": "task_started",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201",
+    "llm_read_tokens": "14346",
+    "llm_progress": "0.80",
+    "llm_read_seconds": "3.13"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201",
+    "llm_read_tokens": "16394",
+    "llm_progress": "0.92",
+    "llm_read_seconds": "3.62"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201",
+    "llm_read_tokens": "17367",
+    "llm_progress": "0.97",
+    "llm_read_seconds": "3.87"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201",
+    "llm_read_tokens": "17879",
+    "llm_progress": "1.00",
+    "llm_read_seconds": "4.05"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201",
+    "llm_read_ms": "4180.02",
+    "llm_read_tokens": "17883",
+    "llm_read_tps": "4278.20"
+   }
+  },
+  {
+   "kind": "output_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201",
+    "llm_output_ms": "34.59",
+    "llm_output_tokens": "3",
+    "llm_output_tps": "57.83"
+   }
+  },
+  {
+   "kind": "total_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201",
+    "llm_total_ms": "4214.61",
+    "llm_total_tokens": "17886"
+   }
+  },
+  {
+   "kind": "draft",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201",
+    "llm_draft_accepted": "2",
+    "llm_draft_generated": "2"
+   }
+  },
+  {
+   "kind": "finished",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "201",
+    "llm_final_tokens": "17886",
+    "llm_truncated": "0"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "20",
+    "llm_read_ms": "12584.47",
+    "llm_read_tokens": "36270",
+    "llm_read_tps": "2882.12"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "63",
+    "llm_read_ms": "14982.05",
+    "llm_read_tokens": "42383",
+    "llm_read_tps": "2828.92"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "115",
+    "llm_read_ms": "13820.31",
+    "llm_read_tokens": "45337",
+    "llm_read_tps": "3280.46"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "169",
+    "llm_read_ms": "20872.89",
+    "llm_read_tokens": "44425",
+    "llm_read_tps": "2128.36"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "225",
+    "llm_read_ms": "11774.72",
+    "llm_read_tokens": "40176",
+    "llm_read_tps": "3412.06"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "273",
+    "llm_read_ms": "14245.25",
+    "llm_read_tokens": "34521",
+    "llm_read_tps": "2423.33"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "conversation_discarded",
+   "level": "WARN",
+   "fields": {
+    "llm_discarded_mib": "1881.718"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "1",
+    "llm_task": "319",
+    "llm_read_ms": "9256.68",
+    "llm_read_tokens": "31940",
+    "llm_read_tps": "3450.48"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "362",
+    "llm_read_ms": "13850.25",
+    "llm_read_tokens": "39657",
+    "llm_read_tps": "2863.27"
+   }
+  },
+  {
+   "kind": "slot_selected",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_select_by": "LRU"
+   }
+  },
+  {
+   "kind": "conversation_discarded",
+   "level": "WARN",
+   "fields": {
+    "llm_discarded_mib": "2123.305"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "412",
+    "llm_read_ms": "13120.07",
+    "llm_read_tokens": "45198",
+    "llm_read_tps": "3444.95"
+   }
+  },
+  {
+   "kind": "conversation_saved",
+   "level": "INFO",
+   "fields": {
+    "llm_saved_tokens": "4531",
+    "llm_saved_mib": "309.680"
+   }
+  },
+  {
+   "kind": "conversation_restored",
+   "level": "INFO",
+   "fields": {
+    "llm_restored_f_keep": "1.000",
+    "llm_restored_f_sim": "1.000"
+   }
+  },
+  {
+   "kind": "conversation_discarded",
+   "level": "WARN",
+   "fields": {
+    "llm_discarded_mib": "1847.056"
+   }
+  },
+  {
+   "kind": "full_reread",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "2",
+    "llm_task": "1556"
+   }
+  },
+  {
+   "kind": "conversation_discarded",
+   "level": "WARN",
+   "fields": {
+    "llm_discarded_mib": "2044.566"
+   }
+  },
+  {
+   "kind": "conversation_discarded",
+   "level": "WARN",
+   "fields": {
+    "llm_discarded_mib": "2292.131"
+   }
+  },
+  {
+   "kind": "conversation_discarded",
+   "level": "WARN",
+   "fields": {
+    "llm_discarded_mib": "6629.720"
+   }
+  },
+  {
+   "kind": "full_reread",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "2021"
+   }
+  },
+  {
+   "kind": "read_timing",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "0",
+    "llm_task": "2021",
+    "llm_read_ms": "87408.22",
+    "llm_read_tokens": "158090",
+    "llm_read_tps": "1808.64"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "247",
+    "llm_read_tokens": "12299",
+    "llm_progress": "0.34",
+    "llm_read_seconds": "4.32"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "247",
+    "llm_read_tokens": "14347",
+    "llm_progress": "0.40",
+    "llm_read_seconds": "4.82"
+   }
+  },
+  {
+   "kind": "read_progress",
+   "level": "INFO",
+   "fields": {
+    "llm_slot": "3",
+    "llm_task": "247",
+    "llm_read_tokens": "16395",
+    "llm_progress": "0.45",
+    "llm_read_seconds": "5.33"
+   }
+  }
+ ]
+}

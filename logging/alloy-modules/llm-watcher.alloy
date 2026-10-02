@@ -1,0 +1,76 @@
+// Per-service log parser — llm-watcher
+//
+// See komodo-op.alloy for the pattern/rationale.
+//
+// llm-watcher writes one JSON object per line:
+//   {"ts":"2026-10-02T12:10:04.431Z","level":"info","event":"handoff.yield","msg":"...", ...}
+// `ts` is RFC 3339 UTC with milliseconds; `level` is info, warning or error;
+// `event` is one of
+//   handoff.yield           the model was unloaded for a game; `trigger` is
+//                           automatic (GPU activity), button, or external_load
+//                           (something other than the watcher loaded the model
+//                           while a game or a hold had the GPU)
+//   handoff.resume          the model is ready again; `quiet_since_ts` is null
+//                           for a load the watcher found already running
+//   handoff.resume_abandoned  the Yield button cancelled a load in progress
+//                           (a load is never abandoned any other way)
+//   slots.changed           the slot report changed
+//   state.adopted           the watcher took the router's state as its own:
+//                           info at start; a warning, with `previous_state`,
+//                           whenever it later finds the router in a state it
+//                           did not expect
+//   load.failed             a load failed, timed out, or the model died while
+//                           serving (the last also logs a warning state.adopted)
+//   watcher.unhealthy       `reason` is yield_stuck, vram_at_limit,
+//                           load_given_up or server_unresponsive (the model
+//                           server has not answered slot reads for five
+//                           minutes); sample_stale is logged only as the
+//                           watcher ends its own process because its GPU
+//                           sampling stalled, and Docker restarts it
+//
+// The body stays the whole JSON line, unlike the services that reduce it to a
+// message. The dashboards read the event's own fields (requests_cut,
+// busy_before_s, the first_activity_ts/released_ts pair, each slot's tokens,
+// the raw samples) and those exist nowhere else. Only the event name is
+// promoted, as `llm_event`, so a query can select events without parsing.
+//
+// Non-JSON lines (a traceback, an interpreter warning) are kept out of the
+// JSON stages by the line filter, for the reason given in pomerium.alloy.
+
+declare "llm_watcher" {
+  argument "forward_to" { }
+
+  loki.process "this" {
+    forward_to = argument.forward_to.value
+
+    stage.match {
+      selector = "{service=\"llm-watcher\"}"
+
+      stage.match {
+        selector = "{service=\"llm-watcher\"} |~ \"^\\\\{\""
+
+        stage.json {
+          expressions = {lvl = "level", ts = "ts", evt = "event"}
+        }
+
+        stage.timestamp {
+          source = "ts"
+          format = "RFC3339Nano"
+        }
+
+        stage.template {
+          source   = "lvl"
+          template = "{{ if eq .Value \"warning\" }}WARN{{ else }}{{ ToUpper .Value }}{{ end }}"
+        }
+
+        stage.labels {
+          values = {detected_level = "lvl", llm_event = "evt"}
+        }
+      }
+    }
+  }
+
+  export "receiver" {
+    value = loki.process.this.receiver
+  }
+}

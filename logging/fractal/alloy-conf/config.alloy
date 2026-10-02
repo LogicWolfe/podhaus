@@ -85,6 +85,87 @@ otelcol.processor.transform "svc_alloy" {
   }
 }
 
+// Local model service (llm/): both containers expose Prometheus metrics on
+// dockernet, bridged to OTLP like Alloy's own above.
+//
+// llm-server is a llama.cpp router, which serves /metrics only by forwarding
+// to the model process: the request must name the model (the preset's
+// section name in llm/server/models.ini), and `autoload=false` is what keeps
+// a scrape from loading the model while a game has the GPU. With no model
+// loaded the router answers 400 and the scrape fails; that failed scrape is
+// the "yielded" signal here, the watcher's llm_watcher_state is the
+// authoritative one.
+prometheus.scrape "llm_server" {
+  targets = [{
+    __address__      = "llm-server:8080",
+    __metrics_path__ = "/metrics",
+  }]
+  params = {
+    model    = ["qwen3.8-27b"],
+    autoload = ["false"],
+  }
+  scrape_interval = "15s"
+  forward_to      = [otelcol.receiver.prometheus.llm_server.receiver]
+}
+
+otelcol.receiver.prometheus "llm_server" {
+  output {
+    metrics = [otelcol.processor.transform.svc_llm_server.input]
+  }
+}
+
+// The bridge carries no service.name; stamp the container name so metrics
+// share a service with the container's logs (set by enrich.alloy).
+otelcol.processor.transform "svc_llm_server" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context = "metric"
+    statements = [
+      `set(resource.attributes["service.name"], "llm-server")`,
+      `set(resource.attributes["host"], "fractal")`,
+    ]
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
+// llm-watcher: its state, the GPU's utilisation, memory, power and
+// temperature, the guest's memory, and the slot pool. 15 s resolves a
+// handoff's phases; the exact timings are in the handoff events.
+prometheus.scrape "llm_watcher" {
+  targets = [{
+    __address__      = "llm-watcher:8081",
+    __metrics_path__ = "/metrics",
+  }]
+  scrape_interval = "15s"
+  forward_to      = [otelcol.receiver.prometheus.llm_watcher.receiver]
+}
+
+otelcol.receiver.prometheus "llm_watcher" {
+  output {
+    metrics = [otelcol.processor.transform.svc_llm_watcher.input]
+  }
+}
+
+otelcol.processor.transform "svc_llm_watcher" {
+  error_mode = "ignore"
+
+  metric_statements {
+    context = "metric"
+    statements = [
+      `set(resource.attributes["service.name"], "llm-watcher")`,
+      `set(resource.attributes["host"], "fractal")`,
+    ]
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.clickstack.input]
+  }
+}
+
 otelcol.processor.batch "clickstack" {
   output {
     logs    = [otelcol.exporter.otlphttp.clickstack.input]

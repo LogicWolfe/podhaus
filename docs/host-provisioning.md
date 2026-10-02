@@ -282,7 +282,9 @@ Windows-provided `/usr/lib/wsl/lib/nvidia-smi` is present, and it installs no
 Linux NVIDIA driver. With the toolkit in place a Compose device request with
 `driver: nvidia` reaches the GPU. Installing the toolkit restarts the Docker
 daemon, which live-restore makes safe for running containers.
-`docker run --rm --gpus all <image> /usr/lib/wsl/lib/nvidia-smi` checks it.
+The toolkit puts `nvidia-smi` on the container's own path, so
+`docker run --rm --gpus all --entrypoint nvidia-smi <image>` checks it with any
+glibc-based image already on the host.
 
 **`storage_binds`** carries the postmortem-hardened defences for any host
 whose containers bind a volume that can arrive late. Each host declares its

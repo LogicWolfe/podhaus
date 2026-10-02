@@ -1,0 +1,239 @@
+# Local model service on fractal: a llama.cpp server in router mode, the
+# watcher that hands the GPU to Windows games and back, and the one-shot job
+# that fetches the model file. Design and measurements:
+# docs/plans/local-llm-service.html.
+#
+# Memory is bounded on every container because fractal's guest is shared with
+# a dev session and has no early out-of-memory protection of its own.
+services:
+  llm-model:
+    # The shared init image carries curl and a busybox sha256sum, which is all
+    # a plain-stream download and a checksum need.
+    build:
+      context: ../init-tools
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_LLM_MODEL:-unset}
+    image: init-tools:local
+    pull_policy: never
+    restart: "no"
+    # The download was the 4.6 GB process the kernel killed during the trial
+    # install's build. One plain stream needs a small fraction of this.
+    mem_limit: 1g
+    memswap_limit: 1g
+    environment:
+      TZ: ${TZ}
+      MODEL_REPO: felippeburk/Qwen3.8-27B-NVFP4-MTP-GGUF
+      MODEL_FILE: qwen3.8-27b-text-nvfp4-mtp.gguf
+      # LFS object id of the file, from Hugging Face's file metadata
+      # (/api/models/<repo>/tree/main and the X-Linked-ETag header agree).
+      MODEL_SHA256: 4fd7a135dabbe267f9d0c6916c642699786e67c047f05b6c002e52a8294a8c42
+    # Every failure exits non-zero: with llm-server and llm-watcher waiting on
+    # completion, a deploy that cannot produce a verified model stops here.
+    command:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        target="/models/$${MODEL_FILE}"
+        partial="$${target}.part"
+        trap 'rm -f "$${partial}"' EXIT
+
+        if [ -f "$${target}" ]; then
+          present="$$(sha256sum "$${target}")"
+          if [ "$${present%% *}" = "$${MODEL_SHA256}" ]; then
+            echo "model present, checksum matches"
+            exit 0
+          fi
+          echo "model present but checksum is $${present%% *}; downloading again" >&2
+          rm -f "$${target}"
+        fi
+
+        rm -f "$${partial}"
+        curl --fail --location --silent --show-error \
+          --output "$${partial}" \
+          "https://huggingface.co/$${MODEL_REPO}/resolve/main/$${MODEL_FILE}"
+
+        downloaded="$$(sha256sum "$${partial}")"
+        if [ "$${downloaded%% *}" != "$${MODEL_SHA256}" ]; then
+          echo "checksum mismatch: expected $${MODEL_SHA256}, got $${downloaded%% *}" >&2
+          rm -f "$${partial}"
+          exit 1
+        fi
+        mv "$${partial}" "$${target}"
+        echo "model downloaded, checksum matches"
+    volumes:
+      - llm-models:/models
+    networks:
+      - dockernet
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+  llm-server:
+    container_name: llm-server
+    # The project's stock CUDA 13 server image, which is the CUDA generation
+    # the trial install was built against. Not pinned: each deploy takes the
+    # current release.
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda13
+    restart: unless-stopped
+    depends_on:
+      llm-model:
+        condition: service_completed_successfully
+    # Router mode: no model argument, so the process only supervises. Settings
+    # for the model are in the preset file; the router's own are here because
+    # it reads them from its command line and withholds them from the model.
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --models-preset
+      - /etc/llm-server/models.ini
+      - --no-models-autoload
+    # The 12 GiB of saved conversations plus working memory (plan, "Server
+    # memory cap"), with 1 GiB of swap. memswap_limit is memory plus swap.
+    mem_limit: 17g
+    memswap_limit: 18g
+    # First process the kernel kills if the whole guest runs out of memory,
+    # ahead of anything in a dev session. The watcher reloads it.
+    oom_score_adj: 1000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      TZ: ${TZ}
+      # One level above the default. The default omits prompt size, tokens
+      # reused, forced re-reads and conversation saves and restores, which the
+      # request records and slow-start causes are built from. This level
+      # prints counts and timings, no prompt or response text. The model
+      # process inherits it from the router.
+      LLAMA_ARG_LOG_VERBOSITY: "4"
+    volumes:
+      # Directory bind only: the preset file and the chat templates.
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-fractal/llm/server:/etc/llm-server:ro
+      - llm-models:/models:ro
+    networks:
+      - dockernet
+    labels:
+      autoheal: "true"
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      podhaus.depends-on-llm-model: ${BUILD_HASH_LLM_MODEL:-unset}
+    healthcheck:
+      # The router answers /health whether or not a model is loaded, so a
+      # yielded model is not an unhealthy server.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  llm-watcher:
+    container_name: llm-watcher
+    build:
+      context: ./watcher
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_LLM_WATCHER:-unset}
+    image: llm-watcher:local
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      llm-model:
+        condition: service_completed_successfully
+      llm-server:
+        condition: service_healthy
+    mem_limit: 256m
+    memswap_limit: 256m
+    # Reads GPU utilisation and VRAM.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      TZ: ${TZ}
+      LLM_SERVER_URL: http://llm-server:8080
+      # The preset's section name in server/models.ini.
+      LLM_MODEL_NAME: qwen3.8-27b
+      # Dropped from the guest's file cache at every yield so Windows gets the
+      # memory back (measured: cache fell from 8.2 to 1.4 GiB).
+      LLM_MODEL_FILE: /models/qwen3.8-27b-text-nvfp4-mtp.gguf
+      # Equals ctx-size in server/models.ini. Slot-change events report the
+      # pool total against it.
+      LLM_POOL_TOKENS: "204800"
+      WATCHER_LISTEN_PORT: "8081"
+      # Three samples at or above 3% within five seconds, with no slot busy,
+      # means Windows wants the GPU: decision about 4 s after a game's first
+      # activity. The three numbers come from one recorded session with one
+      # light game; every handoff event carries its last 30 s of raw samples
+      # so they can be corrected from real sessions.
+      WATCHER_ACTIVITY_THRESHOLD_PERCENT: "3"
+      WATCHER_ACTIVITY_SAMPLES: "3"
+      WATCHER_ACTIVITY_WINDOW_SECONDS: "5"
+      # The longest quiet stretch inside the recorded game session was 17 s.
+      WATCHER_QUIET_SECONDS: "60"
+      # The Yield button also holds the model away this long, long enough to
+      # launch something.
+      WATCHER_BUTTON_HOLD_SECONDS: "600"
+      # A yield taking longer than this means unload did not free the GPU,
+      # which breaks games, so the watcher reports unhealthy.
+      WATCHER_YIELD_STUCK_SECONDS: "30"
+      # A watcher whose last GPU sample is older than this ends its own
+      # process and Docker restarts it; until then a game would share the GPU
+      # with the model.
+      WATCHER_SAMPLE_STALE_SECONDS: "10"
+      # A load still unfinished after this long counts as a failed load and is
+      # retried. A load from disk measured 35 to 57 s; in the first hour after
+      # a WSL restart loads took 104 to 176 s, and a timeout inside that range
+      # would fail every attempt until the watcher gave up.
+      WATCHER_LOAD_TIMEOUT_SECONDS: "300"
+      # The model process answers a slot read only between steps of its main
+      # loop, and saving or restoring a conversation runs inside one step
+      # (measured up to 54 s). Reads unanswered for this long mean the model
+      # server has hung, and the watcher reports unhealthy.
+      WATCHER_SERVER_SILENT_SECONDS: "300"
+      # Whole-GPU memory in use, Windows desktop included. With this pool it
+      # reads 29,600 to 30,300 MiB. The reading stops rising near 31,100 MiB
+      # once the card is full: the one run that spilled into shared memory
+      # (about 1/50 of normal reading speed) read 31,126 MiB, and a larger
+      # pool that did not spill read 31,048. So this level while Serving
+      # means the card is full and a spill is likely, not that one happened.
+      # It rests on that single spilled reading.
+      WATCHER_VRAM_LIMIT_MIB: "31000"
+    volumes:
+      - llm-models:/models:ro
+    networks:
+      - dockernet
+    # No autoheal label. Unhealthy here means a condition a restart cannot
+    # fix and would hide: a yield that did not release the GPU, the model
+    # spilled out of VRAM, or loads given up. A restart resets their clocks,
+    # the container reads healthy for a while, and the Gatus alert on this
+    # container's health might never fire. A stalled watcher restarts itself.
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      podhaus.depends-on-llm-model: ${BUILD_HASH_LLM_MODEL:-unset}
+    healthcheck:
+      # The image is Python, so no curl; urlopen raises on any non-2xx status.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://localhost:8081/healthz", timeout=3)
+      interval: 5s
+      timeout: 3s
+      retries: 2
+      start_period: 10s
+
+volumes:
+  # Docker's default volume location on the root filesystem, never /home,
+  # which stays locked until Nathan logs in.
+  llm-models:
+    name: llm-models
+
+networks:
+  dockernet:
+    external: true

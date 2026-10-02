@@ -1,0 +1,6 @@
+# Runbook filenames give their sidebar labels; an entry here overrides one
+# label. Listed paths sort before unlisted siblings.
+
+[[item]]
+path  = "local-llm.md"
+title = "Local model service"

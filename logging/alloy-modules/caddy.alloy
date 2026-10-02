@@ -16,7 +16,9 @@
 // severity. Body is reduced to `logger: msg` — the `logger` field (e.g.
 // admin.api, http.log.access) is the useful at-a-glance context; the
 // rest (headers, request IDs) stays in the raw line but out of the
-// shaped Body. Non-JSON lines (Caddy's own startup banner) are kept out
+// shaped Body. The exception is an access-log line (logger
+// http.log.access*), which keeps its whole JSON line: its fields are the
+// record. Non-JSON lines (Caddy's own startup banner) are kept out
 // of the JSON stages entirely by a nested line-filtered stage.match, so
 // they pass through untouched — see the inner stage.match comment below
 // for why that gate is load-bearing, not just tidy.
@@ -57,13 +59,20 @@ declare "caddy" {
           values = {detected_level = "lvl"}
         }
 
-        stage.template {
-          source   = "line"
-          template = "{{ if .logger }}{{ .logger }}: {{ end }}{{ .msg }}"
-        }
+        // Access-log lines keep their whole JSON line as the body. Their
+        // fields (caller headers, status, duration) are the record; reducing
+        // the line to "logger: msg" would leave only "handled request".
+        stage.match {
+          selector = "{service=\"caddy\"} != \"\\\"logger\\\":\\\"http.log.access\""
 
-        stage.output {
-          source = "line"
+          stage.template {
+            source   = "line"
+            template = "{{ if .logger }}{{ .logger }}: {{ end }}{{ .msg }}"
+          }
+
+          stage.output {
+            source = "line"
+          }
         }
       }
     }

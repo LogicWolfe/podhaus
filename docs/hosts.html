@@ -195,8 +195,11 @@
 
       <h2 id="fractal">fractal</h2>
       <p>
-        Fedora 44 under WSL2 on a Windows desktop. Ryzen 9 9950X3D, 32 vCPU / 15 GB RAM,
-        1 TB ext4 root plus a LUKS <code>/home</code>. It is two things at once: Nathan's
+        Fedora 44 under WSL2 on a Windows desktop. Ryzen 9 9950X3D, 32 vCPU, a 25 GB
+        memory limit for the guest, 1 TB ext4 root plus a LUKS <code>/home</code>. The
+        memory limit is set in a Windows-side WSL configuration file that Ansible cannot
+        reach, so it is changed on the Windows desktop. The GPU, an RTX 5090, belongs to
+        Windows, which exposes it to the guest. It is two things at once: Nathan's
         remote development machine and an ordinary podhaus host. <strong>The first host
         provisioned entirely by <a href="/host-provisioning.md">Ansible</a></strong>
         — it has no bootstrap script and never had one.
@@ -216,6 +219,8 @@
       <ul>
         <li><strong>Ansible-managed (root state):</strong> hostname via
           <code>/etc/wsl.conf</code>, timezone, Docker CE + <code>dockernet</code>,
+          NVIDIA's container toolkit and Docker runtime so containers can use the GPU (no
+          Linux driver; see <a href="/host-provisioning.md">Host provisioning</a>),
           the developer toolchain, docs source slots, the Pomerium SSH user-CA trust,
           and Komodo Periphery.
           Run <code>ansible/playbooks/fractal.yml</code>.</li>
@@ -224,7 +229,7 @@
           himself; Ansible never invokes it.</li>
         <li><strong>Komodo-managed:</strong> <code>fractal-relay</code> (rathole client),
           <code>fractal-caddy</code> (mTLS origin), <code>fractal-logging</code> (Alloy),
-          and <code>fractal-docs</code> (the docs-server over its Ansible-exposed
+          <code>fractal-llm</code> (the local model service), and <code>fractal-docs</code> (the docs-server over its Ansible-exposed
           repository sources) through
           linked repos <code>podhaus-fractal</code> and <code>docs-server-fractal</code>.</li>
         <li><strong>Bootstrap-managed:</strong> Komodo Periphery only — Core reaches this
@@ -236,11 +241,25 @@
         Ingress is an outbound rathole client to numbat, following the same pattern as bilby:
         <code>fractal.docs.pod.haus</code> lands on Pomerium, which forwards to
         <code>127.0.0.1:8444</code> on numbat, through the tunnel to fractal's Caddy on
-        <code>:4443</code> (mTLS origin), and on to the docs container. Off-LAN SSH takes
+        <code>:4443</code> (mTLS origin), and on to the docs container;
+        <code>llm.pod.haus</code> takes the same tunnel to the model service. Off-LAN SSH takes
         the same route via <code>127.0.0.1:2204</code> and the <code>ssh://fractal</code>
         Pomerium route through a chezmoi <code>Match originalhost</code> rewrite; on the
         home network a preceding <code>localnetwork</code> match connects direct via the
         split-horizon record instead.
+      </p>
+      <p id="fractal-llm">
+        <strong>Local model service.</strong> <code>fractal-llm</code> (<code>llm/</code>)
+        runs a llama.cpp server on the GPU, a one-shot job that downloads and
+        checksums the model file, and a watcher that unloads the model when a Windows game
+        wants the GPU and loads it again when the GPU has been quiet. The server and the watcher carry a
+        Compose GPU request (<code>driver: nvidia</code>). The same Caddy that fronts the
+        docs server serves it at <code>llm.pod.haus</code> through Pomerium, and on a
+        loopback-only port, <code>127.0.0.1:8085</code>, for callers on fractal. Every
+        container has a memory limit, and the server's <code>oom_score_adj</code> makes it the
+        first process killed if the guest runs out of memory. The model file lives in the
+        <code>llm-models</code> volume on the root filesystem, which is re-downloadable and
+        not backed up. See <a href="/runbooks/local-llm.md">the local model runbook</a>.
       </p>
       <p>
         <strong>fractal has no backup stack.</strong> Everything Ansible and chezmoi put

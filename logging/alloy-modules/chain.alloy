@@ -48,7 +48,9 @@ declare "chain" {
 	rathole "run" { forward_to = [flood.run.receiver] }
 	flood "run" { forward_to = [ofelia.run.receiver] }
 	ofelia "run" { forward_to = [pocket_id.run.receiver] }
-	pocket_id "run" { forward_to = argument.forward_to.value }
+	pocket_id "run" { forward_to = [llm_server.run.receiver] }
+	llm_server "run" { forward_to = [llm_watcher.run.receiver] }
+	llm_watcher "run" { forward_to = argument.forward_to.value }
 
 	export "receiver" {
 		value = indy_service.run.receiver

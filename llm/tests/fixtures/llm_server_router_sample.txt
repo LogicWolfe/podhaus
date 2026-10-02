@@ -1,0 +1,187 @@
+# --- router_sample_1
+[45589] 3.28.237.244 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1
+[45589] 3.28.238.010 I slot launch_slot_: id  3 | task 107 | processing task, is_child = 0
+[45589] 3.29.509.559 I slot print_timing: id  3 | task 107 | prompt eval time =    1124.38 ms /    50 tokens (   22.49 ms per token,    44.47 tokens per second)
+[45589] 3.29.509.581 I slot print_timing: id  3 | task 107 |        eval time =     145.36 ms /    15 tokens (   10.38 ms per token,    96.31 tokens per second)
+[45589] 3.29.509.581 I slot print_timing: id  3 | task 107 |       total time =    1269.74 ms /    65 tokens
+[45589] 3.29.509.585 I slot print_timing: id  3 | task 107 |    graphs reused =          4
+[45589] 3.29.509.588 I slot print_timing: id  3 | task 107 | draft acceptance = 0.90000 (    9 accepted /    10 generated), mean len =  2.80
+[45589] 3.29.510.507 I slot      release: id  3 | task 107 | stop processing: n_tokens = 64, truncated = 0
+# --- router_sample_2
+[45589] 3.29.771.740 I slot get_availabl: id  2 | task -1 | selected slot by LRU, t_last = -1
+[45589] 3.29.771.818 I slot launch_slot_: id  2 | task 119 | processing task, is_child = 0
+[45589] 3.33.400.404 I slot print_timing: id  2 | task 119 | prompt processing, n_tokens =  14346, progress = 0.59, t =   3.26 s / 4399.49 tokens per second
+[45589] 3.33.888.889 I slot print_timing: id  2 | task 119 | prompt processing, n_tokens =  16394, progress = 0.68, t =   3.75 s / 4373.82 tokens per second
+[45589] 3.34.389.045 I slot print_timing: id  2 | task 119 | prompt processing, n_tokens =  18442, progress = 0.76, t =   4.25 s / 4342.97 tokens per second
+[45589] 3.34.892.701 I slot print_timing: id  2 | task 119 | prompt processing, n_tokens =  20490, progress = 0.85, t =   4.75 s / 4314.64 tokens per second
+[45589] 3.35.411.773 I slot print_timing: id  2 | task 119 | prompt processing, n_tokens =  22538, progress = 0.93, t =   5.27 s / 4280.09 tokens per second
+[45589] 3.35.737.363 I slot print_timing: id  2 | task 119 | prompt processing, n_tokens =  23669, progress = 0.98, t =   5.62 s / 4208.13 tokens per second
+[45589] 3.36.399.950 I slot print_timing: id  2 | task 119 | prompt processing, n_tokens =  24181, progress = 1.00, t =   6.28 s / 3851.67 tokens per second
+[45589] 3.36.401.996 W slot create_check: id  2 | task 119 | erasing old context checkpoint (pos_min = 9, pos_max = 9, n_tokens = 10, size = 149.647 MiB)
+[45589] 3.37.013.767 I slot print_timing: id  2 | task 119 | prompt eval time =    6716.80 ms / 24185 tokens (    0.28 ms per token,  3600.67 tokens per second)
+[45589] 3.37.013.787 I slot print_timing: id  2 | task 119 |        eval time =     223.20 ms /    16 tokens (   14.88 ms per token,    67.21 tokens per second)
+[45589] 3.37.013.788 I slot print_timing: id  2 | task 119 |       total time =    6939.99 ms / 24201 tokens
+[45589] 3.37.013.789 I slot print_timing: id  2 | task 119 |    graphs reused =         10
+[45589] 3.37.013.791 I slot print_timing: id  2 | task 119 | draft acceptance = 0.46667 (    7 accepted /    15 generated), mean len =  1.88
+[45589] 3.37.037.153 I slot      release: id  2 | task 119 | stop processing: n_tokens = 24200, truncated = 0
+[45589] 3.37.169.827 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1
+[45589] 3.37.169.906 I slot launch_slot_: id  1 | task 151 | processing task, is_child = 0
+[45589] 3.48.191.270 I slot print_timing: id  1 | task 151 | prompt processing, n_tokens =  14346, progress = 0.57, t =   3.29 s / 4359.17 tokens per second
+[45589] 3.48.679.799 I slot print_timing: id  1 | task 151 | prompt processing, n_tokens =  16394, progress = 0.65, t =   3.78 s / 4337.64 tokens per second
+[45589] 3.49.173.450 I slot print_timing: id  1 | task 151 | prompt processing, n_tokens =  18442, progress = 0.74, t =   4.27 s / 4316.69 tokens per second
+[45589] 3.49.679.754 I slot print_timing: id  1 | task 151 | prompt processing, n_tokens =  20490, progress = 0.82, t =   4.78 s / 4290.15 tokens per second
+[45589] 3.50.197.025 I slot print_timing: id  1 | task 151 | prompt processing, n_tokens =  22538, progress = 0.90, t =   5.29 s / 4259.07 tokens per second
+[45589] 3.50.723.420 I slot print_timing: id  1 | task 151 | prompt processing, n_tokens =  24528, progress = 0.98, t =   5.82 s / 4216.97 tokens per second
+[45589] 3.51.381.398 I slot print_timing: id  1 | task 151 | prompt processing, n_tokens =  25040, progress = 1.00, t =   6.50 s / 3853.32 tokens per second
+[45589] 3.51.383.433 W slot create_check: id  1 | task 151 | erasing old context checkpoint (pos_min = 9, pos_max = 9, n_tokens = 10, size = 149.647 MiB)
+[45589] 3.51.923.384 I slot print_timing: id  1 | task 151 | prompt eval time =    6917.34 ms / 25044 tokens (    0.28 ms per token,  3620.47 tokens per second)
+[45589] 3.51.923.404 I slot print_timing: id  1 | task 151 |        eval time =     173.30 ms /    16 tokens (   11.55 ms per token,    86.56 tokens per second)
+[45589] 3.51.923.404 I slot print_timing: id  1 | task 151 |       total time =    7090.64 ms / 25060 tokens
+[45589] 3.51.923.405 I slot print_timing: id  1 | task 151 |    graphs reused =         14
+[45589] 3.51.923.408 I slot print_timing: id  1 | task 151 | draft acceptance = 0.81818 (    9 accepted /    11 generated), mean len =  2.50
+[45589] 3.51.927.302 I slot      release: id  1 | task 151 | stop processing: n_tokens = 25059, truncated = 0
+[45589] 3.52.024.297 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+[45589] 3.52.153.281 I slot launch_slot_: id  0 | task 185 | processing task, is_child = 0
+[45589] 3.54.867.413 W slot create_check: id  0 | task 185 | erasing old context checkpoint (pos_min = 23668, pos_max = 23668, n_tokens = 23669, size = 199.286 MiB)
+[45589] 3.55.005.551 W slot create_check: id  0 | task 185 | erasing old context checkpoint (pos_min = 24199, pos_max = 24199, n_tokens = 24200, size = 200.400 MiB)
+[45589] 3.55.332.342 I slot print_timing: id  0 | task 185 | prompt eval time =     407.38 ms /    22 tokens (   18.52 ms per token,    54.00 tokens per second)
+[45589] 3.55.332.362 I slot print_timing: id  0 | task 185 |        eval time =     228.95 ms /    16 tokens (   15.26 ms per token,    65.52 tokens per second)
+[45589] 3.55.332.363 I slot print_timing: id  0 | task 185 |       total time =     636.33 ms /    38 tokens
+[45589] 3.55.332.630 I slot print_timing: id  0 | task 185 |    graphs reused =         20
+[45589] 3.55.332.681 I slot print_timing: id  0 | task 185 | draft acceptance = 0.50000 (    7 accepted /    14 generated), mean len =  2.00
+[45589] 3.55.333.451 I slot      release: id  0 | task 185 | stop processing: n_tokens = 24237, truncated = 0
+# --- router_sample_3
+[45589] 3.55.386.234 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 0.999 (> 0.500 thold), f_keep = 0.737
+[45589] 3.55.386.358 I slot launch_slot_: id  0 | task 201 | processing task, is_child = 0
+[45589] 3.58.587.369 I slot print_timing: id  0 | task 201 | prompt processing, n_tokens =  14346, progress = 0.80, t =   3.13 s / 4576.47 tokens per second
+[45589] 3.59.069.948 I slot print_timing: id  0 | task 201 | prompt processing, n_tokens =  16394, progress = 0.92, t =   3.62 s / 4533.54 tokens per second
+[45589] 3.59.310.290 I slot print_timing: id  0 | task 201 | prompt processing, n_tokens =  17367, progress = 0.97, t =   3.87 s / 4484.14 tokens per second
+[45589] 3.59.481.387 I slot print_timing: id  0 | task 201 | prompt processing, n_tokens =  17879, progress = 1.00, t =   4.05 s / 4415.01 tokens per second
+[45589] 3.59.482.898 W slot create_check: id  0 | task 201 | erasing old context checkpoint (pos_min = 9, pos_max = 9, n_tokens = 10, size = 149.647 MiB)
+[45589] 3.59.601.978 I slot print_timing: id  0 | task 201 | prompt eval time =    4180.02 ms / 17883 tokens (    0.23 ms per token,  4278.20 tokens per second)
+[45589] 3.59.601.997 I slot print_timing: id  0 | task 201 |        eval time =      34.59 ms /     3 tokens (   17.29 ms per token,    57.83 tokens per second)
+[45589] 3.59.601.998 I slot print_timing: id  0 | task 201 |       total time =    4214.61 ms / 17886 tokens
+[45589] 3.59.601.998 I slot print_timing: id  0 | task 201 |    graphs reused =         20
+[45589] 3.59.602.000 I slot print_timing: id  0 | task 201 | draft acceptance = 1.00000 (    2 accepted /     2 generated), mean len =  3.00
+[45589] 3.59.602.341 I slot      release: id  0 | task 201 | stop processing: n_tokens = 17886, truncated = 0
+# --- router_sample_4
+[51511] 3.15.165.250 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1
+[51511] 3.27.341.125 W slot create_check: id  3 | task 20 | erasing old context checkpoint (pos_min = 10, pos_max = 10, n_tokens = 11, size = 149.649 MiB)
+[51511] 3.28.048.903 I slot print_timing: id  3 | task 20 | prompt eval time =   12584.47 ms / 36270 tokens (    0.35 ms per token,  2882.12 tokens per second)
+[51511] 3.28.281.282 I slot get_availabl: id  2 | task -1 | selected slot by LRU, t_last = -1
+[51511] 3.51.186.088 W slot create_check: id  2 | task 63 | erasing old context checkpoint (pos_min = 10, pos_max = 10, n_tokens = 11, size = 149.649 MiB)
+[51511] 3.52.482.358 I slot print_timing: id  2 | task 63 | prompt eval time =   14982.05 ms / 42383 tokens (    0.35 ms per token,  2828.92 tokens per second)
+[51511] 3.52.748.478 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1
+[51511] 4.17.548.263 W slot create_check: id  1 | task 115 | erasing old context checkpoint (pos_min = 10, pos_max = 10, n_tokens = 11, size = 149.649 MiB)
+[51511] 4.18.062.030 I slot print_timing: id  1 | task 115 | prompt eval time =   13820.31 ms / 45337 tokens (    0.30 ms per token,  3280.46 tokens per second)
+[51511] 4.18.217.149 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+[51511] 4.46.905.274 W slot create_check: id  0 | task 169 | erasing old context checkpoint (pos_min = 10, pos_max = 10, n_tokens = 11, size = 149.649 MiB)
+[51511] 4.47.617.438 I slot print_timing: id  0 | task 169 | prompt eval time =   20872.89 ms / 44425 tokens (    0.47 ms per token,  2128.36 tokens per second)
+[51511] 4.47.911.031 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = 3044236930
+[51511] 5.05.026.828 W slot create_check: id  3 | task 225 | erasing old context checkpoint (pos_min = 10, pos_max = 10, n_tokens = 11, size = 149.649 MiB)
+[51511] 5.06.067.221 I slot print_timing: id  3 | task 225 | prompt eval time =   11774.72 ms / 40176 tokens (    0.29 ms per token,  3412.06 tokens per second)
+[51511] 5.06.383.461 I slot get_availabl: id  2 | task -1 | selected slot by LRU, t_last = 3068651761
+[51511] 5.28.644.903 W slot create_check: id  2 | task 273 | erasing old context checkpoint (pos_min = 10, pos_max = 10, n_tokens = 11, size = 149.649 MiB)
+[51511] 5.29.145.488 I slot print_timing: id  2 | task 273 | prompt eval time =   14245.25 ms / 34521 tokens (    0.41 ms per token,  2423.33 tokens per second)
+[51511] 5.29.700.422 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 3094218124
+[51511] 5.29.703.710 W srv         alloc:  - making room for prompt cache entry, removing oldest entry (size = 1881.718 MiB)
+[51511] 5.47.932.359 W slot create_check: id  1 | task 319 | erasing old context checkpoint (pos_min = 10, pos_max = 10, n_tokens = 11, size = 149.649 MiB)
+[51511] 5.48.636.886 I slot print_timing: id  1 | task 319 | prompt eval time =    9256.68 ms / 31940 tokens (    0.29 ms per token,  3450.48 tokens per second)
+[51511] 5.49.483.353 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 3123761405
+[51511] 6.11.273.165 W slot create_check: id  0 | task 362 | erasing old context checkpoint (pos_min = 10, pos_max = 10, n_tokens = 11, size = 149.649 MiB)
+[51511] 6.11.787.032 I slot print_timing: id  0 | task 362 | prompt eval time =   13850.25 ms / 39657 tokens (    0.35 ms per token,  2863.27 tokens per second)
+[51511] 6.12.068.906 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = 3142213687
+[51511] 6.12.070.659 W srv         alloc:  - making room for prompt cache entry, removing oldest entry (size = 2123.305 MiB)
+[51511] 6.32.871.065 W slot create_check: id  3 | task 412 | erasing old context checkpoint (pos_min = 10, pos_max = 10, n_tokens = 11, size = 149.649 MiB)
+[51511] 6.33.316.108 I slot print_timing: id  3 | task 412 | prompt eval time =   13120.07 ms / 45198 tokens (    0.29 ms per token,  3444.95 tokens per second)
+# --- router_sample_5
+0.00.150.569 I srv    operator(): Available models (1):
+0.00.150.591 I srv    operator():   [    preset] qwen3.8-27b
+0.00.150.679 W srv  llama_server: security: router mode enabled - do not expose to untrusted environments
+0.00.150.681 I srv  llama_server: starting server in router mode. models will be automatically loaded on-demand
+0.00.155.862 I srv  llama_server: listening on http://127.0.0.1:8090
+0.34.689.204 I srv          load: spawning server instance with name=qwen3.8-27b on port 45589
+[45589] 1.43.415.748 I srv  llama_server: listening on http://127.0.0.1:45589
+6.41.314.591 I srv          load: spawning server instance with name=qwen3.8-27b on port 51511
+[51511] 2.55.116.538 I srv  llama_server: listening on http://127.0.0.1:51511
+4.13.857.233 I srv        unload: stopping model instance name=qwen3.8-27b
+[45921] 3.13.707.776 I srv    operator(): exit command received, exiting...
+[45921] 3.13.707.942 I srv    operator(): operator(): cleaning up before exit...
+4.23.866.881 W srv           run: force-killing model instance name=qwen3.8-27b after timeout
+11.13.209.908 I srv        unload: stopping model instance name=qwen3.8-27b
+[41333] 2.05.090.164 I srv    operator(): exit command received, exiting...
+[41333] 2.05.091.322 I srv    operator(): operator(): cleaning up before exit...
+11.15.308.854 I srv           run: instance name=qwen3.8-27b exited with status 0
+11.33.928.375 I srv    operator(): operator(): cleaning up before exit...
+# --- router_sample_6
+[45589] 4.40.124.625 E CUDA error: unknown error
+[45589] 4.40.124.717 E   current device: 0, in function ggml_backend_cuda_synchronize at /opt/llm/llama.cpp/ggml/src/ggml-cuda/ggml-cuda.cu:2549
+[45589] 4.40.124.742 E   cudaStreamSynchronize(cuda_ctx->stream())
+[45589] /opt/llm/llama.cpp/ggml/src/ggml-cuda/ggml-cuda.cu:109: CUDA error
+5.17.052.407 I srv           run: instance name=qwen3.8-27b exited with status 1
+[51511] 7.18.801.257 E CUDA error: unknown error
+[51511] 7.18.803.172 E   current device: 0, in function launch_mul_mat_q at /opt/llm/llama.cpp/ggml/src/ggml-cuda/template-instances/../mmq.cuh:1478
+[51511] /opt/llm/llama.cpp/ggml/src/ggml-cuda/ggml-cuda.cu:109: CUDA error
+14.03.412.305 I srv           run: instance name=qwen3.8-27b exited with status 1
+4.24.394.876 I srv           run: instance name=qwen3.8-27b exited with status 1
+8.44.683.420 I srv           run: instance name=qwen3.8-27b exited with status 1
+# --- router_sample_7
+[45921] 2.53.550.605 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 12288.000 MiB, 204800 tokens, 12884901888 est)
+[45921] 2.53.550.623 I srv  get_availabl: prompt cache update took 0.74 ms
+[45921] 2.53.553.026 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache
+[45921] 2.53.553.227 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache
+[45921] 2.53.553.370 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache
+[45921] 2.57.570.337 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 12288.000 MiB, 204800 tokens, 12884901888 est)
+[45921] 2.57.570.338 I srv  get_availabl: prompt cache update took 0.01 ms
+[45921] 2.57.570.422 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache
+[45921] 2.57.570.561 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache
+[45921] 2.57.570.713 I slot process_sing: id  3 | task -1 | saving idle slot to prompt cache
+[45921] 2.57.571.077 I srv   prompt_save:  - saving prompt with length 4531, total state size = 309.680 MiB (draft: 9.506 MiB)
+[45921] 3.02.302.289 I srv        update:  - cache state: 1 prompts, 626.850 MiB (limits: 12288.000 MiB, 204800 tokens, 204800 est)
+[45921] 3.04.216.308 I srv          load:  - found better prompt with f_keep = 1.000, f_sim = 1.000
+[45921] 3.04.253.111 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 12288.000 MiB, 204800 tokens, 12884901888 est)
+[45921] 3.04.253.150 I srv  get_availabl: prompt cache update took 36.85 ms
+[45921] 3.04.253.312 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache
+# --- router_sample_8
+15.56.658.182 W srv         alloc:  - making room for prompt cache entry, removing oldest entry (size = 1847.056 MiB)
+16.28.991.669 I slot   operator(): id  2 | task 1556 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+16.46.814.047 W srv         alloc:  - making room for prompt cache entry, removing oldest entry (size = 2044.566 MiB)
+17.08.403.481 W srv         alloc:  - making room for prompt cache entry, removing oldest entry (size = 2292.131 MiB)
+18.40.353.277 W srv         alloc:  - making room for prompt cache entry, removing oldest entry (size = 6629.720 MiB)
+19.36.549.925 I slot   operator(): id  0 | task 2021 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+21.04.012.704 I slot print_timing: id  0 | task 2021 | prompt eval time =   87408.22 ms / 158090 tokens (    0.55 ms per token,  1808.64 tokens per second)
+# --- model_process_crash_with_backtrace_and_proxied_requests
+5.13.254.576 I srv  proxy_reques: proxying request to model qwen3.8-27b on port 45589
+[45589] 4.38.962.274 I slot print_timing: id  3 | task 247 | prompt processing, n_tokens =  12299, progress = 0.34, t =   4.32 s / 2844.56 tokens per second
+5.14.149.732 I srv  proxy_reques: proxying request to model qwen3.8-27b on port 45589
+[45589] 4.39.460.426 I slot print_timing: id  3 | task 247 | prompt processing, n_tokens =  14347, progress = 0.40, t =   4.82 s / 2977.66 tokens per second
+[45589] 4.39.967.462 I slot print_timing: id  3 | task 247 | prompt processing, n_tokens =  16395, progress = 0.45, t =   5.33 s / 3077.40 tokens per second
+[45589] 4.40.124.625 E CUDA error: unknown error
+[45589] 4.40.124.717 E   current device: 0, in function ggml_backend_cuda_synchronize at /opt/llm/llama.cpp/ggml/src/ggml-cuda/ggml-cuda.cu:2549
+[45589] 4.40.124.742 E   cudaStreamSynchronize(cuda_ctx->stream())
+[45589] /opt/llm/llama.cpp/ggml/src/ggml-cuda/ggml-cuda.cu:109: CUDA error
+[45589] /opt/llm/llama.cpp/build/bin/libggml-base.so.0(+0x4b65) [0x7b3065333b65]
+[45589] /opt/llm/llama.cpp/build/bin/libggml-base.so.0(ggml_print_backtrace+0x1eb) [0x7b3065333f3b]
+[45589] /opt/llm/llama.cpp/build/bin/libggml-base.so.0(ggml_abort+0x11f) [0x7b30653340bf]
+[45589] /opt/llm/llama.cpp/build/bin/libggml-cuda.so.0(+0x285743) [0x7b305f885743]
+[45589] /opt/llm/llama.cpp/build/bin/libggml-cuda.so.0(+0x28db98) [0x7b305f88db98]
+[45589] /opt/llm/llama.cpp/build/bin/libggml-base.so.0(ggml_backend_sched_graph_compute_async+0x86d) [0x7b3065351d3d]
+[45589] /opt/llm/llama.cpp/build/bin/libllama.so.0(_ZN13llama_context13graph_computeEP11ggml_cgraphb+0xa0) [0x7b3064946550]
+[45589] /opt/llm/llama.cpp/build/bin/libllama.so.0(_ZN13llama_context14process_ubatchERK12llama_ubatch14llm_graph_typeP22llama_memory_context_iR11ggml_status+0x105) [0x7b3064949e15]
+[45589] /opt/llm/llama.cpp/build/bin/libllama.so.0(_ZN13llama_context6decodeERK15llama_batch_ext+0x3ba) [0x7b306495215a]
+[45589] /opt/llm/llama.cpp/build/bin/libllama-server-impl.so(_ZNSt17_Function_handlerIFvvEZN19server_context_impl6decodeERiiEUlvE_E9_M_invokeERKSt9_Any_data+0x4e) [0x7b30654d68de]
+[45589] /opt/llm/llama.cpp/build/bin/libllama-server-impl.so(_ZN12server_queue14yield_to_queueEOSt8functionIFvvEE+0x95) [0x7b306548c125]
+[45589] /opt/llm/llama.cpp/build/bin/libllama-server-impl.so(_ZN19server_context_impl6decodeERii+0x1a9) [0x7b30654e6f69]
+[45589] /opt/llm/llama.cpp/build/bin/libllama-server-impl.so(_ZN19server_context_impl12update_slotsEv+0x449) [0x7b30654e89c9]
+[45589] /opt/llm/llama.cpp/build/bin/libllama-server-impl.so(_ZN12server_queue10start_loopEl+0x118) [0x7b306548fe78]
+[45589] /opt/llm/llama.cpp/build/bin/libllama-server-impl.so(_Z12llama_serverR13common_paramsiPPc+0x45c5) [0x7b3065443195]
+[45589] /opt/llm/llama.cpp/build/bin/libllama-server-impl.so(_Z12llama_serveriPPc+0x1103) [0x7b3065444a13]
+[45589] /lib64/libc.so.6(+0x3681) [0x7b305ea0a681]
+[45589] /lib64/libc.so.6(__libc_start_main+0x88) [0x7b305ea0a798]
+[45589] /opt/llm/llama.cpp/build/bin/llama-server() [0x4003b5]
+5.15.300.102 I srv  proxy_reques: proxying request to model qwen3.8-27b on port 45589
+5.16.213.004 I srv  proxy_reques: proxying request to model qwen3.8-27b on port 45589
+# --- proxying_lines_before_the_first_request
+0.34.941.319 I srv  proxy_reques: proxying request to model qwen3.8-27b on port 45589
+0.35.745.030 I srv  proxy_reques: proxying request to model qwen3.8-27b on port 45589
+0.35.764.213 I srv  proxy_reques: proxying request to model qwen3.8-27b on port 45589

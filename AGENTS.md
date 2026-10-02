@@ -77,7 +77,9 @@ Docker container infrastructure for **seven** active hosts:
   network — so it reaches the fleet exclusively by dialing out: Periphery to
   `core-connect.pod.haus`, rathole to Numbat for `fractal.docs.pod.haus`
   and `ssh://fractal`, Alloy to `logs-ingest.pod.haus`. **Provisioned by
-  Ansible** rather than a bootstrap script, like numbat.
+  Ansible** rather than a bootstrap script, like numbat. It also runs the
+  local model service (`llm/`), a llama.cpp server that borrows the desktop's
+  GPU between games and is served at `llm.pod.haus`.
 - **voltaire** (Fedora Workstation desktop, x86_64, foreign LAN) is
   Nathan's other remote dev machine and an ordinary podhaus host on the
   fractal pattern: no inbound path at all, so it dials out — Periphery to
@@ -259,7 +261,8 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `bandicoot/periphery/` | Bandicoot's own outbound Periphery, dialing Core directly (`ws://bandicoot.pod.haus:9120`) since they share a host. Installed by the `komodo_periphery` Ansible role. |
 | `bilby/periphery/` | Bilby's outbound Periphery (was the inbound service bundled in `komodo/ferretdb.compose.yaml` before Core moved to bandicoot), dialing `ws://bandicoot.pod.haus:9120`. Installed by the `komodo_periphery` Ansible role. |
 | `ansible/roles/docs_sources/` | Stable read-only repository source slots for docs-server on Bilby, Fractal, Voltaire, and Bandicoot. The recurring reconciler exposes each available user-owned checkout beneath `/opt/podhaus/docs-sources`; unavailable sources reveal a marker, making docs health red while other sources continue serving. |
-| `relay/fractal/`, `caddy/fractal/`, `logging/fractal/` | fractal's outbound ingress + observability: rathole client → Numbat (`fractal_http` → `127.0.0.1:8444`, `fractal_ssh` → `127.0.0.1:2204`), Caddy mTLS origin on `:4443`, Alloy to `logs-ingest.pod.haus`. The `fractal-docs` stack and its multi-location repository catalog are defined in the **docs repo**, while Ansible owns the host source slots. |
+| `relay/fractal/`, `caddy/fractal/`, `logging/fractal/` | fractal's outbound ingress + observability: rathole client → Numbat (`fractal_http` → `127.0.0.1:8444`, `fractal_ssh` → `127.0.0.1:2204`), Caddy mTLS origin on `:4443` (docs and `llm.pod.haus`) plus a no-sign-in listener for the local model service published on fractal's loopback only (`127.0.0.1:8085`), Alloy to `logs-ingest.pod.haus` (also scraping the model service's metrics). The `fractal-docs` stack and its multi-location repository catalog are defined in the **docs repo**, while Ansible owns the host source slots. |
+| `llm/` | **Local model service on fractal** (`fractal-llm`). `compose.yaml` runs `llm-model` (a one-shot download-and-checksum job for the model file), `llm-server` (llama.cpp in router mode, given the GPU; settings in `server/models.ini`, chat templates beside it) and `llm-watcher` (`watcher/`, standard-library Python that unloads the model when a Windows game wants the GPU and loads it again once the GPU is quiet; its thresholds are environment settings in `compose.yaml`). `client/llm_token.py` is the sign-in token command for command-line clients; `tests/` run in `tools/pre-commit`. Reached at `llm.pod.haus` (Pomerium → fractal's Caddy; `/control` is Nathan-only) and at `127.0.0.1:8085` on fractal. **Every file under `llm/` is in the stack content hash**, so any edit recreates all three containers and leaves the model unloaded until the GPU has been quiet. See [`docs/runbooks/local-llm.md`](docs/runbooks/local-llm.md). |
 | `relay/voltaire/`, `logging/voltaire/`, `autoheal/voltaire/` | voltaire's outbound ingress + observability on the fractal pattern: rathole client → Numbat (`voltaire_ssh` only — no HTTPS service), Alloy to `logs-ingest.pod.haus`, autoheal. All linked-repo (`podhaus-voltaire`); the Fedora Workstation host runs SELinux enforcing, so every bind-mounting service carries `security_opt: [label:disable]`. |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
 | `ansible/playbooks/numbat-bootstrap.yml` + `ansible/playbooks/numbat.yml` | Numbat's two plays. The bootstrap play (fresh VM only, run from bandicoot) pins Terraform's 1P-published host key for first contact, connects on first-boot port 2222, stages the `numbat_edge` firewall without activating it, starts rathole before outbound Periphery, enrolls the userspace SSH recovery daemon, then loads the final ruleset and closes 2222 last. The steady-state play (base, docker, numbat_edge, sshd_pomerium_ca, komodo_periphery) reaches the host through Pomerium and is what check-mode equivalence proves. Numbat application stacks are Komodo-managed. |
@@ -683,6 +686,7 @@ The full set of pages on `docs.pod.haus`:
 - [Grasshopper LED strip](docs/runbooks/led-strip-grasshopper.md)
 - [Home Assistant](docs/runbooks/home-assistant.md)
 - [Indy Board](docs/runbooks/indy-board.md)
+- [Local model service](docs/runbooks/local-llm.md)
 - [Mumble](docs/runbooks/mumble.md)
 - [Music Assistant + doorbell](docs/runbooks/music-assistant.html)
 - [pizero](docs/runbooks/pizero.md)
