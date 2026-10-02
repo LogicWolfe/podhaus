@@ -11,6 +11,9 @@
 # LAN-only by construction: off-LAN the name does not resolve at all.
 ansible_host: fractal.pod.haus
 ansible_user: nathan
+# Discovery finds nathan's mise shim first on PATH, and root cannot run it
+# (mise refuses the user-owned global config under sudo).
+ansible_python_interpreter: /usr/bin/python3
 
 # WSL2 specifics -------------------------------------------------------
 podhaus_is_wsl: true
