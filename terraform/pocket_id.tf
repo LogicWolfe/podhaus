@@ -45,6 +45,20 @@ resource "pocketid_group" "yiayia_editors" {
   friendly_name = "Yiayia's stories editors"
 }
 
+# Who the protected routes in pomerium/config.yaml let through. Pomerium
+# reads group names from the `groups` claim of the sign-in token, so
+# membership here is the whole of each list: family routes allow `family`,
+# friends routes allow `family` or `friends`.
+resource "pocketid_group" "family" {
+  name          = "family"
+  friendly_name = "Family"
+}
+
+resource "pocketid_group" "friends" {
+  name          = "friends"
+  friendly_name = "Friends"
+}
+
 resource "pocketid_user" "nathan" {
   username       = "LogicWolfe"
   email          = "nathan@nathanbaxter.com"
@@ -56,6 +70,7 @@ resource "pocketid_user" "nathan" {
   email_verified = false
 
   groups = [
+    pocketid_group.family.id,
     pocketid_group.forgejo_users.id,
     pocketid_group.forgejo_admins.id,
     pocketid_group.pomerium_users.id,
@@ -82,6 +97,7 @@ resource "pocketid_user" "sky" {
   email_verified = false
 
   groups = [
+    pocketid_group.family.id,
     pocketid_group.forgejo_users.id,
     pocketid_group.pomerium_users.id,
     pocketid_group.yiayia_editors.id,
@@ -107,6 +123,26 @@ resource "pocketid_user" "indigo" {
   email_verified = false
 
   groups = [
+    pocketid_group.family.id,
+    pocketid_group.pomerium_users.id,
+  ]
+}
+
+# A friend: the friends routes and a Forgejo account. No `ssh_keys` claim,
+# so Forgejo synchronizes no keys for him.
+resource "pocketid_user" "alex" {
+  username       = "alex"
+  email          = "alex@louden.com"
+  first_name     = "Alex"
+  last_name      = "Louden"
+  display_name   = "Alex Louden"
+  is_admin       = false
+  disabled       = false
+  email_verified = false
+
+  groups = [
+    pocketid_group.forgejo_users.id,
+    pocketid_group.friends.id,
     pocketid_group.pomerium_users.id,
   ]
 }

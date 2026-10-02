@@ -5,8 +5,10 @@ authenticate_service_url: https://authenticate.pod.haus
 idp_provider: oidc
 idp_provider_url: https://id.pod.haus
 # offline_access makes Pocket ID issue a refresh token, letting Pomerium
-# keep the IdP tokens fresh for the whole session window below.
-idp_scopes: [openid, email, profile, offline_access]
+# keep the IdP tokens fresh for the whole session window below. groups puts
+# the person's Pocket ID group names in the token, which the family and
+# friends route policies match on.
+idp_scopes: [openid, email, profile, groups, offline_access]
 
 # 30-day sessions instead of the 14-hour default. Personal deployment:
 # the threat model does not include an already-authorized machine
@@ -47,15 +49,12 @@ routes:
     tls_client_key_file: /run/pomerium-secrets/origin-client-key.pem
     allow_websockets: true
     idle_timeout: 0s
+    # Who is in each group is Pocket ID's to say (terraform/pocket_id.tf);
+    # no person is named here.
     policy: &family_policy
       - allow:
           or:
-            - email:
-                is: nathan@nathanbaxter.com
-            - email:
-                is: scroeser@gmail.com
-            - email:
-                is: indigo@indigopod.au
+            - claim/groups: family
 
   - <<: *family_route
     from: https://bugs.pod.haus
@@ -81,13 +80,20 @@ routes:
     allow_public_unauthenticated_access: true
   # Gatus authenticates external-endpoint writes with its own bearer token.
   # This narrow machine route lets remote appliance jobs report without a
-  # browser session while leaving the status UI Nathan/family protected.
+  # browser session while leaving the status UI behind the friends policy.
   - <<: *public_route
     from: https://gatus.pod.haus
     prefix: null
     regex: '^/api/v1/endpoints/[^/]+/external$'
-  - <<: *family_route
+  # Friends routes: the family, plus members of Pocket ID's `friends` group.
+  - &friends_route
+    <<: *family_route
     from: https://gatus.pod.haus
+    policy:
+      - allow:
+          or:
+            - claim/groups: family
+            - claim/groups: friends
   - <<: *family_route
     from: https://komodo.pod.haus
   - <<: *family_route
@@ -106,7 +112,7 @@ routes:
     prefix: /api/mcp
   - <<: *family_route
     from: https://watch.pod.haus
-  - <<: *family_route
+  - <<: *friends_route
     from: https://docs.pod.haus
   - <<: *family_route
     from: https://rustfs.pod.haus
@@ -127,7 +133,7 @@ routes:
     from: https://git.pod.haus
     prefix: null
     regex: '^/api/v1(/.*)?$'
-  - <<: *family_route
+  - <<: *friends_route
     from: https://git.pod.haus
 
   - &nathan_route
@@ -150,9 +156,10 @@ routes:
     from: https://books.pod.haus
     pass_identity_headers: true
 
-  # Per-host docs servers. Family routes, the same permissions as the shared
-  # docs.pod.haus, so anyone in the family can open a page on any host's docs
-  # server from a link.
+  # Per-host docs servers. Family routes, so anyone in the family can open a
+  # page on any host's docs server from a link. Friends get the shared
+  # docs.pod.haus only: the dev machines' servers show whatever is checked
+  # out there.
   #
   # bilby's own docs-server, addressed by its per-host name — an alias onto
   # the same container docs.pod.haus already serves.
@@ -164,8 +171,8 @@ routes:
   - <<: *family_route
     from: https://fractal.docs.pod.haus
     to: https://127.0.0.1:8444
-  # voltaire's docs server. Same shape as fractal's, its own loopback rathole
-  # service and its own Caddy mTLS origin.
+  # bandicoot's and voltaire's docs servers. Same shape as fractal's, each
+  # with its own loopback rathole service and its own Caddy mTLS origin.
   - <<: *family_route
     from: https://bandicoot.docs.pod.haus
     to: https://127.0.0.1:8447

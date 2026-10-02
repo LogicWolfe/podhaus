@@ -25,14 +25,34 @@ SQLite, single local volume.
 ## Identity model
 
 Pocket ID is the source of truth for people and their passkeys. On login it issues
-an ID token carrying the person's `email`; Pomerium applies its Family or
-Nathan-only route policy. There is no separate Pomerium user directory.
+an ID token carrying the person's `email` and the names of their `groups`;
+Pomerium applies one of three route policies. There is no separate Pomerium user
+directory.
 
-So authorising someone is two facts that must agree: create them in Pocket ID
-with the exact email allowed by `pomerium/config.yaml`. A Pocket ID user whose
-email does not match will authenticate and then be denied at the edge.
-Email is mandatory on a user (`REQUIRE_USER_EMAIL` defaults true) — without one the
-token carries no email claim.
+| Policy | Who it allows | How Pomerium matches |
+|---|---|---|
+| Family | The `family` group | `family` in the token's `groups` claim |
+| Friends | The `family` and `friends` groups | Either name in the token's `groups` claim |
+| Nathan-only | Nathan | His email |
+
+Everyone who uses a protected route must also be in `pomerium-users`, or Pocket
+ID refuses the sign-in before any route policy runs.
+
+So authorising someone is group membership in `terraform/pocket_id.tf` and
+nothing else: `pomerium-users` to sign in, plus `family` or `friends` for the
+routes. The family and friends policies in `pomerium/config.yaml` name no one.
+Email is mandatory on a user (`REQUIRE_USER_EMAIL` defaults true), and the
+Nathan-only routes and every SSH route match on Nathan's email.
+
+Pomerium refreshes each signed-in person's claims from Pocket ID about every
+ten minutes, so a membership added or removed in Terraform reaches the routes
+within that time. Signing out at `/.pomerium/sign_out` and in again applies it
+at once.
+
+Removing someone's groups does not end what they set up inside Forgejo. An
+access token or an SSH key they added there themselves keeps working, because
+Forgejo's API and Git SSH don't pass through Pomerium's sign-in. To remove a
+person fully, also disable their Forgejo user.
 
 ## Load-bearing config
 
@@ -69,8 +89,8 @@ date) and inherit the creating user's privileges.
 
 ## OIDC clients
 
-**Pomerium** is confidential, uses PKCE, is restricted to `pomerium-users`, and
-has callback `https://authenticate.pod.haus/oauth2/callback`. Terraform writes
+**Pomerium** is confidential, has PKCE disabled, is restricted to
+`pomerium-users`, and has callback `https://authenticate.pod.haus/oauth2/callback`. Terraform writes
 its credentials to `Pomerium OIDC` in 1Password.
 
 **Forgejo** is confidential, uses PKCE, and is restricted to `forgejo-users`.
@@ -90,7 +110,9 @@ their existing UUIDs, so Terraform adoption preserved their passkeys. Do not
 create or edit these objects in the Pocket UI; change Terraform and apply.
 
 Passkeys remain deliberately outside Terraform: a new person enrols their own
-authenticator through Pocket ID after the user resource is created.
+authenticator through Pocket ID after the user resource is created. Pocket ID
+sends no mail here, so an administrator creates a one-time login code for the
+person from the user list in Pocket ID's admin pages and passes the link on.
 
 Forgejo demonstrates the full model. Terraform restricts its client to
 `forgejo-users`, maps Nathan through `forgejo-admins`, and publishes each
@@ -112,9 +134,11 @@ creates the local profile and synchronizes those keys during OIDC login.
   Pocket ID's public JWKS. Check the Numbat relay, Caddy route, and DNS. Never
   put `id.pod.haus` behind Pomerium; OIDC clients must reach its discovery,
   token, and key endpoints.
-- **Authenticated, then denied** — the Pocket ID user's email doesn't match the
-  applicable Pomerium route policy. Fix the email in Pocket ID; the match is
-  case-insensitive but otherwise exact.
+- **Authenticated, then denied** — on a family or friends route, the person
+  isn't in the group the route's policy allows. Fix the membership in
+  `terraform/pocket_id.tf`, then have them sign out and in again. On a
+  Nathan-only or SSH route, the Pocket ID user's email isn't exactly Nathan's;
+  that match is case-sensitive.
 
 ## Lockout safety
 
