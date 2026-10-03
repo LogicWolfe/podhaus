@@ -192,7 +192,7 @@ resource "pocketid_client" "yiayia_stories" {
   ]
 }
 
-# The client of the llm.pod.haus token command (llm/client/llm_token.py),
+# The client of the llm.pod.haus token command (caddy/fractal/llm-setup/llm-token),
 # which signs people in with Pocket ID's device grant and hands the access
 # token to pi or Claude Code as their API key, and of the setup page at
 # https://llm.pod.haus/setup/, which signs people in from the browser with the

@@ -221,7 +221,7 @@ networks:
         <code>llm.pod.haus</code>, the local model service on fractal, is the route for
         command-line clients. It treats a bearer token as a Pocket ID access token
         (<code>bearer_token_format: idp_access_token</code>): pi or Claude Code send the
-        token that <code>llm/client/llm_token.py</code> fetches through Pocket ID's device
+        token that the setup page's <code>llm-token</code> command fetches through Pocket ID's device
         sign-in as their API key, and the friends policy applies to it. Pomerium checks
         each token with Pocket ID once, at first use, and honours it for 30 days. The
         <code>/setup</code> paths are a public route: the setup page there signs in through

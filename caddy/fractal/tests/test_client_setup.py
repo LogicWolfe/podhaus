@@ -5,7 +5,7 @@ The two install scripts run the way the page tells people to run them, piped
 into sh, under a temporary home directory and a PATH holding only the commands
 a test grants. A stand-in for llm.pod.haus serves their downloads over real
 HTTP on a loopback port, with a stub in place of the token command, and
-LLM_POD_HAUS_URL points the scripts at it. claude-local runs against a stub claude
+LLM_POD_HAUS_URL points the scripts at it. claude-podhaus runs against a stub claude
 that records the environment and arguments it was started with, from an
 ordinary home directory and from one whose path needs quoting. The page's own
 script is tested under node, in setup-page.test.ts.
@@ -19,7 +19,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import stat
 import subprocess
@@ -64,7 +63,7 @@ def pasteable(value: str) -> str:
 
 SIGN_IN_LINK = "https://id.pod.haus/device?code=STUBCODE"
 STUB_TOKEN = "stub-access-token"
-# Stands in for llm_token.py: the link on stderr, the token on stdout.
+# Stands in for llm-token: the link on stderr, the token on stdout.
 SIGNING_IN = f"#!/bin/sh\necho {SIGN_IN_LINK} >&2\necho {STUB_TOKEN}\n".encode()
 REFUSED = b"#!/bin/sh\necho expired >&2\nexit 1\n"
 # Counts its runs in the home directory, so a test can tell whether it ran.
@@ -113,7 +112,7 @@ class StandInSetup:
 def served(token_command: bytes = SIGNING_IN) -> dict[str, bytes]:
     """What the real /setup/ serves, with the token command replaced."""
     files = {f"/setup/{path.name}": path.read_bytes() for path in SETUP.iterdir()}
-    files["/setup/llm-token.py"] = token_command
+    files["/setup/llm-token"] = token_command
     return files
 
 
@@ -172,7 +171,7 @@ class MachineTest(unittest.TestCase):
 class ClaudeInstallTest(MachineTest):
     def setUp(self) -> None:
         super().setUp()
-        self.machine.grant("curl", "python3")
+        self.machine.grant("curl")
 
     def install(self, files: dict[str, bytes], local_bin_on_path: bool = True) -> subprocess.CompletedProcess[str]:
         with StandInSetup(files) as stand_in:
@@ -184,23 +183,23 @@ class ClaudeInstallTest(MachineTest):
         files = served()
         result = self.install(files)
         self.assertEqual(result.returncode, 0, result.stderr)
-        for name, path in (("llm-token.py", "llm-token"), ("claude-local", "claude-local")):
-            installed = self.machine.local_bin / path
+        for name in ("llm-token", "claude-podhaus"):
+            installed = self.machine.local_bin / name
             self.assertEqual(installed.read_bytes(), files[f"/setup/{name}"])
             self.assertEqual(self.mode(installed), 0o755)
-        self.assertEqual(self.machine.files_under_home(), {".local/bin/llm-token", ".local/bin/claude-local"})
-        self.assertIn("claude-local", result.stdout)
+        self.assertEqual(self.machine.files_under_home(), {".local/bin/llm-token", ".local/bin/claude-podhaus"})
+        self.assertIn("claude-podhaus", result.stdout)
 
     def test_replaces_existing_copies(self) -> None:
         self.machine.local_bin.mkdir(parents=True)
-        for name in ("llm-token", "claude-local"):
+        for name in ("llm-token", "claude-podhaus"):
             old = self.machine.local_bin / name
             old.write_text("old")
             old.chmod(0o700)
         result = self.install(served())
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.machine.local_bin / "llm-token").read_bytes(), SIGNING_IN)
-        self.assertEqual(self.mode(self.machine.local_bin / "claude-local"), 0o755)
+        self.assertEqual(self.mode(self.machine.local_bin / "claude-podhaus"), 0o755)
 
     def test_signs_in_once_showing_the_link_and_hiding_the_token(self) -> None:
         result = self.install(served())
@@ -211,7 +210,7 @@ class ClaudeInstallTest(MachineTest):
         result = self.install(served(token_command=REFUSED))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("expired", result.stderr)
-        self.assertNotIn("claude-local", result.stdout)
+        self.assertNotIn("claude-podhaus", result.stdout)
 
     def test_warns_when_local_bin_is_not_on_path(self) -> None:
         warning = f"{self.machine.local_bin} not on PATH"
@@ -220,9 +219,9 @@ class ClaudeInstallTest(MachineTest):
 
     def test_names_the_launcher_by_full_path_when_not_on_path(self) -> None:
         on_path = self.install(served(), local_bin_on_path=True)
-        self.assertEqual(on_path.stdout.splitlines()[-1], "Start: claude-local")
+        self.assertEqual(on_path.stdout.splitlines()[-1], "Start: claude-podhaus")
         off_path = self.install(served(), local_bin_on_path=False)
-        self.assertEqual(off_path.stdout.splitlines()[-1], f"Start: {self.machine.local_bin}/claude-local")
+        self.assertEqual(off_path.stdout.splitlines()[-1], f"Start: {self.machine.local_bin}/claude-podhaus")
 
     def test_warns_when_claude_is_missing(self) -> None:
         self.assertIn("claude not found", self.install(served()).stderr)
@@ -231,27 +230,25 @@ class ClaudeInstallTest(MachineTest):
 
     def test_a_missing_download_fails_and_leaves_no_partial_file(self) -> None:
         files = served()
-        del files["/setup/claude-local"]
+        del files["/setup/claude-podhaus"]
         result = self.install(files)
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn(".local/bin/claude-local.part", self.machine.files_under_home())
-        self.assertNotIn(".local/bin/claude-local", self.machine.files_under_home())
+        self.assertNotIn(".local/bin/claude-podhaus.part", self.machine.files_under_home())
+        self.assertNotIn(".local/bin/claude-podhaus", self.machine.files_under_home())
 
 
-class ClaudeInstallWithoutPythonTest(MachineTest):
-    def test_stops_before_downloading_anything(self) -> None:
-        self.machine.grant("curl")
+class ClaudeInstallWithoutCurlTest(MachineTest):
+    def test_stops_before_writing_anything(self) -> None:
         with StandInSetup(served()) as stand_in:
             environment = self.machine.environment(True, LLM_POD_HAUS_URL=stand_in.base_url)
             result = self.machine.pipe_into_sh(SETUP / "claude.sh", environment)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("python3 not found", result.stderr)
-        self.assertEqual(stand_in.requested, [])
+        self.assertIn("curl not found", result.stderr)
         self.assertEqual(self.machine.files_under_home(), set())
 
 
 class PiInstallTest(MachineTest):
-    EXTENSION = ".pi/agent/extensions/llm-pod-haus.ts"
+    EXTENSION = ".pi/agent/extensions/podhaus.ts"
 
     def setUp(self) -> None:
         super().setUp()
@@ -266,15 +263,15 @@ class PiInstallTest(MachineTest):
         agent = self.machine.home / "elsewhere" / "pi-agent"
         result = self.install(PI_CODING_AGENT_DIR=str(agent))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.machine.files_under_home(), {"elsewhere/pi-agent/extensions/llm-pod-haus.ts"})
+        self.assertEqual(self.machine.files_under_home(), {"elsewhere/pi-agent/extensions/podhaus.ts"})
 
     def test_installs_the_extension(self) -> None:
         result = self.install()
         self.assertEqual(result.returncode, 0, result.stderr)
         installed = self.machine.home / self.EXTENSION
-        self.assertEqual(installed.read_bytes(), (SETUP / "llm-pod-haus.ts").read_bytes())
+        self.assertEqual(installed.read_bytes(), (SETUP / "podhaus.ts").read_bytes())
         self.assertEqual(self.mode(installed), 0o644)
-        self.assertIn("/login llm-pod-haus", result.stdout)
+        self.assertIn("/login podhaus", result.stdout)
         self.assertIn("/model", result.stdout)
 
     def test_writes_only_the_extension(self) -> None:
@@ -298,11 +295,10 @@ class PiInstallTest(MachineTest):
 
 
 class ClaudeLocalTest(MachineTest):
-    """claude-local against a stub claude and a stub token command."""
+    """claude-podhaus against a stub claude and a stub token command."""
 
     def setUp(self) -> None:
         super().setUp()
-        self.machine.grant("python3")
         self.machine.stub(self.machine.bin, "claude", RECORDING_CLAUDE)
         self.helper = self.machine.stub(self.machine.local_bin, "llm-token", COUNTING)
         self.record = self.machine.home / "claude-record.json"
@@ -315,7 +311,7 @@ class ClaudeLocalTest(MachineTest):
             **environment,
         )
         result = subprocess.run(
-            [SH, str(SETUP / "claude-local"), *args],
+            [SH, str(SETUP / "claude-podhaus"), *args],
             env=env, capture_output=True, text=True, timeout=60,
         )
         recorded = json.loads(self.record.read_text()) if self.record.exists() else None
@@ -333,13 +329,11 @@ class ClaudeLocalTest(MachineTest):
         self.assertNotIn("ANTHROPIC_AUTH_TOKEN", recorded["env"])
         flag, settings, *passed = recorded["argv"]
         self.assertEqual(flag, "--settings")
-        helper = json.loads(settings)
-        self.assertEqual(list(helper), ["apiKeyHelper"])
-        self.assertEqual(shlex.split(helper["apiKeyHelper"]), [str(self.helper)])
+        self.assertEqual(json.loads(settings), {"apiKeyHelper": "~/.local/bin/llm-token"})
         self.assertEqual(passed, ["--resume", "two words"])
 
     def test_claude_code_can_run_the_helper_it_is_given(self) -> None:
-        """Claude Code runs apiKeyHelper with sh -c."""
+        """Claude Code runs apiKeyHelper through sh, which expands the tilde."""
         _, recorded = self.start()
         command = json.loads(recorded["argv"][1])["apiKeyHelper"]
         ran = subprocess.run(
@@ -377,9 +371,8 @@ class ClaudeLocalTest(MachineTest):
 
 
 class ClaudeLocalAwkwardHomeTest(ClaudeLocalTest):
-    """Every claude-local test again, from a home directory whose path holds a
-    space, both kinds of quote and a backslash, which the shell and JSON must
-    both survive."""
+    """Every claude-podhaus test again, from a home directory whose path holds a
+    space, both kinds of quote and a backslash."""
 
     home_name = "it's a \"home\" \\ dir"
 
@@ -436,10 +429,9 @@ class SetupPageTest(unittest.TestCase):
 
     def test_offers_the_five_downloads_and_each_exists(self) -> None:
         offered = set(re.findall(r"/setup/([\w.-]+)", self.page))
-        self.assertEqual(offered, {"claude.sh", "pi.sh", "llm-token.py", "claude-local", "llm-pod-haus.ts"})
-        for name in offered - {"llm-token.py"}:
+        self.assertEqual(offered, {"claude.sh", "pi.sh", "llm-token", "claude-podhaus", "podhaus.ts"})
+        for name in offered:
             self.assertTrue((SETUP / name).is_file(), name)
-        self.assertTrue((ROOT / "llm" / "client" / "llm_token.py").is_file())
 
     def test_loads_nothing_from_elsewhere(self) -> None:
         self.assertEqual(re.findall(r"\bsrc=|<link\b|@import|\burl\(", self.page), [])

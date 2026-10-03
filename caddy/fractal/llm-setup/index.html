@@ -92,16 +92,16 @@ th { font-weight: 500; white-space: nowrap; }
     <pre id="claude-install">curl -fsSL https://llm.pod.haus/setup/claude.sh | sh</pre>
     <button type="button" data-copy="claude-install">Copy</button>
   </div>
-  <p class="muted">Installs <code>llm-token</code> and <code>claude-local</code> in <code>~/.local/bin</code>, then signs in. Needs python3 and Claude Code.</p>
-  <p class="muted">Then <code>claude-local</code> starts Claude Code on the local model.</p>
+  <p class="muted">Installs <code>llm-token</code> and <code>claude-podhaus</code> in <code>~/.local/bin</code>, then signs in. Needs Claude Code.</p>
+  <p class="muted">Then <code>claude-podhaus</code> starts Claude Code on the local model.</p>
 
   <h2>pi</h2>
   <div class="line">
     <pre id="pi-install">curl -fsSL https://llm.pod.haus/setup/pi.sh | sh</pre>
     <button type="button" data-copy="pi-install">Copy</button>
   </div>
-  <p class="muted">Installs the <code>llm-pod-haus</code> extension in <code>~/.pi/agent/extensions</code>. Then, in pi:</p>
-  <pre>/login llm-pod-haus
+  <p class="muted">Installs the <code>podhaus</code> extension in <code>~/.pi/agent/extensions</code>. Then, in pi:</p>
+  <pre>/login podhaus
 /model</pre>
 
   <h2>Cursor</h2>
@@ -114,9 +114,9 @@ th { font-weight: 500; white-space: nowrap; }
 
   <h2>Manual</h2>
   <table>
-    <tr><th><a href="/setup/llm-token.py" download>llm-token.py</a></th><td>Prints the key, signing in when needed</td></tr>
-    <tr><th><a href="/setup/claude-local" download>claude-local</a></th><td>Claude Code launcher; expects <code>~/.local/bin/llm-token</code></td></tr>
-    <tr><th><a href="/setup/llm-pod-haus.ts" download>llm-pod-haus.ts</a></th><td>pi extension</td></tr>
+    <tr><th><a href="/setup/llm-token" download>llm-token</a></th><td>Prints the key, signing in when needed</td></tr>
+    <tr><th><a href="/setup/claude-podhaus" download>claude-podhaus</a></th><td>Claude Code launcher; expects <code>~/.local/bin/llm-token</code></td></tr>
+    <tr><th><a href="/setup/podhaus.ts" download>podhaus.ts</a></th><td>pi extension</td></tr>
   </table>
 
   <h3>Claude Code environment</h3>

@@ -196,8 +196,8 @@ routes:
     regex: '^/control(/.*)?$'
     pass_identity_headers: true
   # The model itself, for the friends policy. Clients have no browser, so they
-  # send a Pocket ID access token as their API key (llm/client/llm_token.py
-  # fetches one). Pomerium checks each token with Pocket ID's userinfo endpoint
+  # send a Pocket ID access token as their API key (the token command served
+  # by the setup page fetches one). Pomerium checks each token with Pocket ID's userinfo endpoint
   # once, at first use, and keeps the result for cookie_expire (30 days):
   # userinfo carries no expiry. The policy reads the groups stored then, merged
   # with Pomerium's shared record of the person. So removal from a group takes

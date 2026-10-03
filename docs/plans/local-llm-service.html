@@ -209,6 +209,7 @@ architecture, AGENTS.md). The trial install is removed from fractal: the user un
 <li><strong>The load timeout is 300 s.</strong> A reload from disk took 28 to 64 s live, but the first load after the download took 181 s and loads of 104 to 176 s were seen in the first hour after a WSL restart.</li>
 <li><strong>The VRAM alert level is 31,000 MiB</strong> of whole-GPU use, and means the card is full, not that a spill happened: the one spilled run read 31,126 MiB and a larger pool that did not spill read 31,048.</li>
 <li><strong>While the model is away a client gets HTTP 400 "model is not loaded"</strong> from the server. Whether Claude Code and pi show that clearly was not tested; Caddy answering for the model paths remains the fallback.</li>
+<li><strong>The token command is POSIX sh over curl</strong>, served from the setup page's directory in the Caddy stack rather than Python in <code>llm/client/</code>, so a client needs nothing installed beyond curl and an edit to it redeploys Caddy, not the model. The Claude Code launcher is <code>claude-podhaus</code> and the pi provider is <code>podhaus</code>.</li>
 <li><strong>Join between a request's Caddy line and its server detail is by finish time</strong>, since the server prints no request id.</li>
 </ul>
 
@@ -218,7 +219,7 @@ architecture, AGENTS.md). The trial install is removed from fractal: the user un
 <li><strong>The model process dies with "CUDA error: unknown error" on long prompt reads.</strong> Seen three times on 2 and 3 October, with the GPU at 520 to 577 W: twice on the trial build and once in the stock image run by hand. A 70 s read at up to 579 W on the live stack did not fault. The watcher reloads the model, but the request in flight fails and every saved conversation is lost. The cause is not known. Windows Event Viewer (System log, source nvlddmkm) at those times is the first thing to read, and a lower GPU power limit set from Windows is the first thing to try.</li>
 <li><strong>Slow saves and loads soon after a WSL restart</strong>, and possibly after a game hands memory back. Time a large save soon after a game ends.</li>
 <li><strong>Sign-in round trip, the signed-in remote checks, the first real game, the guest restart and the dashboards</strong>, as marked above.</li>
-<li><strong>A change to <code>llm/tests</code> or <code>llm/client</code> redeploys the stack</strong> and reloads the model, because the content hash covers the whole stack directory.</li>
+<li><strong>A change to <code>llm/tests</code> redeploys the stack</strong> and reloads the model, because the content hash covers the whole stack directory.</li>
 </ul>
 
 <h2 id="decisions">Scope</h2>

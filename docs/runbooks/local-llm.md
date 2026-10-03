@@ -30,10 +30,9 @@ Terms used below:
 | Komodo stack | `llm/stack.toml` (`fractal-llm`, on server `fractal`) |
 | Model server settings and the chat templates | `llm/server/models.ini`, `llm/server/*.jinja` |
 | Watcher | `llm/watcher/` (standard-library Python; start with `state.py`) |
-| Sign-in token command | `llm/client/llm_token.py` |
-| Setup page, install scripts, `claude-local` launcher, pi extension | `caddy/fractal/llm-setup/` (served at `/setup/`; part of the `fractal-caddy` stack) |
-| Tests | `llm/tests/` for the service; `caddy/fractal/tests/` for the setup page: `test_client_setup.py` (the install scripts and `claude-local` against a stand-in `llm.pod.haus`, the page's contents, the public Pomerium route), `setup-page.test.ts` (the page's sign-in script under Node, with stand-in browser objects) and `llm-pod-haus.test.ts` (the pi extension's sign-in under Node). All run by `tools/pre-commit`. |
-| Listeners, exposed paths, the `/setup/` file mounts, request log | `caddy/fractal/Caddyfile`, `caddy/fractal/compose.yaml` |
+| Setup page, `llm-token` sign-in command, install scripts, `claude-podhaus` launcher, pi extension | `caddy/fractal/llm-setup/` (served at `/setup/`; part of the `fractal-caddy` stack) |
+| Tests | `llm/tests/` for the service; `caddy/fractal/tests/` for the setup page: `test_client_setup.py` (the install scripts and `claude-podhaus` against a stand-in `llm.pod.haus`, the page's contents, the public Pomerium route), `setup-page.test.ts` (the page's sign-in script under Node, with stand-in browser objects) and `podhaus.test.ts` (the pi extension's sign-in under Node). All run by `tools/pre-commit`. |
+| Listeners, exposed paths, the `/setup/` files, request log | `caddy/fractal/Caddyfile`, `caddy/fractal/compose.yaml` |
 | The three `llm.pod.haus` routes (setup, control, model) | `pomerium/config.yaml` |
 | DNS record and Pocket ID client | `terraform/services_pod_haus.tf`, `terraform/pocket_id.tf` (`pocketid_client.llm_token`, whose one callback is the setup page) |
 | Log parsers | `logging/alloy-modules/llm-server.alloy`, `llm-watcher.alloy`, `caddy.alloy` |
@@ -83,7 +82,6 @@ Caddy serves only these paths, on both listeners. Everything else is 404.
 | `/v1/chat/completions`, `/v1/completions`, `/v1/messages`, `/v1/messages/count_tokens`, `/v1/models` | `llm-server:8080` (OpenAI and Anthropic formats) |
 | `/control` and `/control/*` | `llm-watcher:8081`. On the remote listener Caddy also requires the caller's email, passed by Pomerium as `X-Pomerium-Claim-Email`, to be Nathan's. |
 | `/setup` | A redirect to `/setup/` |
-| `/setup/llm-token.py` | The file `llm/client/llm_token.py`, mounted read-only at `/srv/llm-client` |
 | `/setup/` and `/setup/*` | Files in `caddy/fractal/llm-setup/`, mounted with the rest of `caddy/fractal/` at `/etc/caddy` |
 
 The server's management paths (load, unload, slots, metrics, health) and the
@@ -107,10 +105,10 @@ out such a token and sets up Claude Code and pi to fetch their own. It shows:
   hour Pocket ID issues it for; Pomerium then accepts it for 30 days (see "What
   Pomerium does with a token" below).
 - **Claude Code**: `curl -fsSL https://llm.pod.haus/setup/claude.sh | sh`, after
-  which `claude-local` starts Claude Code on the local model.
+  which `claude-podhaus` starts Claude Code on the local model.
 - **pi**: `curl -fsSL https://llm.pod.haus/setup/pi.sh | sh`, then `/login
-  llm-pod-haus` and `/model` inside pi.
-- **Manual setup**: download links for the token command, `claude-local` and the
+  podhaus` and `/model` inside pi.
+- **Manual setup**: download links for the token command, `claude-podhaus` and the
   pi extension; Claude Code's environment, whose copy button fills in the key;
   the base addresses of the two request formats (`https://llm.pod.haus` for
   Anthropic's, `https://llm.pod.haus/v1` for OpenAI's); the model name; and the
@@ -144,34 +142,33 @@ holds, and custom keys need Cursor Pro.
 
 ### What `/setup/` serves
 
-The files are in `caddy/fractal/llm-setup/`, except the token command, which is
-served from its own file.
+The files are in `caddy/fractal/llm-setup/`.
 
 | Path | File | What it does |
 |---|---|---|
 | `/setup/` | `index.html` | The page. Static, and loads nothing from elsewhere. |
-| `/setup/claude.sh` | `claude.sh` | Needs `python3` and `curl`, and stops before downloading anything otherwise. Installs the token command as `~/.local/bin/llm-token` and the launcher as `~/.local/bin/claude-local`, mode 755, each replacing any older copy once it has downloaded whole. Warns if `~/.local/bin` is not on `PATH` or `claude` is not installed. Then runs `llm-token` once with the token discarded, so the first sign-in link appears in the terminal during the install and is approved in the browser already open; a refused sign-in fails the install. Ends by printing how to start: `claude-local`, or its full path when `~/.local/bin` is not on `PATH`. |
-| `/setup/claude-local` | `claude-local` | Runs `llm-token` with the token discarded, so a sign-in that has run out shows its link before Claude Code takes the screen, then starts `claude` with `--settings '{"apiKeyHelper":"<home>/.local/bin/llm-token"}'`, the environment below, and every argument passed through. Claude Code runs `apiKeyHelper` through `sh -c`, so the path is quoted for the shell and then written as a JSON string, both by `python3` (which the token command needs anyway); a home directory holding spaces, quotes or backslashes works. |
-| `/setup/pi.sh` | `pi.sh` | Needs `curl`. Installs the pi extension as `llm-pod-haus.ts` in pi's extensions directory, `$PI_CODING_AGENT_DIR/extensions/` (pi's own setting; `~/.pi/agent/extensions/` when unset), mode 644, and touches nothing else of pi's. Warns if `pi` is not installed. |
-| `/setup/llm-pod-haus.ts` | `llm-pod-haus.ts` | The pi provider extension `llm-pod-haus`, which signs in through pi's `/login`. |
-| `/setup/llm-token.py` | `llm/client/llm_token.py` | The token command, mounted into Caddy read-only, so the download is always the copy in the repo. |
+| `/setup/claude.sh` | `claude.sh` | Needs `curl` and nothing else, and stops before writing anything otherwise. Installs the token command as `~/.local/bin/llm-token` and the launcher as `~/.local/bin/claude-podhaus`, mode 755, each replacing any older copy once it has downloaded whole. Warns if `~/.local/bin` is not on `PATH` or `claude` is not installed. Then runs `llm-token` once with the token discarded, so the first sign-in link appears in the terminal during the install and is approved in the browser already open; a refused sign-in fails the install. Ends by printing how to start: `claude-podhaus`, or its full path when `~/.local/bin` is not on `PATH`. |
+| `/setup/claude-podhaus` | `claude-podhaus` | Runs `llm-token` with the token discarded, so a sign-in that has run out shows its link before Claude Code takes the screen, then starts `claude` with `--settings '{"apiKeyHelper":"~/.local/bin/llm-token"}'`, the environment below, and every argument passed through. Claude Code runs `apiKeyHelper` through `sh`, whose tilde expansion yields the home directory whole, so a home directory holding spaces, quotes or backslashes needs no quoting. |
+| `/setup/pi.sh` | `pi.sh` | Needs `curl`. Installs the pi extension as `podhaus.ts` in pi's extensions directory, `$PI_CODING_AGENT_DIR/extensions/` (pi's own setting; `~/.pi/agent/extensions/` when unset), mode 644, and touches nothing else of pi's. Warns if `pi` is not installed. |
+| `/setup/podhaus.ts` | `podhaus.ts` | The pi provider extension `podhaus`, which signs in through pi's `/login`. |
+| `/setup/llm-token` | `llm-token` | The token command, below. |
 
 Both install scripts are written to be piped into `sh`. The shell then reads the
 script from standard input, so they never read it themselves, and everything
 runs from a function called on the last line, so a download cut short runs
 nothing. `LLM_POD_HAUS_URL` replaces `https://llm.pod.haus` in all three
 scripts, as it does in the pi extension: the installers download from
-`$LLM_POD_HAUS_URL/setup/`, and `claude-local` sends Claude Code there. The name
+`$LLM_POD_HAUS_URL/setup/`, and `claude-podhaus` sends Claude Code there. The name
 is this service's alone, because a generic one could already be set for another
 tool, whose server would then be sent a fresh key.
 
-Claude Code's environment, as `claude-local` sets it and the page lists it:
+Claude Code's environment, as `claude-podhaus` sets it and the page lists it:
 
 | Variable | Value |
 |---|---|
 | `ANTHROPIC_BASE_URL` | `https://llm.pod.haus`, or `LLM_POD_HAUS_URL` |
 | `ANTHROPIC_API_KEY` | Empty |
-| `ANTHROPIC_AUTH_TOKEN` | The key, in the page's manual setup. `claude-local` unsets it and gives the token command as `apiKeyHelper` instead, which Claude Code runs again when a request is refused. Claude Code prefers `ANTHROPIC_AUTH_TOKEN`, then `ANTHROPIC_API_KEY`, then `apiKeyHelper`, which is why the first is unset and the second empty. |
+| `ANTHROPIC_AUTH_TOKEN` | The key, in the page's manual setup. `claude-podhaus` unsets it and gives the token command as `apiKeyHelper` instead, which Claude Code runs again when a request is refused. Claude Code prefers `ANTHROPIC_AUTH_TOKEN`, then `ANTHROPIC_API_KEY`, then `apiKeyHelper`, which is why the first is unset and the second empty. |
 | `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_FABLE_MODEL` | `qwen3.8-27b` |
 | `CLAUDE_CODE_MAX_CONTEXT_TOKENS` | `150000`, the window the service is sized for |
 | `CLAUDE_CODE_EXTRA_BODY` | `{"chat_template_kwargs":{"reasoning_effort":"medium"}}`. The server otherwise runs every request at the model's highest effort, whatever Claude Code's own thinking settings say: 74 s against 50 s on a small measured task. |
@@ -180,14 +177,16 @@ Claude Code's environment, as `claude-local` sets it and the page lists it:
 | `CLAUDE_CODE_TOTAL_TOKENS_REMINDER` | `off`. With the two above, no side requests for the terminal title, prompt suggestions or token reminders, each of which would take a slot. |
 
 When `LLM_POD_HAUS_URL` starts with `http://127.0.0.1` (fractal's loopback listener,
-which has no sign-in), `claude-local` skips the token command and sets
+which has no sign-in), `claude-podhaus` skips the token command and sets
 `ANTHROPIC_AUTH_TOKEN=local`, because Claude Code must send some key.
 
 ### The token command
 
-`llm/client/llm_token.py` produces a token from a command line. It is standard
-library only, so it can be copied to any Linux or macOS machine and run with
-`python3`; `claude.sh` installs it as `~/.local/bin/llm-token`.
+`caddy/fractal/llm-setup/llm-token` produces a token from a command line. It is
+POSIX sh over `curl` and `sed`, so it runs as it is on any Linux or macOS
+machine; `claude.sh` installs it as `~/.local/bin/llm-token`. Its tests,
+`caddy/fractal/tests/test_token_command.py`, run it whole against a stand-in
+`curl`.
 
 - It prints the token on standard output and nothing else. The sign-in link and
   any failure go to standard error, and a failure exits non-zero. Claude Code
@@ -200,8 +199,11 @@ library only, so it can be copied to any Linux or macOS machine and run with
   Pocket ID no longer accepts the refresh token. A Pocket ID server error is
   reported as a failure rather than turned into a new sign-in.
 - The token and refresh token are cached in `$XDG_STATE_HOME/llm-token/token.json`
-  (default `~/.local/state/llm-token/`), mode 0600, behind a lock so that two
-  runs cannot both spend the same refresh token.
+  (default `~/.local/state/llm-token/`), mode 0600, replaced in one step.
+  Pocket ID issues a new refresh token on every renewal and refuses the old
+  one, so of two runs renewing at the same moment the second is refused; it
+  then reads the file the first one wrote, and signs in afresh only if that
+  is stale too.
 - The Pocket ID client is `llm-token`: public, with PKCE, limited to the `family`
   and `friends` groups, so Pocket ID itself refuses anyone else at approval and at
   every renewal. Its one callback address is `https://llm.pod.haus/setup/`,
@@ -579,9 +581,7 @@ deploy while a game is running leaves the model away.
 Edits outside `llm/` act on their own stacks: Caddy's listeners and paths and the
 setup page's files (`caddy/fractal/llm-setup/`) on `fractal-caddy`, the routes on
 `pomerium`, log parsers on the `logging` stacks of every host, and alerts on
-`gatus`. The setup page offers the token command straight from the linked
-repo's `llm/client/`, so a change to it reaches the download with the pull and
-needs no Caddy deploy.
+`gatus`.
 
 ### The model download job
 

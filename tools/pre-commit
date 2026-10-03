@@ -46,7 +46,7 @@
 #                                   model-server log parsing against real
 #                                   log lines, and the sign-in token command
 #                                   against a stand-in Pocket ID.
-#   - setup page tests:             the install scripts and claude-local
+#   - setup page tests:             the install scripts and claude-podhaus
 #                                   against a stand-in llm.pod.haus, the
 #                                   public Pomerium route, and, under node,
 #                                   the page's sign-in script with stand-in
@@ -99,5 +99,5 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/llm/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/caddy/fractal/tests"
-mise exec -- node --test "$root/caddy/fractal/tests/llm-pod-haus.test.ts"
+mise exec -- node --test "$root/caddy/fractal/tests/podhaus.test.ts"
 mise exec -- node --test "$root/caddy/fractal/tests/setup-page.test.ts"

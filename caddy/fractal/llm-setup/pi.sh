@@ -1,6 +1,6 @@
 #!/bin/sh
-# Sets up pi for llm.pod.haus: installs the llm-pod-haus provider extension as
-# llm-pod-haus.ts in pi's extensions directory and changes nothing else of
+# Sets up pi for llm.pod.haus: installs the podhaus provider extension as
+# podhaus.ts in pi's extensions directory and changes nothing else of
 # pi's. The extension signs in by itself, through pi's /login.
 #
 # Meant for `curl -fsSL https://llm.pod.haus/setup/pi.sh | sh`. The shell then
@@ -34,9 +34,9 @@ main() {
 	command -v curl >/dev/null 2>&1 || fail "curl not found"
 	extensions="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions"
 	mkdir -p "$extensions"
-	fetch "${LLM_POD_HAUS_URL:-https://llm.pod.haus}/setup/llm-pod-haus.ts" "$extensions/llm-pod-haus.ts" 644
+	fetch "${LLM_POD_HAUS_URL:-https://llm.pod.haus}/setup/podhaus.ts" "$extensions/podhaus.ts" 644
 	command -v pi >/dev/null 2>&1 || printf '%s\n' "pi not found" >&2
-	printf '%s\n' "In pi:" "  /login llm-pod-haus" "  /model"
+	printf '%s\n' "In pi:" "  /login podhaus" "  /model"
 }
 
 main

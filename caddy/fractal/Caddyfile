@@ -59,16 +59,9 @@
 	}
 
 	# Pomerium serves /setup with no sign-in: the page signs in with Pocket ID
-	# itself, in the browser, and none of these files holds a secret. The token
-	# command is served from its own file in llm/client, mounted by
-	# compose.yaml, so the download is always the copy in the repo.
+	# itself, in the browser, and none of these files holds a secret.
 	handle /setup {
 		redir * /setup/
-	}
-	handle /setup/llm-token.py {
-		root * /srv/llm-client
-		rewrite * /llm_token.py
-		file_server
 	}
 	handle /setup/* {
 		root * /etc/caddy/llm-setup

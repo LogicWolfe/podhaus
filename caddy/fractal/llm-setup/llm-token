@@ -1,0 +1,217 @@
+#!/bin/sh
+# Prints a sign-in token for llm.pod.haus, signing in through Pocket ID when
+# needed.
+#
+# The token is a Pocket ID access token. Pomerium checks it on every request to
+# llm.pod.haus and lets in members of Pocket ID's family and friends groups. A
+# first run starts Pocket ID's device sign-in: it prints one link with the code
+# already in it, opens it when this machine has a browser on its own screen,
+# and waits while the link is approved on any device. Later runs return the
+# cached token, renew it silently with the refresh token, or print a fresh link
+# when the refresh token is no longer accepted.
+#
+# Claude Code runs this as its key helper (claude-podhaus sets that up), so the
+# token is the only thing written to standard output. The link and any failure
+# go to standard error, and a failure exits non-zero.
+#
+# POSIX sh over curl and sed, so the file runs as it is on any Linux or macOS
+# machine.
+
+set -eu
+umask 077
+
+ISSUER=https://id.pod.haus
+DEVICE_URL=$ISSUER/api/oidc/device/authorize
+TOKEN_URL=$ISSUER/api/oidc/token
+# The public Pocket ID client declared in podhaus's terraform/pocket_id.tf.
+CLIENT_ID=llm-token
+# email and groups put the person's address and group names in what Pocket
+# ID's userinfo endpoint returns for this token, which is what Pomerium reads.
+SCOPE='openid email groups'
+DEVICE_CODE_GRANT=urn:ietf:params:oauth:grant-type:device_code
+# Pocket ID's access tokens last an hour. Renewing ten minutes early means a
+# token Claude Code holds in its five-minute key cache is still valid when
+# used.
+RENEW_BEFORE_EXPIRY_SECONDS=600
+# RFC 8628: each slow_down answer adds five seconds to the polling interval.
+SLOW_DOWN_STEP_SECONDS=5
+HTTP_TIMEOUT_SECONDS=30
+
+# XDG's state directory, which the specification places at ~/.local/state when
+# XDG_STATE_HOME is unset or empty.
+cache_dir=${XDG_STATE_HOME:-$HOME/.local/state}/llm-token
+cache_file=$cache_dir/token.json
+
+nl='
+'
+
+fail() {
+	printf '%s\n' "$1" >&2
+	exit 1
+}
+
+# The value of string field $1 in the JSON object $2. Pocket ID writes its
+# objects on one line, and the fields read here hold tokens, codes and a link,
+# none of which carries a quote.
+json_string() {
+	value=$(printf '%s\n' "$2" | sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p")
+	[ -n "$value" ] || fail "$1 missing"
+	printf '%s\n' "$value"
+}
+
+json_number() {
+	value=$(printf '%s\n' "$2" | sed -n "s/.*\"$1\": *\([0-9]*\).*/\1/p")
+	[ -n "$value" ] || fail "$1 missing"
+	printf '%s\n' "$value"
+}
+
+now() {
+	date +%s
+}
+
+# Pocket ID's answer to a form POST at $1, with the remaining arguments as
+# curl's form fields: reply_status and reply_body. A refusal is an answer; a
+# server error ends the run, because Pocket ID failing is not a reason to ask
+# the person to sign in again.
+post() {
+	url=$1
+	shift
+	reply=$(curl -sS --max-time "$HTTP_TIMEOUT_SECONDS" -H 'Accept: application/json' \
+		-w "$nl%{http_code}" "$@" "$url")
+	reply_status=${reply##*"$nl"}
+	reply_body=${reply%"$nl"*}
+	case $reply_status in
+	5*) fail "Pocket ID: HTTP $reply_status" ;;
+	esac
+}
+
+# The cached token's fields: access, refresh and expires_at, empty when there
+# is no cache.
+load() {
+	access=
+	refresh=
+	expires_at=0
+	[ -f "$cache_file" ] || return 0
+	cached=$(cat "$cache_file")
+	access=$(json_string access_token "$cached")
+	refresh=$(json_string refresh_token "$cached")
+	expires_at=$(json_number expires_at "$cached")
+}
+
+fresh() {
+	[ $((expires_at - $(now))) -gt "$RENEW_BEFORE_EXPIRY_SECONDS" ]
+}
+
+# Keeps the token Pocket ID just issued (reply_body), replacing the file in
+# one step so that a run cut short leaves the old file or the new one.
+save() {
+	access=$(json_string access_token "$reply_body")
+	refresh=$(json_string refresh_token "$reply_body")
+	expires_at=$(($(now) + $(json_number expires_in "$reply_body")))
+	mkdir -p "$cache_dir"
+	printf '{"access_token":"%s","refresh_token":"%s","expires_at":%s}\n' \
+		"$access" "$refresh" "$expires_at" >"$cache_file.tmp"
+	mv -f "$cache_file.tmp" "$cache_file"
+}
+
+# A renewed token, or false when Pocket ID no longer accepts the refresh token.
+renew() {
+	post "$TOKEN_URL" \
+		--data-urlencode grant_type=refresh_token \
+		--data-urlencode "refresh_token=$refresh" \
+		--data-urlencode "client_id=$CLIENT_ID"
+	case $reply_status in
+	2*) save ;;
+	*) return 1 ;;
+	esac
+}
+
+# Puts the sign-in link in front of the person: printed, and also opened when
+# this machine has a browser on its own screen. Over SSH any screen belongs to
+# the far end. The opener runs on its own: xdg-open can stay attached to a
+# browser it started, and the sign-in must not wait on that.
+show() {
+	printf '%s\n' "$1" >&2
+	[ -z "${SSH_CONNECTION:-}" ] || return 0
+	case $(uname) in
+	Darwin) opener=open ;;
+	Linux)
+		[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || return 0
+		command -v xdg-open >/dev/null 2>&1 || return 0
+		opener=xdg-open
+		;;
+	*) return 0 ;;
+	esac
+	("$opener" "$1" </dev/null >/dev/null 2>&1 &)
+}
+
+# Waits until the link is approved, polling as RFC 8628 prescribes.
+wait_for_approval() {
+	while :; do
+		sleep "$interval"
+		[ "$(now)" -lt "$sign_in_expires_at" ] || fail expired
+		post "$TOKEN_URL" \
+			--data-urlencode "grant_type=$DEVICE_CODE_GRANT" \
+			--data-urlencode "device_code=$device_code" \
+			--data-urlencode "client_id=$CLIENT_ID"
+		case $reply_status in
+		2*)
+			save
+			return
+			;;
+		esac
+		error=$(json_string error "$reply_body")
+		case $error in
+		slow_down) interval=$((interval + SLOW_DOWN_STEP_SECONDS)) ;;
+		authorization_pending) ;;
+		*) fail "$error" ;;
+		esac
+	done
+}
+
+sign_in() {
+	post "$DEVICE_URL" \
+		--data-urlencode "client_id=$CLIENT_ID" \
+		--data-urlencode "scope=$SCOPE"
+	case $reply_status in
+	2*) ;;
+	*)
+		error=$(json_string error "$reply_body")
+		fail "$error"
+		;;
+	esac
+	device_code=$(json_string device_code "$reply_body")
+	interval=$(json_number interval "$reply_body")
+	sign_in_expires_at=$(($(now) + $(json_number expires_in "$reply_body")))
+	link=$(json_string verification_uri_complete "$reply_body")
+	show "$link"
+	wait_for_approval
+}
+
+# Pocket ID issues a new refresh token on every renewal and refuses the old
+# one, so of two runs renewing at the same moment the second is refused. It
+# reads the file the first one wrote before asking the person to sign in for
+# nothing.
+renew_or_sign_in() {
+	if [ -n "$refresh" ]; then
+		if renew; then
+			return
+		fi
+		sleep 1
+		load
+		if fresh; then
+			return
+		fi
+	fi
+	sign_in
+}
+
+main() {
+	load
+	if ! fresh; then
+		renew_or_sign_in
+	fi
+	printf '%s\n' "$access"
+}
+
+main

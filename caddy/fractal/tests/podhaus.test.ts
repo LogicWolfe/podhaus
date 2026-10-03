@@ -1,5 +1,5 @@
 // Runs the extension's PocketId against a stand-in Pocket ID served locally.
-//   node --test llm-pod-haus.test.ts
+//   node --test podhaus.test.ts
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
@@ -7,7 +7,7 @@ import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import registerExtension, { type Clock, PocketId, systemClock } from "../llm-setup/llm-pod-haus.ts";
+import registerExtension, { type Clock, PocketId, systemClock } from "../llm-setup/podhaus.ts";
 
 type TokenAnswer = { status: number; body: Record<string, unknown> };
 
@@ -192,7 +192,7 @@ test("a refused refresh token fails with a plain error", async () => {
 			{ access: "old", refresh: "stale", expires: 0 },
 			new AbortController().signal,
 		),
-		{ message: "Pocket ID no longer accepts the saved sign-in (invalid_grant). Run /login llm-pod-haus" },
+		{ message: "Pocket ID no longer accepts the saved sign-in (invalid_grant). Run /login podhaus" },
 	);
 });
 
@@ -274,7 +274,7 @@ function composeModelName(): string {
 
 test("the registered model is the one the service serves", () => {
 	const { id, config } = registeredProvider(undefined);
-	assert.equal(id, "llm-pod-haus");
+	assert.equal(id, "podhaus");
 	assert.equal(config.api, "openai-completions");
 	assert.equal(config.models.length, 1);
 	assert.equal(config.models[0].id, composeModelName());

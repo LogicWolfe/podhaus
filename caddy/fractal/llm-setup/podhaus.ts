@@ -3,12 +3,12 @@
  *
  * Signs in through Pocket ID's device flow: /login shows one link with the code
  * already in it, which can be approved on any device, and pi renews the token
- * through the refresh token afterwards. Mirrors llm/client/llm_token.py in the
- * podhaus repository, which does the same sign-in for Claude Code.
+ * through the refresh token afterwards. Mirrors llm-token, the shell command
+ * beside this file, which does the same sign-in for Claude Code.
  *
  * Usage:
- *   pi -e ./llm-pod-haus.ts
- *   # then /login llm-pod-haus
+ *   pi -e ./podhaus.ts
+ *   # then /login podhaus
  *
  * Only types are imported from pi, so the file also runs under plain node.
  */
@@ -24,7 +24,7 @@ const CLIENT_ID = "llm-token";
 const SCOPE = "openid email groups";
 const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const DEFAULT_SERVICE_URL = "https://llm.pod.haus";
-const PROVIDER_ID = "llm-pod-haus";
+const PROVIDER_ID = "podhaus";
 // pi has no token cache of its own to outlive, so a few minutes of margin is
 // enough to refresh before a request goes out with an expired token.
 const REFRESH_BEFORE_EXPIRY_MS = 5 * 60 * 1000;

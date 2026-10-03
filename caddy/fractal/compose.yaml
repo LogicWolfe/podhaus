@@ -42,9 +42,6 @@ services:
     volumes:
       # Directory binds only.
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-fractal/caddy/fractal:/etc/caddy:ro
-      # The sign-in token command, which the setup page at /setup/ offers for
-      # download as llm-token.py.
-      - /opt/komodo-periphery/etc-komodo/repos/podhaus-fractal/llm/client:/srv/llm-client:ro
       - fractal-caddy-secrets:/run/podhaus-secrets:ro
       - fractal-caddy-data:/data
       - fractal-caddy-config:/config

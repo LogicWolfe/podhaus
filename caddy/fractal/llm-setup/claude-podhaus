@@ -44,11 +44,8 @@ http://127.0.0.1*)
 esac
 
 unset ANTHROPIC_AUTH_TOKEN
-helper="$HOME/.local/bin/llm-token"
-"$helper" >/dev/null
-# Claude Code runs apiKeyHelper as a command line through sh -c, so the path is
-# quoted for the shell and then written as a JSON string. A home directory
-# holding a space, a quote or a backslash survives both. python3 is already
-# needed by the token command.
-settings=$(python3 -c 'import json, shlex, sys; print(json.dumps({"apiKeyHelper": shlex.quote(sys.argv[1])}))' "$helper")
-exec claude --settings "$settings" "$@"
+~/.local/bin/llm-token >/dev/null
+# Claude Code runs apiKeyHelper as a command line through sh, whose tilde
+# expansion yields the home directory whole, so a home directory holding a
+# space, a quote or a backslash needs no quoting here.
+exec claude --settings '{"apiKeyHelper":"~/.local/bin/llm-token"}' "$@"

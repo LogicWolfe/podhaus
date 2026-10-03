@@ -1,6 +1,6 @@
 #!/bin/sh
 # Sets up Claude Code for llm.pod.haus: installs the sign-in token command as
-# ~/.local/bin/llm-token and the launcher as ~/.local/bin/claude-local, then
+# ~/.local/bin/llm-token and the launcher as ~/.local/bin/claude-podhaus, then
 # runs the token command once, so the first sign-in happens now, while the
 # setup page is still open in the browser.
 #
@@ -35,26 +35,25 @@ fetch() {
 	mv -f "$2.part" "$2"
 }
 
-# How to start claude-local from the directory $1: by name when $1 is on PATH,
+# How to start claude-podhaus from the directory $1: by name when $1 is on PATH,
 # by its full path otherwise.
 start_command() {
 	case ":$PATH:" in
-	*":$1:"*) printf '%s\n' claude-local ;;
+	*":$1:"*) printf '%s\n' claude-podhaus ;;
 	*)
 		printf '%s\n' "$1 not on PATH" >&2
-		printf '%s\n' "$1/claude-local"
+		printf '%s\n' "$1/claude-podhaus"
 		;;
 	esac
 }
 
 main() {
-	require python3
 	require curl
 	setup="${LLM_POD_HAUS_URL:-https://llm.pod.haus}/setup"
 	bin="$HOME/.local/bin"
 	mkdir -p "$bin"
-	fetch "$setup/llm-token.py" "$bin/llm-token" 755
-	fetch "$setup/claude-local" "$bin/claude-local" 755
+	fetch "$setup/llm-token" "$bin/llm-token" 755
+	fetch "$setup/claude-podhaus" "$bin/claude-podhaus" 755
 	start=$(start_command "$bin")
 	command -v claude >/dev/null 2>&1 || printf '%s\n' "claude not found" >&2
 	# The token goes nowhere: Claude Code asks the command for it when needed.
