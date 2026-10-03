@@ -34,6 +34,7 @@ a move does not fit.
 | `onepassword` (op-connect-api, op-connect-sync, komodo-op) | **bandicoot** | ✅ moved with the existing credentials — no new Connect server |
 | Fenwick family (fenwick, signal-cli, web-agent, brinno-downloader) | **bandicoot** | ✅ moved (77caca3, 97d7d2d, 57b571b) |
 | RustFS primary object storage | bandicoot | ✅ serves the website buckets, asset bucket and Terraform state |
+| Book services (bookshelf, bookcard, bookbinder) | **bandicoot** | in flight for bandicoot's disk; front door stays on bilby's Caddy. Cut-over: [book-services-to-bandicoot.md](book-services-to-bandicoot.md) |
 | Plex, Music Assistant, Home Assistant, ESPHome, Flood, StreamFab, Forgejo, Pocket ID, Gatus, Caddy, Backrest, Ofelia, the relay, Bugsink, Umami, pets, yiayia-stories, nathanbaxter-dev | bilby | stay |
 
 **Memory after the moves.** bandicoot today: 9.9 GB used of 15.4 with

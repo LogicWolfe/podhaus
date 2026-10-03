@@ -205,6 +205,43 @@
       },
       "hooks": [],
       "skipIfUnchanged": false
+    },
+    {
+      "id": "bookcard",
+      "repo": "podhaus-bandicoot",
+      "paths": ["/userdata/bookcard"],
+      "excludes": ["/userdata/bookcard/downloads", "/userdata/bookcard/sources"],
+      "schedule": {
+        "cron": "20 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": false
+    },
+    {
+      "id": "bookshelf",
+      "repo": "podhaus-bandicoot",
+      "paths": ["/userdata/bookshelf"],
+      "schedule": {
+        "cron": "30 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [],
+      "skipIfUnchanged": false
     }
   ]
 }

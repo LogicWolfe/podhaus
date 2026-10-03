@@ -214,44 +214,47 @@ git_account = "LogicWolfe"
 repo = "LogicWolfe/indy-board"
 branch = "main"
 
-# Bilby clone of the bookbinder repo (the Kindle page-data decode service).
-# Same linked_repo + run_build pattern as indy-board: Komodo builds the image
-# on bilby.
+# Bandicoot clone of the bookbinder repo (the Kindle page-data decode
+# service). Same linked_repo + run_build pattern as indy-board: Komodo builds
+# the image on bandicoot. The three book services share bandicoot's dockernet
+# and moved here together for its disk: bookcard keeps each book's source
+# archive under /var/lib/bookcard.
 [[repo]]
 name = "bookbinder"
-description = "Komodo-managed clone of the bookbinder repo on bilby's Periphery"
-tags = ["podhaus", "bilby", "bookbinder"]
+description = "Komodo-managed clone of the bookbinder repo on bandicoot's Periphery"
+tags = ["podhaus", "bandicoot", "bookbinder"]
 
 [repo.config]
-server = "podhaus"             # = bilby
+server = "bandicoot"
 git_provider = "git.pod.haus"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/bookbinder"
 branch = "main"
 
-# Bilby clone of the bookcard repo (the Kindle library service beside
+# Bandicoot clone of the bookcard repo (the Kindle library service beside
 # bookbinder). Same linked_repo + run_build pattern.
 [[repo]]
 name = "bookcard"
-description = "Komodo-managed clone of the bookcard repo on bilby's Periphery"
-tags = ["podhaus", "bilby", "bookcard"]
+description = "Komodo-managed clone of the bookcard repo on bandicoot's Periphery"
+tags = ["podhaus", "bandicoot", "bookcard"]
 
 [repo.config]
-server = "podhaus"             # = bilby
+server = "bandicoot"
 git_provider = "git.pod.haus"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/bookcard"
 branch = "main"
 
-# Bilby clone of the bookshelf repo (the book text, history and API service
-# in front of bookcard and bookbinder). Same linked_repo + run_build pattern.
+# Bandicoot clone of the bookshelf repo (the book text, history and API
+# service in front of bookcard and bookbinder). Same linked_repo + run_build
+# pattern.
 [[repo]]
 name = "bookshelf"
-description = "Komodo-managed clone of the bookshelf repo on bilby's Periphery"
-tags = ["podhaus", "bilby", "bookshelf"]
+description = "Komodo-managed clone of the bookshelf repo on bandicoot's Periphery"
+tags = ["podhaus", "bandicoot", "bookshelf"]
 
 [repo.config]
-server = "podhaus"             # = bilby
+server = "bandicoot"
 git_provider = "git.pod.haus"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/bookshelf"

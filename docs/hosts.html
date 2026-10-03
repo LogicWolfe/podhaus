@@ -343,8 +343,9 @@
         host on the home LAN, provisioned by <a href="/host-provisioning.md">Ansible</a>
         (<code>playbooks/bandicoot.yml</code>). Since 2026-09-09 it is also the Komodo
         Core host (Postgres + FerretDB + Core), the 1Password Connect host, the
-        Ansible/Terraform control node, and the host for ClickStack, MeTube, and the
-        Fenwick family (the bot, signal-cli, brinno-downloader, fenwick-web-agent) —
+        Ansible/Terraform control node, and the host for ClickStack, MeTube, the
+        Fenwick family (the bot, signal-cli, brinno-downloader, fenwick-web-agent),
+        and the book services (bookshelf, bookcard, bookbinder) —
         see <a href="/komodo.html">Komodo</a>.
       </p>
       <p>
@@ -386,9 +387,14 @@
           Komodo Core's own
           <code>onepassword</code> stack, and the Fenwick family (<code>fenwick</code>,
           <code>signal-cli-rest-api</code>, <code>fenwick-brinno-downloader</code>,
-          <code>fenwick-web-agent</code>) — through linked repos
-          <code>podhaus-bandicoot</code>, <code>docs-server-bandicoot</code>, and
-          <code>fenwick</code>.</li>
+          <code>fenwick-web-agent</code>), and the book services (<code>bookshelf</code>,
+          <code>bookcard</code>, <code>bookbinder</code>; see
+          <a href="/architecture.html">Architecture</a>) — through linked repos
+          <code>podhaus-bandicoot</code>, <code>docs-server-bandicoot</code>,
+          <code>fenwick</code>, <code>bookshelf</code>, <code>bookcard</code> and
+          <code>bookbinder</code>. <code>books.pod.haus</code>'s front door is bilby's
+          Caddy, which reaches bookshelf on the port it publishes on bandicoot's
+          LAN address, 8789.</li>
       </ul>
       <p>
         <strong>MeTube</strong> lets anyone in the family paste a video, playlist, or
@@ -437,8 +443,12 @@
         that covers the ClickStack mongo dumps, Komodo's Postgres/FerretDB, the
         1Password Connect data volume, MeTube's queue state under
         <code>/var/lib/metube/state</code> (its downloaded media on Pouch is not
-        backed up), and (since 2026-09-09) the Fenwick bot's SQLite
-        and the Signal device link. Local-only, as pinelake's is: no OneDrive leg yet.
+        backed up), Sonarr's state, RustFS, the Fenwick bot's SQLite and the
+        Signal device link, and the book services' state
+        (<code>/var/lib/bookcard</code> less its downloads and source archives,
+        <code>/var/lib/bookshelf</code>). Bilby's nightly Backrest hook copies these
+        snapshots into its own repository, which it mirrors to OneDrive — see
+        <a href="/backup-and-recovery.html">Backup &amp; recovery</a>.
       </p>
 
       <h2 id="pinelake">pinelake</h2>

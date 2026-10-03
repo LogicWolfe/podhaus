@@ -38,8 +38,6 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
           <tr><td><code>plex</code></td><td><code>/var/lib/plex-local</code></td><td>04:00</td></tr>
           <tr><td><code>indy-board</code></td><td><code>/var/lib/indy-board</code> (the catch game's SQLite log behind the panel's high score)</td><td>04:05</td></tr>
           <tr><td><code>flood</code></td><td><code>/var/lib/flood-db</code></td><td>04:10</td></tr>
-          <tr><td><code>bookcard</code></td><td><code>/var/lib/bookcard</code> (the Amazon and Audible session, purchase ledgers, and the record of Kindle Unlimited loans Amazon no longer lists), excluding <code>downloads/</code>, page data bookcard removes a day after each download</td><td>04:15</td></tr>
-          <tr><td><code>bookshelf</code></td><td><code>/var/lib/bookshelf</code> (the SQLite file holding books' text, reading history, notes and summaries)</td><td>04:25</td></tr>
           <tr><td><code>home-assistant</code></td><td><code>/var/lib/home-assistant</code></td><td>04:20</td></tr>
           <tr><td><code>paperless</code></td><td><code>/var/lib/paperless-data</code> + <code>/var/lib/paperless-pgdata</code> + Jump documents</td><td>04:30</td></tr>
           <tr><td><code>music-assistant</code></td><td>server state volume</td><td>04:35</td></tr>
@@ -80,7 +78,7 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
       </p>
 
       <h2 id="bandicoot-plans">Bandicoot plans</h2>
-      <p>Configured in <code>backup/bandicoot/config.json.tmpl</code>. Its repository is on Jump and has no independent OneDrive writer. Every plan creates a nightly snapshot even when unchanged, so the copy gate can prove current source data from repository snapshots. Its own <code>backrest-state</code> heartbeat proves the local Bandicoot backup pipeline; Bilby's off-site heartbeat never replaces that signal.</p>
+      <p>Configured in <code>backup/bandicoot/config.json.tmpl</code>. Its repository is on Jump and has no independent OneDrive writer. Every plan creates a nightly snapshot even when unchanged, so the copy gate can prove current source data from repository snapshots. The gate names the plans it expects in <code>backup/bilby/scripts/sync-bandicoot-copy</code>; a plan added here goes into that list in the same change, which <code>backup/tests/test_offsite_contract.py</code> enforces. Its own <code>backrest-state</code> heartbeat proves the local Bandicoot backup pipeline; Bilby's off-site heartbeat never replaces that signal.</p>
       <p>The 03:30 RustFS plan stops RustFS before its filesystem snapshot and starts it again after the snapshot, including when restic fails. A persistent control marker lets Backrest's five-minute recovery job restart RustFS after an interrupted backup; a RustFS service already stopped before the plan remains stopped.</p>
       <table>
         <thead><tr><th>Plan</th><th>Source</th><th>Schedule</th></tr></thead>
@@ -89,7 +87,9 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
           <tr><td><code>clickstack-mongo</code></td><td>nightly ClickStack MongoDB dump</td><td>04:00</td></tr>
           <tr><td><code>metube</code></td><td>MeTube state</td><td>04:10</td></tr>
           <tr><td><code>fenwick</code></td><td>Fenwick and Signal device state</td><td>04:15</td></tr>
+          <tr><td><code>bookcard</code></td><td><code>/var/lib/bookcard</code> (the Amazon and Audible session, purchase ledgers, and the record of Kindle Unlimited loans Amazon no longer lists), excluding <code>downloads/</code>, page data bookcard removes a day after each download, and <code>sources/</code>, the source archive of every downloaded book</td><td>04:20</td></tr>
           <tr><td><code>sonarr</code></td><td>Sonarr state</td><td>04:25</td></tr>
+          <tr><td><code>bookshelf</code></td><td><code>/var/lib/bookshelf</code> (the SQLite file holding books' text, reading history, notes and summaries, and the covers it has fetched)</td><td>04:30</td></tr>
           <tr><td><code>komodo</code></td><td>Komodo database volumes</td><td>04:40</td></tr>
           <tr><td><code>onepassword</code></td><td>1Password Connect state</td><td>04:50</td></tr>
           <tr><td><code>backrest-state</code></td><td>Backrest's own DB</td><td>05:00</td></tr>

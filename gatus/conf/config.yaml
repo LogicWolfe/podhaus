@@ -335,21 +335,46 @@ endpoints:
       - "[BODY].ok == true"
     alerts: *alerts
 
-  # The book services are probed by container name on dockernet; /health is
-  # 200 while each serves. bookcard's never signs in, so it stays green while
-  # Amazon sessions come and go.
-  - name: bookbinder (container)
-    url: http://bookbinder:8787/health
-    <<: *defaults
+  # The book services live on bandicoot. bookshelf publishes 8789 on its LAN
+  # address, the same path bilby's Caddy takes for books.pod.haus; /health is
+  # 200 while it serves. bookbinder and bookcard publish nothing, so their
+  # checks ask Komodo for the container's own healthcheck, a curl of /health,
+  # the way Radarr's does. bookcard's /health never signs in, so it stays
+  # green while Amazon sessions come and go.
+  - name: bookbinder (bandicoot, via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
     group: Books
+    interval: 2m
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"bandicoot","container":"bookbinder"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
 
-  - name: bookcard (container)
-    url: http://bookcard:8788/health
-    <<: *defaults
+  - name: bookcard (bandicoot, via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
     group: Books
+    interval: 2m
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"bandicoot","container":"bookcard"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
 
-  - name: bookshelf (container)
-    url: http://bookshelf:8789/health
+  - name: bookshelf
+    url: http://${BANDICOOT_LAN_IPV4}:8789/health
     <<: *defaults
     group: Books
 
