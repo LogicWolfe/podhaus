@@ -200,9 +200,9 @@ routes:
   # by the setup page fetches one). Pomerium checks each token with Pocket ID's userinfo endpoint
   # once, at first use, and keeps the result for cookie_expire (30 days):
   # userinfo carries no expiry. The policy reads the groups stored then, merged
-  # with Pomerium's shared record of the person. So removal from a group takes
-  # effect at the next hourly renewal for people using the token command, and
-  # up to 30 days later for a token already accepted. Userinfo carries no
+  # with Pomerium's shared record of the person. The tokens last a year
+  # (terraform/pocket_id.tf), so removal from a group takes effect at that
+  # re-check, up to 30 days later; a deny rule here is immediate. Userinfo carries no
   # audience either, so a token Pocket ID issued to any client for an admitted
   # person is accepted, and an allowed-audiences list would refuse every token.
   #

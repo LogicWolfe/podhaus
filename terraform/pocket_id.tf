@@ -200,7 +200,7 @@ resource "pocketid_client" "yiayia_stories" {
 # because neither can keep a secret. The setup page is the one callback a
 # browser sign-in returns to.
 # Limited to the two groups the llm.pod.haus route admits, so Pocket ID itself
-# refuses anyone else at approval and at every hourly renewal.
+# refuses anyone else at approval and at every renewal.
 resource "pocketid_client" "llm_token" {
   name      = "llm.pod.haus"
   client_id = "llm-token"
@@ -217,6 +217,41 @@ resource "pocketid_client" "llm_token" {
     pocketid_group.family.id,
     pocketid_group.friends.id,
   ]
+}
+
+# The llm-token client's token lifetimes: a year each, so a key pasted into a
+# client with no way to renew it (Cursor) keeps working. Pomerium re-checks a
+# token with Pocket ID every 30 days and finds it still valid. The pocketid
+# provider has no attribute for the lifetimes (2.4.2 leaves them as Pocket ID
+# holds them when it updates the client), so this writes them through Pocket
+# ID's own client endpoint. That endpoint replaces the client in full, which
+# is why every setting the resource above manages is repeated here, read from
+# it so nothing is defined twice. Fold the two lifetimes into
+# pocketid_client.llm_token when the provider gains them, after removing this
+# from state: destroying it would delete the client, hence prevent_destroy.
+resource "restapi_object" "llm_token_lifetimes" {
+  path                    = "/api/oidc/clients"
+  object_id               = pocketid_client.llm_token.id
+  create_method           = "PUT"
+  create_path             = "/api/oidc/clients/{id}"
+  ignore_server_additions = true
+
+  data = jsonencode({
+    name                                = pocketid_client.llm_token.name
+    callbackURLs                        = pocketid_client.llm_token.callback_urls
+    logoutCallbackURLs                  = []
+    isPublic                            = pocketid_client.llm_token.is_public
+    pkceEnabled                         = pocketid_client.llm_token.pkce_enabled
+    requiresReauthentication            = pocketid_client.llm_token.requires_reauthentication
+    requiresPushedAuthorizationRequests = pocketid_client.llm_token.requires_pushed_authorization_requests
+    isGroupRestricted                   = true
+    accessTokenDurationMinutes          = 365 * 24 * 60
+    refreshTokenDurationMinutes         = 365 * 24 * 60
+  })
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "pocketid_client" "tailscale" {

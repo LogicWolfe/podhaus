@@ -101,8 +101,7 @@ token as their API key. The setup page, `https://llm.pod.haus/setup/`, hands
 out such a token and sets up Claude Code and pi to fetch their own. It shows:
 
 - **The key**: a Pocket ID access token, masked, with a copy button. It works
-  as the API key in either request format. It must first be used within the
-  hour Pocket ID issues it for; Pomerium then accepts it for 30 days (see "What
+  as the API key in either request format. It is valid for a year (see "What
   Pomerium does with a token" below).
 - **Claude Code**: `curl -fsSL https://llm.pod.haus/setup/claude.sh | sh`, after
   which `claude-podhaus` starts Claude Code on the local model.
@@ -135,8 +134,8 @@ needs `fcntl`, which native Windows lacks.
 The page also gives Cursor's settings: the key as the OpenAI API key, the base
 URL override `https://llm.pod.haus/v1`, and `qwen3.8-27b` as a custom model.
 Cursor's own servers make the requests, not the laptop, which is why the key
-has to be pasted rather than fetched by a command, and why it must be used
-within its first hour. Only Cursor's chat panel uses a custom endpoint; Tab and
+has to be pasted rather than fetched by a command. Only Cursor's chat panel
+uses a custom endpoint; Tab and
 inline edits stay on Cursor's models, the override applies to every key Cursor
 holds, and custom keys need Cursor Pro.
 
@@ -195,7 +194,7 @@ machine; `claude.sh` installs it as `~/.local/bin/llm-token`. Its tests,
   in it, opens it when the machine has a browser on its own screen (never over
   SSH), and waits while the link is approved on any device.
 - Later runs return the cached token, renew it silently with the refresh token
-  (ten minutes before the token's hour is up), or print a fresh link when
+  (ten minutes before the token runs out), or print a fresh link when
   Pocket ID no longer accepts the refresh token. A Pocket ID server error is
   reported as a failure rather than turned into a new sign-in.
 - The token and refresh token are cached in `$XDG_STATE_HOME/llm-token/token.json`
@@ -214,12 +213,24 @@ machine; `claude.sh` installs it as `~/.local/bin/llm-token`. Its tests,
 The friends route has
 `bearer_token_format: idp_access_token`, so Pomerium checks the token once, at
 its first use, against Pocket ID's userinfo endpoint and keeps the result for
-the global `cookie_expire` (30 days). Userinfo carries no expiry and no audience,
-so a token issued to any Pocket ID client for an admitted person is accepted,
-and an accepted token keeps working for up to 30 days even after its own hour is
-up. Removing someone from a group therefore takes effect at their next renewal
-if they use the token command, and up to 30 days later for a token already
-accepted.
+the global `cookie_expire` (30 days), then checks again. Userinfo carries no
+expiry and no audience, so a token issued to any Pocket ID client for an
+admitted person is accepted.
+
+The `llm-token` client's access and refresh tokens last a year
+(`restapi_object.llm_token_lifetimes` in `terraform/pocket_id.tf`, since the
+pocketid provider has no attribute for lifetimes), so a key pasted into Cursor,
+which cannot renew one, keeps working; Claude Code and pi hold the same kind of
+token and renew it ten minutes before the year is up. A token cannot be revoked
+on its own: Pocket ID does not store access tokens. Revocation is per person,
+and its timing is Pomerium's: removing someone from `family` and `friends`, or
+deleting them, is seen at Pomerium's next check of their key, up to 30 days
+after the last one. For immediate effect add a deny rule for their email to
+the `llm.pod.haus` routes in `pomerium/config.yaml` and push; Pomerium applies
+policy on every request. In the logs, Pomerium's authorize entries carry the
+email and a session id that is a hash of the key, so one key is one session id
+for its whole life wherever it is pasted; Caddy's lines on fractal carry the
+email as `caller`.
 
 ## Handing the GPU to a game and back
 

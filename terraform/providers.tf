@@ -80,6 +80,16 @@ provider "pocketid" {
   api_token = data.onepassword_item.pocket_id_api_key.credential
 }
 
+# Pocket ID again, for the one client setting the pocketid provider cannot
+# express (restapi_object.llm_token_lifetimes in pocket_id.tf).
+provider "restapi" {
+  uri                  = "https://id.pod.haus"
+  write_returns_object = true
+  headers = {
+    "X-API-KEY" = data.onepassword_item.pocket_id_api_key.credential
+  }
+}
+
 provider "aws" {
   region                      = "us-east-1"
   access_key                  = var.rustfs_user

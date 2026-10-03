@@ -100,8 +100,17 @@ terraform {
       # Pin the minor: this is a young community provider and schema
       # changes must be reviewed deliberately.
       # Docs: https://registry.terraform.io/providers/Trozz/pocketid/latest/docs
-      source  = "Trozz/pocketid"
-      version = "~> 2.1.0"
+      source = "Trozz/pocketid"
+      # 2.4.2 and later leave client settings the provider does not expose
+      # (the token lifetimes) as Pocket ID has them when updating a client.
+      version = "~> 2.4.2"
+    }
+    restapi = {
+      # Pocket ID's per-client token lifetimes have no attribute in the
+      # pocketid provider yet; this writes them to the client's own endpoint.
+      # Docs: https://registry.terraform.io/providers/Mastercard/restapi/latest/docs
+      source  = "Mastercard/restapi"
+      version = "~> 3.0"
     }
   }
 

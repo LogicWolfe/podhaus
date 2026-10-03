@@ -29,9 +29,9 @@ CLIENT_ID=llm-token
 # ID's userinfo endpoint returns for this token, which is what Pomerium reads.
 SCOPE='openid email groups'
 DEVICE_CODE_GRANT=urn:ietf:params:oauth:grant-type:device_code
-# Pocket ID's access tokens last an hour. Renewing ten minutes early means a
-# token Claude Code holds in its five-minute key cache is still valid when
-# used.
+# Pocket ID's access tokens for this client last a year. Renewing ten minutes
+# early means a token Claude Code holds in its five-minute key cache is still
+# valid when used.
 RENEW_BEFORE_EXPIRY_SECONDS=600
 # RFC 8628: each slow_down answer adds five seconds to the polling interval.
 SLOW_DOWN_STEP_SECONDS=5
