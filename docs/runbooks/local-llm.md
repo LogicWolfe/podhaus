@@ -134,6 +134,14 @@ fractal's loopback listener it returns to `llm.pod.haus` and reports "Sign-in
 expired", and Retry then works. It suits Linux, macOS and WSL; the token command
 needs `fcntl`, which native Windows lacks.
 
+The page also gives Cursor's settings: the key as the OpenAI API key, the base
+URL override `https://llm.pod.haus/v1`, and `qwen3.8-27b` as a custom model.
+Cursor's own servers make the requests, not the laptop, which is why the key
+has to be pasted rather than fetched by a command, and why it must be used
+within its first hour. Only Cursor's chat panel uses a custom endpoint; Tab and
+inline edits stay on Cursor's models, the override applies to every key Cursor
+holds, and custom keys need Cursor Pro.
+
 ### What `/setup/` serves
 
 The files are in `caddy/fractal/llm-setup/`, except the token command, which is
