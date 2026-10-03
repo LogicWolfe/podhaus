@@ -79,7 +79,8 @@
 		reverse_proxy @gatus gatus:8080
 		reverse_proxy @bugs bugsink:8000
 		reverse_proxy @backup backrest:9898
-		reverse_proxy @books bookshelf:8789
+		# bookshelf lives on bandicoot; the front door stays here.
+		reverse_proxy @books {$BANDICOOT_LAN_IPV4}:8789
 		# The bot lives on bandicoot; the front door stays here.
 		reverse_proxy @fenwick {$BANDICOOT_LAN_IPV4}:8088
 		reverse_proxy @kangaroo_backup {$KANGAROO_LAN_IPV4}:9898

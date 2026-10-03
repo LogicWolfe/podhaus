@@ -106,23 +106,26 @@
         backups and device recovery.
       </p>
       <p>
-        The book services run on Bilby. bookcard
+        The book services run on Bandicoot, for its disk. bookcard
         (<code>http://bookcard:8788</code>) signs in to the Kindle and Audible
         library and downloads books' page data into its own
         <code>/var/lib/bookcard</code>, handing each download out as a tar
         archive over HTTP and removing it a day later. bookbinder
         (<code>http://bookbinder:8787</code>) fetches such an archive by URL
         and decodes it into EPUB or Markdown; it mounts nothing. Both are
-        reachable only on <code>dockernet</code>. bookshelf
+        reachable only on Bandicoot's <code>dockernet</code>. bookshelf
         (<code>http://bookshelf:8789</code>) sits in front of them: it keeps
         books' text, reading history, notes and summaries in one SQLite file
-        under <code>/var/lib/bookshelf</code>, serves Nathan's page at
+        under <code>/var/lib/bookshelf</code> and serves Nathan's page at
         <code>books.pod.haus</code> (Pomerium, Nathan only, with bookshelf
-        verifying the signed identity header itself), and publishes port 8789
-        on the home network for Fenwick on Bandicoot, which presents the
-        <code>Bookshelf Token</code> Homelab item as a bearer token. Backrest
-        snapshots <code>/var/lib/bookcard</code> (less its downloads) and
-        <code>/var/lib/bookshelf</code> nightly; bookcard's Amazon credentials
+        verifying the signed identity header itself). It publishes port 8789
+        on Bandicoot's home-network address, where Bilby's Caddy, the
+        <code>books.pod.haus</code> front door, and Gatus reach it; Fenwick,
+        on the same <code>dockernet</code>, can call it by name, presenting the
+        <code>Bookshelf Token</code> Homelab item as a bearer token. Bandicoot's
+        Backrest snapshots <code>/var/lib/bookcard</code> (less its downloads
+        and source archives) and <code>/var/lib/bookshelf</code> nightly;
+        bookcard's Amazon credentials
         live in the <code>Bookcard Amazon</code> Homelab item. Each repository
         supplies its own stack; Podhaus owns the deployment webhooks and
         Komodo integration. Each service describes its API at

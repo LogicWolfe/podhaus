@@ -1,9 +1,9 @@
 // Per-service log parser — bookshelf
 //
-// See bookbinder.alloy: bookshelf (the book text, history and API service on
-// bilby) exports its own spans and log records to the ClickStack collector
-// over OTLP, each record on its request's trace. Its docker stdout carries
-// each failure again as one JSON line, so this module drops those rather than
+// See bookbinder.alloy: bookshelf (the book text, history and API service)
+// exports its own spans and log records to the ClickStack collector over
+// OTLP, each record on its request's trace. Its docker stdout carries each
+// failure again as one JSON line, so this module drops those rather than
 // ingest them twice. Lines that are not JSON pass through: they are what the
 // process prints when it fails before or after its exporter runs (a missing
 // setting, a database it cannot open). `docker logs bookshelf` still shows

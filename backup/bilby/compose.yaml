@@ -103,14 +103,6 @@ services:
       # Indy Board: the SQLite game log behind the panel's high score, the
       # service's only state.
       - /var/lib/indy-board:/userdata/indy-board:ro
-      # bookcard: bookcard.db (the Amazon and Audible session, the purchase
-      # ledgers, and the only record of the Kindle Unlimited loans Amazon no
-      # longer lists) and its browser profile. The plan excludes downloads/,
-      # page data bookcard removes a day after each download starts.
-      - /var/lib/bookcard:/userdata/bookcard:ro
-      # bookshelf: its one SQLite file, the books' text, reading history,
-      # notes and summaries.
-      - /var/lib/bookshelf:/userdata/bookshelf:ro
       #
       # Docker named volumes from stacks that still use them (NAS squash
       # carve-out stacks + logging). Referenced via `external: true` in

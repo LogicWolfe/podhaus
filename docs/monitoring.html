@@ -100,8 +100,9 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           API and asserts a downstream state. Periphery checks cover every Komodo
           host through <code>GetServerState</code>. Remote-container checks use
           <code>InspectDockerContainer</code> and require both running state and healthy
-          Docker health; this covers kangaroo services and the Fractal/Voltaire docs
-          instances and the two local model containers. Bilby's docs health is probed directly over dockernet. The
+          Docker health; this covers kangaroo services, the Fractal/Voltaire docs
+          instances, the two local model containers, and bandicoot's Backrest, Radarr,
+          bookcard and bookbinder. Bilby's docs health is probed directly over dockernet. The
           <code>Komodo Alerts</code> check asserts no unresolved CRITICAL alert, which
           in Komodo 2.3 means server health only (unreachable, CPU, memory, disk).
           Komodo never stores a failed procedure, action or build as an alert, so

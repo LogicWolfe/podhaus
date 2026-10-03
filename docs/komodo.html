@@ -253,9 +253,13 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         Files in the sync directory today:
       </p>
       <ul>
-        <li><code>komodo/sync/servers.toml</code> — bilby and kangaroo Server entries.</li>
-        <li><code>komodo/sync/repos.toml</code> — the <code>podhaus</code> Linked Repo for
-          kangaroo, plus two deploy-tree Repo resources:
+        <li><code>komodo/sync/servers.toml</code> — one Server entry per host:
+          <code>podhaus</code> (bilby), kangaroo, numbat, fractal, voltaire,
+          pinelake and bandicoot.</li>
+        <li><code>komodo/sync/repos.toml</code> — each host's Linked Repo of this
+          repository (<code>podhaus</code> for kangaroo, <code>podhaus-numbat</code>,
+          and so on), the clone of each separate-repo service on the host that runs
+          it, plus two deploy-tree Repo resources:
           <code>podhaus-bandicoot</code>, Core's own <strong>sync
           tree</strong> on bandicoot (the one Komodo's own deploy
           decisions read), and <code>podhaus-deploy</code>, bilby's own
@@ -294,9 +298,14 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           deployment stage. See <a href="/caching.md">Public site caching</a>.</li>
         <li><code>komodo/sync/syncs.toml</code> — child ResourceSyncs for the
           separate-repo services (<code>fenwick</code>, <code>pets</code>,
-          <code>docs</code>), each a <code>[[resource_sync]]</code> block with its
+          <code>docs</code>, <code>yiayia-stories</code>, <code>indy-board</code>,
+          <code>bookbinder</code>, <code>bookcard</code>, <code>bookshelf</code>),
+          each a <code>[[resource_sync]]</code> block with its
           own <code>linked_repo</code> + dedicated push-deploy procedure. The
-          podhaus sync picks them up via its <code>resource_path</code> scan.</li>
+          podhaus sync picks them up via its <code>resource_path</code> scan.
+          Each service's own <code>stack.toml</code> names the server it runs on,
+          so moving one between hosts is a change in that repository as well as
+          its Repo's <code>server</code> here.</li>
       </ul>
       <blockquote>
         <p><strong>Declare a ResourceSync with [[resource_sync]], never [[sync]]</strong></p>

@@ -194,7 +194,8 @@ executions = [
 ]
 
 
-# bookbinder-push-deploy — push-to-deploy for the bookbinder stack on bilby.
+# bookbinder-push-deploy — push-to-deploy for the bookbinder stack on
+# bandicoot.
 #
 # Bound to the repo's Forgejo push webhook on main, with the same two stages
 # as indy-board-push-deploy. Force-deploys: the Docker layer cache rebuilds an
@@ -223,8 +224,8 @@ executions = [
 ]
 
 
-# bookcard-push-deploy — push-to-deploy for the bookcard stack on bilby, the
-# same two stages as bookbinder-push-deploy.
+# bookcard-push-deploy — push-to-deploy for the bookcard stack on bandicoot,
+# the same two stages as bookbinder-push-deploy.
 
 [[procedure]]
 name = "bookcard-push-deploy"
@@ -248,8 +249,8 @@ executions = [
 ]
 
 
-# bookshelf-push-deploy — push-to-deploy for the bookshelf stack on bilby, the
-# same two stages as bookbinder-push-deploy.
+# bookshelf-push-deploy — push-to-deploy for the bookshelf stack on
+# bandicoot, the same two stages as bookbinder-push-deploy.
 
 [[procedure]]
 name = "bookshelf-push-deploy"

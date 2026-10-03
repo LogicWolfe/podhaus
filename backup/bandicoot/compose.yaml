@@ -52,6 +52,16 @@ services:
       # Sonarr: its database + config (series/episode metadata, import
       # history). The library files themselves live on Pouch, not here.
       - /var/lib/sonarr:/userdata/sonarr:ro
+      # bookcard: bookcard.db (the Amazon and Audible session, the purchase
+      # ledgers, and the only record of the Kindle Unlimited loans Amazon no
+      # longer lists) and its browser profile. The plan excludes downloads/,
+      # page data bookcard removes a day after each download starts, and
+      # sources/, the source archive it keeps of every downloaded book, left
+      # out of the nightly snapshot for its size (several GB).
+      - /var/lib/bookcard:/userdata/bookcard:ro
+      # bookshelf: its SQLite file (the books' text, reading history, notes
+      # and summaries) and the covers it has fetched.
+      - /var/lib/bookshelf:/userdata/bookshelf:ro
       # RustFS holds the primary object store, including version history and
       # Terraform state. Bilby's serialized Backrest hook copies its snapshots
       # into the existing off-site repository.
