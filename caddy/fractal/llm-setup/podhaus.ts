@@ -16,6 +16,8 @@
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+type ProviderOAuth = NonNullable<Parameters<ExtensionAPI["registerProvider"]>[1]["oauth"]>;
+
 const ISSUER = "https://id.pod.haus";
 // The public Pocket ID client declared in podhaus's terraform/pocket_id.tf.
 const CLIENT_ID = "llm-token";
@@ -24,6 +26,10 @@ const CLIENT_ID = "llm-token";
 const SCOPE = "openid email groups";
 const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const DEFAULT_SERVICE_URL = "https://llm.pod.haus";
+// fractal's own listener for the service has no sign-in and ignores the key,
+// which pi still has to send; claude-podhaus sends the same word there.
+const LOOPBACK_SERVICE_URL = "http://127.0.0.1";
+const LOOPBACK_KEY = "local";
 const PROVIDER_ID = "podhaus";
 // pi has no token cache of its own to outlive, so a few minutes of margin is
 // enough to refresh before a request goes out with an expired token.
@@ -218,13 +224,27 @@ function withTimeout(signal: AbortSignal | undefined): AbortSignal {
 	return signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
 }
 
-export default function (pi: ExtensionAPI) {
+/** Pocket ID's sign-in for pi's /login, or the fixed key fractal's listener takes. */
+function credentials(serviceUrl: string): { apiKey: string } | { oauth: ProviderOAuth } {
+	if (serviceUrl.startsWith(LOOPBACK_SERVICE_URL)) return { apiKey: LOOPBACK_KEY };
 	const pocketId = new PocketId(ISSUER, CLIENT_ID, systemClock);
+	return {
+		oauth: {
+			name: "pod.haus local model",
+			login: (callbacks) => pocketId.login(callbacks),
+			refreshToken: (credentials, signal) => pocketId.refresh(credentials, signal),
+			getApiKey: (credentials) => credentials.access,
+		},
+	};
+}
+
+export default function (pi: ExtensionAPI) {
 	const serviceUrl = process.env.LLM_POD_HAUS_URL ?? DEFAULT_SERVICE_URL;
 
 	pi.registerProvider(PROVIDER_ID, {
 		baseUrl: `${serviceUrl}/v1`,
 		api: "openai-completions",
+		...credentials(serviceUrl),
 		models: [
 			{
 				id: "qwen3.8-27b",
@@ -242,11 +262,5 @@ export default function (pi: ExtensionAPI) {
 				maxTokens: 32768,
 			},
 		],
-		oauth: {
-			name: "pod.haus local model",
-			login: (callbacks) => pocketId.login(callbacks),
-			refreshToken: (credentials, signal) => pocketId.refresh(credentials, signal),
-			getApiKey: (credentials) => credentials.access,
-		},
 	});
 }

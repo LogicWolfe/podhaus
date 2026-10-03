@@ -295,3 +295,12 @@ test("the base URL is the service's /v1, or the override's", () => {
 	assert.equal(registeredProvider(undefined).config.baseUrl, "https://llm.pod.haus/v1");
 	assert.equal(registeredProvider("http://127.0.0.1:9").config.baseUrl, "http://127.0.0.1:9/v1");
 });
+
+test("the service signs in through Pocket ID; fractal's loopback takes the fixed key instead", () => {
+	const remote = registeredProvider("https://llm.example").config as { oauth?: unknown; apiKey?: string };
+	assert.equal(typeof remote.oauth, "object");
+	assert.equal(remote.apiKey, undefined);
+	const loopback = registeredProvider("http://127.0.0.1:8085").config as { oauth?: unknown; apiKey?: string };
+	assert.equal(loopback.oauth, undefined);
+	assert.equal(loopback.apiKey, "local");
+});

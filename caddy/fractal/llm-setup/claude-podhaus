@@ -12,9 +12,13 @@
 # would then be sent a fresh key. On fractal,
 # LLM_POD_HAUS_URL=http://127.0.0.1:8085 reaches the model with no sign-in, so
 # no key is fetched; Claude Code must still send one, so it sends "local".
+#
+# CLAUDE_PODHAUS_COMMAND names the command started in place of claude, for a
+# wrapper that picks an account or adds flags of its own.
 
 set -eu
 
+claude=${CLAUDE_PODHAUS_COMMAND:-claude}
 model=qwen3.8-27b
 export ANTHROPIC_BASE_URL="${LLM_POD_HAUS_URL:-https://llm.pod.haus}"
 # Claude Code takes ANTHROPIC_AUTH_TOKEN first, then ANTHROPIC_API_KEY, then
@@ -39,7 +43,7 @@ export CLAUDE_CODE_TOTAL_TOKENS_REMINDER=off
 case $ANTHROPIC_BASE_URL in
 http://127.0.0.1*)
 	export ANTHROPIC_AUTH_TOKEN=local
-	exec claude "$@"
+	exec "$claude" "$@"
 	;;
 esac
 
@@ -48,4 +52,4 @@ unset ANTHROPIC_AUTH_TOKEN
 # Claude Code runs apiKeyHelper as a command line through sh, whose tilde
 # expansion yields the home directory whole, so a home directory holding a
 # space, a quote or a backslash needs no quoting here.
-exec claude --settings '{"apiKeyHelper":"~/.local/bin/llm-token"}' "$@"
+exec "$claude" --settings '{"apiKeyHelper":"~/.local/bin/llm-token"}' "$@"

@@ -360,6 +360,15 @@ class ClaudeLocalTest(MachineTest):
         self.assertEqual(recorded["argv"][0], "--settings")
         self.assertEqual(self.token_runs(), 1)
 
+    def test_starts_the_named_command_in_place_of_claude(self) -> None:
+        self.machine.stub(self.machine.bin, "claude-wrapper", RECORDING_CLAUDE)
+        result, recorded = self.start("-p", "hi", CLAUDE_PODHAUS_COMMAND="claude-wrapper")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(recorded["argv"][-2:], ["-p", "hi"])
+        self.assertEqual(recorded["env"]["CLAUDE_PODHAUS_COMMAND"], "claude-wrapper")
+        _, recorded = self.start("-p", "hi", CLAUDE_PODHAUS_COMMAND="claude-wrapper", LLM_POD_HAUS_URL="http://127.0.0.1:8085")
+        self.assertEqual(recorded["env"]["ANTHROPIC_AUTH_TOKEN"], "local")
+
     def test_loopback_needs_no_sign_in(self) -> None:
         result, recorded = self.start("-p", "hi", LLM_POD_HAUS_URL="http://127.0.0.1:8085")
         self.assertEqual(result.returncode, 0, result.stderr)

@@ -149,7 +149,7 @@ The files are in `caddy/fractal/llm-setup/`.
 | `/setup/claude.sh` | `claude.sh` | Needs `curl` and nothing else, and stops before writing anything otherwise. Installs the token command as `~/.local/bin/llm-token` and the launcher as `~/.local/bin/claude-podhaus`, mode 755, each replacing any older copy once it has downloaded whole. Warns if `~/.local/bin` is not on `PATH` or `claude` is not installed. Then runs `llm-token` once with the token discarded, so the first sign-in link appears in the terminal during the install and is approved in the browser already open; a refused sign-in fails the install. Ends by printing how to start: `claude-podhaus`, or its full path when `~/.local/bin` is not on `PATH`. |
 | `/setup/claude-podhaus` | `claude-podhaus` | Runs `llm-token` with the token discarded, so a sign-in that has run out shows its link before Claude Code takes the screen, then starts `claude` with `--settings '{"apiKeyHelper":"~/.local/bin/llm-token"}'`, the environment below, and every argument passed through. Claude Code runs `apiKeyHelper` through `sh`, whose tilde expansion yields the home directory whole, so a home directory holding spaces, quotes or backslashes needs no quoting. |
 | `/setup/pi.sh` | `pi.sh` | Needs `curl`. Installs the pi extension as `podhaus.ts` in pi's extensions directory, `$PI_CODING_AGENT_DIR/extensions/` (pi's own setting; `~/.pi/agent/extensions/` when unset), mode 644, and touches nothing else of pi's. Warns if `pi` is not installed. |
-| `/setup/podhaus.ts` | `podhaus.ts` | The pi provider extension `podhaus`, which signs in through pi's `/login`. |
+| `/setup/podhaus.ts` | `podhaus.ts` | The pi provider extension `podhaus`, which signs in through pi's `/login`. When `LLM_POD_HAUS_URL` is fractal's loopback listener it registers the fixed key `local` instead and needs no sign-in. |
 | `/setup/llm-token` | `llm-token` | The token command, below. |
 
 Both install scripts are written to be piped into `sh`. The shell then reads the
@@ -178,6 +178,9 @@ Claude Code's environment, as `claude-podhaus` sets it and the page lists it:
 When `LLM_POD_HAUS_URL` starts with `http://127.0.0.1` (fractal's loopback listener,
 which has no sign-in), `claude-podhaus` skips the token command and sets
 `ANTHROPIC_AUTH_TOKEN=local`, because Claude Code must send some key.
+`CLAUDE_PODHAUS_COMMAND` names the command `claude-podhaus` starts in place of
+`claude`, for a wrapper that selects an account or adds flags; Nathan's
+chezmoi `claude-qwen` runs `claude-auto` this way.
 
 ### The token command
 
