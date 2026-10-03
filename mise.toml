@@ -1,6 +1,8 @@
 [tools]
 python = "latest"
 pipenv = "latest"
+# The hook's tests of the setup page's script and the pi extension.
+node = "lts"
 
 [env]
 PIPENV_SKIP_LOCK = "1"

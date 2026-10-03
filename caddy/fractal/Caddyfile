@@ -29,7 +29,7 @@
 # formats. Its management paths (load, unload, slots, metrics, health) are the
 # watcher's, over dockernet, and are refused here, as are the watcher's own
 # /metrics and /healthz. Each listener defines @llm_control, the control page's
-# paths and who may use them.
+# paths and who may use them. /setup/ is the setup page and its downloads.
 (llm_routes) {
 	@llm_model path /v1/chat/completions /v1/completions /v1/messages /v1/messages/count_tokens /v1/models
 
@@ -57,6 +57,25 @@
 	handle @llm_control {
 		reverse_proxy llm-watcher:8081
 	}
+
+	# Pomerium serves /setup with no sign-in: the page signs in with Pocket ID
+	# itself, in the browser, and none of these files holds a secret. The token
+	# command is served from its own file in llm/client, mounted by
+	# compose.yaml, so the download is always the copy in the repo.
+	handle /setup {
+		redir * /setup/
+	}
+	handle /setup/llm-token.py {
+		root * /srv/llm-client
+		rewrite * /llm_token.py
+		file_server
+	}
+	handle /setup/* {
+		root * /etc/caddy/llm-setup
+		uri strip_prefix /setup
+		file_server
+	}
+
 	handle {
 		respond 404
 	}

@@ -62,7 +62,8 @@ mise upgrade --local
 mise exec -- pipenv install --dev --python "$(mise which python)"
 ```
 
-The pre-commit hook runs the linters through that environment. No lock file is
+The pre-commit hook runs the linters through that environment, and two tests
+under the Node LTS release that `mise install` also provides. No lock file is
 kept. Running those commands again upgrades mise's rolling `latest` aliases;
 use `mise exec -- pipenv remove` first when Python itself has changed.
 

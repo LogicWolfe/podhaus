@@ -194,18 +194,19 @@ resource "pocketid_client" "yiayia_stories" {
 
 # The client of the llm.pod.haus token command (llm/client/llm_token.py),
 # which signs people in with Pocket ID's device grant and hands the access
-# token to pi or Claude Code as their API key. Public, because the command is
-# copied to any machine and can keep no secret. Pocket ID requires a callback,
-# and given none it would keep the first one any caller sent, so this names
-# the service's own address, which no sign-in redirects to. Limited to the two
-# groups the llm.pod.haus route admits, so Pocket ID itself refuses anyone
-# else at approval and at every hourly renewal.
+# token to pi or Claude Code as their API key, and of the setup page at
+# https://llm.pod.haus/setup/, which signs people in from the browser with the
+# authorization-code grant and PKCE and shows the same kind of token. Public,
+# because neither can keep a secret. The setup page is the one callback a
+# browser sign-in returns to.
+# Limited to the two groups the llm.pod.haus route admits, so Pocket ID itself
+# refuses anyone else at approval and at every hourly renewal.
 resource "pocketid_client" "llm_token" {
   name      = "llm.pod.haus"
   client_id = "llm-token"
 
   callback_urls = [
-    "https://llm.pod.haus/",
+    "https://llm.pod.haus/setup/",
   ]
 
   is_public                 = true

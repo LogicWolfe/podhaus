@@ -1,0 +1,54 @@
+#!/bin/sh
+# Starts Claude Code on the local model at llm.pod.haus. Every argument is
+# passed through to claude.
+#
+# Claude Code sends the key that ~/.local/bin/llm-token prints (a Pocket ID
+# access token, which Pomerium checks) and runs that command again when a
+# request is refused. It runs once here first, so that a sign-in that has run
+# out prints its link in this terminal before Claude Code takes over the screen.
+#
+# LLM_POD_HAUS_URL replaces https://llm.pod.haus. The name is this service's
+# alone: a generic one could already be set for another tool, whose server
+# would then be sent a fresh key. On fractal,
+# LLM_POD_HAUS_URL=http://127.0.0.1:8085 reaches the model with no sign-in, so
+# no key is fetched; Claude Code must still send one, so it sends "local".
+
+set -eu
+
+model=qwen3.8-27b
+export ANTHROPIC_BASE_URL="${LLM_POD_HAUS_URL:-https://llm.pod.haus}"
+# Claude Code takes ANTHROPIC_AUTH_TOKEN first, then ANTHROPIC_API_KEY, then
+# the apiKeyHelper command, so a key already in the environment would win over
+# the one meant for this service.
+export ANTHROPIC_API_KEY=
+export ANTHROPIC_MODEL="$model"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$model"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$model"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$model"
+export ANTHROPIC_DEFAULT_FABLE_MODEL="$model"
+# The window the service is sized for, medium reasoning effort (the model's
+# highest took 74 s against 50 s on a small task), and no side requests for
+# terminal titles, prompt suggestions or token reminders, which would each
+# take a slot.
+export CLAUDE_CODE_MAX_CONTEXT_TOKENS=150000
+export CLAUDE_CODE_EXTRA_BODY='{"chat_template_kwargs":{"reasoning_effort":"medium"}}'
+export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
+export CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false
+export CLAUDE_CODE_TOTAL_TOKENS_REMINDER=off
+
+case $ANTHROPIC_BASE_URL in
+http://127.0.0.1*)
+	export ANTHROPIC_AUTH_TOKEN=local
+	exec claude "$@"
+	;;
+esac
+
+unset ANTHROPIC_AUTH_TOKEN
+helper="$HOME/.local/bin/llm-token"
+"$helper" >/dev/null
+# Claude Code runs apiKeyHelper as a command line through sh -c, so the path is
+# quoted for the shell and then written as a JSON string. A home directory
+# holding a space, a quote or a backslash survives both. python3 is already
+# needed by the token command.
+settings=$(python3 -c 'import json, shlex, sys; print(json.dumps({"apiKeyHelper": shlex.quote(sys.argv[1])}))' "$helper")
+exec claude --settings "$settings" "$@"

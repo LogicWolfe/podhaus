@@ -4,7 +4,8 @@
 # it runs the stock upstream image — there is no ACME DNS-01 to satisfy and
 # therefore no reason to build the caddy-dns/cloudflare module in. It
 # terminates Pomerium's mTLS and dispatches by Host, and serves the local
-# model service to callers on fractal itself over a loopback-only port.
+# model service to callers on fractal itself over a loopback-only port. It also
+# serves the model service's setup page (llm-setup/) on both.
 services:
   fractal-caddy-secrets-init:
     build:
@@ -41,6 +42,9 @@ services:
     volumes:
       # Directory binds only.
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-fractal/caddy/fractal:/etc/caddy:ro
+      # The sign-in token command, which the setup page at /setup/ offers for
+      # download as llm-token.py.
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-fractal/llm/client:/srv/llm-client:ro
       - fractal-caddy-secrets:/run/podhaus-secrets:ro
       - fractal-caddy-data:/data
       - fractal-caddy-config:/config

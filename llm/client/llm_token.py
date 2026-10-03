@@ -9,8 +9,8 @@ waits while the link is approved on any device. Later runs return the cached
 token, renew it silently with the refresh token, or print a fresh link when the
 refresh token is no longer accepted.
 
-pi runs this for every request and Claude Code runs it when a request is
-refused, so the token is the only thing written to stdout. The link and any
+Claude Code runs this as its key helper (claude-local sets that up), so the
+token is the only thing written to stdout. The link and any
 failure go to stderr, and a failure exits non-zero.
 
 Standard library only, so the file can be copied to any Linux or macOS machine

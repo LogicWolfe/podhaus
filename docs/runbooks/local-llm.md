@@ -31,10 +31,11 @@ Terms used below:
 | Model server settings and the chat templates | `llm/server/models.ini`, `llm/server/*.jinja` |
 | Watcher | `llm/watcher/` (standard-library Python; start with `state.py`) |
 | Sign-in token command | `llm/client/llm_token.py` |
-| Tests | `llm/tests/`, run by `tools/pre-commit` |
-| Listeners, exposed paths, request log | `caddy/fractal/Caddyfile`, `caddy/fractal/compose.yaml` |
-| The two `llm.pod.haus` routes | `pomerium/config.yaml` |
-| DNS record and Pocket ID client | `terraform/services_pod_haus.tf`, `terraform/pocket_id.tf` (`pocketid_client.llm_token`) |
+| Setup page, install scripts, `claude-local` launcher, pi extension | `caddy/fractal/llm-setup/` (served at `/setup/`; part of the `fractal-caddy` stack) |
+| Tests | `llm/tests/` for the service; `caddy/fractal/tests/` for the setup page: `test_client_setup.py` (the install scripts and `claude-local` against a stand-in `llm.pod.haus`, the page's contents, the public Pomerium route), `setup-page.test.ts` (the page's sign-in script under Node, with stand-in browser objects) and `llm-pod-haus.test.ts` (the pi extension's sign-in under Node). All run by `tools/pre-commit`. |
+| Listeners, exposed paths, the `/setup/` file mounts, request log | `caddy/fractal/Caddyfile`, `caddy/fractal/compose.yaml` |
+| The three `llm.pod.haus` routes (setup, control, model) | `pomerium/config.yaml` |
+| DNS record and Pocket ID client | `terraform/services_pod_haus.tf`, `terraform/pocket_id.tf` (`pocketid_client.llm_token`, whose one callback is the setup page) |
 | Log parsers | `logging/alloy-modules/llm-server.alloy`, `llm-watcher.alloy`, `caddy.alloy` |
 | Metric scrapes | `logging/fractal/alloy-conf/config.alloy` |
 | Alerts | `gatus/conf/config.yaml`, group `Local model` |
@@ -69,17 +70,21 @@ client on fractal ─ http://127.0.0.1:8085 ────────────
 - **Local path.** On fractal itself Caddy also listens on port 8085, published on
   fractal's loopback only. It has no sign-in: anything running on fractal can
   use it, including the control page's buttons.
-- **Routes.** Pomerium sends `/control` and below to a route that admits only
-  Nathan's email. Everything else goes to a route that admits members of
-  Pocket ID's `family` and `friends` groups, on the bearer token described in
-  the next section. Group membership is Pocket ID's to say.
+- **Routes.** Pomerium sends `/setup` and below to a public route with no
+  sign-in, for the setup page (next section), and `/control` and below to a
+  route that admits only Nathan's email. Everything else goes to a route that
+  admits members of Pocket ID's `family` and `friends` groups, on the bearer
+  token described in the next section. Group membership is Pocket ID's to say.
 
-Caddy forwards only these paths, on both listeners. Everything else is 404.
+Caddy serves only these paths, on both listeners. Everything else is 404.
 
 | Paths | Go to |
 |---|---|
 | `/v1/chat/completions`, `/v1/completions`, `/v1/messages`, `/v1/messages/count_tokens`, `/v1/models` | `llm-server:8080` (OpenAI and Anthropic formats) |
 | `/control` and `/control/*` | `llm-watcher:8081`. On the remote listener Caddy also requires the caller's email, passed by Pomerium as `X-Pomerium-Claim-Email`, to be Nathan's. |
+| `/setup` | A redirect to `/setup/` |
+| `/setup/llm-token.py` | The file `llm/client/llm_token.py`, mounted read-only at `/srv/llm-client` |
+| `/setup/` and `/setup/*` | Files in `caddy/fractal/llm-setup/`, mounted with the rest of `caddy/fractal/` at `/etc/caddy` |
 
 The server's management paths (load, unload, slots, metrics, health) and the
 watcher's own `/metrics` and `/healthz` are not exposed. Only the watcher may
@@ -91,16 +96,94 @@ answer.
 
 The model's id on the API is `qwen3.8-27b`.
 
-## Signing in from a command line
+## Setting up a client
 
 Command-line clients have no browser session, so they send a Pocket ID access
-token as their API key. `llm/client/llm_token.py` produces one. It is standard
+token as their API key. The setup page, `https://llm.pod.haus/setup/`, hands
+out such a token and sets up Claude Code and pi to fetch their own. It shows:
+
+- **The key**: a Pocket ID access token, masked, with a copy button. It works
+  as the API key in either request format. It must first be used within the
+  hour Pocket ID issues it for; Pomerium then accepts it for 30 days (see "What
+  Pomerium does with a token" below).
+- **Claude Code**: `curl -fsSL https://llm.pod.haus/setup/claude.sh | sh`, after
+  which `claude-local` starts Claude Code on the local model.
+- **pi**: `curl -fsSL https://llm.pod.haus/setup/pi.sh | sh`, then `/login
+  llm-pod-haus` and `/model` inside pi.
+- **Manual setup**: download links for the token command, `claude-local` and the
+  pi extension; Claude Code's environment, whose copy button fills in the key;
+  the base addresses of the two request formats (`https://llm.pod.haus` for
+  Anthropic's, `https://llm.pod.haus/v1` for OpenAI's); the model name; and the
+  no-key address on fractal itself, `http://127.0.0.1:8085`.
+
+Pomerium serves `/setup` with no sign-in. The page signs in by itself, in the
+browser, through Pocket ID's authorization-code grant with PKCE on the token
+command's client `llm-token`, which admits only the `family` and `friends`
+groups, so nobody else gets a key; none of the files holds a secret. The
+sign-in's state and PKCE verifier stay in the tab's session storage for the
+round trip to Pocket ID and are removed on return, the code is cleared from the
+address before it is exchanged, and the token is kept only in the page's
+memory, so a reload signs in again and shows a new key. The page leaves for
+Pocket ID by replacing itself, so Back does not return to it. Nothing in the
+returned address is used until its state matches the one the tab sent, and an
+error code is then shown in fixed words ("Access denied", "Pocket ID
+unavailable", otherwise "Sign-in failed"), never as the address's own text,
+because anyone can write an error into a link. The client's callback is
+`https://llm.pod.haus/setup/`, so the page signs in only there: opened on
+fractal's loopback listener it returns to `llm.pod.haus` and reports "Sign-in
+expired", and Retry then works. It suits Linux, macOS and WSL; the token command
+needs `fcntl`, which native Windows lacks.
+
+### What `/setup/` serves
+
+The files are in `caddy/fractal/llm-setup/`, except the token command, which is
+served from its own file.
+
+| Path | File | What it does |
+|---|---|---|
+| `/setup/` | `index.html` | The page. Static, and loads nothing from elsewhere. |
+| `/setup/claude.sh` | `claude.sh` | Needs `python3` and `curl`, and stops before downloading anything otherwise. Installs the token command as `~/.local/bin/llm-token` and the launcher as `~/.local/bin/claude-local`, mode 755, each replacing any older copy once it has downloaded whole. Warns if `~/.local/bin` is not on `PATH` or `claude` is not installed. Then runs `llm-token` once with the token discarded, so the first sign-in link appears in the terminal during the install and is approved in the browser already open; a refused sign-in fails the install. Ends by printing how to start: `claude-local`, or its full path when `~/.local/bin` is not on `PATH`. |
+| `/setup/claude-local` | `claude-local` | Runs `llm-token` with the token discarded, so a sign-in that has run out shows its link before Claude Code takes the screen, then starts `claude` with `--settings '{"apiKeyHelper":"<home>/.local/bin/llm-token"}'`, the environment below, and every argument passed through. Claude Code runs `apiKeyHelper` through `sh -c`, so the path is quoted for the shell and then written as a JSON string, both by `python3` (which the token command needs anyway); a home directory holding spaces, quotes or backslashes works. |
+| `/setup/pi.sh` | `pi.sh` | Needs `curl`. Installs the pi extension as `llm-pod-haus.ts` in pi's extensions directory, `$PI_CODING_AGENT_DIR/extensions/` (pi's own setting; `~/.pi/agent/extensions/` when unset), mode 644, and touches nothing else of pi's. Warns if `pi` is not installed. |
+| `/setup/llm-pod-haus.ts` | `llm-pod-haus.ts` | The pi provider extension `llm-pod-haus`, which signs in through pi's `/login`. |
+| `/setup/llm-token.py` | `llm/client/llm_token.py` | The token command, mounted into Caddy read-only, so the download is always the copy in the repo. |
+
+Both install scripts are written to be piped into `sh`. The shell then reads the
+script from standard input, so they never read it themselves, and everything
+runs from a function called on the last line, so a download cut short runs
+nothing. `LLM_POD_HAUS_URL` replaces `https://llm.pod.haus` in all three
+scripts, as it does in the pi extension: the installers download from
+`$LLM_POD_HAUS_URL/setup/`, and `claude-local` sends Claude Code there. The name
+is this service's alone, because a generic one could already be set for another
+tool, whose server would then be sent a fresh key.
+
+Claude Code's environment, as `claude-local` sets it and the page lists it:
+
+| Variable | Value |
+|---|---|
+| `ANTHROPIC_BASE_URL` | `https://llm.pod.haus`, or `LLM_POD_HAUS_URL` |
+| `ANTHROPIC_API_KEY` | Empty |
+| `ANTHROPIC_AUTH_TOKEN` | The key, in the page's manual setup. `claude-local` unsets it and gives the token command as `apiKeyHelper` instead, which Claude Code runs again when a request is refused. Claude Code prefers `ANTHROPIC_AUTH_TOKEN`, then `ANTHROPIC_API_KEY`, then `apiKeyHelper`, which is why the first is unset and the second empty. |
+| `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_FABLE_MODEL` | `qwen3.8-27b` |
+| `CLAUDE_CODE_MAX_CONTEXT_TOKENS` | `150000`, the window the service is sized for |
+| `CLAUDE_CODE_EXTRA_BODY` | `{"chat_template_kwargs":{"reasoning_effort":"medium"}}`. The server otherwise runs every request at the model's highest effort, whatever Claude Code's own thinking settings say: 74 s against 50 s on a small measured task. |
+| `CLAUDE_CODE_DISABLE_TERMINAL_TITLE` | `1` |
+| `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION` | `false` |
+| `CLAUDE_CODE_TOTAL_TOKENS_REMINDER` | `off`. With the two above, no side requests for the terminal title, prompt suggestions or token reminders, each of which would take a slot. |
+
+When `LLM_POD_HAUS_URL` starts with `http://127.0.0.1` (fractal's loopback listener,
+which has no sign-in), `claude-local` skips the token command and sets
+`ANTHROPIC_AUTH_TOKEN=local`, because Claude Code must send some key.
+
+### The token command
+
+`llm/client/llm_token.py` produces a token from a command line. It is standard
 library only, so it can be copied to any Linux or macOS machine and run with
-`python3`.
+`python3`; `claude.sh` installs it as `~/.local/bin/llm-token`.
 
 - It prints the token on standard output and nothing else. The sign-in link and
-  any failure go to standard error, and a failure exits non-zero. pi runs it for
-  every request; Claude Code runs it when a request is refused.
+  any failure go to standard error, and a failure exits non-zero. Claude Code
+  runs it as its key helper; pi signs in through its own extension instead.
 - First run: Pocket ID's device sign-in. It prints one link with the code already
   in it, opens it when the machine has a browser on its own screen (never over
   SSH), and waits while the link is approved on any device.
@@ -113,10 +196,12 @@ library only, so it can be copied to any Linux or macOS machine and run with
   runs cannot both spend the same refresh token.
 - The Pocket ID client is `llm-token`: public, with PKCE, limited to the `family`
   and `friends` groups, so Pocket ID itself refuses anyone else at approval and at
-  every renewal. Its one callback address, `https://llm.pod.haus/`, is never
-  redirected to.
+  every renewal. Its one callback address is `https://llm.pod.haus/setup/`,
+  where the setup page's sign-in returns; the device sign-in uses none.
 
-What Pomerium does with the token: the friends route has
+### What Pomerium does with a token
+
+The friends route has
 `bearer_token_format: idp_access_token`, so Pomerium checks the token once, at
 its first use, against Pocket ID's userinfo endpoint and keeps the result for
 the global `cookie_expire` (30 days). Userinfo carries no expiry and no audience,
@@ -483,9 +568,12 @@ model then loads only after the watcher's quiet period, because the new watcher
 counts it from its start. A
 deploy while a game is running leaves the model away.
 
-Edits outside `llm/` act on their own stacks: Caddy's listeners and paths on
-`fractal-caddy`, the routes on `pomerium`, log parsers on the `logging` stacks of
-every host, and alerts on `gatus`.
+Edits outside `llm/` act on their own stacks: Caddy's listeners and paths and the
+setup page's files (`caddy/fractal/llm-setup/`) on `fractal-caddy`, the routes on
+`pomerium`, log parsers on the `logging` stacks of every host, and alerts on
+`gatus`. The setup page offers the token command straight from the linked
+repo's `llm/client/`, so a change to it reaches the download with the pull and
+needs no Caddy deploy.
 
 ### The model download job
 

@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>llm.pod.haus</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #fafaf8;
+  --fg: #1c1c1a;
+  --muted: #6a6a64;
+  --line: #deded8;
+  --well: #f0f0ec;
+  --accent: #2e5c4f;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #151514;
+    --fg: #e6e6e1;
+    --muted: #9b9b94;
+    --line: #2e2e2b;
+    --well: #1f1f1d;
+    --accent: #8fc4b1;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.page { max-width: 46rem; margin: 0 auto; padding: 2.5rem 16px 4rem; }
+h1 { font-size: 1.35rem; font-weight: 600; margin: 0; }
+h2 { font-size: 1rem; font-weight: 600; margin: 2.75rem 0 .6rem; }
+h3 { font-size: .9rem; font-weight: 600; margin: 1.75rem 0 .5rem; color: var(--muted); }
+p { margin: .5rem 0; }
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+code, pre { font: .85rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+pre {
+  margin: 0;
+  padding: .55rem .75rem;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.line { display: flex; gap: .5rem; align-items: flex-start; }
+.line pre { flex: 1; min-width: 0; }
+button {
+  font: inherit;
+  font-size: .85rem;
+  padding: .5rem .9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+button:hover, button:focus-visible { border-color: var(--accent); }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; vertical-align: top; padding: .4rem .75rem .4rem 0; border-bottom: 1px solid var(--line); }
+th { font-weight: 500; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>llm.pod.haus</h1>
+
+<p id="loading" class="muted">Loading</p>
+
+<div id="failed" hidden>
+  <p id="failure"></p>
+  <p><a href="/setup/">Retry</a></p>
+</div>
+
+<div id="ready" hidden>
+  <p class="muted">Linux, macOS, WSL</p>
+
+  <h2>Key</h2>
+  <div class="line">
+    <pre id="key"><span class="key"></span></pre>
+    <button type="button" data-copy="key">Copy</button>
+  </div>
+  <p class="muted">The API key. First use within an hour, then accepted for 30 days.</p>
+
+  <h2>Claude Code</h2>
+  <div class="line">
+    <pre id="claude-install">curl -fsSL https://llm.pod.haus/setup/claude.sh | sh</pre>
+    <button type="button" data-copy="claude-install">Copy</button>
+  </div>
+  <p class="muted">Installs <code>llm-token</code> and <code>claude-local</code> in <code>~/.local/bin</code>, then signs in. Needs python3 and Claude Code.</p>
+  <p class="muted">Then <code>claude-local</code> starts Claude Code on the local model.</p>
+
+  <h2>pi</h2>
+  <div class="line">
+    <pre id="pi-install">curl -fsSL https://llm.pod.haus/setup/pi.sh | sh</pre>
+    <button type="button" data-copy="pi-install">Copy</button>
+  </div>
+  <p class="muted">Installs the <code>llm-pod-haus</code> extension in <code>~/.pi/agent/extensions</code>. Then, in pi:</p>
+  <pre>/login llm-pod-haus
+/model</pre>
+
+  <h2>Manual</h2>
+  <table>
+    <tr><th><a href="/setup/llm-token.py" download>llm-token.py</a></th><td>Prints the key, signing in when needed</td></tr>
+    <tr><th><a href="/setup/claude-local" download>claude-local</a></th><td>Claude Code launcher; expects <code>~/.local/bin/llm-token</code></td></tr>
+    <tr><th><a href="/setup/llm-pod-haus.ts" download>llm-pod-haus.ts</a></th><td>pi extension</td></tr>
+  </table>
+
+  <h3>Claude Code environment</h3>
+  <div class="line">
+    <pre id="claude-env">export ANTHROPIC_BASE_URL=https://llm.pod.haus
+export ANTHROPIC_API_KEY=
+export ANTHROPIC_AUTH_TOKEN=<span class="key"></span>
+export ANTHROPIC_MODEL=qwen3.8-27b
+export ANTHROPIC_DEFAULT_OPUS_MODEL=qwen3.8-27b
+export ANTHROPIC_DEFAULT_SONNET_MODEL=qwen3.8-27b
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=qwen3.8-27b
+export ANTHROPIC_DEFAULT_FABLE_MODEL=qwen3.8-27b
+export CLAUDE_CODE_MAX_CONTEXT_TOKENS=150000
+export CLAUDE_CODE_EXTRA_BODY='{"chat_template_kwargs":{"reasoning_effort":"medium"}}'
+export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
+export CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false
+export CLAUDE_CODE_TOTAL_TOKENS_REMINDER=off</pre>
+    <button type="button" data-copy="claude-env">Copy</button>
+  </div>
+
+  <h3>Endpoints</h3>
+  <table>
+    <tr><th>Anthropic</th><td><code>https://llm.pod.haus</code></td></tr>
+    <tr><th>OpenAI</th><td><code>https://llm.pod.haus/v1</code></td></tr>
+    <tr><th>Model</th><td><code>qwen3.8-27b</code></td></tr>
+    <tr><th>On fractal</th><td><code>http://127.0.0.1:8085</code>, no key</td></tr>
+  </table>
+</div>
+</div>
+
+<script>
+"use strict";
+
+// The Pocket ID client the token command uses (podhaus terraform/pocket_id.tf):
+// public, with PKCE, admitting only the family and friends groups, which is
+// why this page needs no protection of its own.
+const AUTHORIZE_URL = "https://id.pod.haus/authorize";
+const TOKEN_URL = "https://id.pod.haus/api/oidc/token";
+const CLIENT_ID = "llm-token";
+const REDIRECT_URI = "https://llm.pod.haus/setup/";
+const SCOPE = "openid email groups";
+// The state and verifier must survive the trip to Pocket ID and back, which
+// reloads this page. The key itself is never stored.
+const PENDING_ITEM = "llm-setup-sign-in";
+const MASK = "\u2022".repeat(24);
+// Anyone can write an address with an error in it and send it as a link, so
+// the page shows these fixed words for Pocket ID's error codes and never the
+// address's own text.
+const ERROR_WORDING = new Map([
+  ["access_denied", "Access denied"],
+  ["server_error", "Pocket ID unavailable"],
+  ["temporarily_unavailable", "Pocket ID unavailable"],
+]);
+const OTHER_ERROR = "Sign-in failed";
+const STALE_RETURN = "Sign-in expired";
+
+/** One sign-in through Pocket ID, by the authorization-code grant with PKCE. */
+class SignIn {
+  constructor(storage) {
+    this.storage = storage;
+  }
+
+  /** Leaves for Pocket ID. Replacing this page keeps Back from returning to it. */
+  async begin() {
+    const pending = { state: randomText(), verifier: randomText() };
+    this.storage.setItem(PENDING_ITEM, JSON.stringify(pending));
+    const url = new URL(AUTHORIZE_URL);
+    url.search = new URLSearchParams({
+      response_type: "code",
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
+      scope: SCOPE,
+      state: pending.state,
+      code_challenge: await challengeFor(pending.verifier),
+      code_challenge_method: "S256",
+    });
+    location.replace(url.href);
+  }
+
+  /**
+   * The access token, from Pocket ID's redirect back to this page. Nothing in
+   * the address is trusted until its state matches the one this tab sent,
+   * which Pocket ID returns on an error too.
+   */
+  async finish(params) {
+    const pending = this.takePending();
+    if (pending === null || params.get("state") !== pending.state) throw new Error(STALE_RETURN);
+    if (params.has("error")) throw new Error(ERROR_WORDING.get(params.get("error")) ?? OTHER_ERROR);
+    const reply = await fetch(TOKEN_URL, {
+      method: "POST",
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: CLIENT_ID,
+        code: params.get("code"),
+        redirect_uri: REDIRECT_URI,
+        code_verifier: pending.verifier,
+      }),
+    });
+    const body = await reply.json();
+    if (!reply.ok) throw new Error(body.error);
+    return body.access_token;
+  }
+
+  takePending() {
+    const text = this.storage.getItem(PENDING_ITEM);
+    this.storage.removeItem(PENDING_ITEM);
+    return text === null ? null : JSON.parse(text);
+  }
+}
+
+/** The page's three states: loading, failed, and ready with the key. */
+class SetupPage {
+  constructor(root) {
+    this.root = root;
+  }
+
+  /** Shows the key masked; a Copy button writes its element's text with the key in place of the mask. */
+  showKey(key) {
+    for (const span of this.root.querySelectorAll(".key")) span.textContent = MASK;
+    for (const button of this.root.querySelectorAll("[data-copy]")) {
+      const source = this.root.getElementById(button.dataset.copy);
+      button.addEventListener("click", () => copyInto(button, source.textContent.replaceAll(MASK, key)));
+    }
+    this.reveal("ready");
+  }
+
+  showFailure(failure) {
+    this.root.getElementById("failure").textContent = failure.message;
+    this.reveal("failed");
+  }
+
+  reveal(id) {
+    this.root.getElementById("loading").hidden = true;
+    this.root.getElementById(id).hidden = false;
+  }
+}
+
+async function copyInto(button, text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = "Copied";
+  } catch {
+    button.textContent = "Failed";
+  }
+  setTimeout(() => { button.textContent = "Copy"; }, 1500);
+}
+
+function randomText() {
+  return base64url(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+async function challengeFor(verifier) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return base64url(new Uint8Array(digest));
+}
+
+function base64url(bytes) {
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function main(page) {
+  const params = new URLSearchParams(location.search);
+  const signIn = new SignIn(sessionStorage);
+  if (!params.has("code") && !params.has("error")) {
+    await signIn.begin();
+    return;
+  }
+  // The code is spent by the exchange, so a reload must start a new sign-in.
+  history.replaceState(null, "", location.pathname);
+  page.showKey(await signIn.finish(params));
+}
+
+// caddy/fractal/tests/setup-page.test.ts runs this script with stand-ins for
+// these browser objects.
+const page = new SetupPage(document);
+main(page).catch((failure) => page.showFailure(failure));
+</script>
+</body>
+</html>

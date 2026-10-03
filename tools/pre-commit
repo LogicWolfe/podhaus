@@ -44,8 +44,15 @@
 #   - llm tests:                    the watcher's handoff rules replayed
 #                                   against a recorded game session, the
 #                                   model-server log parsing against real
-#                                   log lines, and the sign-in token
-#                                   command against a stand-in Pocket ID.
+#                                   log lines, and the sign-in token command
+#                                   against a stand-in Pocket ID.
+#   - setup page tests:             the install scripts and claude-local
+#                                   against a stand-in llm.pod.haus, the
+#                                   public Pomerium route, and, under node,
+#                                   the page's sign-in script with stand-in
+#                                   browser objects and the pi extension's
+#                                   device sign-in against a stand-in
+#                                   Pocket ID.
 set -e
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -57,6 +64,11 @@ fi
 
 if ! mise exec -- pipenv --venv >/dev/null 2>&1; then
   echo "podhaus Pipenv is not installed; follow the Python setup in README.md" >&2
+  exit 1
+fi
+
+if ! mise exec -- node --version >/dev/null 2>&1; then
+  echo "podhaus hooks require Node from mise.toml; run mise install" >&2
   exit 1
 fi
 
@@ -85,3 +97,7 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/backup/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/llm/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/caddy/fractal/tests"
+mise exec -- node --test "$root/caddy/fractal/tests/llm-pod-haus.test.ts"
+mise exec -- node --test "$root/caddy/fractal/tests/setup-page.test.ts"

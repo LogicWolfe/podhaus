@@ -179,6 +179,14 @@ routes:
   - <<: *family_route
     from: https://fractal.docs.pod.haus
     to: https://127.0.0.1:8444
+  # The local model's setup page and its downloads, open to anyone. The page
+  # signs in with Pocket ID itself, in the browser, on the token command's
+  # client, which admits only the family and friends groups; the files hold no
+  # secret. Passes no identity headers.
+  - <<: *public_route
+    from: https://llm.pod.haus
+    to: https://127.0.0.1:8444
+    prefix: /setup
   # The local model on fractal, through the same tunnel port as its docs
   # server. The control page is Nathan's and comes first, so its paths never
   # fall to the model route below.
