@@ -12,10 +12,10 @@ services:
   pocket-id:
     container_name: pocket-id
     # Multi-arch image (linux/arm64 present — bilby is Apple M1). Pinned to
-    # the v2.9.0 multi-arch index digest; bump deliberately for a new
+    # the v2.17.0 multi-arch index digest; bump deliberately for a new
     # release. DB_PROVIDER was removed in v2 (SQLite is auto-detected from
     # the default data/pocket-id.db connection string) — do not set it.
-    image: ghcr.io/pocket-id/pocket-id:v2.9.0@sha256:a2a38a96699d7483d65b5849b015d954f294938306a03a9c0699bc5b79554e86
+    image: ghcr.io/pocket-id/pocket-id:v2.17.0@sha256:19f556d5852115c8ebbef271f6f7cf610d8803312a1fa63f29e1b342fe9d2939
     restart: unless-stopped
     mem_limit: 256m
     environment:
