@@ -631,6 +631,13 @@ $DK restart alloy backrest                           # reattach by name + rebuil
         (chezmoi regenerates and would clobber a manual <code>claude mcp add</code>). The
         same command works from any machine through Numbat, with no LAN dependency.
       </p>
+      <p>
+        pi gets the same server from the same chezmoi definition, written to
+        <code>~/.pi/agent/mcp.json</code>. It takes pi's default <code>codemode</code>
+        exposure: the model reaches the tools from codemode scripts, named
+        <code>mcp__hyperdx__clickstack_*</code>, rather than having each one declared.
+        <code>pi mcp list</code> shows the connection.
+      </p>
 
       <h2 id="autoheal">Autoheal</h2>
       <p>
