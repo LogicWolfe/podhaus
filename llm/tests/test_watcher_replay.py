@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import unittest
 
-from watcher_harness import Harness, at, game_session, idle_slot, parse_ts, slot
+from watcher_harness import LINUX_ONLY, Harness, at, game_session, idle_slot, parse_ts, slot
 
 # The first sample at or above 3% after ninety idle seconds.
 LAUNCH = at("17:54:37")
@@ -23,6 +23,7 @@ LAUNCH = at("17:54:37")
 QUIT = at("18:05:45")
 
 
+@LINUX_ONLY
 class GameSessionReplay(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -68,6 +69,7 @@ class GameSessionReplay(unittest.TestCase):
         self.assertEqual(set(event["samples"][-1]), {"t", "util", "busy"})
 
 
+@LINUX_ONLY
 class BusyAtLaunch(unittest.TestCase):
     """A request runs across the launch: the model's own work hides the game."""
 

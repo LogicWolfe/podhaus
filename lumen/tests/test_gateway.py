@@ -21,7 +21,9 @@ class CatalogTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # Git reports resolved paths; macOS temp directories sit behind the
+        # /var -> /private/var symlink, so expectations must be resolved too.
+        self.root = Path(self.temp.name).resolve()
         self.sources = self.root / 'slots'
         self.sources.mkdir()
         self.original = self.root / 'original'

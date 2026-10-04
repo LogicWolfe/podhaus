@@ -6,7 +6,7 @@ from __future__ import annotations
 import threading
 import unittest
 
-from watcher_harness import QUIET_LOAD, Harness, at, idle_slot, parse_ts, slot
+from watcher_harness import LINUX_ONLY, QUIET_LOAD, Harness, at, idle_slot, parse_ts, slot
 
 T0 = at("12:00:00")
 
@@ -19,6 +19,7 @@ def gaps(times: list[float]) -> list[float]:
     return [later - earlier for earlier, later in zip(times, times[1:])]
 
 
+@LINUX_ONLY
 class Adoption(unittest.TestCase):
     def test_started_with_the_model_loaded_it_is_serving(self) -> None:
         harness = Harness(self.addCleanup, model="loaded", start=T0)
@@ -46,6 +47,7 @@ class Adoption(unittest.TestCase):
         self.assertIsNone(resume["quiet_since_ts"])
 
 
+@LINUX_ONLY
 class SlotChanges(unittest.TestCase):
     def setUp(self) -> None:
         self.harness = Harness(self.addCleanup, model="loaded", start=T0)
@@ -98,6 +100,7 @@ class SlotChanges(unittest.TestCase):
             self.assertEqual(query["autoload"], ["false"])
 
 
+@LINUX_ONLY
 class UnansweredSlotReads(unittest.TestCase):
     """The model process answers a slot read only between steps, and saving or
     restoring a conversation is one long step."""
@@ -139,6 +142,7 @@ class UnansweredSlotReads(unittest.TestCase):
         self.assertIsNone(h.watcher.health())
 
 
+@LINUX_ONLY
 class SlotReadErrors(unittest.TestCase):
     """The model process can end, or the router start loading it again, between
     the status read and the slot read of one tick."""
@@ -170,6 +174,7 @@ class SlotReadErrors(unittest.TestCase):
         self.assertEqual(h.state, "resuming")
 
 
+@LINUX_ONLY
 class UnloadingAModelAlreadyGone(unittest.TestCase):
     """The router answers "model is not running" to an unload that arrives
     after the model process ended on its own."""
@@ -214,6 +219,7 @@ class UnloadingAModelAlreadyGone(unittest.TestCase):
         self.assertEqual(h.state, "yielded")
 
 
+@LINUX_ONLY
 class Button(unittest.TestCase):
     def setUp(self) -> None:
         self.harness = Harness(self.addCleanup, model="loaded", start=T0)
@@ -275,6 +281,7 @@ class Button(unittest.TestCase):
         self.assertEqual(h.server.loads, [])
 
 
+@LINUX_ONLY
 class Loads(unittest.TestCase):
     """A load is blind, like a busy slot: its own GPU activity looks like a
     game's, so only the Yield button ends one early."""
@@ -323,6 +330,7 @@ class Loads(unittest.TestCase):
         self.assertEqual(h.server.loads, [T0 + 60])
 
 
+@LINUX_ONLY
 class ExternalLoads(unittest.TestCase):
     """The router's autoload parameter lets something other than the watcher
     load the model."""
@@ -395,6 +403,7 @@ class ExternalLoads(unittest.TestCase):
         self.assertEqual(h.state, "serving")
 
 
+@LINUX_ONLY
 class Recovery(unittest.TestCase):
     def test_failed_loads_retry_with_growing_delays_then_give_up_unhealthy(self) -> None:
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_seconds=5, load_profile=QUIET_LOAD)
@@ -480,6 +489,7 @@ class Recovery(unittest.TestCase):
         self.assertEqual(h.server.loads, [T0 + 60, T0 + 149])
 
 
+@LINUX_ONLY
 class Health(unittest.TestCase):
     def test_a_stale_sample_is_the_watchdogs_not_the_health_checks(self) -> None:
         h = Harness(self.addCleanup, model="loaded", start=T0)
@@ -511,6 +521,7 @@ class Health(unittest.TestCase):
         self.assertIsNone(yielded.watcher.health())
 
 
+@LINUX_ONLY
 class ModelFileCache(unittest.TestCase):
     def test_dropped_each_time_the_model_becomes_loaded_or_unloaded_whoever_caused_it(self) -> None:
         h = Harness(self.addCleanup, model="loaded", start=T0, load_profile=QUIET_LOAD, load_seconds=5)
@@ -529,6 +540,7 @@ class ModelFileCache(unittest.TestCase):
         self.assertEqual(h.guest.drops, [T0 + 1, T0 + 4, T0 + 10, T0 + 71, T0 + 76])
 
 
+@LINUX_ONLY
 class WallClockCorrections(unittest.TestCase):
     """WSL2 moves the guest's wall clock when Windows sleeps or resumes."""
 
@@ -552,6 +564,7 @@ class WallClockCorrections(unittest.TestCase):
                 self.assertEqual(parse_ts(resume["ready_ts"]) - parse_ts(resume["load_started_ts"]), 5)
 
 
+@LINUX_ONLY
 class StallWatchdog(unittest.TestCase):
     """A stale sample ends the process so Docker restarts it; nothing else does."""
 

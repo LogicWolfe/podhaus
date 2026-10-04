@@ -23,8 +23,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 from pathlib import Path
+import sys
 import tempfile
 import threading
+import unittest
 from urllib.parse import parse_qs, urlsplit
 
 import yaml
@@ -35,6 +37,13 @@ from llm.watcher.guest import Guest
 from llm.watcher.model_server import ModelServer
 from llm.watcher.settings import Settings
 from llm.watcher.state import EventLog, Watcher
+
+# The watcher drops the model file's page cache with os.posix_fadvise, which
+# Python provides only on Linux, where the watcher runs. Tests that take it
+# through a load or unload cannot run on a Mac.
+LINUX_ONLY = unittest.skipUnless(
+    sys.platform == "linux", "the watcher drops page cache with os.posix_fadvise, Linux only"
+)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 COMPOSE = Path(__file__).resolve().parents[1] / "compose.yaml"

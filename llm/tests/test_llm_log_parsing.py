@@ -40,7 +40,7 @@ import re
 import unittest
 
 from alloy_pipeline import Entry, Pipeline, Selector
-from watcher_harness import QUIET_LOAD, Harness, at, slot
+from watcher_harness import LINUX_ONLY, QUIET_LOAD, Harness, at, slot
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = ROOT / "logging" / "alloy-modules"
@@ -732,6 +732,7 @@ def real_watcher_lines(add_cleanup) -> list[str]:
     return lines
 
 
+@LINUX_ONLY
 class WatcherEventParsingTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

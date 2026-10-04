@@ -14,11 +14,12 @@ from llm.watcher.guest import Guest
 from llm.watcher.gpu import GpuReading, NvidiaSmi
 from llm.watcher.settings import Settings
 from llm.watcher.web import ControlServer
-from watcher_harness import MEMINFO, Harness, at, environment
+from watcher_harness import LINUX_ONLY, MEMINFO, Harness, at, environment
 
 T0 = at("12:00:00")
 
 
+@LINUX_ONLY
 class ControlSurface(unittest.TestCase):
     def setUp(self) -> None:
         self.harness = Harness(self.addCleanup, model="loaded", start=T0)
@@ -192,6 +193,7 @@ class GuestMemory(unittest.TestCase):
         # is what returns that memory to Windows.
         self.assertEqual(memory.used_mib, 21504)
 
+    @LINUX_ONLY
     def test_drops_the_model_files_cache(self) -> None:
         Guest(self.meminfo, self.model_file).drop_model_file_cache()
 
@@ -200,6 +202,7 @@ class GuestMemory(unittest.TestCase):
             Guest(self.meminfo, self.model_file.with_name("absent.gguf"))
 
 
+@LINUX_ONLY
 class LogLines(unittest.TestCase):
     TS = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
 
