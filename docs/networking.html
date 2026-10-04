@@ -235,7 +235,8 @@ networks:
         paths alone across the LAN at <code>10.0.0.70:8086</code>, also with no sign-in:
         Caddy answers 403 to any other address, and Windows' Hyper-V firewall admits the
         port from bandicoot only (<a href="/hosts.html#fractal-windows">fractal's Windows-side
-        settings</a>).
+        settings</a>). Docker sends every bandicoot container's LAN traffic from that one
+        address, so any of them can use the model, Fenwick's web browsing container included.
       </p>
       <p>
         Umami's per-site tracker hosts expose only <code>/script.js</code> and

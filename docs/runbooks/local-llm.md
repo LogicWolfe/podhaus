@@ -31,7 +31,7 @@ Terms used below:
 | Model server settings and the chat templates | `llm/server/models.ini`, `llm/server/*.jinja` |
 | Watcher | `llm/watcher/` (standard-library Python; start with `state.py`) |
 | Setup page, `llm-token` sign-in command, install scripts, `claude-podhaus` launcher, pi extension | `caddy/fractal/llm-setup/` (served at `/setup/`; part of the `fractal-caddy` stack) |
-| Tests | `llm/tests/` for the service; `caddy/fractal/tests/` for the setup page: `test_client_setup.py` (the install scripts and `claude-podhaus` against a stand-in `llm.pod.haus`, the page's contents, the public Pomerium route), `setup-page.test.ts` (the page's sign-in script under Node, with stand-in browser objects) and `podhaus.test.ts` (the pi extension's sign-in under Node). All run by `tools/pre-commit`. |
+| Tests | `llm/tests/` for the service; `caddy/fractal/tests/test_caddyfile.py` for the loopback and LAN listeners, running the real Caddyfile with stand-in upstreams; `caddy/fractal/tests/` for the setup page: `test_client_setup.py` (the install scripts and `claude-podhaus` against a stand-in `llm.pod.haus`, the page's contents, the public Pomerium route), `setup-page.test.ts` (the page's sign-in script under Node, with stand-in browser objects) and `podhaus.test.ts` (the pi extension's sign-in under Node). All run by `tools/pre-commit`. |
 | Listeners, exposed paths, the `/setup/` files, request log | `caddy/fractal/Caddyfile`, `caddy/fractal/compose.yaml` |
 | The three `llm.pod.haus` routes (setup, control, model) | `pomerium/config.yaml` |
 | DNS record and Pocket ID client | `terraform/services_pod_haus.tf`, `terraform/pocket_id.tf` (`pocketid_client.llm_token`, whose one callback is the setup page) |
@@ -74,7 +74,9 @@ Fenwick on bandicoot ─ http://10.0.0.70:8086 ───────────
   LAN, with no sign-in. It serves the model paths alone, never the control or
   setup pages. Caddy answers 403 to every address but bandicoot's
   (`BANDICOOT_LAN_IPV4`, from `config/lan-addresses.json`), and Windows' Hyper-V
-  firewall admits the port from bandicoot only. The port is published on every
+  firewall admits the port from bandicoot only. That is every container on
+  bandicoot, not Fenwick alone: Docker sends their LAN traffic from bandicoot's
+  address, Fenwick's web browsing container included. The port is published on every
   interface because fractal's LAN address exists in the guest only under WSL's
   mirrored networking, and a bind to an absent address would stop the whole
   `fractal-caddy` container. See [fractal's Windows-side
@@ -366,7 +368,7 @@ and does not load the model on a request.
 | The watcher's GPU sampling stalls longer than `WATCHER_SAMPLE_STALE_SECONDS` | A watchdog thread logs `watcher.unhealthy` with reason `sample_stale` and ends the process; Docker restarts it and it adopts the router's real state. Until then a game would share the GPU with the model. |
 | The watcher reports unhealthy for any other reason | Nothing restarts it, deliberately: a restart resets the clocks that raise these conditions and would let the container read healthy while the cause remains. |
 | fractal's Docker or WSL restarts | All containers come back (`unless-stopped`). The model stays unloaded until the watcher has seen a quiet GPU. |
-| Fenwick cannot reach the model | Fenwick hands the run to Claude, within seconds when the request is refused and after 30 seconds when nothing answers, and logs `model unavailable, falling back`. A 403 in the `llm_lan` record means Caddy saw another address, which its `remote_ip` field names. No `llm_lan` record means the request never arrived: check that WSL is still in mirrored mode and the Hyper-V firewall rule is in place ([fractal's Windows-side settings](../hosts.html#fractal-windows)). |
+| Fenwick cannot reach the model | Fenwick hands the run to Claude, within seconds when the request is refused and after 30 seconds when nothing answers, and logs `model unavailable, falling back`. A run that had already used one of its tools is not handed on; Fenwick tells the member it may be half done. A 403 in the `llm_lan` record means Caddy saw another address, which its `remote_ip` field names. No `llm_lan` record means the request never arrived: check that WSL is still in mirrored mode and the Hyper-V firewall rule is in place ([fractal's Windows-side settings](../hosts.html#fractal-windows)). |
 
 ### Why the watcher reports unhealthy
 

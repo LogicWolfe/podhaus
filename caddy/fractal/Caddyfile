@@ -10,7 +10,7 @@
 # The local model service's access record, shared by its three listeners:
 # one JSON line per request on stdout, which the caddy Alloy module keeps whole
 # because its logger name starts with http.log.access. It keeps only the
-# fields llm_routes appends plus status and duration. The request object goes
+# fields the model route appends plus status and duration. The request object goes
 # whole, so no header (the sign-in token included) and no body can reach it.
 (llm_access_log) {
 	output stdout
@@ -139,8 +139,9 @@ http://:8085 {
 # The local model service for Fenwick on bandicoot, over the home LAN, with no
 # sign-in: the model route only, never the control or setup pages.
 # compose.yaml publishes this port on every interface, so this address check
-# is what admits bandicoot and nothing else. The caller's address goes in the
-# access record, so a refusal shows which address Caddy saw.
+# is what admits bandicoot. Every container on bandicoot leaves under its
+# address, Fenwick's web browsing container included. The caller's address
+# goes in the access record, so a refusal shows which address Caddy saw.
 http://:8086 {
 	log llm_lan {
 		import llm_access_log

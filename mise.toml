@@ -3,6 +3,8 @@ python = "latest"
 pipenv = "latest"
 # The hook's tests of the setup page's script and the pi extension.
 node = "lts"
+# The hook's tests of fractal's Caddy listeners, which run the real Caddyfile.
+caddy = "latest"
 
 [env]
 PIPENV_SKIP_LOCK = "1"

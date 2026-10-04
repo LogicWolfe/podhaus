@@ -58,7 +58,7 @@ services:
       # The local model service's listener (http://:8085 in the Caddyfile). It
       # has no sign-in, so it is published on fractal's loopback only.
       - "127.0.0.1:8085:8085"
-      # Fenwick's listener (http://:8086), which admits bandicoot only. Every
+      # Fenwick's listener (http://:8086), which admits bandicoot's address. Every
       # interface rather than the LAN address: that address exists in the WSL
       # guest only under mirrored networking, and a bind to an absent address
       # would stop the whole container, the signed-in route with it.
