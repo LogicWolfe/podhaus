@@ -2,18 +2,14 @@
 //
 // See komodo-op.alloy for the pattern/rationale.
 //
-// paperless-ngx (Django/Celery) log format, LOCAL time
-// (Australia/Perth — the container's TZ), bracketed fields:
+// paperless-ngx (Django/Celery) log format, LOCAL time (the container's
+// TZ), bracketed fields:
 //   [2026-05-16 11:40:00,000] [INFO] [celery.beat] Scheduler: Sending due task ...
 //
-// The fractional second uses a comma separator (Python logging
-// default). Go's reference layout can't express a comma-delimited
-// fraction, so we capture the timestamp at second precision only
-// (drop the ,mmm) and parse with the plain second layout — the lost
-// millisecond is irrelevant for log ordering here. Levels are Python
-// logging words; normalize WARNING→WARN and CRITICAL→FATAL so the
-// detected_level label matches the canonical
-// TRACE|DEBUG|INFO|WARN|ERROR|FATAL set (OTTL maps it to OTLP
+// The bracketed local time is stripped from Body and not parsed: the row
+// keeps Docker's receive time. Levels are Python logging words; normalize
+// WARNING→WARN and CRITICAL→FATAL so the detected_level label matches the
+// canonical TRACE|DEBUG|INFO|WARN|ERROR|FATAL set (OTTL maps it to OTLP
 // severity). Multiline tracebacks and any non-matching lines fall
 // through stage.match untouched.
 
@@ -27,13 +23,7 @@ declare "paperless" {
       selector = "{service=\"paperless\"}"
 
       stage.regex {
-        expression = "^\\[(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}),(?P<ms>\\d{3})\\] \\[(?P<lvl>[A-Z]+)\\] \\[(?P<comp>[^\\]]+)\\]\\s+(?P<msg>.*)$"
-      }
-
-      stage.timestamp {
-        source   = "ts"
-        format   = "2006-01-02 15:04:05"
-        location = "Australia/Perth"
+        expression = "^\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3}\\] \\[(?P<lvl>[A-Z]+)\\] \\[(?P<comp>[^\\]]+)\\]\\s+(?P<msg>.*)$"
       }
 
       stage.template {

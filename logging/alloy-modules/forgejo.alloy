@@ -2,10 +2,9 @@
 //
 // See komodo-op.alloy for the pattern/rationale.
 //
-// Forgejo (Go, its own gitea-style logger) log format, LOCAL time (the
-// container runs TZ=Australia/Perth like the rest of the fleet — same
-// convention as gatus), caller info, then a single-letter bracketed
-// level:
+// Forgejo (Go, its own gitea-style logger) log format, the container's
+// LOCAL wall clock (not parsed: the row keeps Docker's receive time),
+// caller info, then a single-letter bracketed level:
 //   2026/09/09 21:29:12 ...eb/routing/logger.go:102:func1() [I] router: completed GET /api/healthz for 127.0.0.1:56144, 200 OK in 0.1ms @ healthcheck/check.go:67(healthcheck.Check)
 //   2026/09/09 09:28:39 ...eful/manager_unix.go:142:handleSignals() [W] PID 7. Received SIGTERM. Shutting down...
 //
@@ -33,13 +32,7 @@ declare "forgejo" {
       selector = "{service=\"forgejo\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} .*\\\\[[TDIWEFC]\\\\] \""
 
       stage.regex {
-        expression = "^(?P<ts>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}) .*?\\[(?P<lvl>[TDIWEFC])\\]\\s+(?P<msg>.*)$"
-      }
-
-      stage.timestamp {
-        source   = "ts"
-        format   = "2006/01/02 15:04:05"
-        location = "Australia/Perth"
+        expression = "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} .*?\\[(?P<lvl>[TDIWEFC])\\]\\s+(?P<msg>.*)$"
       }
 
       stage.template {

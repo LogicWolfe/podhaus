@@ -24,13 +24,15 @@ podhaus.docker_logs "run" {
 	forward_to = [podhaus.chain.run.receiver]
 }
 
-podhaus.container_file_log "clickhouse_errors" {
-	host          = "bandicoot"
-	container     = "clickstack-clickhouse"
-	service       = "clickstack-clickhouse"
-	path          = "/var/log/podhaus/clickhouse/clickhouse-server.err.log"
-	tail_from_end = true
-	forward_to    = [podhaus.chain.run.receiver]
+// ClickHouse writes this file in its container's local time, the clickstack
+// stack's TZ; logging/bandicoot/stack.toml passes the same Komodo variable
+// in as CLICKHOUSE_TZ.
+podhaus.clickhouse_error_log "run" {
+	host       = "bandicoot"
+	container  = "clickstack-clickhouse"
+	path       = "/var/log/podhaus/clickhouse/clickhouse-server.err.log"
+	timezone   = sys.env("CLICKHOUSE_TZ")
+	forward_to = [podhaus.chain.run.receiver]
 }
 
 podhaus.journal "run" {

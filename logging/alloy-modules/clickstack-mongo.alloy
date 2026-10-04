@@ -2,9 +2,7 @@
 //
 // See komodo-op.alloy for the pattern/rationale.
 //
-// MongoDB Log v2: one structured-JSON object per line. The event time
-// is a nested `{"t":{"$date":"..."}}` with a local (+08:00) offset, not
-// UTC like the Komodo services:
+// MongoDB Log v2: one structured-JSON object per line:
 //   {"t":{"$date":"2026-05-16T11:56:30.664+08:00"},"s":"I",
 //    "c":"NETWORK","id":22943,"ctx":"listener","msg":"Connection
 //    accepted","attr":{...}}
@@ -13,16 +11,16 @@
 // human message, attr = structured detail (dropped from Body — it's
 // noisy and varies per event; keep Body to component + message).
 //
-// Shaping mirrors the other parsers: real event time → log timestamp,
-// Mongo severity → canonical `detected_level` label (OTTL maps it to
-// OTLP severity), Body reduced to "<component>  <message>". Verified
-// end-to-end against grafana/alloy + a local Loki: the +08:00 offset
-// resolves to the correct UTC instant and the level mapping holds.
+// Shaping: Mongo severity → canonical `detected_level` label (OTTL maps it
+// to OTLP severity; the debug verbosities D1–D5 pass through and
+// enrich.alloy folds them to DEBUG), Body reduced to
+// "<component>  <message>". The row keeps Docker's receive time; `t` is
+// not parsed.
 //
-// The timestamp lives at the JSON path `t.$date`. `$date` is not a
-// bare JMESPath identifier (the `$` is a syntax error unquoted), so the
-// expression quotes it: `t."$date"` — written here as `t.\"$date\"`.
-// A single stage.json pass extracts it directly; no second pass needed.
+// The stages are gated on a JSON line filter: a non-JSON line (an
+// entrypoint message) would otherwise leave every extracted value unset
+// and the templates would write "<no value>" into the level and Body. See
+// hyperdx.alloy for that failure mode.
 
 declare "clickstack_mongo" {
   argument "forward_to" { }
@@ -31,20 +29,14 @@ declare "clickstack_mongo" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{service=\"clickstack-mongo\"}"
+      selector = "{service=\"clickstack-mongo\"} |~ \"^\\\\{\""
 
       stage.json {
         expressions = {
-          ts   = "t.\"$date\"",
           sev  = "s",
           comp = "c",
           msg  = "msg",
         }
-      }
-
-      stage.timestamp {
-        source = "ts"
-        format = "RFC3339Nano"
       }
 
       stage.template {

@@ -266,8 +266,8 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
       </p>
       <p>
         Implemented as Gatus endpoints that POST a ClickHouse query and assert recent
-        telemetry per host. Gatus is on dockernet, so it reaches ClickHouse directly
-        at <code>http://clickstack-clickhouse:8123/</code> with headers
+        telemetry per host. Gatus runs on bilby and reaches ClickHouse across the LAN at
+        bandicoot's published port, <code>http://${BANDICOOT_LAN_IPV4}:8123/</code>, with headers
         <code>X-ClickHouse-User: default</code> and
         <code>X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}</code>. Conditions:
         <code>[STATUS] == 200</code> and <code>[BODY] == 1</code>. Use
@@ -277,27 +277,30 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         time filter the query scans every active part and times out at gatus's 10 s budget:
       </p>
       <pre><code>SELECT toUInt8(count() &gt; 0) FROM default.otel_logs
-WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']='&lt;host&gt;'</code></pre>
+WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['host']='&lt;host&gt;'</code></pre>
       <p>
-        Three live endpoints in <code>gatus/conf/config.yaml</code>, of two kinds:
+        Six live endpoints in <code>gatus/conf/config.yaml</code>, of two kinds:
         <em>heartbeats</em> (assert a fresh Alloy <strong>self-metric</strong> reached
         ClickHouse, i.e. the host's whole telemetry ship-path Alloy → collector → ClickHouse
-        is alive) and <em>log-volume</em> checks (count <code>otel_logs</code> rows). Named for
+        is alive) and a <em>log-volume</em> check (counts <code>otel_logs</code> rows). Named for
         what they measure:
       </p>
       <ul>
-        <li><strong>Kangaroo Telemetry Pipeline</strong> and
-          <strong>Numbat Telemetry Pipeline</strong> are heartbeats. Each host's Alloy
+        <li>Five <strong>&lt;Host&gt; Telemetry Pipeline</strong> heartbeats, for kangaroo,
+          Numbat, pinelake, bandicoot and voltaire. Each host's Alloy
           scrapes its own self-metrics every 60 s and ships them through the same exporter as
           the logs, so the query asserts a fresh
           per-host Alloy metric in a 15-minute window (<code>otel_metrics_gauge</code> where
           <code>ResourceAttributes['host']='&lt;host&gt;'</code>; the <code>host</code>
           attribute is stamped by the <code>svc_alloy</code> transform in each host's
-          <code>config.alloy</code>). A fixed 60 s cadence means a genuine stall alerts in
-          ~10 min.</li>
+          <code>config.alloy</code>). A genuine stall alerts about 20–25 minutes after the
+          last metric arrived: the window must first empty (15 minutes), the check runs every
+          5 minutes, and it alerts on the second failure in a row. Fractal deliberately has
+          none: the existing <em>Docs (fractal, via Komodo)</em> check is the one alert wanted
+          for fractal, and no further fractal alert is added.</li>
         <li><strong>Pipeline Log Ingest (bilby / total)</strong> is a 10-minute
           <code>count()</code> check that detects total collector, ClickHouse, or Alloy failure.
-          The remote-host heartbeats cover their complete shipping paths without assuming a
+          The heartbeats cover the other hosts' complete shipping paths without assuming a
           minimum log volume.</li>
       </ul>
       <p>
@@ -360,9 +363,14 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
       <ul>
         <li><strong>bilby</strong> and <strong>kangaroo</strong> — cross-LAN to
           <code>http://10.0.0.90:4318</code> (plaintext, LAN-only), each with
-          <code>disable_keep_alives</code> for the published-port reason below.</li>
+          <code>disable_keep_alives</code> for the published-port reason below.
+          Kangaroo, like every host but bilby, retries a failed batch for at most 30
+          minutes; bilby retries forever, because nothing on bilby restarts an exporter whose
+          30-minute budget is spent.</li>
         <li><strong>bandicoot</strong> — HTTPS to <code>logs-ingest.pod.haus</code> like the
-          remote hosts; the path loops through bilby's Caddy and back across the LAN.</li>
+          remote hosts. That name resolves only to Numbat's relay address, so the path goes
+          out to Numbat, back through rathole to bilby's Caddy, and across the LAN to the
+          collector on bandicoot.</li>
         <li><strong>Numbat</strong>: HTTPS to <code>logs-ingest.pod.haus</code> through
           rathole and Caddy, with a dedicated client certificate.</li>
         <li><strong>fractal</strong>: the same HTTPS ingress with its own client certificate.</li>
@@ -420,10 +428,13 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
           Flood request errors retain their complete structured exception record, timestamp
           and severity under the corresponding web service name. The
           five-minute <code>changed=0</code> stignore heartbeat is dropped in Alloy.</li>
-        <li><strong>ClickHouse error log</strong> (<code>container_file_log</code>,
+        <li><strong>ClickHouse error log</strong> (<code>clickhouse_error_log</code>,
           bandicoot) — the only place ClickHouse's own errors land; tailed from the end
           under the <code>clickstack-clickhouse</code> service so the same parser shapes
-          it.</li>
+          it. Its lines carry ClickHouse's local time with no zone, so the module parses
+          them in the zone bandicoot's <code>config.alloy</code> passes in as
+          <code>CLICKHOUSE_TZ</code>, the same Komodo <code>TZ</code> variable the clickstack
+          stack runs with.</li>
         <li><strong>Local model request record</strong> (fractal): fractal's Caddy
           writes one access line per request to <code>llm.pod.haus</code>, on both its
           Pomerium-facing and loopback listeners, with <code>caller</code> (remote only),
@@ -435,11 +446,23 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
           rest of each request (slot, tokens read and reused, timings) and no path or
           status. The two share no identifier.</li>
         <li><strong>systemd journal</strong> (<code>journal</code>, bilby, bandicoot,
-          Numbat, fractal, voltaire) — priority warning and worse, as service
-          <code>journald</code> with <code>unit</code>, <code>identifier</code> and
-          <code>priority</code> attributes. OpenSSH accepts, OOM kills and mount failures
-          live here. Kangaroo (QTS) has no journald; Pinelake's macOS unified log has no
-          Alloy source.</li>
+          Numbat, fractal, voltaire) — priority warning and worse from every unit, plus
+          every priority from four audit sources: OpenSSH (matched by its syslog identifiers
+          <code>sshd</code> and <code>sshd-session</code>, so each login's
+          <code>Accepted publickey</code> line and its disconnect and
+          <code>session closed</code> lines, which land under the login's session scope or no
+          unit at all), sudo (matched by its syslog identifier: its command and
+          <code>session opened</code> lines), <code>earlyoom.service</code> (its
+          kill reports) and <code>docker.service</code> (the Docker daemon's whole log). Rows
+          land as service <code>journald</code> with <code>unit</code>,
+          <code>identifier</code>, <code>transport</code> and <code>priority</code> attributes.
+          Severity comes from the journal priority, except that dockerd and earlyoom write to
+          stdout, where every line has the unit's default priority (6); for those the
+          severity is read from the line's own level word, so dockerd's
+          <code>level=error</code> lines are ERROR, and earlyoom's
+          <code>sending SIGTERM/SIGKILL to process</code> kill lines are WARN. Kernel faults, OOM kills and mount
+          failures live here too. Kangaroo (QTS) has no journald; Pinelake's macOS unified
+          log has no Alloy source.</li>
       </ul>
 
       <h3 id="parsers">Per-service log parsing</h3>
@@ -455,8 +478,17 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         with it and no logging change is needed. Each module:
       </p>
       <ul>
-        <li>parses that service's real event timestamp into the log entry,</li>
         <li>normalizes the level to a <code>detected_level</code> attribute,</li>
+        <li>leaves the row's time alone: a container's row keeps Docker's nanosecond receive
+          time, which is right whatever time zone the container prints in. Only file sources,
+          whose lines carry the only time there is, parse it, each in the zone it is written
+          in: Plex's <code>Media Server.log</code> in the zone each host's
+          <code>config.alloy</code> writes beside the module call (Perth on bilby, Edmonton on
+          pinelake); ClickHouse's error file in the zone bandicoot's <code>config.alloy</code>
+          reads from the logging stack's <code>CLICKHOUSE_TZ</code>, set from the fleet
+          <code>TZ</code> variable; the Flood job logs in UTC; and <code>rtorrent.log</code> as
+          epoch seconds. <code>tools/lint-alloy-timestamps.py</code> rejects a timestamp stage
+          in any other module and any time zone written into a module,</li>
         <li>retains the full structured Body for Flood request diagnostics and for the two authentication sources, Pomerium and Pocket ID, whose authorize and request lines (email, session id, path, status, client address, user agent, OIDC client id) are the fleet's authentication trail; the collector promotes every field of a JSON body into <code>LogAttributes</code>. Other parsers may still reduce the body to the message; <a href="plans/structured-logging.html">the structured-logging plan</a> removes that.</li>
       </ul>
       <p>
@@ -467,13 +499,20 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         log attributes: Pomerium, Caddy's admin API and FerretDB emit their own
         <code>host</code> field, so <code>LogAttributes['host']</code> lies for those rows;
         <code>ResourceAttributes['host']</code> does not, and is what the Gatus staleness
-        checks query. The severity mapping is authoritative; for lines with no parsed level
-        there's a body-keyword fallback (anchored to the first ~60 chars so e.g. "Total
-        errors encountered: 0" isn't mislabelled ERROR). Services without a parser —
-        <code>docs</code>, <code>ofelia</code>, <code>sonarr</code>, <code>mumble</code> —
-        still flow with the generic fallback, and when that finds no level either, the
-        ClickStack collector guesses one from the first level-like word in the body. That
-        guess is the baseline; a service whose lines it mislabels gets its own module.
+        checks query. The parser's level is authoritative. For a line with no parsed level
+        the fallback takes the <em>first</em> level word (trace, debug, info, warn, warning,
+        error, err, fatal, panic, any case) in the first ~60 characters, where the word
+        follows the start of the line, <code>[</code>, whitespace, <code>=</code> or
+        <code>"</code> and is followed by <code>]</code>, <code>:</code>, whitespace,
+        <code>"</code> or the end. So uvicorn's <code>INFO:</code> in column one and
+        logfmt's <code>level=warn</code> are read, <code>[INFO] retrying after error</code>
+        stays INFO, and "Total errors encountered: 0" is not ERROR. Every level, parsed or
+        found, is normalized to TRACE, DEBUG, INFO, WARN, ERROR or FATAL with its
+        OpenTelemetry severity number (WARNING → WARN, ERR → ERROR, PANIC and zap's DPANIC →
+        FATAL, MongoDB's D1–D5 → DEBUG). Services without a parser (<code>docs</code>,
+        <code>sonarr</code>, <code>mumble</code>) rely on that fallback, and when it finds no
+        level either, the ClickStack collector guesses one from the body. That guess is the
+        baseline; a service whose lines it mislabels gets its own module.
       </p>
       <p>
         To parse a new service: add <code>logging/alloy-modules/&lt;service&gt;.alloy</code>
@@ -533,7 +572,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         <li><strong>kangaroo Alloy log ingest can go stale — two distinct causes, two
           different fixes.</strong> The <em>Kangaroo Telemetry Pipeline (heartbeat)</em> Gatus
           check fires for both — since 2026-06-20 it's a 60 s self-metric heartbeat (above), which
-          rides the same exporter as the logs, so a stall in either fails it within ~10 min.
+          rides the same exporter as the logs, so a stall in either alerts about 20–25 minutes
+          after the last metric arrived.
           The port-only container healthcheck detects neither (the socket
           stays open, so the container reads healthy and autoheal ignores it). Read the alloy
           log to tell them apart — <code>GetContainerLog kangaroo alloy</code>:
@@ -551,7 +591,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
               cross-network exporters' <code>config.alloy</code>: a fresh connection per batch
               always reaches the current collector. (A host that ships in-network by container
               name — DNS re-resolves — never hits this; since the move to bandicoot, bilby's
-              exporter is cross-network too and carries the same setting.) Validated by recreating the collector and
+              exporter is cross-network too and carries <code>disable_keep_alives</code>, but
+              still retries forever: nothing restarts a stopped exporter on bilby.) Validated by recreating the collector and
               confirming kangaroo shipped straight across it. If a wedge somehow recurs despite
               this, <code>RestartStack kangaroo-logging</code> remains the fallback.</li>
             <li><strong>dockernet detach / phantom network</strong> — the log shows
@@ -584,8 +625,8 @@ $DK restart alloy backrest                           # reattach by name + rebuil
               running-but-detached containers (via restart) <em>at boot</em>, but a mid-life
               detach (no reboot) still needs this manual repair — the
               <em>Kangaroo Telemetry Pipeline (heartbeat)</em> check is the detection net for
-              that case (its 60 s self-metric rides the same exporter, so a detach trips it
-              within ~15 min). See
+              that case (its 60 s self-metric rides the same exporter, so a detach alerts
+              about 20–25 minutes after the last metric arrived). See
               <a href="/postmortems/2026-06-16-firmware-reboot-recovery.md">the
               firmware-reboot postmortem</a>.</li>
           </ul></li>

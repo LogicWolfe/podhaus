@@ -35,6 +35,11 @@ services:
     # pattern).
     security_opt:
       - label:disable
+    environment:
+      # The zone ClickHouse writes its error log in: the clickstack stack's
+      # own TZ, read by config.alloy through sys.env(). An empty zone would
+      # silently parse as UTC, so the deploy refuses to start without one.
+      CLICKHOUSE_TZ: ${CLICKHOUSE_TZ:?set from [[TZ]] in stack.toml}
     volumes:
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot/logging/bandicoot/alloy-conf:/etc/alloy:ro
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-bandicoot/logging/alloy-modules:/etc/alloy-modules:ro

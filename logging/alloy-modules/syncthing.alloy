@@ -1,15 +1,16 @@
-// Per-service log parser — syncthing (kangaroo)
+// Per-service log parser — syncthing
 //
 // See komodo-op.alloy for the pattern/rationale.
 //
-// Syncthing log format, LOCAL time (kangaroo TZ = Australia/Perth),
-// 3-letter level:
+// Syncthing log format, the container's LOCAL wall clock (Perth on
+// kangaroo, Edmonton on pinelake), 3-letter level:
 //   2026-05-16 10:24:04 INF Established secure connection (device=...)
 //   2026-05-16 10:55:05 WRN Failed to sync (path="WORK FOLDERS" ...)
 //
-// Levels: DBG/INF/WRN/ERR → canonical. Body = message; ts parsed into
-// the event time (so no duplicated timestamp). Non-matching lines pass
-// through to the generic OTTL fallback.
+// Levels: DBG/INF/WRN/ERR → canonical. Body = message. The local time is
+// stripped and not parsed: the row keeps Docker's receive time, which is
+// right on every host whatever the container's time zone. Non-matching
+// lines pass through to the generic OTTL fallback.
 
 declare "syncthing" {
   argument "forward_to" { }
@@ -21,13 +22,7 @@ declare "syncthing" {
       selector = "{service=\"syncthing\"}"
 
       stage.regex {
-        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) (?P<lvl>[A-Z]{3}) (?P<msg>.*)$"
-      }
-
-      stage.timestamp {
-        source   = "ts"
-        format   = "2006-01-02 15:04:05"
-        location = "Australia/Perth"
+        expression = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} (?P<lvl>[A-Z]{3}) (?P<msg>.*)$"
       }
 
       stage.template {

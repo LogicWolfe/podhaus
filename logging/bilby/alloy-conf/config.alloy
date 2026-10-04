@@ -231,11 +231,12 @@ otelcol.exporter.otlphttp "clickstack" {
     }
   }
 
-  // Collector resilience. The endpoint
-  // blips on every clickstack redeploy; OTel's default retry gives up
-  // after 5min and the in-memory queue then wedges → silent data loss
-  // until a manual restart. Retry forever + a large buffer so any
-  // collector outage self-heals on recovery instead of going dark.
+  // Retry forever, unlike the other six hosts' bounded 30m. That bound
+  // is held back here on purpose: the 2026-08-08 postmortem records the
+  // 30m budget running out and leaving fractal's exporter permanently
+  // stopped while it reported healthy. Bilby takes the bounded retry
+  // together with the exporter-stall healthcheck and autoheal restart that
+  // recover from that, not before.
   retry_on_failure {
     max_elapsed_time = "0s"
   }

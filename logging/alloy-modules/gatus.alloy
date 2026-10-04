@@ -2,34 +2,56 @@
 //
 // See komodo-op.alloy for the pattern/rationale.
 //
-// gatus log format, LOCAL time (the container runs TZ=Australia/Perth,
-// UTC+8 — gatus prints wall-clock, not UTC):
+// gatus log format (Go's standard logger, wall-clock date and time, then
+// the message):
 //   2026/05/16 11:33:32 [watchdog.executeEndpoint] Monitored group=...
 //   2026/05/16 11:29:22 Received termination signal, attempting to ...
 //
 // Two real shapes: a bracketed `[component]` (a Go function name like
 // `watchdog.executeEndpoint`, NOT a level) and bare lines with no
 // bracket (`Shutting down`). The regex makes the bracket optional so
-// both get their timestamp parsed and stripped from Body. The Fiber
+// both get the date and component stripped from Body. The row keeps
+// Docker's receive time; the in-line time is not parsed. The Fiber
 // startup banner (box-drawing lines, no timestamp) doesn't match and
 // passes through untouched.
 //
-// Shaping decisions:
-//  - timestamp: parsed with location=Australia/Perth so the local
-//    wall-clock instant is anchored to the correct UTC time.
-//  - severity: gatus emits NO level token. `[component]` is a function
-//    name. Left unset, the ClickStack collector keyword-scans the body
-//    and stamps ERROR on every watchdog line (the "err" in `errors=0`)
-//    and FATAL on any endpoint whose name contains "alert" — 300k
-//    false errors a day. So every gatus line is INFO unless it carries
-//    the one real failure signal, `success=false` (a monitored endpoint
-//    failing its conditions), which is WARN: the endpoint is down, not
-//    gatus. The unbracketed process lines ("Received termination
-//    signal", "Shutting down") are INFO as well.
-//  - body: reduced to just the message; the `[component]` capture is
-//    intentionally dropped (not lifted to a label — it's a high-
-//    cardinality function name) and kept out of Body to match the
-//    clean single-line shape of the other parsers.
+// Severity: gatus prints NO level word. Its logger (TwiN/logr) is created
+// without the level prefix, so logr.Errorf and logr.Infof lines look the
+// same. Left unset, the ClickStack collector keyword-scans the body and
+// stamps ERROR on every watchdog line (the "err" in `errors=0`) and FATAL
+// on any endpoint whose name contains "alert". So the level comes from
+// the message text, mapped from gatus's own source (github.com/TwiN/gatus;
+// the file and line references below are at commit 884f64d). The texts
+// were audited at that commit, but gatus/compose.yaml runs the `latest`
+// image: when gatus upgrades, re-check this wording against its source,
+// because a reworded failure no longer matches and falls back to INFO.
+//  - ERROR: the messages gatus logs with logr.Errorf or logr.Fatalf.
+//    "Failed to send an alert" (watchdog/alerting.go:66, 111) and the
+//    rest of the `Failed to <verb>` family (alert persistence in the same
+//    file, storage writes in storage/store/sql/sql.go, the config reload
+//    in main.go:237, the cookie-jar fatal in client/config.go:291); the
+//    invalid-config reload (main.go:238); storage and shutdown failures
+//    ("Save failed", "Query failed", "Silently ...", "Error closing SSH
+//    tunnels"); a rejected push to an external endpoint ("Invalid token",
+//    "Invalid duration", "... not found", api/external_endpoint.go:38-54);
+//    and every `[controller.Handle]` line except its two info lines, since
+//    controller/controller.go:32 and 37 log the listen error as
+//    logr.Fatalf("[controller.Handle] %s") and exit. Error messages of
+//    features podhaus does not configure (IAP, PagerDuty, incident.io,
+//    security) are not listed.
+//  - ERROR: a Go crash header, `panic: ` or `fatal error: ` at the start of
+//    the line. gatus panics when its configuration or storage fails to
+//    load (main.go:32, 105, 243; storage/store/store.go:113); the runtime
+//    prints these without the date, so they never match the regex above.
+//  - WARN: `success=false` (a monitored endpoint failing its conditions:
+//    the endpoint is down, not gatus), and "Not sending alert" (the alert
+//    triggered but its provider is not configured, watchdog/alerting.go:78
+//    and 114, logged by gatus as a warning).
+//  - INFO: everything else, including the stack-trace lines after a panic.
+//
+// Body: reduced to just the message; the `[component]` capture is
+// intentionally dropped (not lifted to a label — it's a high-cardinality
+// function name).
 
 declare "gatus" {
   argument "forward_to" { }
@@ -39,20 +61,6 @@ declare "gatus" {
 
     stage.match {
       selector = "{service=\"gatus\"}"
-
-      stage.regex {
-        expression = "^(?P<ts>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}) (?:\\[(?P<comp>[^\\]]+)\\]\\s+)?(?P<msg>.*)$"
-      }
-
-      stage.timestamp {
-        source   = "ts"
-        format   = "2006/01/02 15:04:05"
-        location = "Australia/Perth"
-      }
-
-      stage.output {
-        source = "msg"
-      }
 
       stage.static_labels {
         values = {detected_level = "INFO"}
@@ -64,6 +72,46 @@ declare "gatus" {
         stage.static_labels {
           values = {detected_level = "WARN"}
         }
+      }
+
+      stage.match {
+        selector = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} \\\\[watchdog\\\\.handleAlertsTo(Trigger|Resolve)\\\\] Not sending alert \""
+
+        stage.static_labels {
+          values = {detected_level = "WARN"}
+        }
+      }
+
+      stage.match {
+        selector = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} (\\\\[[^\\\\]]+\\\\] )?(Failed to (check|create|decode|delete|execute|get|initialize|insert|load|merge|parse|persist|render|retrieve|save|scan|send|update) |The configuration file was updated, but it is not valid|Save failed|Query failed|Silently |Error closing |Invalid (token|duration) |(External e|E)ndpoint with key=\\\\S+ not found)\""
+
+        stage.static_labels {
+          values = {detected_level = "ERROR"}
+        }
+      }
+
+      stage.match {
+        selector = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} \\\\[controller\\\\.Handle\\\\] \" !~ \"\\\\] (Listening on |Server has shut down successfully)\""
+
+        stage.static_labels {
+          values = {detected_level = "ERROR"}
+        }
+      }
+
+      stage.match {
+        selector = "{service=\"gatus\"} |~ \"^(panic|fatal error): \""
+
+        stage.static_labels {
+          values = {detected_level = "ERROR"}
+        }
+      }
+
+      stage.regex {
+        expression = "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} (?:\\[(?P<comp>[^\\]]+)\\]\\s+)?(?P<msg>.*)$"
+      }
+
+      stage.output {
+        source = "msg"
       }
     }
   }

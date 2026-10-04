@@ -13,8 +13,9 @@
 // Keep the JSON body intact: ClickStack needs the request ID, request,
 // response and error fields to correlate failures. Reducing it to msg
 // discards those fields before the collector can extract them.
-// Only pino records enter the timestamp and severity stages; plain-text
-// access logs must not acquire a fabricated timestamp or severity.
+// Only pino records enter the severity stages; plain-text access logs
+// must not acquire a fabricated severity. Every row keeps Docker's
+// receive time; pino's `time` stays in the body and is not parsed.
 
 declare "flood" {
 	argument "forward_to" { }
@@ -26,12 +27,7 @@ declare "flood" {
 			selector = "{service=\"flood\"} |~ \"^[{]\\\"level\\\":(10|20|30|40|50|60),\""
 
 			stage.json {
-				expressions = {lvl = "level", ts = "time"}
-			}
-
-			stage.timestamp {
-				source = "ts"
-				format = "RFC3339Nano"
+				expressions = {lvl = "level"}
 			}
 
 			// pino numeric levels → canonical level tokens.

@@ -6,10 +6,8 @@
 //   16-05-2026 04:00:12 Container /gatus (c12cdd3e3339) found to be unhealthy - Restarting container now with 10s timeout
 //   16-05-2026 03:41:41 Container /fenwick (77f6c4a75959) found to be restarting - don't restart
 //
-// Timezone: empirically UTC. The in-line ts (e.g. 04:00:12) matches
-// `date -u` (04:00:33 UTC) at capture time, not local AWST (12:00:33);
-// the willfarrell/autoheal entrypoint emits `date -u`-style stamps.
-// So format date is parsed with location = "UTC".
+// The date and time are stripped from Body and not parsed: the row keeps
+// Docker's receive time.
 //
 // Severity: autoheal has no level field. Every line it emits is an
 // action it took on an unhealthy/restarting container — that is the
@@ -27,13 +25,7 @@ declare "autoheal" {
       selector = "{service=\"autoheal\"}"
 
       stage.regex {
-        expression = "^(?P<ts>\\d{2}-\\d{2}-\\d{4} \\d{2}:\\d{2}:\\d{2}) (?P<msg>.*)$"
-      }
-
-      stage.timestamp {
-        source   = "ts"
-        format   = "02-01-2006 15:04:05"
-        location = "UTC"
+        expression = "^\\d{2}-\\d{2}-\\d{4} \\d{2}:\\d{2}:\\d{2} (?P<msg>.*)$"
       }
 
       // No level token in autoheal output; classify its action lines.

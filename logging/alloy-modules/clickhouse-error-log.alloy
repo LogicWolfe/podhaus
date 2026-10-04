@@ -1,0 +1,71 @@
+// ClickHouse's own error log, on the host that runs ClickStack. The file is
+// the only place ClickHouse's own errors land; its stdout carries only the
+// tail of the server log and entrypoint noise. Bind the log directory
+// read-only into Alloy and give `path` the in-container path.
+//
+// Each line carries the only time there is, as the container's local wall
+// clock with no zone:
+//   2026.05.16 12:00:24.261660 [ 747 ] {} <Error> default.otel_logs (...): ...
+// The container's zone is the clickstack stack's TZ, so the host config
+// passes that same value in as `timezone` and the time is parsed in it.
+// Level and Body are then shaped by the clickstack-clickhouse parser in
+// chain.alloy, exactly as for the container's stdout.
+//
+// Tailing starts at the end of the file on first sight: it is large
+// (~90 MB) and long-lived, and only new lines matter.
+//
+// Labels: host, container and service=clickstack-clickhouse (so the chain's
+// parser and enrich.alloy treat these rows like the container's stdout),
+// log_file, stream=file.
+
+declare "clickhouse_error_log" {
+	argument "host" { }
+	argument "container" { }
+	argument "path" { }
+	argument "timezone" { }
+	argument "forward_to" { }
+
+	local.file_match "this" {
+		path_targets = [{
+			__path__  = argument.path.value,
+			host      = argument.host.value,
+			container = argument.container.value,
+			service   = "clickstack-clickhouse",
+			stream    = "file",
+		}]
+	}
+
+	discovery.relabel "log_file" {
+		targets = local.file_match.this.targets
+
+		rule {
+			source_labels = ["__path__"]
+			regex         = ".*/([^/]+)$"
+			target_label  = "log_file"
+		}
+	}
+
+	loki.source.file "this" {
+		targets       = discovery.relabel.log_file.output
+		tail_from_end = true
+		forward_to    = [loki.process.this.receiver]
+	}
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector = "{service=\"clickstack-clickhouse\"} |~ \"^\\\\d{4}\\\\.\\\\d{2}\\\\.\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d+ \""
+
+			stage.regex {
+				expression = "^(?P<ts>\\d{4}\\.\\d{2}\\.\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+) "
+			}
+
+			stage.timestamp {
+				source   = "ts"
+				format   = "2006.01.02 15:04:05.000000"
+				location = argument.timezone.value
+			}
+		}
+	}
+}

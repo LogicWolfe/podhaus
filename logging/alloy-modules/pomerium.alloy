@@ -11,10 +11,9 @@
 //   {"level":"debug","server-name":"all","...","time":"2026-09-09T21:27:55+08:00","message":"no session handle from request"}
 //   {"level":"info","component":"idp-token-session-creator","...","time":"2026-09-09T21:27:55+08:00","message":"idp-token-session-creator.CreateSession succeeded"}
 //
-// `time` is RFC3339 with a numeric offset (+08:00, Pomerium's own local
-// wall clock) — Alloy's RFC3339Nano token parses the offset directly, no
-// location= needed. Most lines put the human text in `message`; the
-// autocert sub-logger uses `msg` instead.
+// `time` is not parsed: the row keeps Docker's nanosecond receive time.
+// Most lines put the human text in `message`; the autocert sub-logger uses
+// `msg` instead.
 //
 // Known collision until the attribute namespacing in
 // docs/plans/structured-logging.html lands: the collector copies the JSON
@@ -27,13 +26,9 @@
 // client IP and user agent, and all of it must reach HyperDX. The
 // collector promotes every field of a JSON-object body into
 // LogAttributes, so the fields stay queryable; rewriting the body to
-// plain text would lose them. This parser therefore only sets the
-// timestamp from `time` and a `detected_level` from `level`; a non-JSON
-// line (a panic dump) gets neither and falls through to the enrich.alloy
-// severity heuristic. The timestamp stage is kept for now, although
-// `time` has whole seconds and Docker's own capture time, which a row
-// carries without it, is finer; docs/plans/structured-logging.html
-// removes timestamp parsing for Docker sources.
+// plain text would lose them. This parser therefore only sets a
+// `detected_level` from `level`; a non-JSON line (a panic dump) does not
+// get one and falls through to the enrich.alloy severity heuristic.
 
 declare "pomerium" {
   argument "forward_to" { }
@@ -44,26 +39,15 @@ declare "pomerium" {
     stage.match {
       selector = "{service=\"pomerium\"}"
 
-      // Gate the JSON handling on the line looking like a JSON object.
-      // stage.timestamp's default action_on_failure is "fudge": a line
-      // whose `time` cannot be parsed is stamped 1 ns after the previous
-      // parsed line from the same stream. Without the gate, a non-JSON
-      // line (the startup banner, a panic dump) would be back-dated to
-      // the last JSON line's time. The gate leaves such lines on Docker's
-      // capture time.
+      // The gate keeps non-JSON lines (the startup banner, a panic dump)
+      // out of the JSON stages.
       stage.match {
         selector = "{service=\"pomerium\"} |~ \"^\\\\{\""
 
         stage.json {
           expressions = {
             lvl = "level",
-            ts  = "time",
           }
-        }
-
-        stage.timestamp {
-          source = "ts"
-          format = "RFC3339Nano"
         }
 
         stage.template {

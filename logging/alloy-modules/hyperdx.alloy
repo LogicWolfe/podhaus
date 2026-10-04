@@ -7,17 +7,17 @@
 //   [API] {"level":30,"time":1778903804921,"pid":14,"hostname":"...","req":{...},"msg":"HTTP GET /health"}
 //   [ALERT-TASK] {"level":30,"time":1778903820031,"msg":"check-alerts started at ..."}
 //
-// pino fields used: `level` (numeric: 10/20/30/40/50/60), `time`
-// (epoch MILLISECONDS), `msg` (the human line). Component prefix
-// (API, ALERT-TASK, ...) is preserved by re-prefixing Body so the
-// HyperDX line still shows which subsystem logged it.
+// pino fields used: `level` (numeric: 10/20/30/40/50/60) and `msg` (the
+// human line). `time` is not parsed: the row keeps Docker's receive time.
+// Component prefix (API, ALERT-TASK, ...) is preserved by re-prefixing
+// Body so the HyperDX line still shows which subsystem logged it.
 //
 // Early-boot / framework lines that aren't `[COMP] {json}` (plain
 // text, no JSON object) don't match the regex and are meant to fall
 // straight through this component untouched.
 //
 // Bug fixed here: that passthrough claim was wrong. When the outer
-// regex doesn't match at all, `comp`/`json`/`lvl`/`t`/`msg` are never
+// regex doesn't match at all, `comp`/`json`/`lvl`/`msg` are never
 // extracted (not even as empty strings), and Loki's template stage
 // prints the literal text "<no value>" for a referenced-but-never-set
 // variable — not "". The old single stage.match ran the level template
@@ -51,7 +51,7 @@ declare "hyperdx" {
 
 				stage.json {
 					source      = "json"
-					expressions = {lvl = "level", t = "time", msg = "msg"}
+					expressions = {lvl = "level", msg = "msg"}
 				}
 
 				// pino numeric level -> canonical UPPERCASE severity. OTTL
@@ -63,14 +63,6 @@ declare "hyperdx" {
 
 				stage.labels {
 					values = {detected_level = "lvl"}
-				}
-
-				// pino `time` is epoch milliseconds; "UnixMs" is the documented
-				// Alloy/Loki predefined token for ms-since-epoch (peers: Unix,
-				// UnixUs, UnixNs). The 13-digit string parses directly.
-				stage.timestamp {
-					source = "t"
-					format = "UnixMs"
 				}
 
 				// Body = pino msg, re-prefixed with the component tag so the

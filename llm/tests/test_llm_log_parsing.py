@@ -635,15 +635,12 @@ class RequestAssemblyTest(unittest.TestCase):
 
 
 class WatcherModule:
-    """logging/alloy-modules/llm-watcher.alloy: the JSON paths and timestamp layout it reads."""
+    """logging/alloy-modules/llm-watcher.alloy: the JSON paths it reads and the labels it sets."""
 
     def __init__(self, text: str) -> None:
         paths = re.search(r"stage\.json \{\s*expressions\s*=\s*\{([^}]*)\}", text)
         assert paths, "llm-watcher.alloy has no stage.json"
         self.paths = dict(re.findall(r'(\w+)\s*=\s*"(\w+)"', paths.group(1)))
-        timestamp = re.search(r'stage\.timestamp \{\s*source\s*=\s*"(\w+)"\s*format\s*=\s*"(\w+)"', text)
-        assert timestamp, "llm-watcher.alloy has no stage.timestamp"
-        self.timestamp_source, self.timestamp_format = timestamp.groups()
         labels = re.search(r"stage\.labels \{\s*values\s*=\s*\{([^}]*)\}", text)
         assert labels, "llm-watcher.alloy has no stage.labels"
         self.labels = dict(re.findall(r'(\w+)\s*=\s*"(\w+)"', labels.group(1)))
@@ -796,20 +793,22 @@ class WatcherEventParsingTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(name, comment)
 
-    def test_every_event_yields_level_timestamp_and_event_name(self) -> None:
+    def test_every_event_yields_level_and_event_name(self) -> None:
         for event in self.events:
             with self.subTest(event=event["event"]):
                 got = self.extracted(event)
                 self.assertIn(got["lvl"], {"info", "warning", "error"})
                 self.assertEqual(got["evt"], event["event"])
 
-    def test_timestamps_have_the_layout_the_module_parses(self) -> None:
-        self.assertEqual(self.module.timestamp_format, "RFC3339Nano")
-        self.assertEqual(self.module.timestamp_source, "ts")
+    def test_the_row_keeps_dockers_receive_time(self) -> None:
+        """Container rows are timed by Docker's nanosecond receive time; no parser overrides it."""
+        self.assertNotIn("stage.timestamp", self.module.text)
+        self.assertNotIn("ts", self.module.paths.values())
+
+    def test_every_event_carries_a_utc_time_in_its_body(self) -> None:
         for event in self.events:
             with self.subTest(event=event["event"]):
-                parsed = datetime.fromisoformat(self.extracted(event)["ts"])
-                self.assertEqual(parsed.utcoffset().total_seconds(), 0)
+                self.assertEqual(datetime.fromisoformat(event["ts"]).utcoffset().total_seconds(), 0)
 
     def test_event_name_is_the_only_promoted_field_besides_level(self) -> None:
         self.assertEqual(set(self.module.labels), {"detected_level", "llm_event"})

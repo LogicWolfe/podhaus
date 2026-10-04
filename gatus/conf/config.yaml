@@ -846,11 +846,14 @@ endpoints:
   # on dockernet) and assert recent log arrival per host — absence of
   # telemetry is itself the signal. ClickHouse always 200s; freshness is
   # in the body: `1` = a row within the window, `0` = stale.
-  # These two per-host checks assert a fresh Alloy *self-metric* reached
-  # ClickHouse — i.e. the host's whole telemetry ship-path (Alloy →
-  # collector → ClickHouse) is alive. They are NOT log-volume checks
-  # (that's "Pipeline Log Ingest (bilby / total)" below, which counts
-  # otel_logs rows); named for what they measure.
+  # The per-host heartbeat checks (kangaroo, numbat, pinelake, bandicoot,
+  # voltaire) assert a fresh Alloy *self-metric* reached ClickHouse — i.e.
+  # the host's whole telemetry ship-path (Alloy → collector → ClickHouse)
+  # is alive. They are NOT log-volume checks (that's "Pipeline Log Ingest
+  # (bilby / total)" below, which counts otel_logs rows); named for what
+  # they measure. Fractal deliberately has no heartbeat: the existing
+  # "Docs (fractal, via Komodo)" check is the one alert wanted for fractal,
+  # and no further fractal alert is added.
   - name: Kangaroo Telemetry Pipeline (heartbeat)
     url: http://${BANDICOOT_LAN_IPV4}:8123/
     method: POST
@@ -880,7 +883,8 @@ endpoints:
     # 15-min window @ 60 s cadence = ~15 expected scrapes; the 30 m
     # bounded exporter retry rides out a transient collector restart
     # (metrics queue and flush), so only a genuine stall empties the
-    # window. With the 2-fail debounce a real stoppage alerts in ~10 min
+    # window. A real stoppage alerts about 20–25 min after the last metric
+    # arrived (the 15-min window empties, then two failed 5-min checks),
     # instead of 150. See 2026-06-20 in the alloy-exporter-keepalive-
     # wedge postmortem.
     body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='kangaroo'"
@@ -928,6 +932,44 @@ endpoints:
     alerts:
       - type: custom
         description: "No Pinelake Alloy metrics reached ClickHouse in 15+ minutes. Check pinelake-logging, outbound HTTPS, the mTLS client certificate, and the ClickStack ingestion key."
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
+  - name: Bandicoot Telemetry Pipeline (heartbeat)
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    group: Observability
+    interval: 5m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='bandicoot'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: custom
+        description: "No bandicoot Alloy metrics reached ClickHouse in 15+ minutes. Bandicoot ships to logs-ingest.pod.haus, out through Numbat's rathole and back through bilby's Caddy to the collector on bandicoot. Check bandicoot-logging, the logs-ingest rathole service, bilby's Caddy, the mTLS client certificate, and the ClickStack ingestion key."
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
+  - name: Voltaire Telemetry Pipeline (heartbeat)
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    group: Observability
+    interval: 5m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='voltaire'"
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == 1"
+    alerts:
+      - type: custom
+        description: "No voltaire Alloy metrics reached ClickHouse in 15+ minutes. Check voltaire-logging, outbound HTTPS to logs-ingest.pod.haus, the mTLS client certificate, and the ClickStack ingestion key."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true

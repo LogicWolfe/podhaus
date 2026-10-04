@@ -7,7 +7,8 @@
 // (whitespace-separated, RFC3339-nanosecond UTC; ANSI already stripped
 // upstream). It logs very little, so this is unverified against live
 // data — if periphery ever diverges, non-matching lines simply pass
-// through to the generic OTTL fallback (non-breaking).
+// through to the generic OTTL fallback (non-breaking). The timestamp is
+// stripped from Body and not parsed: the row keeps Docker's receive time.
 
 declare "komodo_periphery" {
   argument "forward_to" { }
@@ -19,12 +20,7 @@ declare "komodo_periphery" {
       selector = "{service=\"komodo-periphery\"}"
 
       stage.regex {
-        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z)\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
-      }
-
-      stage.timestamp {
-        source = "ts"
-        format = "RFC3339Nano"
+        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
       }
 
       stage.labels {

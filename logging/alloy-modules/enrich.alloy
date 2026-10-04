@@ -11,15 +11,28 @@
 //     HyperDX's ServiceName column, Service Map and service filters are
 //     all blank. File and journal sources that carry no container set
 //     `service_name` instead.
-//  3. Re-derive severity from the real level token at the START of the
-//     line. ClickStack otherwise keyword-scans the whole body and
-//     mislabels lines like "[INFO] ... Total errors encountered: 0" as
-//     ERROR. One delimiter-anchored pattern over the first ~60 chars
-//     ("errors" ≠ "error"); lines with no recognisable level keep
-//     whatever ClickStack inferred.
-//  4. Authoritative override: the parser modules set `detected_level`
-//     from the real parsed level. Runs LAST so it wins over the
-//     body-keyword heuristic for parsed services.
+//  3. Severity. The level is taken from the parser's `detected_level` when
+//     there is one: parser modules set it from the service's real level
+//     field, and it runs last and wins. Otherwise it is the FIRST level
+//     word in the first ~60 characters of the body: the word must follow
+//     the start of the line, `[`, whitespace, `=` or `"`, and be followed
+//     by `]`, `:`, whitespace, `"` or the end. That reads `INFO:` in column
+//     one, `level=warn`, `"level":"info"` and `[INFO]`, and the first word
+//     winning keeps "[INFO] retrying after error: boom" INFO. A word must
+//     stand alone, so "errors" is not "error". Lines with neither keep
+//     whatever ClickStack infers.
+//
+//     Known limitation, accepted: because `=` and `"` count as delimiters,
+//     a key or value that is a level word and comes before the real level
+//     is read as the level. Measured live, the only case is indy-service's
+//     `reset=Panic`, which reads as FATAL (7 rows in 22 hours); the
+//     delimiters fix far more lines than that breaks.
+//
+//     Every level is normalised to TRACE DEBUG INFO WARN ERROR FATAL with
+//     its OpenTelemetry number (1 5 9 13 17 21): WARNING folds to WARN,
+//     ERR to ERROR, PANIC and zap's DPANIC to FATAL, and MongoDB's debug
+//     verbosities D1–D5 to DEBUG. A parser level outside that vocabulary
+//     keeps its own text and gets no number.
 
 declare "enrich" {
 	argument "host" { }
@@ -36,31 +49,22 @@ declare "enrich" {
 				`set(resource.attributes["service.name"], attributes["container"]) where attributes["container"] != nil`,
 				`set(resource.attributes["service.name"], attributes["service_name"]) where attributes["service_name"] != nil`,
 
-				`set(severity_text, "TRACE") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
-				`set(severity_number, 1) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(trace)(\\]|:|\\s)")`,
+				`merge_maps(cache, ExtractPatterns(body, "(?i)^.{0,60}?(?:^|[\\[\\s=\"])(?P<level>trace|debug|info|warning|warn|error|err|fatal|panic)(?:[\\]:\\s\"]|$)"), "upsert")`,
+				`set(cache["level"], ConvertCase(cache["level"], "upper")) where cache["level"] != nil`,
+				`set(cache["level"], attributes["detected_level"]) where attributes["detected_level"] != nil`,
 
-				`set(severity_text, "DEBUG") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
-				`set(severity_number, 5) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(debug)(\\]|:|\\s)")`,
+				`set(cache["level"], "WARN") where cache["level"] == "WARNING"`,
+				`set(cache["level"], "ERROR") where cache["level"] == "ERR"`,
+				`set(cache["level"], "FATAL") where cache["level"] == "PANIC" or cache["level"] == "DPANIC"`,
+				`set(cache["level"], "DEBUG") where IsMatch(cache["level"], "^D[1-5]$")`,
 
-				`set(severity_text, "INFO") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
-				`set(severity_number, 9) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(info)(\\]|:|\\s)")`,
-
-				`set(severity_text, "WARN") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
-				`set(severity_number, 13) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(warn|warning)(\\]|:|\\s)")`,
-
-				`set(severity_text, "ERROR") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
-				`set(severity_number, 17) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(error|err)(\\]|:|\\s)")`,
-
-				`set(severity_text, "FATAL") where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
-				`set(severity_number, 21) where IsMatch(body, "(?i)^.{0,60}?(\\[|\\s)(fatal|panic)(\\]|:|\\s)")`,
-
-				`set(severity_text, attributes["detected_level"]) where attributes["detected_level"] != nil`,
-				`set(severity_number, 1)  where attributes["detected_level"] == "TRACE"`,
-				`set(severity_number, 5)  where attributes["detected_level"] == "DEBUG"`,
-				`set(severity_number, 9)  where attributes["detected_level"] == "INFO"`,
-				`set(severity_number, 13) where attributes["detected_level"] == "WARN" or attributes["detected_level"] == "WARNING"`,
-				`set(severity_number, 17) where attributes["detected_level"] == "ERROR" or attributes["detected_level"] == "ERR"`,
-				`set(severity_number, 21) where attributes["detected_level"] == "FATAL" or attributes["detected_level"] == "PANIC"`,
+				`set(severity_text, cache["level"]) where cache["level"] != nil`,
+				`set(severity_number, 1) where cache["level"] == "TRACE"`,
+				`set(severity_number, 5) where cache["level"] == "DEBUG"`,
+				`set(severity_number, 9) where cache["level"] == "INFO"`,
+				`set(severity_number, 13) where cache["level"] == "WARN"`,
+				`set(severity_number, 17) where cache["level"] == "ERROR"`,
+				`set(severity_number, 21) where cache["level"] == "FATAL"`,
 			]
 		}
 

@@ -4,7 +4,8 @@
 //
 // llm-watcher writes one JSON object per line:
 //   {"ts":"2026-10-02T12:10:04.431Z","level":"info","event":"handoff.yield","msg":"...", ...}
-// `ts` is RFC 3339 UTC with milliseconds; `level` is info, warning or error;
+// `ts` is RFC 3339 UTC with milliseconds and stays in the body unparsed (the
+// row keeps Docker's receive time); `level` is info, warning or error;
 // `event` is one of
 //   handoff.yield           the model was unloaded for a game; `trigger` is
 //                           automatic (GPU activity), button, or external_load
@@ -50,12 +51,7 @@ declare "llm_watcher" {
         selector = "{service=\"llm-watcher\"} |~ \"^\\\\{\""
 
         stage.json {
-          expressions = {lvl = "level", ts = "ts", evt = "event"}
-        }
-
-        stage.timestamp {
-          source = "ts"
-          format = "RFC3339Nano"
+          expressions = {lvl = "level", evt = "event"}
         }
 
         stage.template {

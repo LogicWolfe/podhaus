@@ -253,7 +253,7 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. |
 | `tools/lint-stack-toml.py` | Pre-commit lint: rejects `deploy = true` on any podhaus-tagged stack. See "Hard rules" for why — Komodo's `Sync Deploy` sub-stage in `RunSync` would auto-deploy on Stage 0 and break on transient linked-repo timeouts. |
 | `mise.toml` + `Pipfile` | Current stable Python and Pipenv plus the unpinned Python tooling dependencies, and Node for the two `node --test` suites the hook runs. Bootstrap with the commands in `README.md`; no lock file is kept. |
-| `tools/pre-commit` | The pre-commit hook runner. Invokes `lint-stack-env.py` + `lint-stack-content-hash.py` + `lint-stack-toml.py` through Pipenv. Install with `ln -sf ../../tools/pre-commit .git/hooks/pre-commit` so future edits to the hook are live. |
+| `tools/pre-commit` | The pre-commit hook runner. Invokes `lint-stack-env.py` + `lint-stack-content-hash.py` + `lint-stack-toml.py` + `lint-alloy-timestamps.py` (no `stage.timestamp` outside the file-source Alloy modules, no time zone written into a shared module; zones arrive as arguments from each host's config) through Pipenv. Install with `ln -sf ../../tools/pre-commit .git/hooks/pre-commit` so future edits to the hook are live. |
 | `komodo-stop` | Stop Komodo Core |
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |

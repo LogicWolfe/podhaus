@@ -1,19 +1,16 @@
 // Per-service log parser — caddy
 //
-// See komodo-op.alloy for the pattern/rationale. Same zap-JSON shape and
-// float-epoch-seconds timestamp as clickstack-otel; see that file for
-// the "why Unix, not UnixMs" rationale.
+// See komodo-op.alloy for the pattern/rationale. Same zap-JSON shape as
+// clickstack-otel.
 //
 // Caddy emits one zap JSON object per line, admin API and access logs
 // both:
 //   {"level":"info","ts":1788960526.0307655,"logger":"admin.api","msg":"received request","method":"GET","host":"127.0.0.1:2019","uri":"/config/", ...}
 //
-// `ts` is a float epoch in fractional SECONDS (zap's default encoder,
-// same as clickstack-otel) — Alloy's "Unix" timestamp token consumes
-// float seconds directly. `level` is a lowercase zap word; uppercase it
-// and fold dpanic/panic onto FATAL so it lands on the canonical
-// TRACE|DEBUG|INFO|WARN|ERROR|FATAL set before OTTL maps it to OTLP
-// severity. Body is reduced to `logger: msg` — the `logger` field (e.g.
+// `ts` is not parsed: the row keeps Docker's receive time. `level` is a
+// lowercase zap word; uppercase it and fold dpanic/panic onto FATAL so it
+// lands on the canonical TRACE|DEBUG|INFO|WARN|ERROR|FATAL set before
+// OTTL maps it to OTLP severity. Body is reduced to `logger: msg` — the `logger` field (e.g.
 // admin.api, http.log.access) is the useful at-a-glance context; the
 // rest (headers, request IDs) stays in the raw line but out of the
 // shaped Body. The exception is an access-log line (logger
@@ -42,17 +39,12 @@ declare "caddy" {
         selector = "{service=\"caddy\"} |~ \"^\\\\{\""
 
         stage.json {
-          expressions = {lvl = "level", ts = "ts", msg = "msg", logger = "logger"}
+          expressions = {lvl = "level", msg = "msg", logger = "logger"}
         }
 
         stage.template {
           source   = "lvl"
           template = "{{ $u := ToUpper .Value }}{{ if or (eq $u \"DPANIC\") (eq $u \"PANIC\") }}FATAL{{ else }}{{ $u }}{{ end }}"
-        }
-
-        stage.timestamp {
-          source = "ts"
-          format = "Unix"
         }
 
         stage.labels {

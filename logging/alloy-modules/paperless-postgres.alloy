@@ -4,9 +4,8 @@
 // PostgreSQL stderr format to komodo-postgres; see
 // komodo-postgres.alloy for the level-mapping rationale.
 //
-// PostgreSQL stderr log format (UTC; the literal " UTC" is in the line,
-// not a Go-parseable zone, so we capture ts without it and pin
-// location="UTC"):
+// PostgreSQL stderr log format (UTC). The date and time are stripped
+// from Body and not parsed: the row keeps Docker's receive time.
 //   2026-05-16 03:32:35.729 UTC [26] LOG:  checkpoint starting: time
 //
 // Fields: <ts: YYYY-MM-DD HH:MM:SS.mmm> UTC [<pid>] <PGLEVEL>:  <message>
@@ -30,13 +29,7 @@ declare "paperless_postgres" {
       selector = "{service=\"paperless-postgres\"}"
 
       stage.regex {
-        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) UTC \\[\\d+\\] (?P<pglvl>[A-Z][A-Z0-9]*):\\s+(?P<msg>.*)$"
-      }
-
-      stage.timestamp {
-        source   = "ts"
-        format   = "2006-01-02 15:04:05.000"
-        location = "UTC"
+        expression = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} UTC \\[\\d+\\] (?P<pglvl>[A-Z][A-Z0-9]*):\\s+(?P<msg>.*)$"
       }
 
       stage.template {

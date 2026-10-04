@@ -16,6 +16,10 @@
 #                                   stacks — Komodo's Sync Deploy sub-
 #                                   stage duplicates Stage 2 and breaks
 #                                   on transient linked-repo timeouts.
+#   - lint-alloy-timestamps.py:    rejects `stage.timestamp` outside the
+#                                   file-source Alloy modules (a container
+#                                   row keeps Docker's receive time) and any
+#                                   time zone pinned in a logging config.
 #   - render-pomerium-keys.py --verify:
 #                                   catches pomerium/config.yaml or
 #                                   stack.toml key material that no longer
@@ -85,6 +89,7 @@ fi
 mise exec -- pipenv run python "$root/tools/lint-stack-env.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-content-hash.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-toml.py"
+mise exec -- pipenv run python "$root/tools/lint-alloy-timestamps.py"
 mise exec -- pipenv run python "$root/tools/render-pomerium-keys.py" --verify
 mise exec -- pipenv run python "$root/tools/render-lan-addresses.py" --verify
 # These tests create repositories whose git commands need their own index.

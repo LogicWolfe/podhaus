@@ -15,13 +15,13 @@
 //   1 -> ERROR   2 -> WARN   3 -> INFO   4 -> DEBUG   5 -> TRACE
 // Anything outside 1..5 falls back to INFO (a valid token — never drop
 // severity). The `(X) ` prefix is intentionally left on the Body: it is
-// short, human-meaningful, and lets the generic OTTL severity fallback
-// re-derive level for any line stage.json failed to parse.
+// short and human-meaningful.
 //
-// Non-JSON plain lines make stage.json a no-op (non-fatal); ts/lvl stay
-// empty so stage.timestamp/stage.labels skip, and stage.output falls
-// back to leaving the raw line as Body — the line passes through, never
-// dropped.
+// `timestamp` is not parsed: the row keeps Docker's receive time.
+//
+// The stages are gated on a JSON line filter, so a non-JSON plain line
+// passes through untouched to the generic OTTL fallback. Without the gate,
+// the level template's INFO fallthrough would stamp every such line INFO.
 
 declare "op_connect_sync" {
 	argument "forward_to" { }
@@ -30,19 +30,13 @@ declare "op_connect_sync" {
 		forward_to = argument.forward_to.value
 
 		stage.match {
-			selector = "{service=\"op-connect-sync\"}"
+			selector = "{service=\"op-connect-sync\"} |~ \"^\\\\{\""
 
 			stage.json {
 				expressions = {
 					log_message = "log_message",
-					ts          = "timestamp",
 					lvl         = "level",
 				}
-			}
-
-			stage.timestamp {
-				source = "ts"
-				format = "RFC3339Nano"
 			}
 
 			stage.template {
