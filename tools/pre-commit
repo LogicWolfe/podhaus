@@ -53,6 +53,9 @@
 #                                   browser objects and the pi extension's
 #                                   device sign-in against a stand-in
 #                                   Pocket ID.
+#   - fractal Caddy listener tests: the real Caddyfile's loopback and LAN
+#                                   listeners run under the mise-installed
+#                                   caddy, with stand-in upstreams.
 set -e
 root="$(git rev-parse --show-toplevel)"
 cd "$root"

@@ -1,9 +1,10 @@
 # fractal rathole CLIENT — dials OUT to Numbat's control port and publishes
 # two services: host SSH and the local mTLS origin.
 #
-# This is what makes fractal reachable at all. Its LAN address is the Windows
-# host, which forwards only :22 into the guest, and the guest's own address is
-# WSL NAT. Everything inbound therefore arrives through this outbound tunnel.
+# This is what makes fractal reachable from off the LAN. On the LAN, Windows'
+# Hyper-V firewall admits only SSH and the model service's LAN port from
+# the home network (docs/hosts.html#fractal), so everything else inbound
+# arrives through this outbound tunnel.
 services:
   fractal-rathole-client:
     container_name: fractal-rathole-client

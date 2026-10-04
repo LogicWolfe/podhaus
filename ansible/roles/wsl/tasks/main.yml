@@ -64,8 +64,8 @@
 # root, so sshd can authenticate before the LUKS /home is unlocked — is now
 # the fleet-wide authorized_keys role, which renders the same path on every
 # host. What stays is the inbound hardening, which is a property of this
-# guest's exposure (a Windows :22 forward from the LAN) rather than of the
-# access policy.
+# guest's exposure (SSH open to the LAN through WSL's mirrored networking)
+# rather than of the access policy.
 
 - name: Harden inbound sshd on the guest
   ansible.builtin.copy:

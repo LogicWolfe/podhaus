@@ -7,9 +7,9 @@ type = "noise"
 [client.transport.noise]
 remote_public_key = "${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}"
 
-# Host sshd, reached across the dockernet bridge gateway. fractal is a WSL
-# guest behind NAT, so this outbound tunnel — not the Windows :22 forward —
-# is what makes `ssh fractal.pod.haus` work from anywhere.
+# Host sshd, reached across the dockernet bridge gateway. fractal admits SSH
+# from the home LAN only, so this outbound tunnel is what makes
+# `ssh fractal.pod.haus` work from anywhere else.
 [client.services.fractal_ssh]
 type = "tcp"
 local_addr = "172.18.0.1:22"

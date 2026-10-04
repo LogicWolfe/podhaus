@@ -7,10 +7,10 @@
 	}
 }
 
-# The local model service's access record, shared by both of its listeners:
+# The local model service's access record, shared by its three listeners:
 # one JSON line per request on stdout, which the caddy Alloy module keeps whole
 # because its logger name starts with http.log.access. It keeps only the
-# fields llm_routes appends plus status and duration. The request object goes
+# fields the model route appends plus status and duration. The request object goes
 # whole, so no header (the sign-in token included) and no body can reach it.
 (llm_access_log) {
 	output stdout
@@ -24,13 +24,11 @@
 	}
 }
 
-# The local model service, for both of its listeners. Only the request paths a
-# coding client needs reach the model server, in the OpenAI and Anthropic
-# formats. Its management paths (load, unload, slots, metrics, health) are the
-# watcher's, over dockernet, and are refused here, as are the watcher's own
-# /metrics and /healthz. Each listener defines @llm_control, the control page's
-# paths and who may use them. /setup/ is the setup page and its downloads.
-(llm_routes) {
+# The model server's request paths: only those a coding client needs, in the
+# OpenAI and Anthropic formats. Its management paths (load, unload, slots,
+# metrics, health) are the watcher's, over dockernet, and every listener
+# refuses them, as it does the watcher's own /metrics and /healthz.
+(llm_model_route) {
 	@llm_model path /v1/chat/completions /v1/completions /v1/messages /v1/messages/count_tokens /v1/models
 
 	# Claude Code names its session and, from a subagent, the subagent in these
@@ -54,6 +52,13 @@
 		request_header -X-Conversation-Id
 		reverse_proxy llm-server:8080
 	}
+}
+
+# The model route plus the control page and the setup page, for the signed-in
+# and loopback listeners. Each defines @llm_control, the control page's paths
+# and who may use them. /setup/ is the setup page and its downloads.
+(llm_routes) {
+	import llm_model_route
 	handle @llm_control {
 		reverse_proxy llm-watcher:8081
 	}
@@ -129,4 +134,24 @@ http://:8085 {
 	}
 	@llm_control path /control /control/*
 	import llm_routes
+}
+
+# The local model service for Fenwick on bandicoot, over the home LAN, with no
+# sign-in: the model route only, never the control or setup pages.
+# compose.yaml publishes this port on every interface, so this address check
+# is what admits bandicoot. The caller's address goes in the access record,
+# so a refusal shows which address Caddy saw.
+http://:8086 {
+	log llm_lan {
+		import llm_access_log
+	}
+	log_append remote_ip {http.request.remote.host}
+	@not_bandicoot not remote_ip {$BANDICOOT_LAN_IPV4}
+	handle @not_bandicoot {
+		respond 403
+	}
+	import llm_model_route
+	handle {
+		respond 404
+	}
 }

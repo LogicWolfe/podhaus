@@ -1,11 +1,15 @@
+x-podhaus-content-paths:
+  - ../../config
+
 # fractal's protected origin.
 #
 # Unlike bilby's Caddy this owns no public TLS and issues no certificates, so
 # it runs the stock upstream image — there is no ACME DNS-01 to satisfy and
 # therefore no reason to build the caddy-dns/cloudflare module in. It
 # terminates Pomerium's mTLS and dispatches by Host, and serves the local
-# model service to callers on fractal itself over a loopback-only port. It also
-# serves the model service's setup page (llm-setup/) on both.
+# model service to callers on fractal itself over a loopback-only port and to
+# Fenwick on bandicoot over the LAN. It also serves the model service's setup
+# page (llm-setup/) on the first two.
 services:
   fractal-caddy-secrets-init:
     build:
@@ -47,10 +51,18 @@ services:
       - fractal-caddy-config:/config
     environment:
       TZ: ${TZ}
+      # The one LAN address the http://:8086 listener admits, read when Caddy
+      # parses the Caddyfile.
+      BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
     ports:
       # The local model service's listener (http://:8085 in the Caddyfile). It
       # has no sign-in, so it is published on fractal's loopback only.
       - "127.0.0.1:8085:8085"
+      # Fenwick's listener (http://:8086), which admits bandicoot's address. Every
+      # interface rather than the LAN address: that address exists in the WSL
+      # guest only under mirrored networking, and a bind to an absent address
+      # would stop the whole container, the signed-in route with it.
+      - "8086:8086"
     networks:
       - dockernet
     labels:
