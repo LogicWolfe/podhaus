@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -10,6 +11,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+# The control script runs in bandicoot's Linux backup container: it takes its
+# lock with util-linux flock, reads lock age with GNU stat -c and looks for
+# restic under /proc, none of which a Mac has.
+@unittest.skipUnless(sys.platform == "linux", "rustfs-backup-control needs flock, GNU stat and /proc")
 class RustfsQuiesceTest(unittest.TestCase):
     def test_stop_failure_is_fatal_before_snapshot(self) -> None:
         result = self.run_control("stop", fail_stop=True)
