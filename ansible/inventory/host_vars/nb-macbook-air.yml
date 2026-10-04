@@ -1,7 +1,7 @@
 # nb-macbook-air — Nathan's MacBook Air (macOS, Apple Silicon), a managed
 # development client. Not a Podhaus runtime host: no Docker, Periphery,
 # Alloy, Komodo, or log shipping — playbooks/nb-macbook-air.yml owns only
-# root SSH policy and safety assertions.
+# root SSH policy, safety assertions and the repository source list.
 #
 # Reached over the home LAN only (split-horizon nb-macbook-air.pod.haus →
 # UniFi-reserved wifi address, both in terraform/). It has no inbound path
@@ -22,3 +22,17 @@ ansible_python_interpreter: /Users/nathan/.local/share/mise/installs/python/3.13
 podhaus_machine_key: >-
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC5zEJO7pWBiUNL3Sx7VvTUCpIIaZoKVvNeqMKymgDl3
   nb-macbook-air machine key
+
+# Docs sources ----------------------------------------------------------
+# The same two sources as the Linux docs hosts, at Mac paths. The Mac's
+# docs server is localhost-only and chezmoi-managed; this list is also what
+# local agents treat as trusted checkouts (see roles/mac_docs_sources).
+podhaus_docs_sources:
+  - name: home
+    type: directory
+    source: /Users/nathan/repos
+    required_path: .
+  - name: chezmoi
+    type: repository
+    source: /Users/nathan/.local/share/chezmoi
+    required_path: .git

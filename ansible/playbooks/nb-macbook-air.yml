@@ -1,5 +1,5 @@
-# nb-macbook-air steady state: root SSH policy and safety assertions for
-# the MacBook development client. Deliberately tiny — the Mac joins the
+# nb-macbook-air steady state: root SSH policy, safety assertions and the
+# repository source list for the MacBook development client. Deliberately tiny — the Mac joins the
 # managed development surface (machine identity, op-vault, managed SSH via
 # chezmoi) but none of Podhaus runtime management.
 #
@@ -20,3 +20,5 @@
   roles:
     - role: mac_ssh
       tags: [ssh]
+    - role: mac_docs_sources
+      tags: [docs-sources]

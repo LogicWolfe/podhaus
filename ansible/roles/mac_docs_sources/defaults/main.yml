@@ -1,0 +1,5 @@
+---
+# The same path the Linux docs_sources role writes, so docs-url, the pi
+# repository-MCP extension and the local docs server read one location on
+# every machine.
+mac_docs_sources_config: /etc/podhaus/docs-sources.json

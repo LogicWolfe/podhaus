@@ -133,6 +133,7 @@ ansible/
     komodo_core_host/      Komodo Core's host directories (bandicoot)
     numbat_edge/           numbat's nftables ruleset, relay-IP dispatcher, loopback sshd
     mac_ssh/               MacBook FileVault gate, key-only sshd policy and mesh keys
+    mac_docs_sources/      MacBook repository source list (/etc/podhaus/docs-sources.json)
     pinelake_macos/        macOS power, OrbStack and Plex safety gates
 ```
 

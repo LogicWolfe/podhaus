@@ -1,0 +1,33 @@
+# The MacBook's repository source list: which local checkouts its localhost
+# docs server serves, and which repositories local agents trust (pi loads a
+# repository's .mcp.json only from a checkout on this list).
+#
+# Only the manifest. The Linux docs_sources role also bind-mounts each source
+# into read-only slots for the docs-server container; the Mac runs docs-server
+# as a native user process, set up by chezmoi, which reads the checkouts in
+# place.
+---
+- name: Require the Mac to declare its sources
+  ansible.builtin.assert:
+    that:
+      - podhaus_docs_sources is defined
+      - podhaus_docs_sources | length > 0
+    fail_msg: >-
+      {{ inventory_hostname }} declares no podhaus_docs_sources in
+      inventory/host_vars/{{ inventory_hostname }}.yml
+
+- name: Create the Podhaus configuration directory
+  ansible.builtin.file:
+    path: "{{ mac_docs_sources_config | dirname }}"
+    state: directory
+    owner: root
+    group: wheel
+    mode: "0755"
+
+- name: Declare the repository source locations
+  ansible.builtin.copy:
+    content: "{{ podhaus_docs_sources | to_nice_json }}\n"
+    dest: "{{ mac_docs_sources_config }}"
+    owner: root
+    group: wheel
+    mode: "0644"

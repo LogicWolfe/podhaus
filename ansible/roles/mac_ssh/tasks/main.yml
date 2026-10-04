@@ -1,6 +1,7 @@
-# Root-owned SSH policy for the MacBook development client — the whole of
-# what Ansible manages on it. User state is chezmoi's; there is no Docker,
-# Periphery, Alloy, or Komodo here and this role must never grow any.
+# Root-owned SSH policy for the MacBook development client. Beside it,
+# mac_docs_sources writes the repository source list; nothing else is
+# Ansible's here. User state is chezmoi's; there is no Docker, Periphery,
+# Alloy, or Komodo here and this role must never grow any.
 #
 # Remote Login stays enabled as steady state (Nathan's decision, 2026-08:
 # the shields window mechanism was dropped). Exposure is the home LAN and
