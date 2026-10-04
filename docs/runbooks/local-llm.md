@@ -79,11 +79,15 @@ Fenwick on bandicoot ─ http://fractal.pod.haus:8086 ────────�
   mirrored networking, and a bind to an absent address would stop the whole
   `fractal-caddy` container. See [fractal's Windows-side
   settings](../hosts.html#fractal-windows).
-- **Routes.** Pomerium sends `/setup` and below to a public route with no
-  sign-in, for the setup page (next section), and `/control` and below to a
-  route that admits only Nathan's email. Everything else goes to a route that
-  admits members of Pocket ID's `family` and `friends` groups, on the bearer
-  token described in the next section. Group membership is Pocket ID's to say.
+- **Routes.** Pomerium sends the five installer files under `/setup/` (the two
+  install scripts, the token command, the Claude Code launcher and the pi
+  extension) to a public route with no sign-in, so `curl | sh` works from a
+  bare terminal; the rest of `/setup` and below, the page itself, to a route
+  that admits members of Pocket ID's `family` and `friends` groups by browser
+  sign-in; and `/control` and below to a route that admits only Nathan's email.
+  Everything else goes to a route that admits the same two groups on the
+  bearer token described in the next section. Group membership is Pocket ID's
+  to say.
 
 The signed-in and loopback listeners serve only these paths, and the LAN
 listener only the first row. Everything else is 404.
@@ -124,10 +128,12 @@ out such a token and sets up Claude Code and pi to fetch their own. It shows:
   Anthropic's, `https://llm.pod.haus/v1` for OpenAI's); the model name; and the
   no-key address on fractal itself, `http://127.0.0.1:8085`.
 
-Pomerium serves `/setup` with no sign-in. The page signs in by itself, in the
+Pomerium serves the page behind the friends policy, so opening it means the
+usual Pocket ID sign-in first; only the installer files it links are public,
+and none of them holds a secret. The page then signs in by itself, in the
 browser, through Pocket ID's authorization-code grant with PKCE on the token
 command's client `llm-token`, which admits only the `family` and `friends`
-groups, so nobody else gets a key; none of the files holds a secret. The
+groups, because Pomerium cannot hand its own Pocket ID token to a browser. The
 sign-in's state and PKCE verifier stay in the tab's session storage for the
 round trip to Pocket ID and are removed on return, the code is cleared from the
 address before it is exchanged, and the token is kept only in the page's

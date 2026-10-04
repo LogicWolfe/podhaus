@@ -63,8 +63,10 @@
 		reverse_proxy llm-watcher:8081
 	}
 
-	# Pomerium serves /setup with no sign-in: the page signs in with Pocket ID
-	# itself, in the browser, and none of these files holds a secret.
+	# Pomerium serves the installer files under /setup/ with no sign-in, so
+	# `curl | sh` works from a bare terminal, and the page itself behind the
+	# friends policy. None of the files holds a secret; the page signs in with
+	# Pocket ID itself, in the browser, to fetch the key.
 	handle /setup {
 		redir * /setup/
 	}

@@ -386,8 +386,8 @@ class ClaudeLocalAwkwardHomeTest(ClaudeLocalTest):
     home_name = "it's a \"home\" \\ dir"
 
 
-class PomeriumSetupRouteTest(unittest.TestCase):
-    """The one llm.pod.haus route with no sign-in is the setup page's."""
+class PomeriumSetupRoutesTest(unittest.TestCase):
+    """The installer files are the one llm.pod.haus route with no sign-in; the page is for friends."""
 
     routes = yaml.safe_load((ROOT / "pomerium" / "config.yaml").read_text())["routes"]
     llm = [(index, route) for index, route in enumerate(routes) if route["from"] == "https://llm.pod.haus"]
@@ -397,20 +397,35 @@ class PomeriumSetupRouteTest(unittest.TestCase):
         self.assertEqual(len(public), 1)
         return public[0]
 
-    def test_covers_setup_only_and_passes_no_identity(self) -> None:
+    def page(self) -> tuple[int, dict]:
+        return next((index, route) for index, route in self.llm if route.get("prefix") == "/setup")
+
+    def test_public_route_covers_every_installer_file_and_nothing_else(self) -> None:
         _, route = self.public()
-        self.assertEqual(route["prefix"], "/setup")
-        for absent in ("regex", "path", "policy", "bearer_token_format"):
+        self.assertIsNone(route.get("prefix"))
+        for absent in ("path", "policy", "bearer_token_format"):
             self.assertNotIn(absent, route)
         self.assertFalse(route.get("pass_identity_headers", False))
+        matches = re.compile(route["regex"]).search
+        for file in SETUP.iterdir():
+            self.assertEqual(bool(matches(f"/setup/{file.name}")), file.name != "index.html", file.name)
+        for other in ("/setup", "/setup/", "/setup/claude.sh/", "/setup/claude.sh?x", "/v1/models", "/control"):
+            self.assertIsNone(matches(other), other)
 
-    def test_comes_first_and_reaches_the_same_origin_as_the_control_route(self) -> None:
-        index, route = self.public()
-        self.assertEqual(index, min(i for i, _ in self.llm))
-        control = next(r for _, r in self.llm if r.get("regex") == "^/control(/.*)?$")
-        for key in ("to", "preserve_host_header", "tls_upstream_server_name",
-                    "tls_custom_ca_file", "tls_client_cert_file", "tls_client_key_file"):
-            self.assertEqual(route[key], control[key], key)
+    def test_page_route_admits_friends_and_names_the_caller(self) -> None:
+        _, route = self.page()
+        friends = next(r for r in self.routes if r["from"] == "https://docs.pod.haus")
+        self.assertEqual(route["policy"], friends["policy"])
+        self.assertNotIn("allow_public_unauthenticated_access", route)
+        self.assertTrue(route["pass_identity_headers"])
+
+    def test_both_come_before_the_control_route_and_reach_its_origin(self) -> None:
+        control_index, control = next((i, r) for i, r in self.llm if r.get("regex") == "^/control(/.*)?$")
+        for index, route in (self.public(), self.page()):
+            self.assertLess(index, control_index)
+            for key in ("to", "preserve_host_header", "tls_upstream_server_name",
+                        "tls_custom_ca_file", "tls_client_cert_file", "tls_client_key_file"):
+                self.assertEqual(route[key], control[key], key)
 
 
 class SetupPageTest(unittest.TestCase):
