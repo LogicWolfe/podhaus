@@ -4,9 +4,9 @@
 # Ansible (machine state) and chezmoi (user state) together.
 ---
 # The split-horizon name (podhaus terraform/dns_unifi_split_horizon.tf),
-# which on the LAN resolves to the WINDOWS host; Windows forwards only :22
-# into the guest. The guest's own address (172.19.x/20) is WSL NAT and
-# unreachable from the LAN. Terraform reads config/lan-addresses.json for
+# which on the LAN resolves to the address the guest shares with the Windows
+# host under WSL's mirrored networking; Windows' Hyper-V firewall admits :22
+# from the LAN. Terraform reads config/lan-addresses.json for
 # the Windows reservation and DNS record; Ansible rides the name. Runs are
 # LAN-only by construction: off-LAN the name does not resolve at all.
 ansible_host: fractal.pod.haus
@@ -43,7 +43,7 @@ podhaus_machine_key: >-
 
 # The UniFi gateway, which serves the split-horizon view of pod.haus. The
 # guest's public resolvers could not see it, so LAN hostnames resolved from
-# the Windows host but not from inside WSL. Routes fine over WSL NAT.
+# the Windows host but not from inside WSL.
 podhaus_wsl_resolver: 10.0.0.1
 
 # /home is a LUKS volume on a separate VHDX, unlocked by hand once per WSL

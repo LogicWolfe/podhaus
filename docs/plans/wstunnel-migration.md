@@ -45,7 +45,8 @@ These are structural requirements, derived from
 of them is not a candidate.
 
 - **Outbound-only from origin hosts.** voltaire and pinelake have no
-  inbound path at all; fractal is a WSL guest behind NAT.
+  inbound path at all; fractal's Windows firewall admits only LAN SSH and
+  bandicoot's requests to the local model.
 - **Per-service bind addresses.** Numbat has two public IPs precisely
   because two different services need `:443` and `:22`:
   `public_tls` binds `relay.numbat.pod.haus:443` while `forgejo_ssh`

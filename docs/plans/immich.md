@@ -129,7 +129,7 @@ running it on fractal means fractal dials out, exactly as the Forgejo CI
 runner already dials out to bilby at `10.0.0.119`. Nothing reaches into
 fractal, and **no reverse tunnel is needed**. This is simpler than
 splitting off only the ML container, which would have required bilby to
-originate a call into WSL NAT.
+originate a call into fractal.
 
 The file access is also why fractal needs NFS: the worker reads originals
 and writes thumbnails and transcodes. The ML container itself never
@@ -139,9 +139,10 @@ touches storage — it receives image bytes over HTTP.
 
 **Text search runs on the api worker.** `search.service.ts` encodes the
 user's query with CLIP on the API request path (behind an embedding
-cache) before doing the vector search. bilby can never reach fractal's
-ML service, so without a local one, search would be permanently broken
-rather than merely degraded while fractal is down.
+cache) before doing the vector search. bilby cannot reach fractal's ML
+service (fractal's Windows firewall admits only LAN SSH and bandicoot's
+requests to the local model), so without a local one, search would be
+permanently broken rather than merely degraded while fractal is down.
 
 Text encoding is a small transformer and is cheap on CPU; the expensive
 work — image embeddings, face detection, OCR — stays in the
@@ -158,7 +159,7 @@ Keep them otherwise byte-identical.
 
 fractal reaches Postgres and Valkey over the LAN, so both must bind on
 bilby's LAN address rather than dockernet only. bilby's firewalld
-`public` zone trusts all of `10.0.0.0/24`, and fractal's traffic NATs out
+`public` zone trusts all of `10.0.0.0/24`, and fractal's traffic leaves
 as `10.0.0.70`, indistinguishable from anything else on the LAN — so
 **Valkey needs `requirepass`** (`REDIS_PASSWORD`) rather than relying on
 network position. Postgres already authenticates.

@@ -29,9 +29,11 @@
         prose on these pages are for the reader; the file above is the truth. Do not
         write an address into a compose file, Caddyfile, Gatus config, Alloy config,
         inventory entry, or script — read the variable instead.
-        Each consuming stack includes the catalog directory in its content hash,
-        so an address change redeploys those stacks after ResourceSync publishes
-        the variables.
+        Each consuming podhaus stack includes the catalog directory in its content
+        hash, so an address change redeploys those stacks after ResourceSync
+        publishes the variables. Fenwick's stack lives in the Fenwick repository
+        and reads <code>LAN_FRACTAL_WINDOWS_IPV4</code>, so a change to fractal's
+        address reaches Fenwick only on its next deploy.
       </p>
       <p>
         Each consumer compose file declares:
@@ -93,8 +95,8 @@ networks:
         canonical <code>&lt;host&gt;.pod.haus</code> name for host SSH. Chezmoi sends Bilby
         and Fractal directly through split DNS and Kangaroo directly to its active LAN
         address while preserving the canonical host-key identity. Fractal's split-horizon
-        record resolves to the Windows host's <code>:22</code> forward (UniFi-reserved,
-        both in Terraform) and is safe precisely because <code>fractal.pod.haus</code> is
+        record resolves to the LAN address its WSL guest shares with the Windows host under
+        mirrored networking (UniFi-reserved, both in Terraform) and is safe precisely because <code>fractal.pod.haus</code> is
         SSH-only — its HTTPS name <code>fractal.docs.pod.haus</code> is separate and stays
         on Pomerium — and it keeps fractal reachable from the LAN even when the Pomerium
         edge is down. Chezmoi sends all other cases through
@@ -231,7 +233,12 @@ networks:
         checks the caller's email again before forwarding them. Pomerium passes that
         email to the origin as <code>X-Pomerium-Claim-Email</code> on every route that
         passes identity headers. On fractal itself, Caddy serves the same paths with no
-        sign-in at <code>127.0.0.1:8085</code>.
+        sign-in at <code>127.0.0.1:8085</code>. Fenwick on bandicoot reaches the model
+        paths alone across the LAN at <code>10.0.0.70:8086</code>, also with no sign-in:
+        Caddy answers 403 to any other address, and Windows' Hyper-V firewall admits the
+        port from bandicoot only (<a href="/hosts.html#fractal-windows">fractal's Windows-side
+        settings</a>). Docker sends every bandicoot container's LAN traffic from that one
+        address, so any of them can use the model, Fenwick's web browsing container included.
       </p>
       <p>
         Umami's per-site tracker hosts expose only <code>/script.js</code> and

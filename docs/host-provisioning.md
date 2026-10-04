@@ -80,7 +80,8 @@ group, which is what `site.yml` targets. How each is reached is a
 per-host fact in `host_vars/`: bandicoot is the control node and runs
 against itself (`ansible_connection: local`); bilby is direct on the
 home LAN via `bilby.pod.haus`; fractal is direct on the home LAN too
-(`10.0.0.70`, the Windows host's `:22` forward); numbat and
+(`10.0.0.70`, the address its WSL guest shares with the Windows host
+under mirrored networking); numbat and
 voltaire have no inbound path of their own and route through Pomerium,
 carrying `nathan@numbat` / `nathan@voltaire` as `ansible_user` — that is
 a Pomerium *route selector*, not an OS account, which is why

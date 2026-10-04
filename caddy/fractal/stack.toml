@@ -1,6 +1,6 @@
 [[stack]]
 name = "fractal-caddy"
-description = "Pomerium mTLS origin on fractal — terminates the fractal_http rathole service and dispatches by Host"
+description = "Pomerium mTLS origin on fractal — terminates the fractal_http rathole service and dispatches by Host; serves the local model to bandicoot over the LAN"
 tags = ["fractal", "podhaus"]
 
 [stack.config]
@@ -20,6 +20,7 @@ ignore_services = ["fractal-caddy-secrets-init"]
 # changing what is authenticated.
 environment = """
 TZ=[[TZ]]
+BANDICOOT_LAN_IPV4=[[LAN_BANDICOOT_IPV4]]
 POMERIUM_ORIGIN_CA_CERT_B64=[[OP__KOMODO__POMERIUM_ORIGIN_PKI__CA_CERT_B64]]
 POMERIUM_ORIGIN_SERVER_CERT_B64=[[OP__KOMODO__POMERIUM_ORIGIN_PKI__SERVER_CERT_B64]]
 POMERIUM_ORIGIN_SERVER_KEY_B64=[[OP__KOMODO__POMERIUM_ORIGIN_PKI__SERVER_KEY_B64]]

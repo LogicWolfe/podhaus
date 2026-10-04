@@ -205,16 +205,43 @@
         — it has no bootstrap script and never had one.
       </p>
       <p>
-        Almost everything in and out is a connection fractal makes. Its LAN address
-        <code>10.0.0.70</code> is the <em>Windows</em> host, which forwards only :22 into the
-        guest; the guest itself sits behind WSL's NAT on a subnet that changes across reboots.
-        The one inbound path is LAN SSH: a split-horizon <code>fractal.pod.haus</code> A
-        record (Terraform, UniFi resolver) points at the Windows host's :22 forward, with
-        the address UniFi-reserved so it cannot drift. That keeps fractal reachable from
+        Almost everything in and out is a connection fractal makes. WSL runs in mirrored
+        networking mode, so the guest shares the Windows host's LAN address
+        <code>10.0.0.70</code>, UniFi-reserved so it cannot drift. Windows' Hyper-V
+        firewall for WSL admits two inbound paths from the LAN and nothing else: SSH on
+        :22 from the home network, and the model service's Fenwick listener on :8086 from
+        bandicoot only. A split-horizon <code>fractal.pod.haus</code> A record (Terraform,
+        UniFi resolver) points at that address for SSH. That keeps fractal reachable from
         the home network — including for bilby-resident agents — even when the Pomerium
         edge is down. It is safe where a kangaroo split record would not be, because this
         name is SSH-only: fractal's HTTPS name <code>fractal.docs.pod.haus</code> is
         separate and stays on Pomerium.
+      </p>
+      <p id="fractal-windows">
+        <strong>Windows-side settings.</strong> Ansible cannot reach Windows, so these are
+        set by hand on the desktop and recorded here. The guest's memory limit and
+        <code>networkingMode=mirrored</code> are in the <code>[wsl2]</code> section of
+        <code>%UserProfile%\.wslconfig</code>; a change takes effect after
+        <code>wsl --shutdown</code>. Mirrored networking and the Hyper-V firewall need
+        Windows 11 22H2 or later and WSL 2 from the Store (<code>wsl --version</code>); on
+        anything older WSL ignores the setting and stays on NAT. There is no <code>netsh interface portproxy</code>
+        forward: under mirrored networking a Windows listener on :22 would take the port from
+        the guest's sshd. The firewall rules, from an elevated PowerShell (the GUID is WSL's
+        Hyper-V VM creator id, which <code>Get-NetFirewallHyperVVMCreator</code> lists):
+      </p>
+      <pre><code>$wsl = '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}'
+New-NetFirewallHyperVRule -Name podhaus-ssh -DisplayName 'podhaus: LAN SSH' `
+  -Direction Inbound -VMCreatorId $wsl -Protocol TCP -LocalPorts 22 `
+  -RemoteAddresses 10.0.0.0/24 -Action Allow
+New-NetFirewallHyperVRule -Name podhaus-llm-fenwick -DisplayName 'podhaus: model service for Fenwick' `
+  -Direction Inbound -VMCreatorId $wsl -Protocol TCP -LocalPorts 8086 `
+  -RemoteAddresses 10.0.0.90 -Action Allow</code></pre>
+      <p>
+        The rules are the only way in because the WSL firewall's default for incoming
+        traffic is Block, Windows' own default. Under mirrored networking anything else
+        listening in the guest, Docker's published ports included, would otherwise be open
+        to the LAN. <code>Get-NetFirewallHyperVVMSetting -PolicyStore ActiveStore -Name $wsl</code>
+        shows <code>DefaultInboundAction : Block</code>.
       </p>
       <ul>
         <li><strong>Ansible-managed (root state):</strong> hostname via
@@ -254,8 +281,11 @@
         checksums the model file, and a watcher that unloads the model when a Windows game
         wants the GPU and loads it again when the GPU has been quiet. The server and the watcher carry a
         Compose GPU request (<code>driver: nvidia</code>). The same Caddy that fronts the
-        docs server serves it at <code>llm.pod.haus</code> through Pomerium, and on a
-        loopback-only port, <code>127.0.0.1:8085</code>, for callers on fractal. Every
+        docs server serves it at <code>llm.pod.haus</code> through Pomerium, on a
+        loopback-only port, <code>127.0.0.1:8085</code>, for callers on fractal, and on
+        <code>:8086</code> for Fenwick on bandicoot, which both Caddy and the Windows
+        firewall limit to bandicoot's address, the address every container there
+        shares. Every
         container has a memory limit, and the server's <code>oom_score_adj</code> makes it the
         first process killed if the guest runs out of memory. The model file lives in the
         <code>llm-models</code> volume on the root filesystem, which is re-downloadable and
