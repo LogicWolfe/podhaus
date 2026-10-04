@@ -4,8 +4,9 @@ whole against a stand-in curl.
 The stand-in curl records every call and answers each from a prepared reply,
 so the tests see the exact requests the command sends Pocket ID and drive it
 through every answer Pocket ID gives. sleep is a stand-in too, so polling
-takes no time; it records the intervals asked for. Everything else on PATH is
-real.
+takes no time; it records the intervals asked for. So are open and xdg-open:
+the command opens its sign-in link in a browser, and a test run must never
+reach the real one. Everything else on PATH is real.
 """
 
 from __future__ import annotations
@@ -107,6 +108,8 @@ class TokenCommandTest(unittest.TestCase):
         self.opened_file = self.root / "opened"
         self.stub("curl", STAND_IN_CURL)
         self.stub("sleep", STAND_IN_SLEEP)
+        self.stub("open", STAND_IN_OPENER)
+        self.stub("xdg-open", STAND_IN_OPENER)
         self.cache_file = self.home / ".local" / "state" / "llm-token" / "token.json"
 
     def stub(self, name: str, script: str) -> None:
@@ -316,7 +319,6 @@ class LinkOpenerTest(TokenCommandTest):
         return self.opened_file.read_text().splitlines() if self.opened_file.exists() else []
 
     def test_opens_the_link_on_a_linux_desktop_without_waiting_for_the_browser(self) -> None:
-        self.stub("xdg-open", STAND_IN_OPENER)
         self.stub("uname", "#!/bin/sh\necho Linux\n")
         started = time.monotonic()
         result = self.sign_in(DISPLAY=":0")
@@ -326,14 +328,11 @@ class LinkOpenerTest(TokenCommandTest):
         self.assertEqual(result.stderr, f"{LINK}\n")
 
     def test_opens_the_link_on_a_mac(self) -> None:
-        self.stub("open", STAND_IN_OPENER)
         self.stub("uname", "#!/bin/sh\necho Darwin\n")
         self.assertEqual(self.sign_in().returncode, 0)
         self.assertEqual(self.opened(), [LINK])
 
     def test_only_prints_the_link_over_ssh_or_without_a_screen(self) -> None:
-        self.stub("xdg-open", STAND_IN_OPENER)
-        self.stub("open", STAND_IN_OPENER)
         for environment in (
             {"DISPLAY": ":0", "SSH_CONNECTION": "10.0.0.5 1 10.0.0.9 22"},
             {},
