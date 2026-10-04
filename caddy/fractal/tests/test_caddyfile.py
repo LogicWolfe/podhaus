@@ -82,6 +82,20 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+def matchers(node: object) -> list[dict]:
+    """Every request matcher set anywhere in a compiled config."""
+    if isinstance(node, list):
+        return [m for item in node for m in matchers(item)]
+    if not isinstance(node, dict):
+        return []
+    found: list[dict] = []
+    for key, value in node.items():
+        if key in ("match", "not"):
+            found.extend(value)
+        found.extend(matchers(value))
+    return found
+
+
 def relocated(node: object, moves: dict[str, str]) -> object:
     """The config with every string equal to a key replaced by its value."""
     if isinstance(node, dict):
@@ -102,36 +116,48 @@ class FractalCaddy:
         if caddy is None:
             raise RuntimeError("caddy is not on PATH; run mise install")
         self.ports = {LOCAL: free_port(), LAN: free_port()}
-        config = self._config(caddy, admitted, model, watcher)
+        self.compiled = self._compile(caddy, admitted)
         self._dir = tempfile.TemporaryDirectory()
         path = Path(self._dir.name) / "caddy.json"
-        path.write_text(json.dumps(config))
+        path.write_text(json.dumps(self._relocate(self.compiled, model, watcher)))
         self._log = Path(self._dir.name) / "caddy.log"
+        # Caddy's own state goes in the test's directory, not the home.
+        state = {"XDG_CONFIG_HOME": self._dir.name, "XDG_DATA_HOME": self._dir.name}
         with self._log.open("w") as log:
             self._process = subprocess.Popen(
                 [caddy, "run", "--config", str(path)],
+                env={**os.environ, **state},
                 stdout=log,
                 stderr=subprocess.STDOUT,
             )
         self._await_listeners()
         self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    def _config(self, caddy: str, admitted: str, model: StandIn, watcher: StandIn) -> dict:
-        compiled = subprocess.run(
+    @staticmethod
+    def _compile(caddy: str, admitted: str) -> dict:
+        adapted = subprocess.run(
             [caddy, "adapt", "--config", str(CADDYFILE), "--adapter", "caddyfile"],
             env={**os.environ, "BANDICOOT_LAN_IPV4": admitted},
             capture_output=True,
             text=True,
             check=True,
         )
-        config = json.loads(compiled.stdout)
+        return json.loads(adapted.stdout)
+
+    def server(self, listener: str) -> dict:
+        """The compiled config of one listener, before it was relocated."""
+        servers = self.compiled["apps"]["http"]["servers"].values()
+        return next(s for s in servers if s["listen"] == [listener])
+
+    def _relocate(self, compiled: dict, model: StandIn, watcher: StandIn) -> dict:
+        config = json.loads(json.dumps(compiled))
         servers = config["apps"]["http"]["servers"]
         names = {tuple(server["listen"]): name for name, server in servers.items()}
         del servers[names[(":4443",)]]
         del config["apps"]["tls"]
         for listen, port in self.ports.items():
             servers[names[(listen,)]]["listen"] = [f"{LOOPBACK}:{port}"]
-        config["admin"] = {"disabled": True}
+        config["admin"] = {"disabled": True, "config": {"persist": False}}
         return relocated(config, {
             "llm-server:8080": model.address,
             "llm-watcher:8081": watcher.address,
@@ -226,6 +252,12 @@ class LanListenerRefusesOthers(RunningCaddy):
             with self.subTest(path=path):
                 self.assertEqual(self.caddy.status(LAN, path), 403)
         self.assertEqual(self.model.received, [])
+
+    def test_the_address_check_names_bandicoot_alone(self) -> None:
+        # Requests can only come from loopback, so a check widened to admit
+        # more of the LAN would pass every request above.
+        checks = [m for m in matchers(self.caddy.server(LAN)) if "remote_ip" in m]
+        self.assertEqual(checks, [{"remote_ip": {"ranges": [ELSEWHERE]}}])
 
     def test_a_forwarded_for_header_does_not_change_the_caller(self) -> None:
         status = self.caddy.status(LAN, "/v1/models", headers={"X-Forwarded-For": ELSEWHERE})

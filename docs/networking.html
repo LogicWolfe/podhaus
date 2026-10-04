@@ -29,9 +29,11 @@
         prose on these pages are for the reader; the file above is the truth. Do not
         write an address into a compose file, Caddyfile, Gatus config, Alloy config,
         inventory entry, or script — read the variable instead.
-        Each consuming stack includes the catalog directory in its content hash,
-        so an address change redeploys those stacks after ResourceSync publishes
-        the variables.
+        Each consuming podhaus stack includes the catalog directory in its content
+        hash, so an address change redeploys those stacks after ResourceSync
+        publishes the variables. Fenwick's stack lives in the Fenwick repository
+        and reads <code>LAN_FRACTAL_WINDOWS_IPV4</code>, so a change to fractal's
+        address reaches Fenwick only on its next deploy.
       </p>
       <p>
         Each consumer compose file declares:
