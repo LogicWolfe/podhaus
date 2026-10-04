@@ -140,9 +140,8 @@ touches storage — it receives image bytes over HTTP.
 **Text search runs on the api worker.** `search.service.ts` encodes the
 user's query with CLIP on the API request path (behind an embedding
 cache) before doing the vector search. bilby cannot reach fractal's ML
-service (fractal's Windows firewall admits only LAN SSH and bandicoot's
-requests to the local model), so without a local one, search would be
-permanently broken rather than merely degraded while fractal is down.
+service (fractal's Windows firewall admits only SSH and the local model's
+LAN port), so without a local one, search would be permanently broken rather than merely degraded while fractal is down.
 
 Text encoding is a small transformer and is cheap on CPU; the expensive
 work — image embeddings, face detection, OCR — stays in the

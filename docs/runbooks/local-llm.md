@@ -58,7 +58,7 @@ the exited job as an unhealthy stack.
 ```text
 client ─ https://llm.pod.haus ─▶ Numbat Pomerium ─ rathole fractal_http ─▶ fractal-caddy :4443 ─▶ llm-server :8080
 client on fractal ─ http://127.0.0.1:8085 ───────────────────────────────▶ fractal-caddy :8085 ─▶ llm-server :8080
-Fenwick on bandicoot ─ http://10.0.0.70:8086 ────────────────────────────▶ fractal-caddy :8086 ─▶ llm-server :8080
+Fenwick on bandicoot ─ http://fractal.pod.haus:8086 ─────────────────────▶ fractal-caddy :8086 ─▶ llm-server :8080
 ```
 
 - **Remote path.** `llm.pod.haus` is a DNS-only A record to Numbat's application
@@ -74,9 +74,7 @@ Fenwick on bandicoot ─ http://10.0.0.70:8086 ───────────
   LAN, with no sign-in. It serves the model paths alone, never the control or
   setup pages. Caddy answers 403 to every address but bandicoot's
   (`BANDICOOT_LAN_IPV4`, from `config/lan-addresses.json`), and Windows' Hyper-V
-  firewall admits the port from bandicoot only. That is every container on
-  bandicoot, not Fenwick alone: Docker sends their LAN traffic from bandicoot's
-  address, Fenwick's web browsing container included. The port is published on every
+  firewall admits the port from the home network. The port is published on every
   interface because fractal's LAN address exists in the guest only under WSL's
   mirrored networking, and a bind to an absent address would stop the whole
   `fractal-caddy` container. See [fractal's Windows-side

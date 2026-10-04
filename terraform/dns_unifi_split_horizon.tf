@@ -75,8 +75,9 @@ resource "unifi_dns_record" "voice_pod_haus" {
 }
 
 # fractal.pod.haus → the LAN address fractal's WSL guest shares with the
-# Windows host, LAN only. The name is SSH-only — fractal has no HTTPS route
-# at this name (fractal.docs.pod.haus is a separate name and stays on
+# Windows host, LAN only. The name carries SSH and Fenwick's plain-HTTP
+# calls to the local model, never HTTPS — fractal has no HTTPS route at
+# this name (fractal.docs.pod.haus is a separate name and stays on
 # Pomerium), so unlike kangaroo there is no HTTPS identity boundary for a
 # split record to leak. There is deliberately NO public record: off-LAN
 # SSH rides the ssh.pod.haus Pomerium route via the chezmoi ssh config

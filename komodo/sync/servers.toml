@@ -58,7 +58,7 @@ tags = ["fractal", "podhaus"]
 
 [server.config]
 # Outbound mode (v2 PKI noise handshake). Windows' Hyper-V firewall admits
-# only SSH and bandicoot's model requests into fractal from the LAN, so
+# only SSH and the model service's LAN port into fractal, so
 # Periphery's path is a connection fractal makes. Port 8120 is not published.
 address = ""
 enabled = true

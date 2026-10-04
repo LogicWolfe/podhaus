@@ -208,14 +208,15 @@
         Almost everything in and out is a connection fractal makes. WSL runs in mirrored
         networking mode, so the guest shares the Windows host's LAN address
         <code>10.0.0.70</code>, UniFi-reserved so it cannot drift. Windows' Hyper-V
-        firewall for WSL admits two inbound paths from the LAN and nothing else: SSH on
-        :22 from the home network, and the model service's Fenwick listener on :8086 from
-        bandicoot only. A split-horizon <code>fractal.pod.haus</code> A record (Terraform,
-        UniFi resolver) points at that address for SSH. That keeps fractal reachable from
-        the home network — including for bilby-resident agents — even when the Pomerium
-        edge is down. It is safe where a kangaroo split record would not be, because this
-        name is SSH-only: fractal's HTTPS name <code>fractal.docs.pod.haus</code> is
-        separate and stays on Pomerium.
+        firewall for WSL admits two inbound paths from the home network and nothing else:
+        SSH on :22, and the model service's Fenwick listener on :8086, where Caddy admits
+        only bandicoot. A split-horizon <code>fractal.pod.haus</code> A record (Terraform,
+        UniFi resolver) points at that address, for SSH and for Fenwick's calls to the
+        model. That keeps fractal reachable from the home network — including for
+        bilby-resident agents — even when the Pomerium edge is down. It is safe where a
+        kangaroo split record would not be, because no HTTPS is served at this name:
+        fractal's HTTPS name <code>fractal.docs.pod.haus</code> is separate and stays on
+        Pomerium.
       </p>
       <p id="fractal-windows">
         <strong>Windows-side settings.</strong> Ansible cannot reach Windows, so these are
@@ -235,7 +236,7 @@ New-NetFirewallHyperVRule -Name podhaus-ssh -DisplayName 'podhaus: LAN SSH' `
   -RemoteAddresses 10.0.0.0/24 -Action Allow
 New-NetFirewallHyperVRule -Name podhaus-llm-fenwick -DisplayName 'podhaus: model service for Fenwick' `
   -Direction Inbound -VMCreatorId $wsl -Protocol TCP -LocalPorts 8086 `
-  -RemoteAddresses 10.0.0.90 -Action Allow</code></pre>
+  -RemoteAddresses 10.0.0.0/24 -Action Allow</code></pre>
       <p>
         The rules are the only way in because the WSL firewall's default for incoming
         traffic is Block, Windows' own default. Under mirrored networking anything else
@@ -283,9 +284,8 @@ New-NetFirewallHyperVRule -Name podhaus-llm-fenwick -DisplayName 'podhaus: model
         Compose GPU request (<code>driver: nvidia</code>). The same Caddy that fronts the
         docs server serves it at <code>llm.pod.haus</code> through Pomerium, on a
         loopback-only port, <code>127.0.0.1:8085</code>, for callers on fractal, and on
-        <code>:8086</code> for Fenwick on bandicoot, which both Caddy and the Windows
-        firewall limit to bandicoot's address, the address every container there
-        shares. Every
+        <code>:8086</code> for Fenwick on bandicoot, which Caddy limits to bandicoot's
+        address. Every
         container has a memory limit, and the server's <code>oom_score_adj</code> makes it the
         first process killed if the guest runs out of memory. The model file lives in the
         <code>llm-models</code> volume on the root filesystem, which is re-downloadable and
