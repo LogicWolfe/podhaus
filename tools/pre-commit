@@ -32,6 +32,13 @@
 #                                   without the GPU switch (a drift would
 #                                   restart Docker on every host) and carries
 #                                   exactly the nvidia runtime with it.
+#   - wsl role tests:              chrony's config (the Windows-clock refclock
+#                                   never selected nor required, makestep at
+#                                   any time, chronyd ordered after that
+#                                   clock's device) and
+#                                   `base` running before `wsl` and `earlyoom`
+#                                   in fractal.yml and site.yml, so a fresh-host
+#                                   dry run has the dnf5 bindings.
 #   - docs_sources role tests:      source slots remain isolated and every
 #                                   docs host declares both aggregate and
 #                                   canonical chezmoi locations.
@@ -92,6 +99,8 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/earlyoom/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/docker/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/ansible/roles/wsl/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/metube/tests"
 mise exec -- pipenv run python -m unittest discover \

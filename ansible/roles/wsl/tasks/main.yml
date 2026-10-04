@@ -216,3 +216,52 @@
     enabled: true
     state: started
     daemon_reload: "{{ wsl_x11_unit is changed }}"
+
+# ---- Time sync --------------------------------------------------------
+# The Hyper-V time driver sets the guest's clock from Windows at every start
+# and resume and whenever the guest falls 5 s behind it, so the guest mirrors
+# the Windows clock, and that clock runs fast. chrony corrects the guest
+# against the pool; `timedatectl`'s "synchronized: yes" only reflects the
+# driver. Spans and access logs line up across hosts only if the guest is right.
+
+- name: Install chrony
+  ansible.builtin.dnf:
+    name: chrony
+    state: present
+  register: wsl_chrony_package
+
+- name: Create the chronyd drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/chronyd.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Order chronyd after the Windows clock device
+  ansible.builtin.copy:
+    src: chronyd-after-ptp.conf
+    dest: /etc/systemd/system/chronyd.service.d/10-after-ptp.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: wsl_chronyd_drop_in
+  notify: Restart chronyd
+
+- name: Configure chrony
+  ansible.builtin.copy:
+    src: chrony.conf
+    dest: /etc/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chronyd
+
+- name: Run chronyd
+  # A dry run that would install the package has no unit to inspect yet.
+  ansible.builtin.systemd_service:
+    name: chronyd.service
+    enabled: true
+    state: started
+    daemon_reload: "{{ wsl_chronyd_drop_in is changed }}"
+  when: not (ansible_check_mode and wsl_chrony_package is changed)

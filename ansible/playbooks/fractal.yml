@@ -16,10 +16,10 @@
   roles:
     - role: disk_tmp
       tags: [disk-tmp]
-    - role: wsl
-      tags: [wsl]
     - role: base
       tags: [base]
+    - role: wsl
+      tags: [wsl]
     - role: earlyoom
       tags: [earlyoom]
     - role: docs_sources
