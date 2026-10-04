@@ -1,0 +1,31 @@
+# Drop SSH clients that stopped answering.
+#
+# A laptop that sleeps mid-session leaves its connection open here with
+# nobody on the other end. sshd keeps it, and with it the tmux client
+# attached through it and every port it forwarded, until TCP gives up about
+# fifteen minutes later. The cc-clip image-paste tunnel is the visible
+# casualty: the dead session still holds remote port 18339, so the session
+# that replaces it cannot forward the port and paste stops working.
+#
+# Probing every 15 s and dropping after three misses frees all of that
+# within about 45 s. A live client answers every probe, so an idle but
+# working session is never dropped.
+---
+- name: Probe SSH clients and drop the ones that stopped answering
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/20-podhaus-client-liveness.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by ansible/roles/sshd_liveness. Do not edit on the host.
+      ClientAliveInterval 15
+      ClientAliveCountMax 3
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd for client liveness
+
+- name: Verify sshd accepts the resulting configuration
+  # The per-file validate cannot see the other drop-ins; this proves the
+  # combined config parses before the reload.
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false

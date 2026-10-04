@@ -127,6 +127,7 @@ ansible/
     gnome_on_demand/       GDM only while a display is attached (bandicoot)
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
+    sshd_liveness/         drop SSH clients that stopped answering (dev hosts)
     storage_binds/         Late-arriving-volume hardening (bilby, fractal)
     firewalld/             declarative zone + service XML (bilby, bandicoot)
     komodo_core_host/      Komodo Core's host directories (bandicoot)
@@ -246,6 +247,14 @@ earlyoom follows the kernel's own ranking, which in practice picks the process
 using the most memory. And systemd-oomd runs there but monitors no cgroups,
 because the WSL image lacks the `systemd-oomd-defaults` package; earlyoom is the
 only early killer, and the kernel's own killer is what acts after it.
+
+**`sshd_liveness`** makes sshd on the development hosts Bilby, Bandicoot,
+Fractal, and Voltaire probe each client every 15 seconds and drop one that
+misses three probes in a row. Without it, a laptop that sleeps mid-session
+leaves a dead connection that keeps its tmux client attached and its forwarded
+ports bound for about fifteen minutes. That includes cc-clip's port 18339, so
+the reconnected session cannot forward it and image paste stops working.
+`sudo sshd -T | grep -i clientalive` shows the values. Apply with `--tags ssh`.
 
 **`base`** opens with a `raw` task that installs `python3-libdnf5` if
 missing. This is the one deliberate `check_mode: false` in the layer:

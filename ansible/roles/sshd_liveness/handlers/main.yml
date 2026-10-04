@@ -1,0 +1,6 @@
+---
+- name: Reload sshd for client liveness
+  # Reload, not restart: a restart would drop the session applying this.
+  ansible.builtin.systemd_service:
+    name: sshd
+    state: reloaded

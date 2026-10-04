@@ -103,6 +103,8 @@ mise exec -- pipenv run python -m unittest discover \
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/earlyoom/tests"
 mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/ansible/roles/sshd_liveness/tests"
+mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/docker/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/wsl/tests"

@@ -42,6 +42,9 @@
       tags: [ssh]
     - role: sshd_pomerium_ca
       tags: [ssh]
+    - role: sshd_liveness
+      when: inventory_hostname in groups['remote_dev_machines']
+      tags: [ssh]
     - role: komodo_periphery
       when: inventory_hostname in groups['komodo_periphery_hosts']
       tags: [periphery]

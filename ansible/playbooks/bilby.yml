@@ -31,6 +31,8 @@
       tags: [ssh]
     - role: sshd_pomerium_ca
       tags: [ssh]
+    - role: sshd_liveness
+      tags: [ssh]
     - role: komodo_periphery
       tags: [periphery]
     - role: storage_binds
