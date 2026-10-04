@@ -13,6 +13,9 @@
     - role: disk_tmp
       when: inventory_hostname in groups['disk_tmp_hosts']
       tags: [disk-tmp]
+    - role: base
+      when: inventory_hostname in groups['linux_hosts']
+      tags: [base]
     - role: earlyoom
       when: inventory_hostname in groups['earlyoom_hosts']
       tags: [earlyoom]
@@ -22,9 +25,6 @@
     - role: pinelake_macos
       when: inventory_hostname in groups['macos_appliance_hosts']
       tags: [macos, pinelake]
-    - role: base
-      when: inventory_hostname in groups['linux_hosts']
-      tags: [base]
     - role: docs_sources
       when: inventory_hostname in groups['docs_hosts']
       tags: [docs-sources]

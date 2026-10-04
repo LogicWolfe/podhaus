@@ -246,7 +246,7 @@ New-NetFirewallHyperVRule -Name podhaus-llm-fenwick -DisplayName 'podhaus: model
       </p>
       <ul>
         <li><strong>Ansible-managed (root state):</strong> hostname via
-          <code>/etc/wsl.conf</code>, timezone, Docker CE + <code>dockernet</code>,
+          <code>/etc/wsl.conf</code>, timezone, time sync, Docker CE + <code>dockernet</code>,
           NVIDIA's container toolkit and Docker runtime so containers can use the GPU (no
           Linux driver; see <a href="/host-provisioning.md">Host provisioning</a>),
           the developer toolchain, docs source slots, the Pomerium SSH user-CA trust,
@@ -265,6 +265,61 @@ New-NetFirewallHyperVRule -Name podhaus-llm-fenwick -DisplayName 'podhaus: model
           it would sever the path it runs on. Same reasoning as kangaroo.
           Ansible owns it instead of a script.</li>
       </ul>
+      <p id="fractal-time">
+        <strong>Time sync.</strong> The guest's clock follows the Windows host's: the Hyper-V
+        time driver sets it from Windows at every WSL start and resume, and again whenever it
+        falls 5 seconds or more behind, so it agrees with the host to within a fraction of a
+        millisecond. The Windows clock is the one that is fast, by about two seconds when
+        measured against Cloudflare, <code>time.windows.com</code> and the Fedora pool, so a
+        guest left alone is two seconds ahead of the rest of the fleet. The WSL image ships no
+        NTP client, and <code>timedatectl</code>'s <em>System clock synchronized: yes</em> only
+        reflects that driver. The <code>wsl</code> role installs <code>chrony</code> against
+        Fedora's pool, plus <code>time.cloudflare.com</code> polled every 64 seconds,
+        because a resume puts the guest back on Windows time until chrony's next poll. The pool
+        keeps chrony's default polling, which its volunteer servers ask for. The role replaces
+        <code>/etc/chrony.conf</code> whole rather than adding a drop-in, because Fedora's
+        packaged file never reads <code>/etc/chrony.d</code>. The file sets
+        <code>makestep 1.0 -1</code>, so chrony steps the clock whenever it is more than a
+        second out; the packaged default steps only during the first three updates after start.
+        It also declares the Windows clock (<code>/dev/ptp_hyperv</code>) as a source marked
+        <code>noselect</code>, so it is measured and shown but never steered to, and
+        <code>optional</code>, so a missing device costs only that measurement. The role leaves
+        the driver's host sync on.
+      </p>
+      <p>
+        udev creates <code>/dev/ptp_hyperv</code> a second after <code>basic.target</code>, and
+        chronyd opens its sources once at start, so the role adds a systemd drop-in
+        (<code>/etc/systemd/system/chronyd.service.d/10-after-ptp.conf</code>) that orders
+        <code>chronyd</code> after <code>dev-ptp_hyperv.device</code>. Should the device never
+        appear, chronyd waits up to 45 s for it and then runs without the Windows measurement.
+        The check after a <code>wsl --shutdown</code> and restart: <code>systemctl is-active chronyd</code>
+        says <code>active</code> and <code>chronyc sources</code> lists the Windows clock.
+      </p>
+      <p>
+        To see whether Windows is the clock that is wrong, read the Windows source's offset in
+        <code>chronyc sources</code>, and look for repeated <em>System clock wrong by</em> lines
+        in <code>journalctl -u chronyd</code> after resumes. <code>chronyc tracking</code>
+        compares the guest with its sources, which chrony keeps right, so it says nothing about
+        Windows until Windows is 5 seconds or more fast; past that the driver keeps pulling the
+        guest forward.
+      </p>
+      <p id="fractal-windows-time">
+        <strong>Windows Time.</strong> The fix for the cause is on Windows, so it is another
+        by-hand step recorded here. From an elevated PowerShell on the desktop, inspect first:
+      </p>
+      <pre><code>w32tm /query /status
+w32tm /query /configuration</code></pre>
+      <p>
+        Make sure the Windows Time service is running and its peer is <code>time.windows.com</code>,
+        not <em>Local CMOS Clock</em>. A bare peer name is queried in symmetric mode; the
+        <code>,0x8</code> flag asks for client mode, which is what a time server expects. On a
+        desktop the Windows Time service is usually manual-start and stops at each reboot, so set
+        it automatic (an always-running service) or accept that the resync is one-off. Then resync:
+      </p>
+      <pre><code>Set-Service w32time -StartupType Automatic
+Start-Service w32time
+w32tm /config /syncfromflags:manual /manualpeerlist:"time.windows.com,0x8" /update
+w32tm /resync</code></pre>
       <p>
         Ingress is an outbound rathole client to numbat, following the same pattern as bilby:
         <code>fractal.docs.pod.haus</code> lands on Pomerium, which forwards to
