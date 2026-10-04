@@ -57,10 +57,9 @@ description = "Fedora 44 under WSL2 on a Windows desktop. Remote dev machine + d
 tags = ["fractal", "podhaus"]
 
 [server.config]
-# Outbound mode (v2 PKI noise handshake). fractal has no reachable inbound
-# address at all — its LAN address is the Windows host, which forwards only
-# :22 into the guest — so every path in and out is a connection fractal
-# makes. Port 8120 is not published.
+# Outbound mode (v2 PKI noise handshake). Windows' Hyper-V firewall admits
+# only SSH and bandicoot's model requests into fractal from the LAN, so
+# Periphery's path is a connection fractal makes. Port 8120 is not published.
 address = ""
 enabled = true
 # A developer machine running builds and test suites hits 100% CPU as normal

@@ -74,14 +74,14 @@ resource "unifi_dns_record" "voice_pod_haus" {
   enabled     = true
 }
 
-# fractal.pod.haus → the Windows host's :22 forward, LAN only. The name
-# is SSH-only — fractal has no HTTPS route at this name (fractal.docs.
-# pod.haus is a separate name and stays on Pomerium), so unlike kangaroo
-# there is no HTTPS identity boundary for a split record to leak. There
-# is deliberately NO public record: off-LAN SSH rides the ssh.pod.haus
-# Pomerium route via the chezmoi ssh config rewrite. LAN clients (and
-# bilby-resident agents) connect direct, keeping fractal reachable even
-# when the Pomerium edge is not.
+# fractal.pod.haus → the LAN address fractal's WSL guest shares with the
+# Windows host, LAN only. The name is SSH-only — fractal has no HTTPS route
+# at this name (fractal.docs.pod.haus is a separate name and stays on
+# Pomerium), so unlike kangaroo there is no HTTPS identity boundary for a
+# split record to leak. There is deliberately NO public record: off-LAN
+# SSH rides the ssh.pod.haus Pomerium route via the chezmoi ssh config
+# rewrite. LAN clients (and bilby-resident agents) connect direct, keeping
+# fractal reachable even when the Pomerium edge is not.
 resource "unifi_dns_record" "fractal_pod_haus" {
   name        = "fractal.pod.haus"
   record_type = "A"

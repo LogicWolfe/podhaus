@@ -58,6 +58,7 @@ the exited job as an unhealthy stack.
 ```text
 client ─ https://llm.pod.haus ─▶ Numbat Pomerium ─ rathole fractal_http ─▶ fractal-caddy :4443 ─▶ llm-server :8080
 client on fractal ─ http://127.0.0.1:8085 ───────────────────────────────▶ fractal-caddy :8085 ─▶ llm-server :8080
+Fenwick on bandicoot ─ http://10.0.0.70:8086 ────────────────────────────▶ fractal-caddy :8086 ─▶ llm-server :8080
 ```
 
 - **Remote path.** `llm.pod.haus` is a DNS-only A record to Numbat's application
@@ -69,13 +70,23 @@ client on fractal ─ http://127.0.0.1:8085 ────────────
 - **Local path.** On fractal itself Caddy also listens on port 8085, published on
   fractal's loopback only. It has no sign-in: anything running on fractal can
   use it, including the control page's buttons.
+- **LAN path.** Fenwick on bandicoot reaches Caddy's port 8086 across the home
+  LAN, with no sign-in. It serves the model paths alone, never the control or
+  setup pages. Caddy answers 403 to every address but bandicoot's
+  (`BANDICOOT_LAN_IPV4`, from `config/lan-addresses.json`), and Windows' Hyper-V
+  firewall admits the port from bandicoot only. The port is published on every
+  interface because fractal's LAN address exists in the guest only under WSL's
+  mirrored networking, and a bind to an absent address would stop the whole
+  `fractal-caddy` container. See [fractal's Windows-side
+  settings](../hosts.html#fractal-windows).
 - **Routes.** Pomerium sends `/setup` and below to a public route with no
   sign-in, for the setup page (next section), and `/control` and below to a
   route that admits only Nathan's email. Everything else goes to a route that
   admits members of Pocket ID's `family` and `friends` groups, on the bearer
   token described in the next section. Group membership is Pocket ID's to say.
 
-Caddy serves only these paths, on both listeners. Everything else is 404.
+The signed-in and loopback listeners serve only these paths, and the LAN
+listener only the first row. Everything else is 404.
 
 | Paths | Go to |
 |---|---|
@@ -355,6 +366,7 @@ and does not load the model on a request.
 | The watcher's GPU sampling stalls longer than `WATCHER_SAMPLE_STALE_SECONDS` | A watchdog thread logs `watcher.unhealthy` with reason `sample_stale` and ends the process; Docker restarts it and it adopts the router's real state. Until then a game would share the GPU with the model. |
 | The watcher reports unhealthy for any other reason | Nothing restarts it, deliberately: a restart resets the clocks that raise these conditions and would let the container read healthy while the cause remains. |
 | fractal's Docker or WSL restarts | All containers come back (`unless-stopped`). The model stays unloaded until the watcher has seen a quiet GPU. |
+| Fenwick cannot reach the model | Fenwick hands the run to Claude, within seconds when the request is refused and after 30 seconds when nothing answers, and logs `model unavailable, falling back`. A 403 in the `llm_lan` record means Caddy saw another address, which its `remote_ip` field names. No `llm_lan` record means the request never arrived: check that WSL is still in mirrored mode and the Hyper-V firewall rule is in place ([fractal's Windows-side settings](../hosts.html#fractal-windows)). |
 
 ### Why the watcher reports unhealthy
 
@@ -441,9 +453,11 @@ There is no single request log. A request leaves two records, which share no
 identifier and are lined up by time.
 
 - **Caddy's access line**, one JSON line per request to `llm.pod.haus` on
-  fractal-caddy's output, logger `http.log.access.llm_remote` (Pomerium path) or
-  `http.log.access.llm_local` (loopback). Fields: `caller` (the signed-in email,
-  remote only; nothing vouches for an email header on the loopback listener),
+  fractal-caddy's output, logger `http.log.access.llm_remote` (Pomerium path),
+  `http.log.access.llm_local` (loopback) or `http.log.access.llm_lan` (Fenwick).
+  Fields: `caller` (the signed-in email, remote only; nothing vouches for an
+  email header on the other listeners), `remote_ip` (the caller's address, LAN
+  only, so a refused request shows which address Caddy saw),
   `client` (User-Agent), `session_id` and `agent_id` (Claude Code's session and
   subagent headers), `path` (no query string), `status`, `duration`. The request
   object, response headers, sizes and user id are deleted, so no other header
