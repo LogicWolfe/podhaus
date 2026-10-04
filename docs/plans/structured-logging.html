@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structured logging across the fleet</title>
+<style>
+.doc-page {
+  --doc-paper: rgb(var(--bg, 255 255 255));
+  --doc-panel-color: rgb(var(--bg-soft, 246 250 246));
+  --doc-ink: rgb(var(--text, 15 23 42));
+  --doc-muted-color: rgb(var(--text-muted, 75 85 99));
+  --doc-line: rgb(var(--border, 229 231 235));
+  --doc-accent: rgb(var(--code-text, 17 94 64));
+  color: var(--doc-ink);
+  background: var(--doc-paper);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.6;
+  max-width: 72rem;
+  margin-inline: auto;
+}
+.doc-page .doc-panel,
+.doc-page .doc-callout,
+.doc-page .doc-diagram {
+  background: var(--doc-panel-color);
+  border: 1px solid var(--doc-line);
+  border-radius: .5rem;
+  padding: .75rem 1rem;
+  margin-block: 1rem;
+}
+.doc-page .doc-callout { border-inline-start: .25rem solid var(--doc-accent); }
+.doc-page .doc-muted { color: var(--doc-muted-color); }
+.doc-page .doc-badge {
+  display: inline-block;
+  color: var(--doc-ink);
+  background: var(--doc-panel-color);
+  border: 1px solid var(--doc-line);
+  border-radius: .25rem;
+  padding: .1em .45em;
+  font-size: .8em;
+  white-space: nowrap;
+}
+.doc-page .doc-badge.decide { border-color: var(--doc-accent); font-weight: 600; }
+.doc-page .doc-diagram { overflow-x: auto; }
+.doc-page .doc-diagram svg { display: block; max-width: 100%; height: auto; }
+.doc-page .doc-diagram svg text { fill: currentColor; font-family: system-ui, sans-serif; }
+.doc-page .doc-diagram .lost { stroke-dasharray: 4 3; }
+.doc-page table { font-size: .93em; }
+.doc-page td, .doc-page th { vertical-align: top; }
+.doc-page .lede { color: var(--doc-muted-color); font-size: 1.05em; }
+@media print {
+  .doc-page {
+    --doc-paper: #fff; --doc-panel-color: #f6f6f6; --doc-ink: #111;
+    --doc-muted-color: #555; --doc-line: #ccc; --doc-accent: #245c40;
+    color-scheme: light;
+    --tw-prose-body: var(--doc-ink); --tw-prose-headings: var(--doc-ink);
+    --tw-prose-lead: var(--doc-muted-color); --tw-prose-links: var(--doc-accent);
+    --tw-prose-bold: var(--doc-ink); --tw-prose-captions: var(--doc-muted-color);
+    --tw-prose-code: var(--doc-ink); --tw-prose-th-borders: var(--doc-line);
+    --tw-prose-td-borders: var(--doc-line);
+  }
+  .doc-page .doc-panel, .doc-page .doc-callout, .doc-page .doc-diagram { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<main>
+<div class="doc-page">
+
+<h1>Structured logging across the fleet</h1>
+<p class="lede">One schema for every log row on every host, documented so the next service and the next agent fit it without asking. Every field a service emits arrives queryable, with a correct severity and time, under names that never collide. Today the pipeline can do all of that and, in a dozen places, has been configured not to.</p>
+
+<h2>The case</h2>
+<p>The log pipeline already ships structured data end to end: a JSON body that reaches the ClickStack collector is parsed and every field lands in the attributes map, which is how Caddy's access lines are queryable by caller and path. The defects are all upstream of that, in our own Alloy configs, and almost all are the same mistake repeated: a per-service parser rewrites the JSON body to a short string for readability and discards the fields. The fix removes code rather than adding it. Per-service parsers shrink to severity mapping, one shared rule does the structuring, and the pipeline stops depending on which service happens to have a parser.</p>
+
+<div class="doc-callout">
+<p><strong>Two findings cannot wait for the rest.</strong> Lumen's throwaway code-search containers ship their request stream, including source snippets from indexed repositories, into a store with 180-day retention, under random names, and twice. And the only authentication trail the fleet has, Pomerium's authorize lines and Pocket ID's request lines, is stripped of identity before it leaves numbat and bilby. Both are a few lines in two Alloy modules and go first.</p>
+</div>
+
+<p><strong>Kill criterion.</strong> If the shared JSON step cannot reproduce the attribute names the collector produces today for Caddy access lines, so that existing saved searches break, stop and fall back to keeping JSON bodies whole in the two offending parsers. That smaller fix restores the audit trail on its own.</p>
+
+<h2>Where structure is lost</h2>
+<div class="doc-diagram">
+<svg viewBox="0 0 960 250" role="img" aria-labelledby="pipe-title pipe-desc">
+<title id="pipe-title">Log pipeline and where fields are dropped</title>
+<desc id="pipe-desc">A container's JSON line passes through an Alloy per-service parser, the Loki to OTLP conversion, the shared enrich step, the ClickStack collector and ClickHouse. Today the parser rewrites the body, so the collector has no JSON to parse and the fields are gone. After the change the parser leaves the body alone and the enrich step parses it into attributes.</desc>
+<g fill="none" stroke="currentColor" stroke-width="1.2">
+  <rect x="10" y="40" width="130" height="54" rx="6"/>
+  <rect x="190" y="40" width="150" height="54" rx="6"/>
+  <rect x="390" y="40" width="130" height="54" rx="6"/>
+  <rect x="570" y="40" width="130" height="54" rx="6"/>
+  <rect x="750" y="40" width="200" height="54" rx="6"/>
+  <path d="M140 67 H190 M340 67 H390 M520 67 H570 M700 67 H750"/>
+</g>
+<g font-size="13" text-anchor="middle">
+  <text x="75" y="62">container</text><text x="75" y="80" font-size="11">JSON line</text>
+  <text x="265" y="62">Alloy parser</text><text x="265" y="80" font-size="11">loki.process</text>
+  <text x="455" y="62">Loki → OTLP</text><text x="455" y="80" font-size="11">labels → attributes</text>
+  <text x="635" y="62">enrich</text><text x="635" y="80" font-size="11">shared OTTL</text>
+  <text x="850" y="62">ClickStack collector</text><text x="850" y="80" font-size="11">JSON body → attributes</text>
+</g>
+<g font-size="12">
+  <text x="190" y="135" font-weight="600">Today</text>
+  <text x="190" y="155">parser replaces the body with "[authorize] authorize check";</text>
+  <text x="190" y="172">email, session, path, status, IP never reach the collector</text>
+  <text x="190" y="210" font-weight="600">After</text>
+  <text x="190" y="230">parser sets severity only; enrich parses the JSON body into attributes and keeps the message as the body</text>
+</g>
+<g fill="none" stroke="currentColor" stroke-width="1.2">
+  <path class="lost" d="M265 94 V120"/>
+  <path d="M635 94 V200"/>
+</g>
+</svg>
+</div>
+
+<h2>The schema every row follows</h2>
+<p>One shape for every service, host and source, so a reader can interpret any row without knowing which service wrote it, and a new service needs no pipeline work to fit. Pipeline facts live in namespaced names that no application field can collide with; application fields keep their own names.</p>
+<table>
+<thead><tr><th>Field</th><th>Where</th><th>Meaning</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td><code>Timestamp</code></td><td>column</td><td>When the line was written. Docker's nanosecond receive time for containers; the line's own time only for file sources.</td><td><code>2026-10-04 04:04:55.618</code></td></tr>
+<tr><td><code>SeverityText</code></td><td>column</td><td>The service's own level word, mapped onto TRACE DEBUG INFO WARN ERROR FATAL. Guessed from the first level word in the line only when the service writes none.</td><td><code>WARN</code></td></tr>
+<tr><td><code>SeverityNumber</code></td><td>column</td><td>The OpenTelemetry number for that text, always set alongside it: 1, 5, 9, 13, 17, 21.</td><td><code>13</code></td></tr>
+<tr><td><code>service.name</code></td><td>resource</td><td>The service, the same on every host. We set this one.</td><td><code>flood</code></td></tr>
+<tr><td><code>ServiceName</code></td><td>column</td><td>The collector copies <code>service.name</code> here; HyperDX's service filter reads it. Same value, not set by us.</td><td><code>flood</code></td></tr>
+<tr><td><code>service.namespace</code></td><td>resource</td><td>The stack: the compose project.</td><td><code>pinelake-flood</code></td></tr>
+<tr><td><code>service.instance.id</code></td><td>resource</td><td>This running copy: host and container, never ambiguous.</td><td><code>pinelake/pinelake-flood</code></td></tr>
+<tr><td><code>host</code></td><td>resource</td><td>The machine. Unchanged from today; Gatus queries it.</td><td><code>pinelake</code></td></tr>
+<tr><td><code>container.name</code></td><td>resource</td><td>The Docker container.</td><td><code>fractal-llm-llm-model-1</code></td></tr>
+<tr><td><code>compose.service</code></td><td>attribute</td><td>The compose service key.</td><td><code>llm-model</code></td></tr>
+<tr><td><code>log.iostream</code></td><td>attribute</td><td>stdout or stderr.</td><td><code>stderr</code></td></tr>
+<tr><td><code>log.source</code></td><td>attribute</td><td>How the line was read.</td><td><code>docker</code>, <code>journal</code>, <code>/var/log/…</code></td></tr>
+<tr><td><code>Body</code></td><td>column</td><td>The human message only: the JSON message field, or the whole line for text formats.</td><td><code>authorize check</code></td></tr>
+<tr><td>everything else</td><td>attribute</td><td>The service's own fields, own names, nested objects flattened with dots, secrets stripped.</td><td><code>email</code>, <code>request.path</code>, <code>status</code></td></tr>
+</tbody>
+</table>
+<p><strong>What a new service must do to fit:</strong> write JSON lines to stdout with a level field and a message field. Nothing in the pipeline changes. A text-only service gets one small parser module that maps its level word, and nothing else.</p>
+<p><strong>Services that ship their own OTLP</strong> (fenwick, fenwick-web-agent, indy-service, the book services, and whatever the fenwick tracing work adds) never pass through Alloy, so the enrich step cannot stamp them. Today their rows carry the SDK's resource: <code>service.name</code>, a UUID in <code>service.instance.id</code>, no <code>host</code>, no namespace. To fit, each sets <code>OTEL_RESOURCE_ATTRIBUTES</code> in its compose file to the schema's <code>host</code>, <code>service.namespace</code> and <code>service.instance.id</code>: one line per service, in those repos, after the names below are settled. <span class="doc-badge decide">decision</span> <strong><code>host</code> or <code>host.name</code>.</strong> <code>host</code> is what every Gatus check and the enrich step use today; <code>host.name</code> is the OpenTelemetry name an SDK's resource detector emits on its own. Recommended: adopt <code>host.name</code> fleet-wide and rewrite the Gatus queries in the same commit, so SDK-shipped and Alloy-shipped rows agree without a mapping.</p>
+
+<h3>Where this is documented once it ships</h3>
+<p>A new system doc, <code>docs/logging.md</code>: the table above, the new-service contract, how to query by instance or host in HyperDX, the parser rules (severity only, never rewrite a body, never drop a field), and the volume and secret rules. <code>docs/monitoring.html</code> keeps the alerting and pipeline-health content and points at it. <code>AGENTS.md</code> gains a row in its required-reading table and a hard rule: a parser never drops a field. It is written with the implementation, not before, because <code>docs/</code> states what is true.</p>
+
+<h2>Approach, by component</h2>
+<p>Badges: <span class="doc-badge">mechanical</span> needs no decision; <span class="doc-badge decide">decision</span> is Nathan's call and names its trade-off.</p>
+
+<h3>Shared JSON structuring in the enrich step</h3>
+<p><code>logging/alloy-modules/enrich.alloy</code> already runs an OTTL transform on every host's logs. It gains one rule: when the body starts with a brace, parse it, merge the fields into the log attributes without overwriting any that exist, then set the body to the message field (<code>msg</code>, <code>message</code> or <code>log_message</code>, whichever is present). <span class="doc-badge">mechanical</span></p>
+<ul>
+<li><strong>No field is lost to a collision.</strong> The pipeline's own facts use the namespaced names under Service names and attributes, so a service's <code>host</code> or <code>service</code> field lands under its own name beside them.</li>
+<li><strong>Secrets are stripped first.</strong> Keys that are unambiguous secrets go: <code>authorization</code>, <code>cookie</code>, <code>set-cookie</code>, <code>password</code>, <code>access_token</code>, <code>refresh_token</code>, <code>id_token</code>. Pomerium's OAuth <code>state</code> blob is stripped in its own module, not globally: <code>state</code> is an ordinary field elsewhere (the model watcher reports its state in one).</li>
+<li><strong>Nested objects keep today's names.</strong> Caddy's <code>request</code>, pino's <code>req</code> and Mongo's <code>attr</code> are flattened to the key names the collector produces now, checked against one live Caddy row before the switch.</li>
+<li><strong>No time parsing here.</strong> Docker already stamps each line with its nanosecond receive time; see Timestamps.</li>
+<li><strong>Some modules stay.</strong> HyperDX's <code>[COMP] {…}</code> prefix, FerretDB's and Backrest's mixed text-plus-JSON lines still need their own small parsers.</li>
+</ul>
+
+<h3>Per-service parsers shrink to severity</h3>
+<table>
+<thead><tr><th>Module</th><th>Change</th><th></th></tr></thead>
+<tbody>
+<tr><td><code>pomerium</code>, <code>pocket-id</code>, <code>caddy</code>, <code>clickstack-otel</code>, <code>alloy</code>, <code>hyperdx</code>, <code>clickstack-mongo</code>, <code>op-connect-*</code></td><td>Remove the body rewrite. Keep the level stage. The enrich step does the rest.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td><code>home-assistant</code>, <code>paperless</code></td><td>Plain-text sources: keep the <code>[component]</code> logger name as an attribute instead of dropping it.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td><code>clickstack-mongo</code></td><td>Add the <code>^\{</code> gate every other JSON parser has; a non-JSON line becomes <code>&lt;no value&gt;</code> today.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td><code>rathole</code></td><td>Selector names <code>bilby-rathole-client</code>; bilby's container is <code>numbat-rathole-client</code>, so bilby's rathole lines are never parsed. Widen to <code>.*rathole-client|rathole-server</code>.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td><code>gatus</code></td><td>Stamps every line INFO unless it contains <code>success=false</code>, so panics and alert-delivery failures can never show red. Map <code>panic:</code> and send failures to ERROR.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td><code>llm-server</code></td><td>Keeps its allow-list of lines. The prompt-read timing lines stay: the fenwick tracing plan reads them beside its spans.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td>Level maps</td><td>Mongo <code>D1</code>–<code>D5</code> and zap <code>DPANIC</code> set a text level with no number. Add them.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td><code>enrich</code> fallback regex</td><td>Requires <code>[</code> or a space before the level word, so <code>INFO:</code> in column one (uvicorn, metube) and <code>level=WARN</code> (ollama, signal-cli, Forgejo runner) never match. Allow <code>^</code>, <code>=</code> and <code>"</code> as well. Whether the first level word or the most severe should win is open.</td><td><span class="doc-badge">mechanical</span> <span class="doc-badge decide">decision</span></td></tr>
+</tbody>
+</table>
+
+<h3>Timestamps</h3>
+<p>Seven parsers overwrite Docker's nanosecond receive time with a parsed whole-second time, and five of them pin <code>Australia/Perth</code>. Pinelake's Syncthing runs in <code>America/Edmonton</code>, so its rows land fourteen hours in the past, and the pins break the promise that a service can move hosts with its parsing intact. Stop parsing timestamps for Docker sources altogether; keep it only for file sources whose lines carry no other time (Plex's server log, Flood's job logs, ClickHouse's error file). <span class="doc-badge">mechanical</span></p>
+<p>Docker's receive time is only as good as the host's clock. Fractal has no time sync and runs about 1.8 s ahead; the fenwick tracing plan's clock section (<code>~/repos/podhaus-tracing-clock</code>, chrony in the WSL Ansible role) fixes that and is the prerequisite for comparing fractal's log times with any other host's. This plan does not touch that role.</p>
+
+<h3>Audit trail</h3>
+<ul>
+<li><strong>Logins and privilege use are filtered out.</strong> <code>journal.alloy</code> collects priority 0–4 only; sshd's <code>Accepted publickey</code>, sudo's session lines and earlyoom's kills are priority 5–6. Add journal sources with no priority filter for <code>sshd.service</code>, sudo, <code>earlyoom.service</code> and <code>docker.service</code>. Alloy ANDs matches within one source, so each unit is its own source. <span class="doc-badge">mechanical</span></li>
+<li><strong>Bilby's front door logs nothing.</strong> <code>caddy/Caddyfile</code> has no <code>log</code> directive, so nothing records who reached <code>storage.pod.haus</code>, <code>git.pod.haus</code> or any public site. Turn on access logs per site with the <code>request delete</code> filter fractal already uses. Trade-off: volume on the public sites against having any record at all. <span class="doc-badge decide">decision</span></li>
+<li><strong>Pomerium runs at debug.</strong> Only <code>ssh-auth-notify</code> needs it, and it reads <code>docker logs</code>, not ClickStack. Drop DEBUG in Alloy except the keyboard-interactive line it needs. Trade-off: less to diagnose a Pomerium policy problem after the fact. <span class="doc-badge decide">decision</span></li>
+</ul>
+
+<h3>Delivery reliability</h3>
+<table>
+<thead><tr><th>Finding</th><th>Change</th><th></th></tr></thead>
+<tbody>
+<tr><td>Gatus has heartbeat checks for kangaroo, numbat and pinelake only. Bandicoot and voltaire can stop shipping unnoticed. Fractal is deliberately left out: it is down intermittently by design, and the docs alert already says when.</td><td>Copy numbat's heartbeat endpoint for bandicoot and voltaire.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td>Bilby's exporter has <code>max_elapsed_time = "0s"</code>, the forever retry the 2026-06-19 postmortem replaced everywhere else. Bilby has shipped cross-network since the collector moved to bandicoot.</td><td>Set it to <code>30m</code> like the other six hosts.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td><code>logs-ingest.pod.haus</code> resolves only to numbat's relay address, so bandicoot and fractal, both on the home LAN, ship out to numbat and back through rathole and bilby's Caddy to a collector on bandicoot.</td><td>Bandicoot sends to <code>clickstack-otel:4318</code> by container name; fractal to plaintext LAN like bilby and kangaroo, or to a split-horizon record. Trade-off: no mTLS on the LAN hop, in exchange for removing the internet, numbat and rathole from the path.</td><td><span class="doc-badge decide">decision</span></td></tr>
+<tr><td>Every host now emits a 60-second self-metric, so a stalled <code>otelcol_exporter_sent_metric_points_total</code> is detectable inside the container. The 2026-06-19 postmortem declined in-container detection before that metric existed, and the 2026-08-08 item "the bounded retry needs to resume rather than stop" is still open.</td><td><strong>Decided:</strong> a healthcheck on that counter marks the Alloy container unhealthy when it stops rising, autoheal restarts it, and nothing alerts unless the heal fails. The Gatus heartbeat thresholds, existing and new, move beyond one healthcheck-plus-restart cycle so a successful heal never pages; a stall that survives the restart does. The Alloy image offers only bash <code>/dev/tcp</code> to build the check with. Closes the 2026-08-08 item.</td><td><span class="doc-badge">mechanical</span></td></tr>
+</tbody>
+</table>
+
+<h3>Service names and attributes</h3>
+<p>Rule: every fact the pipeline knows about a line is kept, under a name no service's own JSON field can collide with. Nothing is removed except two attributes that carry no information. The only decision is which fact fills the <code>ServiceName</code> column.</p>
+<table>
+<thead><tr><th>Fact</th><th>Today</th><th>After</th></tr></thead>
+<tbody>
+<tr><td>Which service</td><td><code>ServiceName</code> is the container name: <code>flood</code> on bilby, <code>pinelake-flood</code> on pinelake. Parsers key on the name with the host prefix stripped, so service and parser disagree, and bilby's are the only unprefixed ones.</td><td>Resource <code>service.name</code>, see the decision below.</td></tr>
+<tr><td>Which host</td><td>Resource <code>host</code> is correct and is what Gatus queries. Log attribute <code>host</code> is a copy that Caddy's and Pomerium's JSON <code>host</code> fields overwrite, so it lies on ~35k rows a day.</td><td>Resource <code>host</code> unchanged. The copy goes. A JSON <code>host</code> field keeps its own meaning (Caddy: the request's Host header) and no longer collides.</td></tr>
+<tr><td>Which container</td><td>Log attribute <code>container</code>, the full name.</td><td>Resource <code>container.name</code>: <code>pinelake-flood</code>, <code>fractal-llm-llm-model-1</code>.</td></tr>
+<tr><td>Which instance of the service</td><td>Only implied by the host prefix in the container name.</td><td>Resource <code>service.instance.id</code> = <code>&lt;host&gt;/&lt;container&gt;</code>: <code>pinelake/pinelake-flood</code>, <code>bilby/flood</code>. Never collides, even for two of the same service on one host.</td></tr>
+<tr><td>Which stack</td><td>Log attribute <code>compose_project</code>: <code>pinelake-flood</code>, <code>fractal-llm</code>.</td><td>Resource <code>service.namespace</code>, same value.</td></tr>
+<tr><td>Which compose service</td><td>Log attribute <code>compose_service</code>: <code>llm-model</code>, where the container is <code>fractal-llm-llm-model-1</code>.</td><td>Log attribute <code>compose.service</code>, same value.</td></tr>
+<tr><td>stdout or stderr</td><td>Log attribute <code>stream</code>.</td><td>Log attribute <code>log.iostream</code>, same value.</td></tr>
+<tr><td>Where the line was read</td><td>Implied: Docker, journal or file, told apart by which attributes exist.</td><td>Log attribute <code>log.source</code>: <code>docker</code>, <code>journal</code>, or the file path.</td></tr>
+<tr><td>The service's own fields</td><td>Promoted by the collector under their own names; <code>host</code> and <code>service</code> collide with ours.</td><td>Own names kept, nested objects flattened with dots. With the pipeline's names above, nothing collides, so every field survives.</td></tr>
+<tr><td>Level</td><td><code>detected_level</code>, the same bytes as <code>SeverityText</code>.</td><td>Removed once severity is set from it.</td></tr>
+<tr><td>Loki label list</td><td><code>loki.attribute.labels</code>: the names of the labels, on every row.</td><td>Removed.</td></tr>
+<tr><td>Containers outside a stack</td><td>Each becomes its own service: one per Forgejo Actions job run, one per Lumen search session, random names from <code>docker run</code>.</td><td>Kept, named by what they are: <code>forgejo-actions-task</code> and <code>lumen-warm</code> with the run in <code>container.name</code>; anything else <code>unmanaged</code>. Only Lumen's search streams are dropped (Volume).</td></tr>
+</tbody>
+</table>
+<p><span class="doc-badge decide">decision</span> <strong>What fills <code>ServiceName</code>.</strong> Recommended: stripped (<code>flood</code>, host one filter away in <code>service.instance.id</code>): one saved search covers every host and splits by host; the service list and Service Map stay short. Or host-prefixed as today (<code>pinelake-flood</code>), made consistent by prefixing bilby's too: the host is visible in the service list without a filter, at the cost of seven entries for every fleet-wide service. Either way the other fact is an attribute, so nothing is lost; the trade is what the first-glance column shows. Saved searches keyed on the losing form are rewritten in the same pass.</p>
+
+<h3>Volume</h3>
+<p>Inferred from config; measure first (rows and body bytes per service per day, distinct service names per day, lines at Docker's 16 KiB split, top patterns for the top ten services).</p>
+<table>
+<thead><tr><th>Source</th><th>Today</th><th>After</th><th></th></tr></thead>
+<tbody>
+<tr><td>Lumen search containers</td><td>Unnamed <code>docker run --rm</code>, label <code>podhaus.lumen=true</code>. Stdout is the MCP request stream with code snippets. Shipped under random names; index runs land twice via <code>lumen-sweep</code>.</td><td><code>docker-logs.alloy</code> drops targets with that label and no worktree label; warm containers named <code>lumen-warm</code>.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td><code>lumen-sweep</code></td><td>3 hosts × 144 runs/day × ~12k lines. 76 M rows in two weeks.</td><td>Keep <code>^Lumen </code> lines and WARN or worse. Drop progress.</td><td><span class="doc-badge decide">decision</span></td></tr>
+<tr><td><code>lumen-ollama</code></td><td>One GIN line per embed batch; healthcheck line every 30 s. 1.7 M rows.</td><td>Drop 2xx request lines; errors and slow requests stay.</td><td><span class="doc-badge decide">decision</span></td></tr>
+<tr><td><code>komodo-ferretdb</code></td><td>INFO <code>Command handled</code> per database command.</td><td>Log level warn at the source; loses the per-command trail of Komodo's database.</td><td><span class="doc-badge decide">decision</span></td></tr>
+<tr><td><code>gatus</code></td><td><code>success=true</code> per check; 25 endpoints every 60 s.</td><td>Dropped; the same fact is in Gatus's metrics and its own database.</td><td><span class="doc-badge decide">decision</span></td></tr>
+<tr><td><code>pomerium</code></td><td><code>log_level: debug</code>; only <code>ssh-auth-notify</code> needs it, via <code>docker logs</code>.</td><td>DEBUG dropped in Alloy except the keyboard-interactive line.</td><td><span class="doc-badge decide">decision</span></td></tr>
+</tbody>
+</table>
+
+<h3>Short-lived containers</h3>
+<table>
+<thead><tr><th>Today</th><th>After</th><th></th></tr></thead>
+<tbody>
+<tr><td>Docker discovery refreshes every 30 s and lists running containers only. An init container that exits sooner, including <code>plex-preferences-init</code>, is never read.</td><td><code>refresh_interval = "5s"</code>. Confirmed by <code>plex-preferences-init</code> rows after the next Plex deploy.</td><td><span class="doc-badge">mechanical</span></td></tr>
+</tbody>
+</table>
+
+<h3>One shipping module</h3>
+<table>
+<thead><tr><th>Today</th><th>After</th><th></th></tr></thead>
+<tbody>
+<tr><td>Seven <code>logging/&lt;host&gt;/alloy-conf/config.alloy</code> files, ~100 identical lines each. Drift so far: bilby retries forever, pinelake has no tracing block, numbat mixes a variable and a fixed path.</td><td>A <code>ship</code> module in <code>alloy-modules/</code> taking host, endpoint and optional mTLS files. Each host file names its host and endpoint and little else.</td><td><span class="doc-badge">mechanical</span></td></tr>
+<tr><td>Four exporter comments describe bilby's published port and NAT; kangaroo's says bandicoot ships by container name; <code>pocket-id.alloy</code> says numbat.</td><td>Comments describe the bandicoot collector and each host's real path.</td><td><span class="doc-badge">mechanical</span></td></tr>
+</tbody>
+</table>
+
+<h3>Docs corrected in the same commits</h3>
+<table>
+<thead><tr><th>Page</th><th>Says</th><th>True</th></tr></thead>
+<tbody>
+<tr><td rowspan="6"><code>docs/monitoring.html</code></td><td>ofelia is unparsed</td><td>It has a parser</td></tr>
+<tr><td>Three heartbeat endpoints</td><td>Four today; two more after this plan</td></tr>
+<tr><td>Query snippets use <code>LogAttributes['host']</code></td><td>Its own text says to use the resource attribute</td></tr>
+<tr><td>Bilby carries the bounded retry</td><td>Bilby retries forever</td></tr>
+<tr><td>Bandicoot's logs loop through bilby's Caddy</td><td>They go out via numbat</td></tr>
+<tr><td>OpenSSH accepts are collected; every module parses event time</td><td>Neither</td></tr>
+<tr><td><code>docs/runbooks/local-llm.md</code></td><td>Pomerium's authorize entries carry the email</td><td>True again once the parser stops dropping it</td></tr>
+</tbody>
+</table>
+
+<h2>Order of work</h2>
+<ol>
+<li>Lumen container drop; Pomerium and Pocket ID parsers stop rewriting bodies.</li>
+<li>Measurement queries.</li>
+<li>Schema: shared JSON step and the namespaced pipeline attributes, checked against one live Caddy row; the remaining parsers shrink; <code>docs/logging.md</code> and the <code>AGENTS.md</code> rule land in the same commit.</li>
+<li>Independent fixes: severity, timestamps, rathole selector, mongo gate, sshd source, heartbeats, bilby retry.</li>
+<li>Stall healthcheck, autoheal, heartbeat thresholds.</li>
+<li>Decisions once taken: LAN shipping path, access logs, Pomerium debug, service naming.</li>
+<li>Shipping module.</li>
+</ol>
+
+<h2>Verification</h2>
+<table>
+<thead><tr><th>Behaviour</th><th>Check</th></tr></thead>
+<tbody>
+<tr><td>Every row fits the schema</td><td>The fixture harness asserts each module's output uses only schema names plus the service's own fields, and that <code>service.name</code>, <code>service.instance.id</code> and <code>host</code> are always set. Red first on every module.</td></tr>
+<tr><td>Fields survive</td><td>Fixture test per module in <code>logging/tests/</code>: captured line in, attribute set out. Red first on Pomerium <code>email</code> and Pocket ID <code>path</code>.</td></tr>
+<tr><td>Caddy attribute names unchanged</td><td>Grouping fractal's access rows by <code>caller</code> and <code>path</code> works the day after the switch.</td></tr>
+<tr><td>Secrets stripped, fields kept</td><td>Fixture: Pomerium debug line with OAuth state; no <code>state</code> attribute. Fixture: Caddy access line; <code>host</code> is the request's Host header and resource <code>host</code> is the machine.</td></tr>
+<tr><td>Every instance distinguishable</td><td>Rows from bilby's and pinelake's flood share <code>service.name</code> and differ in <code>service.instance.id</code>, <code>service.namespace</code> and <code>host</code>.</td></tr>
+<tr><td>Lumen gone</td><td>After one day: zero randomly named services; <code>lumen-sweep</code> rows at most half.</td></tr>
+<tr><td>Severity fallback</td><td>Fixtures: <code>INFO:</code> in column one → INFO; <code>level=WARN</code> → WARN; <code>[INFO] retrying after error:</code> → INFO.</td></tr>
+<tr><td>Pinelake time</td><td>A Syncthing row's timestamp within a minute of Docker's receive time.</td></tr>
+<tr><td>SSH trail</td><td>One login to bilby → one <code>Accepted publickey</code> row.</td></tr>
+<tr><td>Stall self-heals silently</td><td>Block voltaire's Alloy from the collector: unhealthy, autoheal restarts, Gatus green. Keep it blocked: Gatus red for voltaire only, after the threshold.</td></tr>
+<tr><td>Init containers tailed</td><td><code>plex-preferences-init</code> rows after the next Plex deploy.</td></tr>
+<tr><td>Config lint</td><td><code>alloy fmt</code> and <code>alloy validate</code> on every host config in <code>tools/pre-commit</code>.</td></tr>
+</tbody>
+</table>
+
+<h2>Open questions</h2>
+<ul>
+<li>What does the Lumen indexer print per run; does it have a quieter level?</li>
+<li>Should the authentication trail also stay in Pomerium's and Pocket ID's own stores?</li>
+<li>Does RustFS have an audit log for <code>storage.pod.haus</code>?</li>
+</ul>
+
+</div>
+</main>
+</body>
+</html>

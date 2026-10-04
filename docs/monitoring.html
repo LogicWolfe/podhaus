@@ -378,6 +378,24 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
         An empty/wrong key means a hard 401 and no data in HyperDX — a loud, visible failure
         with no silent fallback to the old sink.
       </p>
+      <p>
+        Container discovery (<code>docker-logs.alloy</code>) is the same on every host:
+      </p>
+      <ul>
+        <li>Lumen's throwaway code-search containers (Docker label
+          <code>podhaus.lumen</code> without a worktree label) are not collected: their
+          stdout is the search request stream, source snippets included. The long-lived
+          Lumen services and the <code>lumen-warm-*</code> index containers are collected,
+          the index containers under the one <code>service</code> label
+          <code>lumen-warm</code>.</li>
+        <li>Stopped containers stay discovered, with their network and port labels
+          dropped, so a container that Ofelia starts on a schedule resumes where it
+          stopped instead of being re-read from its first line on every run. Alloy
+          forgets a container's read position once its log stream ends, so an Alloy
+          restart re-reads each stopped container's log once. A stopped container that
+          never printed a line is polled every five seconds for as long as it exists;
+          Alloy's zero-byte report of each poll is not shipped.</li>
+      </ul>
 
       <h3 id="sources">Beyond container stdout</h3>
       <p>
@@ -439,7 +457,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND LogAttributes['host']
       <ul>
         <li>parses that service's real event timestamp into the log entry,</li>
         <li>normalizes the level to a <code>detected_level</code> attribute,</li>
-        <li>retains the full structured Body for Flood request diagnostics; other parsers may reduce it to the message.</li>
+        <li>retains the full structured Body for Flood request diagnostics and for the two authentication sources, Pomerium and Pocket ID, whose authorize and request lines (email, session id, path, status, client address, user agent, OIDC client id) are the fleet's authentication trail; the collector promotes every field of a JSON body into <code>LogAttributes</code>. Other parsers may still reduce the body to the message; <a href="plans/structured-logging.html">the structured-logging plan</a> removes that.</li>
       </ul>
       <p>
         After the chain, the shared <code>enrich.alloy</code> OTTL module stamps the host

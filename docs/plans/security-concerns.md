@@ -1,7 +1,7 @@
 # Security concerns
 
-Open findings from the post-migration review of the Numbat edge. Each item
-is a real defect with a scoped remediation, not a design preference.
+Open findings, most from the post-migration review of the Numbat edge. Each
+item is a real defect with a scoped remediation, not a design preference.
 
 Two areas are deliberately **out of scope here** because they are being
 reworked separately: anything in the host bootstrap / rebuild path, and
@@ -126,6 +126,54 @@ exists, so the docs claim coverage the config does not provide.
 (heartbeat)" endpoint with `ResourceAttributes['host']='fractal'`.
 
 **Verify:** both endpoints appear green on `gatus.pod.haus` after deploy.
+
+## HyperDX MCP credentials sit in the log store
+
+- [ ] Decide whether to rotate the HyperDX MCP client's two credentials.
+- [ ] Decide whether to delete the 60 rows that hold them.
+
+For six minutes on 2026-08-08, 13:14:10 to 13:20:12 UTC, Pomerium's Envoy
+proxy logged whole request headers (`proxy_log_level: debug` at the time;
+`pomerium/config.yaml` now sets `info`). Sixty `pomerium` rows from that
+window in ClickStack's `otel_logs` table carry credentials:
+
+- 10 rows from requests to `watch.pod.haus/api/mcp` carry both of the HyperDX
+  MCP client's credentials: the `Authorization: Bearer` header, which is
+  Nathan's HyperDX Personal API Access Key (the `credential` field of the
+  Dev-vault `Podhaus HyperDX` item), and the `X-Podhaus-Gateway-Token` header,
+  which is the `hyperdx_mcp` field of the Homelab `Pomerium Gateway Tokens`
+  item. Neither expires.
+- 50 rows carry a Pomerium session cookie. `cookie_expire` is 720 h, so these
+  sessions expired by 2026-09-07 and need no action.
+
+No other day in the 180-day log retention holds these headers (counted on
+2026-10-04 by matching header names in the body; values were not read).
+`otel_logs` keeps rows for 180 days, so they stay readable to every HyperDX
+user, and to anything holding the MCP key, until about 2027-02-04.
+
+**Recommendation:** rotate both credentials and delete the rows. Rotation is
+what closes the exposure; deleting alone cannot undo a read that already
+happened, and the rows would keep turning up as live-looking secrets in any
+later audit. Rotation costs a client re-registration: a new key in HyperDX
+Team Settings, the new values in the Homelab `Pomerium Gateway Tokens` item and
+the Dev-vault `Podhaus HyperDX` item, a manual Caddy redeploy for the gateway
+check (a secret change does not redeploy on its own), and an updated MCP client
+on each development machine. Deleting is a ClickHouse mutation on
+one day's data:
+
+```
+ALTER TABLE otel_logs DELETE
+WHERE ServiceName = 'pomerium'
+  AND TimestampTime BETWEEN toDateTime('2026-08-08 13:14:00', 'UTC')
+                        AND toDateTime('2026-08-08 13:21:00', 'UTC')
+  AND (positionCaseInsensitive(Body, '_pomerium') > 0
+       OR positionCaseInsensitive(Body, 'x-podhaus-gateway-token') > 0
+       OR (positionCaseInsensitive(Body, 'authorization') > 0
+           AND positionCaseInsensitive(Body, 'bearer') > 0))
+```
+
+**Verify:** requests to `https://watch.pod.haus/api/mcp` with the old key or
+the old gateway token are refused; a count over the same filter returns 0.
 
 ## Configuration that describes a system that no longer exists
 

@@ -75,18 +75,20 @@ the affected stack named in the error. Verify both a returned unsuccessful
 update and a thrown execution error, plus the batch deployment path. A failed
 image build must never produce an overall successful deployment result.
 
-## Caddy and Pomerium collection discards structured diagnostic fields
+## Caddy collection discards structured diagnostic fields
 
-**Status:** Open. Flood's collector already preserves its full error record.
+**Status:** Open. Superseded by the shared JSON step in
+[structured-logging](structured-logging.html), which removes body reduction
+from every parser.
 
-`logging/alloy-modules/caddy.alloy` replaces each structured record with logger
-name and message; `logging/alloy-modules/pomerium.alloy` keeps only service,
-component and message. Their `stage.output` blocks discard the remaining
-fields, so central logs cannot recover diagnostic context that exists in the
-original container record.
+`logging/alloy-modules/caddy.alloy` replaces each non-access record with
+logger name and message, so a failed certificate reads `tls.obtain: could not
+get certificate from issuer` with no domain or reason. The structured fields
+exist in the container's own line and never reach central logs.
 
-Preserve useful structured diagnostics while retaining correct timestamps and
-severity. Decide explicitly which request fields to redact before broadening
-retention: richer diagnostics must not copy credentials or sensitive request
-data into central storage. Verify representative error records end to end in
-ClickStack and assert that credential canaries remain absent.
+Keep those fields while retaining correct timestamps and severity. Richer
+records must not copy credentials into central storage: the key denylist that
+strips them is planned in the shared JSON step and not yet built. Verify a
+representative Caddy error record end to end in ClickStack and assert that
+credential canaries remain absent. Pomerium and Pocket ID already ship their
+whole JSON line; see [monitoring](../monitoring.html#parsers).

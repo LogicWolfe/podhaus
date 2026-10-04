@@ -13,6 +13,11 @@
 //                   `flood` on bilby select the same parser module.
 //   stream          stdout / stderr.
 //   compose_project, compose_service  from the compose labels.
+//
+// Not collected: Lumen's throwaway `docker run --rm` search containers
+// (label podhaus.lumen=true without podhaus.lumen.worktree); their stdout
+// is the code-search request stream, source snippets included. See the
+// first relabel rule.
 
 declare "docker_logs" {
 	argument "host" { }
@@ -21,10 +26,58 @@ declare "docker_logs" {
 	discovery.docker "containers" {
 		host             = "unix:///var/run/docker.sock"
 		refresh_interval = "30s"
+
+		// List stopped containers too. Docker lists only running, paused
+		// and restarting containers by default, so a container that stays
+		// stopped for longer than one refresh, such as one Ofelia starts on
+		// a schedule, would leave the list; its tailer would end and forget
+		// its read position, and the next start would re-read the whole log
+		// from the first line. Kept in the list, the same tailer resumes
+		// where it stopped. That holds only because the first relabel rule
+		// drops the network labels, which change when a container stops.
+		// The filter matches state names exactly, so the default states are
+		// listed alongside `exited`; `created` is left out because such a
+		// container has never run and has no log. Cost: the tailer forgets
+		// a position once a log stream ends, so an Alloy restart re-reads
+		// each stopped container's log once.
+		filter {
+			name   = "status"
+			values = ["restarting", "running", "paused", "exited"]
+		}
 	}
 
 	discovery.relabel "container_logs" {
 		targets = discovery.docker.containers.targets
+
+		// Drop the network and port labels. loki.source.docker keys each
+		// tailer and its saved read position on the container ID plus this
+		// whole label set, and a stopped container reports no IP address
+		// and no ports, so with these labels every start and stop would
+		// change the key and the replacement tailer would read the log from
+		// the first line. The tailer reads only the container ID, and every
+		// `__` label is stripped from the entries it sends, so nothing
+		// downstream loses anything. Keep this rule first, so no rule can
+		// copy one of these labels into a label that survives.
+		rule {
+			action = "labeldrop"
+			regex  = "__address__|__meta_docker_network_.*|__meta_docker_port_.*"
+		}
+
+		// Lumen's throwaway `docker run --rm` containers (label
+		// podhaus.lumen=true) stream MCP requests that include source
+		// snippets from indexed repositories, under random Docker names.
+		// Never tail them. The detached warm/index containers also carry
+		// podhaus.lumen.worktree and are kept (renamed below). A missing
+		// label is the empty string, so "true;" means lumen without a
+		// worktree.
+		rule {
+			source_labels = [
+				"__meta_docker_container_label_podhaus_lumen",
+				"__meta_docker_container_label_podhaus_lumen_worktree",
+			]
+			regex  = "true;"
+			action = "drop"
+		}
 
 		// Drop the leading slash that Docker prepends to container names.
 		rule {
@@ -37,6 +90,18 @@ declare "docker_logs" {
 			source_labels = ["__meta_docker_container_name"]
 			regex         = "/(?:" + argument.host.value + "-)?(.*)"
 			target_label  = "service"
+		}
+
+		// Give the per-worktree `lumen-warm-<hash>` containers one `service`
+		// label, so one parser selector covers them. Must follow the generic
+		// name rule above so it wins. HyperDX's ServiceName still comes from
+		// the `container` label (enrich.alloy) and stays per-hash until the
+		// service-naming change in docs/plans/structured-logging.html.
+		rule {
+			source_labels = ["__meta_docker_container_label_podhaus_lumen_worktree"]
+			regex         = ".+"
+			target_label  = "service"
+			replacement   = "lumen-warm"
 		}
 
 		rule {

@@ -29,6 +29,18 @@ declare "alloy" {
   loki.process "this" {
     forward_to = argument.forward_to.value
 
+    // Drop the Docker tailer's "finished transferring logs" line when it
+    // reports zero bytes written: a no-op poll report, not a record. A
+    // stopped container that has never printed a line is re-polled every
+    // 5 s for as long as it exists, because the tailer only stops
+    // re-polling once it has read a line, and every poll logs this line.
+    // Reports with bytes written and every other Alloy line are kept.
+    stage.match {
+      selector            = "{service=\"alloy\"} |= \"finished transferring logs\" |~ \"written=0( |$)\""
+      action              = "drop"
+      drop_counter_reason = "empty_docker_poll"
+    }
+
     stage.match {
       selector = "{service=\"alloy\"}"
 

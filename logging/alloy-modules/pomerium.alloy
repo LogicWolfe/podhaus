@@ -13,21 +13,27 @@
 //
 // `time` is RFC3339 with a numeric offset (+08:00, Pomerium's own local
 // wall clock) — Alloy's RFC3339Nano token parses the offset directly, no
-// location= needed. `message` (not `msg`) carries the human text.
+// location= needed. Most lines put the human text in `message`; the
+// autocert sub-logger uses `msg` instead.
 //
-// Why a parser despite ClickStack's own JSON-body promotion already
-// getting most of these right: that promotion is undocumented-to-us
-// downstream behaviour keyed on the body having a literal "level" field,
-// not a guarantee. Pomerium is the fleet's auth front door and among the
-// highest-volume unparsed sources (~2500+ rows/day); the concrete wins
-// here are (1) the real event timestamp — every one of these rows
-// currently lands at ingest time, not the time Pomerium logged it, and
-// (2) a `detected_level` that survives a non-JSON line (a panic/crash
-// dump) still falling through to the enrich.alloy heuristic instead of
-// silently depending on collector-side JSON promotion. Body is reduced
-// to the sub-logger (when present) + message, dropping the large
-// per-request JSON (route ids, headers, OAuth state blobs) that makes
-// these lines hard to scan in HyperDX.
+// Known collision until the attribute namespacing in
+// docs/plans/structured-logging.html lands: the collector copies the JSON
+// `service` field (envoy, authorize, ...) over the pipeline's `service`
+// log attribute on about half of these rows. ServiceName is unaffected.
+//
+// The body is deliberately left as the whole JSON line. Pomerium's
+// authorize and http-request lines are, with Pocket ID's, the fleet's
+// authentication trail: they carry the user's email, session id, request path, status,
+// client IP and user agent, and all of it must reach HyperDX. The
+// collector promotes every field of a JSON-object body into
+// LogAttributes, so the fields stay queryable; rewriting the body to
+// plain text would lose them. This parser therefore only sets the
+// timestamp from `time` and a `detected_level` from `level`; a non-JSON
+// line (a panic dump) gets neither and falls through to the enrich.alloy
+// severity heuristic. The timestamp stage is kept for now, although
+// `time` has whole seconds and Docker's own capture time, which a row
+// carries without it, is finer; docs/plans/structured-logging.html
+// removes timestamp parsing for Docker sources.
 
 declare "pomerium" {
   argument "forward_to" { }
@@ -38,14 +44,13 @@ declare "pomerium" {
     stage.match {
       selector = "{service=\"pomerium\"}"
 
-      // Gate the JSON handling on a line filter that the body actually
-      // looks like a JSON object. Without this, a non-JSON line (the
-      // startup banner) leaves every extracted var unset, and Loki's
-      // template stage prints the literal text "<no value>" for a
-      // referenced-but-never-set variable rather than "" — corrupting
-      // both detected_level and Body instead of leaving the line alone.
-      // Confirmed via the local harness before adding this filter (same
-      // failure mode fixed in hyperdx.alloy).
+      // Gate the JSON handling on the line looking like a JSON object.
+      // stage.timestamp's default action_on_failure is "fudge": a line
+      // whose `time` cannot be parsed is stamped 1 ns after the previous
+      // parsed line from the same stream. Without the gate, a non-JSON
+      // line (the startup banner, a panic dump) would be back-dated to
+      // the last JSON line's time. The gate leaves such lines on Docker's
+      // capture time.
       stage.match {
         selector = "{service=\"pomerium\"} |~ \"^\\\\{\""
 
@@ -53,9 +58,6 @@ declare "pomerium" {
           expressions = {
             lvl = "level",
             ts  = "time",
-            msg = "message",
-            svc = "service",
-            cmp = "component",
           }
         }
 
@@ -71,15 +73,6 @@ declare "pomerium" {
 
         stage.labels {
           values = { detected_level = "lvl" }
-        }
-
-        stage.template {
-          source   = "line"
-          template = "{{ if .svc }}[{{ .svc }}] {{ end }}{{ if .cmp }}[{{ .cmp }}] {{ end }}{{ .msg }}"
-        }
-
-        stage.output {
-          source = "line"
         }
       }
     }
