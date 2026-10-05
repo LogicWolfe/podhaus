@@ -36,10 +36,11 @@
 #                                   without the GPU switch (a drift would
 #                                   restart Docker on every host) and carries
 #                                   exactly the nvidia runtime with it.
-#   - wsl role tests:              chrony's config (the Windows-clock refclock
-#                                   never selected nor required, makestep at
-#                                   any time, chronyd ordered after that
-#                                   clock's device) and
+#   - wsl role tests:              no NTP daemon in the guest, since Windows
+#                                   owns the clock (chrony removed, chronyd
+#                                   stopped and disabled while its unit file
+#                                   still exists, its drop-in removed with a
+#                                   daemon-reload), and
 #                                   `base` running before `wsl` and `earlyoom`
 #                                   in fractal.yml and site.yml, so a fresh-host
 #                                   dry run has the dnf5 bindings.

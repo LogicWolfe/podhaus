@@ -1,4 +1,9 @@
-"""Contract tests for the WSL guest's own NTP client."""
+"""Contract tests that the WSL guest runs no NTP daemon of its own.
+
+Windows owns the clock and WSL keeps the guest on it, so the role removes
+chrony wherever it is installed rather than run a second daemon steering
+the same clock.
+"""
 
 from pathlib import Path
 import unittest
@@ -7,79 +12,62 @@ import yaml
 
 
 ROLE = Path(__file__).resolve().parents[1]
+DROP_IN_DIR = "/etc/systemd/system/chronyd.service.d"
 
 
-def chrony_directives() -> dict[str, list[str]]:
-    directives: dict[str, list[str]] = {}
-    for line in (ROLE / "files" / "chrony.conf").read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            name, _, arguments = line.partition(" ")
-            directives.setdefault(name, []).append(arguments.strip())
-    return directives
+def tasks() -> list[dict]:
+    return yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
 
 
-DROP_IN = "chronyd-after-ptp.conf"
+def handlers() -> list[dict]:
+    return yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
 
 
-def drop_in_unit_section() -> dict[str, str]:
-    section: dict[str, str] = {}
-    for line in (ROLE / "files" / DROP_IN).read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and line != "[Unit]":
-            key, _, value = line.partition("=")
-            section[key] = value
-    return section
+def position(module: str, matches) -> int:
+    found = [index for index, task in enumerate(tasks()) if module in task and matches(task[module])]
+    if len(found) != 1:
+        raise AssertionError(f"expected exactly one matching {module} task, found {len(found)}")
+    return found[0]
 
 
-def tasks_using(module: str) -> list[dict]:
-    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    return [task for task in tasks if module in task]
+def chrony_package() -> int:
+    return position("ansible.builtin.dnf", lambda args: args.get("name") == "chrony")
 
 
-class ChronyContractTest(unittest.TestCase):
-    def test_steps_the_clock_at_any_time_so_a_host_sleep_jump_is_not_slewed(self) -> None:
-        self.assertEqual(chrony_directives()["makestep"], ["1.0 -1"])
+def chronyd_unit() -> int:
+    return position("ansible.builtin.systemd_service", lambda args: args.get("name") == "chronyd.service")
 
-    def test_pool_is_polled_by_default_and_one_commercial_server_every_64_seconds(self) -> None:
-        directives = chrony_directives()
-        self.assertEqual(directives["pool"], ["2.fedora.pool.ntp.org iburst"])
-        self.assertEqual(directives["server"], ["time.cloudflare.com iburst maxpoll 6"])
 
-    def test_windows_clock_is_visible_but_never_steered_to_and_never_required(self) -> None:
-        self.assertEqual(chrony_directives()["refclock"],
-                         ["PHC /dev/ptp_hyperv poll 3 dpoll -2 noselect optional"])
+class NoGuestNtpDaemonTest(unittest.TestCase):
+    def test_chrony_package_is_removed(self) -> None:
+        self.assertEqual(tasks()[chrony_package()]["ansible.builtin.dnf"]["state"], "absent")
 
-    def test_chronyd_starts_after_the_windows_clock_device_exists(self) -> None:
-        self.assertEqual(drop_in_unit_section(),
-                         {"Wants": "dev-ptp_hyperv.device", "After": "dev-ptp_hyperv.device"})
-        drop_in = [task for task in tasks_using("ansible.builtin.copy")
-                   if task["ansible.builtin.copy"]["dest"].startswith("/etc/systemd/system/chronyd.service.d/")]
-        self.assertEqual([task["ansible.builtin.copy"]["src"] for task in drop_in], [DROP_IN])
-        self.assertEqual(drop_in[0]["register"], "wsl_chronyd_drop_in")
+    def test_chronyd_is_stopped_and_disabled_only_where_it_exists(self) -> None:
+        task = tasks()[chronyd_unit()]
+        unit = task["ansible.builtin.systemd_service"]
+        self.assertEqual((unit["state"], unit["enabled"]), ("stopped", False))
+        self.assertEqual(task["when"], "'chrony' in ansible_facts.packages")
+        facts = [index for index, entry in enumerate(tasks()) if "ansible.builtin.package_facts" in entry]
+        self.assertTrue(facts and facts[0] < chronyd_unit())
 
-    def test_systemd_rereads_units_when_the_drop_in_changes(self) -> None:
-        run = [task["ansible.builtin.systemd_service"] for task in tasks_using("ansible.builtin.systemd_service")
-               if task["ansible.builtin.systemd_service"]["name"] == "chronyd.service"]
-        self.assertEqual([unit["daemon_reload"] for unit in run], ["{{ wsl_chronyd_drop_in is changed }}"])
+    def test_chronyd_stops_while_its_unit_file_still_exists(self) -> None:
+        self.assertLess(chronyd_unit(), chrony_package())
 
-    def test_role_installs_chrony_and_runs_chronyd(self) -> None:
-        packages = [task["ansible.builtin.dnf"] for task in tasks_using("ansible.builtin.dnf")]
-        self.assertIn("chrony", [package["name"] for package in packages])
-        units = {task["ansible.builtin.systemd_service"]["name"]: task["ansible.builtin.systemd_service"]
-                 for task in tasks_using("ansible.builtin.systemd_service")}
-        self.assertEqual((units["chronyd.service"]["enabled"], units["chronyd.service"]["state"]),
-                         (True, "started"))
+    def test_the_chronyd_drop_in_is_removed_and_systemd_rereads_units(self) -> None:
+        removal = tasks()[position("ansible.builtin.file", lambda args: args.get("path") == DROP_IN_DIR)]
+        self.assertEqual(removal["ansible.builtin.file"]["state"], "absent")
+        reload = tasks()[position("ansible.builtin.systemd_service", lambda args: "name" not in args)]
+        self.assertIs(reload["ansible.builtin.systemd_service"]["daemon_reload"], True)
+        self.assertEqual(reload["when"], f"{removal['register']} is changed")
 
-    def test_config_change_restarts_chronyd(self) -> None:
-        config = [task for task in tasks_using("ansible.builtin.copy")
-                  if task["ansible.builtin.copy"]["dest"] == "/etc/chrony.conf"]
-        self.assertEqual(len(config), 1)
-        self.assertEqual(config[0]["ansible.builtin.copy"]["src"], "chrony.conf")
-        handlers = {handler["name"]: handler for handler in
-                    yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())}
-        restart = handlers[config[0]["notify"]]["ansible.builtin.systemd_service"]
-        self.assertEqual((restart["name"], restart["state"]), ("chronyd.service", "restarted"))
+    def test_nothing_installs_configures_or_runs_chrony(self) -> None:
+        mentions = [yaml.safe_dump(entry) for entry in tasks() + handlers()
+                    if "chrony" in yaml.safe_dump(entry)]
+        for text in mentions:
+            for forbidden in ("state: present", "state: started", "state: restarted",
+                              "enabled: true", "/etc/chrony.conf"):
+                self.assertNotIn(forbidden, text)
+        self.assertEqual(list((ROLE / "files").glob("chrony*")), [])
 
 
 if __name__ == "__main__":
