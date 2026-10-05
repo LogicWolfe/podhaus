@@ -6,6 +6,12 @@ node = "lts"
 # The hook's tests of fractal's Caddy listeners, which run the real Caddyfile.
 caddy = "latest"
 
+[settings]
+# Older mise lists caddy's versions from GitHub's 14 MB release feed, which
+# takes about four seconds; its three-second default then fails and retries
+# on every command run in this repository.
+fetch_remote_versions_timeout = "20s"
+
 [env]
 PIPENV_SKIP_LOCK = "1"
 PIPENV_VENV_IN_PROJECT = "1"
