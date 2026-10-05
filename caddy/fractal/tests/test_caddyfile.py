@@ -76,10 +76,18 @@ class StandIn:
         self._server.server_close()
 
 
-def free_port() -> int:
-    with socket.socket() as s:
-        s.bind((LOOPBACK, 0))
-        return s.getsockname()[1]
+def free_ports(count: int) -> list[int]:
+    """Distinct loopback ports. The sockets stay open until every port is
+    chosen: a port handed back on close can be handed out again by the very
+    next bind, which gave two Caddy listeners the same address."""
+    sockets = [socket.socket() for _ in range(count)]
+    try:
+        for s in sockets:
+            s.bind((LOOPBACK, 0))
+        return [s.getsockname()[1] for s in sockets]
+    finally:
+        for s in sockets:
+            s.close()
 
 
 def matchers(node: object) -> list[dict]:
@@ -115,7 +123,8 @@ class FractalCaddy:
         caddy = shutil.which("caddy")
         if caddy is None:
             raise RuntimeError("caddy is not on PATH; run mise install")
-        self.ports = {LOCAL: free_port(), LAN: free_port()}
+        local, lan = free_ports(2)
+        self.ports = {LOCAL: local, LAN: lan}
         self.compiled = self._compile(caddy, admitted)
         self._dir = tempfile.TemporaryDirectory()
         path = Path(self._dir.name) / "caddy.json"
