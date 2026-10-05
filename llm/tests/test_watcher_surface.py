@@ -14,7 +14,7 @@ from llm.watcher.guest import Guest
 from llm.watcher.gpu import GpuReading, NvidiaSmi
 from llm.watcher.settings import Settings
 from llm.watcher.web import ControlServer
-from watcher_harness import LINUX_ONLY, MEMINFO, Harness, at, environment
+from watcher_harness import LINUX_ONLY, LIVE_LOAD, MEMINFO, QUIET_S, Harness, at, environment
 
 T0 = at("12:00:00")
 
@@ -210,7 +210,7 @@ class LogLines(unittest.TestCase):
         h = Harness(self.addCleanup, model="loaded", start=T0)
         for second in range(1, 8):
             h.tick(T0 + second, util=30)
-        h.quiet(T0 + 8, T0 + 200)
+        h.quiet(T0 + 8, T0 + 7 + QUIET_S + LIVE_LOAD[-1].t + 10)
         lines = h.lines()
         self.assertEqual(
             {line["event"] for line in lines},

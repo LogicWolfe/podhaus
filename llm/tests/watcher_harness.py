@@ -72,6 +72,8 @@ def environment(**overrides: str) -> dict[str, str]:
 
 
 MODEL = environment()["LLM_MODEL_NAME"]
+# Whole seconds, so a test can place its idle samples a second apart across it.
+QUIET_S = int(environment()["WATCHER_QUIET_SECONDS"])
 
 
 def at(time_of_day: str) -> float:

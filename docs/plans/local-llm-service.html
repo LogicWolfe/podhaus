@@ -188,7 +188,7 @@ architecture, AGENTS.md). The trial install is removed from fractal: the user un
 <tr><td>A real handoff meets its targets</td><td>Button only: Yield released the GPU in 1.7 s and guest memory in use fell from 11.0 to 7.2 GiB; Resume had the model ready 33 s later. A real game has not been run.</td></tr>
 <tr><td>Unattended start</td><td>Half. After each deploy the model loaded with nobody acting. The restart of the guest with <code>/home</code> locked has not been run.</td></tr>
 <tr><td>Recovery</td><td>Pass. Model process killed: the watcher logged the death within a second and was Serving again 116 s later (a quiet minute, then a 64 s load). Watcher killed: restarted and adopted Serving in one second, and a request sent meanwhile completed.</td></tr>
-<tr><td>A deploy during a game stays out of the way</td><td>Changed, and not run with a game. A button hold is not kept across a watcher restart; after a deploy the watcher waits for a quiet minute, which a running game never gives it.</td></tr>
+<tr><td>A deploy during a game stays out of the way</td><td>Changed, and not run with a game. A button hold is not kept across a watcher restart; after a deploy the watcher waits for the quiet period, which a running game never gives it.</td></tr>
 <tr><td>Long silent reads survive the path</td><td>Pass over loopback: a 138,360-token uncached prompt, not streamed, returned through Caddy after 70.8 s. The same read through <code>llm.pod.haus</code> waits on the token.</td></tr>
 <tr><td>Building cannot take the guest down</td><td>Pass. Available guest memory never fell below 20.4 GiB during the first image build and the 24-minute model download. There is no build file to read, because the stack uses the stock image. Filling the guest with a throwaway process while the model was loaded made the early out-of-memory service kill the model process and nothing else, once memory and swap were both down to 10%. The session survived and the watcher was Serving again 52 s later.</td></tr>
 <tr><td>Stack wiring</td><td>Pass. The three stack lints run in the pre-commit hook and in CI.</td></tr>
@@ -237,7 +237,7 @@ gateway of our own; idle
 conversations saved to memory by the server itself; a 204,800-token pool with
 four slots and the drafter; memory sized for a main conversation of up to
 150,000 tokens; WSL raised
-from 15 GB to 25 GB; 60 seconds of quiet before the model returns after a game,
+from 15 GB to 25 GB; five minutes of quiet before the model returns after a game,
 with any Windows use of the GPU counting, video included; coding sessions
 dropped freely for a game; sign-in by device link through
 Pocket ID and Pomerium, built and proven during the build, open to Pocket ID's
@@ -774,7 +774,7 @@ yielding to it is the intended behaviour.</p>
 <tbody>
 <tr><td>1. Serving to Yielding</td><td>Three samples at or above 3% within five seconds while no slot is busy, or the Yield button</td><td>The model server is told to unload, which cuts any request in flight and ends the model process, freeing its VRAM and every saved conversation. The watcher then tells the guest to drop the model file from its file cache, so that memory can return to Windows too.</td><td>Decision about 4 s after a game's first GPU activity</td></tr>
 <tr><td>2. Yielding to Yielded</td><td>The model server reports the model gone</td><td>The handoff event is logged with its timings</td><td>About 2 s</td></tr>
-<tr><td>3. Yielded to Resuming</td><td>No sample at or above 3% for 60 seconds, and any button hold has run out</td><td>The model server is told to load</td><td>The longest quiet stretch inside the recorded game session was 17 s</td></tr>
+<tr><td>3. Yielded to Resuming</td><td>No sample at or above 3% for five minutes, and any button hold has run out</td><td>The model server is told to load</td><td>Long enough to switch games or sit in a menu; a minute reloaded the model during a pause in a game</td></tr>
 <tr><td>4. Resuming to Serving</td><td>The model server reports the model ready</td><td>The resume event is logged</td><td>About 25 s, reading the model file from disk</td></tr>
 <tr><td>5. Resuming to Yielded</td><td>The same activity rule as step 1, with the load's own GPU activity excluded</td><td>The load is abandoned</td><td>Not measured</td></tr>
 </tbody>
@@ -789,33 +789,33 @@ blind spot: a game launched while the model is busy is not seen until the next
 pause between requests.</p>
 
 <p><strong>Thresholds are configuration with evidence attached.</strong> The
-3% line, the five-second window and the 60-second quiet period come from one
-session with one light game. Every handoff event therefore carries the raw
+3% line and the five-second window come from one session with one light game;
+the five-minute quiet period covers switching games, which a minute did not. Every handoff event therefore carries the raw
 samples from the 30 seconds before the decision, so the numbers can be
 corrected from real sessions without another trial.</p>
 
 <div class="doc-diagram">
 <svg viewBox="0 0 1000 320" role="img" aria-labelledby="hand-time-t hand-time-d">
 <title id="hand-time-t">A game starting and ending, second by second</title>
-<desc id="hand-time-d">Two timelines on an axis of 170 seconds. A game starts: noticed in 4 seconds, model unloaded 2 seconds later. A game ends: 60 seconds of quiet, 25 seconds to load, then the first turn re-reads the conversation for about 75 seconds.</desc>
+<desc id="hand-time-d">Two timelines on an axis of 410 seconds. A game starts: noticed in 4 seconds, model unloaded 2 seconds later. A game ends: five minutes of quiet, 25 seconds to load, then the first turn re-reads the conversation for about 75 seconds.</desc>
 <line class="cost-grid" x1="190.0" y1="66" x2="190.0" y2="294"/>
 <text class="llm-muted" x="190.0" y="310" text-anchor="middle">0 s</text>
 <line class="cost-grid" x1="281.8" y1="66" x2="281.8" y2="294"/>
-<text class="llm-muted" x="281.8" y="310" text-anchor="middle">20 s</text>
+<text class="llm-muted" x="281.8" y="310" text-anchor="middle">50 s</text>
 <line class="cost-grid" x1="373.5" y1="66" x2="373.5" y2="294"/>
-<text class="llm-muted" x="373.5" y="310" text-anchor="middle">40 s</text>
+<text class="llm-muted" x="373.5" y="310" text-anchor="middle">100 s</text>
 <line class="cost-grid" x1="465.3" y1="66" x2="465.3" y2="294"/>
-<text class="llm-muted" x="465.3" y="310" text-anchor="middle">60 s</text>
-<line class="cost-grid" x1="557.1" y1="66" x2="557.1" y2="294"/>
-<text class="llm-muted" x="557.1" y="310" text-anchor="middle">80 s</text>
+<text class="llm-muted" x="465.3" y="310" text-anchor="middle">150 s</text>
+<line class="cost-grid" x1="557.0" y1="66" x2="557.0" y2="294"/>
+<text class="llm-muted" x="557.0" y="310" text-anchor="middle">200 s</text>
 <line class="cost-grid" x1="648.8" y1="66" x2="648.8" y2="294"/>
-<text class="llm-muted" x="648.8" y="310" text-anchor="middle">100 s</text>
+<text class="llm-muted" x="648.8" y="310" text-anchor="middle">250 s</text>
 <line class="cost-grid" x1="740.6" y1="66" x2="740.6" y2="294"/>
-<text class="llm-muted" x="740.6" y="310" text-anchor="middle">120 s</text>
-<line class="cost-grid" x1="832.4" y1="66" x2="832.4" y2="294"/>
-<text class="llm-muted" x="832.4" y="310" text-anchor="middle">140 s</text>
+<text class="llm-muted" x="740.6" y="310" text-anchor="middle">300 s</text>
+<line class="cost-grid" x1="832.3" y1="66" x2="832.3" y2="294"/>
+<text class="llm-muted" x="832.3" y="310" text-anchor="middle">350 s</text>
 <line class="cost-grid" x1="924.1" y1="66" x2="924.1" y2="294"/>
-<text class="llm-muted" x="924.1" y="310" text-anchor="middle">160 s</text>
+<text class="llm-muted" x="924.1" y="310" text-anchor="middle">400 s</text>
 <rect class="t-work" x="190" y="13" width="26" height="14" rx="2"/>
 <text class="llm-small" x="223" y="24">generating</text>
 <rect class="t-read" x="311.0" y="13" width="26" height="14" rx="2"/>
@@ -827,21 +827,21 @@ corrected from real sessions without another trial.</p>
 <text class="llm-small" x="799.4000000000001" y="24">✕ a failure</text>
 <text class="llm-title" x="20" y="58">A game starts</text>
 <text x="178" y="99" text-anchor="end">GPU</text>
-<line class="t-idle" x1="190.0" y1="94" x2="208.4" y2="94"/>
+<line class="t-idle" x1="190.0" y1="94" x2="197.3" y2="94"/>
 <text class="llm-small" x="190.0" y="81">noticed in 4 s, unloaded 2 s later; from then the game has the whole GPU and the memory is released</text>
-<rect class="t-move" x="208.4" y="86" width="9.2" height="17" rx="2"/>
-<line class="t-idle" x1="217.5" y1="94" x2="465.3" y2="94"/>
+<rect class="t-move" x="197.3" y="86" width="3.7" height="17" rx="2"/>
+<line class="t-idle" x1="201.0" y1="94" x2="740.6" y2="94"/>
 <text class="llm-muted" x="190" y="132">A request in flight is cut. If the model was busy when the game started, noticing waits for the next pause, or for the button.</text>
 <text class="llm-title" x="20" y="164">The game ends</text>
 <text x="178" y="205" text-anchor="end">GPU</text>
-<line class="t-idle" x1="190.0" y1="200" x2="465.3" y2="200"/>
-<text class="llm-small" x="190.0" y="187">must stay quiet: 60 s</text>
-<rect class="t-move" x="465.3" y="192" width="114.7" height="17" rx="2"/>
-<text class="llm-small" x="465.3" y="187">model loads: 25 s</text>
+<line class="t-idle" x1="190.0" y1="200" x2="740.6" y2="200"/>
+<text class="llm-small" x="190.0" y="187">must stay quiet: 5 min</text>
+<rect class="t-move" x="740.6" y="192" width="45.9" height="17" rx="2"/>
+<text class="llm-small" x="740.6" y="187">model loads: 25 s</text>
 <text x="178" y="245" text-anchor="end">First turn afterwards</text>
-<rect class="t-read" x="580.0" y="232" width="344.1" height="17" rx="2"/>
-<text class="llm-small" x="580.0" y="227">re-reads the conversation: 75 s at 150,000 tokens</text>
-<rect class="t-work" x="924.1" y="232" width="45.9" height="17" rx="2"/>
+<rect class="t-read" x="786.5" y="232" width="137.6" height="17" rx="2"/>
+<text class="llm-small" x="924.1" y="227" text-anchor="end">re-reads the conversation: 75 s at 150,000 tokens</text>
+<rect class="t-work" x="924.1" y="232" width="18.4" height="17" rx="2"/>
 <text class="llm-muted" x="190" y="278">Every conversation is cold after a game. That is accepted: a coding session need not survive one.</text>
 </svg>
 </div>
@@ -1004,7 +1004,7 @@ model was ready.</p>
 <thead><tr><th>Question</th><th>Answered from</th></tr></thead>
 <tbody>
 <tr><td>How long from a game touching the GPU to the VRAM being free?</td><td>Yield events: first activity to released. Target 6 s.</td></tr>
-<tr><td>How long after a game until the model is usable again?</td><td>Resume events: quiet to ready. Target 60 s plus the load.</td></tr>
+<tr><td>How long after a game until the model is usable again?</td><td>Resume events: quiet to ready. Target five minutes plus the load.</td></tr>
 <tr><td>How often does it happen, and by which trigger?</td><td>Count of yield events by trigger</td></tr>
 <tr><td>How often was the watcher wrong?</td><td>Yields whose activity ended within a minute (probably not a game), and resumes followed by a yield within five minutes (the game was still open)</td></tr>
 <tr><td>How often was it blind at launch?</td><td>Yield events where the model was busy just before, with that duration</td></tr>
@@ -1250,7 +1250,7 @@ written first and seen to fail for the right reason.</p>
 <table>
 <thead><tr><th>Property</th><th>How it is proven</th></tr></thead>
 <tbody>
-<tr><td>The watcher's rules match the recorded game session</td><td>Replay test: the 883-sample recording of a real game session is fed through the watcher in place of the GPU reader. It must decide to yield within 6 s of the launch, never resume during the nine-minute load screen, and resume within 75 s of the quit.</td></tr>
+<tr><td>The watcher's rules match the recorded game session</td><td>Replay test: the 883-sample recording of a real game session is fed through the watcher in place of the GPU reader. It must decide to yield within 6 s of the launch, never resume during the nine-minute load screen, and resume one quiet period (five minutes) after the last activity following the quit. The recording ends before that, so the test continues with synthetic idle samples.</td></tr>
 <tr><td>The watcher is blind only while the model is busy</td><td>Replay test with the stand-in server reporting a busy slot during the launch: no yield until the slot goes idle, then a yield within the window.</td></tr>
 <tr><td>A restart adopts reality</td><td>Test against a stand-in model server speaking the router's management API over real HTTP: started with a model loaded the watcher is Serving, started empty it is Yielded.</td></tr>
 <tr><td>Slot-change events are right</td><td>Same harness, with the stand-in changing its slot report: one event per change, carrying each slot's tokens and the pool total; no event when nothing changed.</td></tr>

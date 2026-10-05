@@ -40,7 +40,7 @@ import re
 import unittest
 
 from alloy_pipeline import Entry, Pipeline, Selector
-from watcher_harness import LINUX_ONLY, QUIET_LOAD, Harness, at, slot
+from watcher_harness import LINUX_ONLY, QUIET_LOAD, QUIET_S, Harness, at, slot
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = ROOT / "logging" / "alloy-modules"
@@ -652,19 +652,19 @@ def real_watcher_lines(add_cleanup) -> list[str]:
     h.server.slots[0] = slot(0, 24713, busy=False)
     for second in range(2, 9):
         h.tick(t0 + second, util=30)
-    h.quiet(t0 + 9, t0 + 120)
+    h.quiet(t0 + 9, t0 + QUIET_S + 60)
     collect(h)
 
     # The model process dies while serving, and the watcher loads it again.
     h = scenario(model="unloaded")
     h.server.lifetimes = [10.0]
-    h.quiet(t0 + 1, t0 + 120)
+    h.quiet(t0 + 1, t0 + QUIET_S + 60)
     collect(h)
 
     # Loads fail until the watcher gives up.
     h = scenario(model="unloaded")
     h.server.failing_loads = 99
-    h.quiet(t0 + 1, t0 + 1200)
+    h.quiet(t0 + 1, t0 + QUIET_S + 1140)
     collect(h)
 
     # The Yield button cancels a load in progress; the load was adopted mid-way.
@@ -688,9 +688,9 @@ def real_watcher_lines(add_cleanup) -> list[str]:
     collect(h)
     h = scenario(model="unloaded")
     h.server.failing_loads = 1
-    h.quiet(t0 + 1, t0 + 69)
+    h.quiet(t0 + 1, t0 + QUIET_S + 9)
     h.server.load_elsewhere()
-    h.quiet(t0 + 70, t0 + 100)
+    h.quiet(t0 + QUIET_S + 10, t0 + QUIET_S + 40)
     collect(h)
 
     # The remaining unhealthy reasons: the VRAM limit, a yield that never completes, a silent server, a stalled sampler.

@@ -3,10 +3,11 @@ rules, each driven tick by tick against the stand-in router over real HTTP."""
 
 from __future__ import annotations
 
+import math
 import threading
 import unittest
 
-from watcher_harness import LINUX_ONLY, QUIET_LOAD, Harness, at, idle_slot, parse_ts, slot
+from watcher_harness import LINUX_ONLY, LIVE_LOAD, QUIET_LOAD, QUIET_S, Harness, at, idle_slot, parse_ts, slot
 
 T0 = at("12:00:00")
 
@@ -30,10 +31,10 @@ class Adoption(unittest.TestCase):
     def test_started_empty_it_is_yielded_and_loads_only_after_the_quiet_period(self) -> None:
         harness = Harness(self.addCleanup, model="unloaded", start=T0)
         self.assertEqual(harness.state, "yielded")
-        harness.quiet(T0 + 1, T0 + 59)
+        harness.quiet(T0 + 1, T0 + QUIET_S - 1)
         self.assertEqual(harness.server.loads, [])
-        harness.tick(T0 + 60)
-        self.assertEqual(harness.server.loads, [T0 + 60])
+        harness.tick(T0 + QUIET_S)
+        self.assertEqual(harness.server.loads, [T0 + QUIET_S])
         self.assertEqual(harness.state, "resuming")
 
     def test_started_during_a_load_it_is_resuming_and_serves_when_it_completes(self) -> None:
@@ -197,16 +198,17 @@ class UnloadingAModelAlreadyGone(unittest.TestCase):
     def test_yield_pressed_as_a_load_fails_is_the_failure_not_an_abandoned_load(self) -> None:
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_profile=QUIET_LOAD, load_seconds=30)
         h.server.failing_loads = 1
-        h.quiet(T0 + 1, T0 + 89)
-        self.assertEqual(h.server.loads, [T0 + 60])
-        h.clock.now = T0 + 90.5  # the load failed at T0 + 90; the watcher has not ticked since
+        failed = T0 + QUIET_S + 30
+        h.quiet(T0 + 1, failed - 1)
+        self.assertEqual(h.server.loads, [T0 + QUIET_S])
+        h.clock.now = failed + 0.5  # the load failed at `failed`; the watcher has not ticked since
         h.watcher.yield_now()
-        h.tick(T0 + 91)
+        h.tick(failed + 1)
         self.assertEqual(h.events("handoff.resume_abandoned"), [])
         self.assertEqual([e["attempt"] for e in h.events("load.failed")], [1])
         self.assertEqual(h.state, "yielded")
-        h.quiet(T0 + 92, T0 + 690)
-        self.assertEqual(h.server.loads, [T0 + 60])
+        h.quiet(failed + 2, failed + 600)
+        self.assertEqual(h.server.loads, [T0 + QUIET_S])
 
     def test_a_death_just_before_the_watchers_own_unload_is_counted(self) -> None:
         h = Harness(self.addCleanup, model="loaded", start=T0, load_profile=QUIET_LOAD, load_seconds=5)
@@ -286,48 +288,53 @@ class Loads(unittest.TestCase):
     """A load is blind, like a busy slot: its own GPU activity looks like a
     game's, so only the Yield button ends one early."""
 
+    REQUESTED = T0 + QUIET_S
+    # The first whole-second sample after the recorded load ends.
+    READY = REQUESTED + math.ceil(LIVE_LOAD[-1].t)
+
     def setUp(self) -> None:
-        # The live load: requested at T0 + 60, ready at T0 + 165.
         self.harness = Harness(self.addCleanup, model="unloaded", start=T0)
-        self.harness.quiet(T0 + 1, T0 + 60)
-        self.assertEqual(self.harness.server.loads, [T0 + 60])
+        self.harness.quiet(T0 + 1, self.REQUESTED)
+        self.assertEqual(self.harness.server.loads, [self.REQUESTED])
 
     def test_the_loads_own_activity_neither_abandons_it_nor_yields_the_model_after(self) -> None:
         h = self.harness
-        h.quiet(T0 + 61, T0 + 240)
+        h.quiet(self.REQUESTED + 1, self.READY + 75)
         self.assertEqual(h.server.unloads, [])
         self.assertEqual(h.events("handoff.resume_abandoned"), [])
         (resume,) = h.events("handoff.resume")
-        self.assertEqual(parse_ts(resume["ready_ts"]), T0 + 165)
+        self.assertEqual(parse_ts(resume["ready_ts"]), self.READY)
         self.assertEqual(h.state, "serving")
 
     def test_a_game_during_a_load_is_seen_once_the_model_is_ready(self) -> None:
         h = self.harness
-        for t in range(int(T0) + 61, int(T0) + 175):
-            h.tick(t, util=20 if t >= T0 + 100 else 0)
+        game_from = self.REQUESTED + 40
+        for t in range(int(self.REQUESTED) + 1, int(self.READY) + 10):
+            h.tick(t, util=20 if t >= game_from else 0)
         self.assertEqual(h.events("handoff.resume_abandoned"), [])
         # Only samples taken after the model was ready count.
-        self.assertEqual(h.server.unloads, [T0 + 168])
-        h.tick(T0 + 175, util=20)
+        self.assertEqual(h.server.unloads, [self.READY + 3])
+        h.tick(self.READY + 10, util=20)
         (event,) = h.events("handoff.yield")
-        self.assertEqual(parse_ts(event["first_activity_ts"]), T0 + 166)
+        self.assertEqual(parse_ts(event["first_activity_ts"]), self.READY + 1)
 
     def test_the_yield_button_cancels_a_load(self) -> None:
         h = self.harness
-        h.quiet(T0 + 61, T0 + 79)
-        h.clock.now = T0 + 80
+        pressed = self.REQUESTED + 20
+        h.quiet(self.REQUESTED + 1, pressed - 1)
+        h.clock.now = pressed
         h.watcher.yield_now()
-        self.assertEqual(h.server.unloads, [T0 + 80])
-        h.quiet(T0 + 81, T0 + 90)
+        self.assertEqual(h.server.unloads, [pressed])
+        h.quiet(pressed + 1, pressed + 10)
         (abandoned,) = h.events("handoff.resume_abandoned")
-        self.assertEqual(parse_ts(abandoned["load_started_ts"]), T0 + 60)
-        self.assertEqual(parse_ts(abandoned["abandoned_ts"]), T0 + 80)
+        self.assertEqual(parse_ts(abandoned["load_started_ts"]), self.REQUESTED)
+        self.assertEqual(parse_ts(abandoned["abandoned_ts"]), pressed)
         (handoff,) = h.events("handoff.yield")
         self.assertEqual(handoff["trigger"], "button")
         self.assertEqual(h.state, "yielded")
         self.assertEqual(h.events("load.failed"), [])
-        h.quiet(T0 + 91, T0 + 679)
-        self.assertEqual(h.server.loads, [T0 + 60])
+        h.quiet(pressed + 11, pressed + 599)
+        self.assertEqual(h.server.loads, [self.REQUESTED])
 
 
 @LINUX_ONLY
@@ -364,42 +371,43 @@ class ExternalLoads(unittest.TestCase):
         # Quiet counts from the start until activity is seen, for this check as
         # for the watcher's own load.
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_profile=QUIET_LOAD, load_seconds=5)
-        h.quiet(T0 + 1, T0 + 30)
+        halfway = T0 + QUIET_S // 2
+        h.quiet(T0 + 1, halfway)
         h.server.load_elsewhere()
-        h.tick(T0 + 31)
-        self.assertEqual(h.server.unloads, [T0 + 31])
-        h.quiet(T0 + 32, T0 + 60)
+        h.tick(halfway + 1)
+        self.assertEqual(h.server.unloads, [halfway + 1])
+        h.quiet(halfway + 2, T0 + QUIET_S)
         self.assertEqual([e["trigger"] for e in h.events("handoff.yield")], ["external_load"])
-        self.assertEqual(h.server.loads, [T0 + 60])
+        self.assertEqual(h.server.loads, [T0 + QUIET_S])
 
     def test_once_the_gpu_has_been_quiet_for_the_quiet_period_it_is_adopted(self) -> None:
         # Quiet since the start, with the watcher's own load waiting out a retry delay.
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_profile=QUIET_LOAD, load_seconds=5)
         h.server.failing_loads = 1
-        h.quiet(T0 + 1, T0 + 69)
+        h.quiet(T0 + 1, T0 + QUIET_S + 9)
         self.assertEqual([e["attempt"] for e in h.events("load.failed")], [1])
         h.server.load_elsewhere()
-        h.tick(T0 + 70)
+        h.tick(T0 + QUIET_S + 10)
         self.assertEqual(h.state, "resuming")
         adopted = h.events("state.adopted")[-1]
         self.assertEqual(
             {key: adopted[key] for key in ("previous_state", "router_state", "state")},
             {"previous_state": "yielded", "router_state": "loading", "state": "resuming"},
         )
-        h.quiet(T0 + 71, T0 + 100)
+        h.quiet(T0 + QUIET_S + 11, T0 + QUIET_S + 40)
         self.assertEqual(h.state, "serving")
         (resume,) = h.events("handoff.resume")
         self.assertEqual(resume["trigger"], "external_load")
-        self.assertEqual((h.server.loads, h.server.unloads), ([T0 + 60], []))
+        self.assertEqual((h.server.loads, h.server.unloads), ([T0 + QUIET_S], []))
 
     def test_already_running_at_the_watchers_own_load_is_not_a_failed_load(self) -> None:
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_profile=QUIET_LOAD, load_seconds=5)
-        h.quiet(T0 + 1, T0 + 59)
+        h.quiet(T0 + 1, T0 + QUIET_S - 1)
         h.server.load_elsewhere_first = True
-        h.tick(T0 + 60)
+        h.tick(T0 + QUIET_S)
         self.assertEqual(h.events("load.failed"), [])
         self.assertEqual(h.state, "resuming")
-        h.quiet(T0 + 61, T0 + 70)
+        h.quiet(T0 + QUIET_S + 1, T0 + QUIET_S + 10)
         self.assertEqual(h.state, "serving")
 
 
@@ -408,7 +416,7 @@ class Recovery(unittest.TestCase):
     def test_failed_loads_retry_with_growing_delays_then_give_up_unhealthy(self) -> None:
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_seconds=5, load_profile=QUIET_LOAD)
         h.server.failing_loads = 99
-        h.quiet(T0 + 1, T0 + 1200)
+        h.quiet(T0 + 1, T0 + QUIET_S + 1140)
 
         loads = h.server.loads
         self.assertEqual(len(loads), 5)
@@ -422,16 +430,17 @@ class Recovery(unittest.TestCase):
     def test_a_load_that_never_finishes_is_a_failed_attempt(self) -> None:
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_seconds=10**6, load_profile=QUIET_LOAD,
                     env={"WATCHER_LOAD_TIMEOUT_SECONDS": "120"})
-        h.quiet(T0 + 1, T0 + 180)
-        self.assertEqual((h.server.loads, h.server.unloads), ([T0 + 60], []))
-        h.tick(T0 + 181)
-        self.assertEqual(h.server.unloads, [T0 + 181])
+        timed_out = T0 + QUIET_S + 120
+        h.quiet(T0 + 1, timed_out)
+        self.assertEqual((h.server.loads, h.server.unloads), ([T0 + QUIET_S], []))
+        h.tick(timed_out + 1)
+        self.assertEqual(h.server.unloads, [timed_out + 1])
         (failure,) = h.events("load.failed")
         self.assertEqual(failure["attempt"], 1)
         self.assertIn("timed out", failure["error"])
 
-        h.quiet(T0 + 182, T0 + 1000)
-        self.assertEqual(h.server.loads[1], T0 + 196)  # the first retry delay, as for any failure
+        h.quiet(timed_out + 2, T0 + QUIET_S + 940)
+        self.assertEqual(h.server.loads[1], timed_out + 1 + 15)  # the first retry delay, as for any failure
         self.assertEqual(len(h.server.loads), 5)
         self.assertEqual(len(h.server.unloads), 5)
         self.assertEqual(h.events("handoff.yield"), [])
@@ -440,7 +449,7 @@ class Recovery(unittest.TestCase):
     def test_a_model_that_keeps_dying_is_a_failing_load(self) -> None:
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_seconds=5, load_profile=QUIET_LOAD)
         h.server.lifetimes = [10.0] * 10
-        h.quiet(T0 + 1, T0 + 1500)
+        h.quiet(T0 + 1, T0 + QUIET_S + 1440)
 
         loads = h.server.loads
         self.assertEqual(len(loads), 5)
@@ -463,7 +472,7 @@ class Recovery(unittest.TestCase):
     def test_failures_are_forgotten_only_after_ten_minutes_loaded(self) -> None:
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_seconds=5, load_profile=QUIET_LOAD)
         h.server.lifetimes = [10.0, 10.0, 700.0, 10.0]
-        h.quiet(T0 + 1, T0 + 900)
+        h.quiet(T0 + 1, T0 + QUIET_S + 840)
         self.assertEqual([e["attempt"] for e in h.events("load.failed")], [1, 2, 1, 2])
 
     def test_the_routers_forced_stop_of_the_watchers_own_unload_is_not_a_failure(self) -> None:
@@ -473,20 +482,22 @@ class Recovery(unittest.TestCase):
             h.tick(T0 + second, util=30)
         self.assertEqual(h.state, "yielded")
         self.assertEqual(h.server.status(), h.server.status() | {"value": "unloaded", "failed": True, "exit_code": 1})
-        h.quiet(T0 + 8, T0 + 80)
+        h.quiet(T0 + 8, T0 + QUIET_S + 20)
         self.assertEqual(h.events("load.failed"), [])
         self.assertEqual(len(h.events("state.adopted")), 1)
-        self.assertEqual(h.server.loads, [T0 + 67])  # the quiet period after the game, as for any yield
+        self.assertEqual(h.server.loads, [T0 + 7 + QUIET_S])  # the quiet period after the game, as for any yield
         self.assertEqual(h.state, "serving")
 
     def test_a_retry_waits_for_a_game_seen_during_the_failed_load_to_go_quiet(self) -> None:
         h = Harness(self.addCleanup, model="unloaded", start=T0, load_seconds=30, load_profile=QUIET_LOAD)
         h.server.failing_loads = 1
-        h.quiet(T0 + 1, T0 + 60)
-        for t in range(int(T0) + 61, int(T0) + 200):
-            h.tick(t, util=20 if t < T0 + 90 else 0)
-        # Failed at T0 + 90; the retry delay alone would allow T0 + 105.
-        self.assertEqual(h.server.loads, [T0 + 60, T0 + 149])
+        requested = T0 + QUIET_S
+        failed = requested + 30
+        h.quiet(T0 + 1, requested)
+        for t in range(int(requested) + 1, int(failed) + QUIET_S + 80):
+            h.tick(t, util=20 if t < failed else 0)
+        # The retry delay alone would allow `failed` + 15.
+        self.assertEqual(h.server.loads, [requested, failed - 1 + QUIET_S])
 
 
 @LINUX_ONLY
@@ -531,13 +542,14 @@ class ModelFileCache(unittest.TestCase):
         h.quiet(T0 + 3, T0 + 4)  # unloaded at T0 + 4
         h.clock.now = T0 + 5
         h.watcher.resume_now()
-        h.quiet(T0 + 6, T0 + 70)  # loaded at T0 + 10
+        died = T0 + QUIET_S + 11
+        h.quiet(T0 + 6, died - 1)  # loaded at T0 + 10
         h.server.kill()
-        h.tick(T0 + 71)
+        h.tick(died)
         h.server.load_elsewhere()
-        h.quiet(T0 + 72, T0 + 80)  # found loading after a quiet period, then loaded at T0 + 76
+        h.quiet(died + 1, died + 9)  # found loading after a quiet period, then loaded 5 s on
         self.assertEqual(h.events("handoff.resume")[-1]["trigger"], "external_load")
-        self.assertEqual(h.guest.drops, [T0 + 1, T0 + 4, T0 + 10, T0 + 71, T0 + 76])
+        self.assertEqual(h.guest.drops, [T0 + 1, T0 + 4, T0 + 10, died, died + 5])
 
 
 @LINUX_ONLY

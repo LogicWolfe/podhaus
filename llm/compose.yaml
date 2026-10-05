@@ -174,8 +174,8 @@ services:
       WATCHER_ACTIVITY_THRESHOLD_PERCENT: "3"
       WATCHER_ACTIVITY_SAMPLES: "3"
       WATCHER_ACTIVITY_WINDOW_SECONDS: "5"
-      # The longest quiet stretch inside the recorded game session was 17 s.
-      WATCHER_QUIET_SECONDS: "60"
+      # Long enough to switch games or sit in a menu without the model loading in between.
+      WATCHER_QUIET_SECONDS: "300"
       # The Yield button also holds the model away this long, long enough to
       # launch something.
       WATCHER_BUTTON_HOLD_SECONDS: "600"

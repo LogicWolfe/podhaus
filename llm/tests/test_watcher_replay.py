@@ -7,20 +7,23 @@ launched, sat on its loading screen for nine minutes, was played, and quit.
 The model was loaded and idle through the launch. Each row is fed to the
 watcher in place of the GPU reader, at its recorded time, with the stand-in
 router answering for the model. The model's return after the quit is a real
-load's length and GPU activity (fixtures/watcher_live_load.csv), which ends
-three seconds before the recording does.
+load's length and GPU activity (fixtures/watcher_live_load.csv). The recording
+ends before a quiet period and a load could pass, so the replay carries on with
+synthetic idle samples for that long.
 """
 
 from __future__ import annotations
 
 import unittest
 
-from watcher_harness import LINUX_ONLY, Harness, at, game_session, idle_slot, parse_ts, slot
+from watcher_harness import LINUX_ONLY, LIVE_LOAD, QUIET_S, Harness, at, game_session, idle_slot, parse_ts, slot
 
 # The first sample at or above 3% after ninety idle seconds.
 LAUNCH = at("17:54:37")
 # The game's steady 17% ends here and its VRAM falls by 770 MiB.
 QUIT = at("18:05:45")
+# The last sample at or above 3%, a few seconds after the quit.
+LAST_ACTIVITY = at("18:05:54")
 
 
 @LINUX_ONLY
@@ -31,6 +34,7 @@ class GameSessionReplay(unittest.TestCase):
         cls.harness = Harness(cls.addClassCleanup, model="loaded", start=session[0].t - 1)
         for sample in session:
             cls.harness.tick(sample.t, sample.util)
+        cls.harness.quiet(session[-1].t + 1, session[-1].t + QUIET_S + LIVE_LOAD[-1].t)
 
     def test_decides_to_yield_within_six_seconds_of_the_launch(self) -> None:
         (event,) = self.harness.events("handoff.yield")
@@ -43,9 +47,10 @@ class GameSessionReplay(unittest.TestCase):
         (load,) = self.harness.server.loads
         self.assertGreater(load, QUIT)
 
-    def test_resumes_within_75_seconds_of_the_quit(self) -> None:
+    def test_resumes_one_quiet_period_after_the_last_game_activity(self) -> None:
         (load,) = self.harness.server.loads
-        self.assertLessEqual(load - QUIT, 75)
+        self.assertGreaterEqual(load - LAST_ACTIVITY, QUIET_S)
+        self.assertLessEqual(load - LAST_ACTIVITY, QUIET_S + 1)
 
     def test_ends_with_the_model_back_and_serving_despite_the_loads_own_activity(self) -> None:
         (load,) = self.harness.server.loads
