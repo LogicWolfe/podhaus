@@ -75,24 +75,12 @@
 <li>✅ Lumen's throwaway search containers are no longer collected, stopped containers stay in discovery so a container that stops and starts again is not re-read, and Pomerium and Pocket ID ship whole bodies.</li>
 <li>✅ Volume was measured; the results are in Volume below.</li>
 <li>✅ Every row Alloy ships follows one schema. The resource carries <code>host.name</code> (replacing <code>host</code>, with the Gatus heartbeat queries rewritten to it), <code>service.name</code> with the host prefix stripped, <code>service.namespace</code>, <code>service.instance.id</code> and <code>container.name</code>; the pipeline's log attributes are <code>log.source</code>, <code>log.iostream</code>, <code>compose.service</code> and <code>journal.*</code>; <code>loki.attribute.labels</code> and <code>detected_level</code> are gone. All of it is derived in <code>enrich.alloy</code>, after the tailers, whose labels, relabel rules and arguments stay exactly as deployed so no saved read position is lost. <code>enrich.alloy</code> parses a body that is one JSON object, keeps every field under its own name except one spelled like a reserved schema name, removes every key with a credential word as any dotted part, reads a JSON <code>level</code> or <code>severity</code> field as the level, and sets the body to the message. Every parser sets severity only; Pomerium's OAuth <code>state</code> is removed in its own module. Tailed files carry their container's service name, compose project and compose service. Containers outside a stack are named <code>forgejo-actions-task</code> or <code>unmanaged</code>, and Lumen's index containers <code>lumen-warm</code>. <code>logging/tests/</code> runs a captured line for every module through a real Alloy in <code>tools/pre-commit</code> and pins the Docker relabel rule list, the Docker tailer's arguments and every tailer's labels.</li>
+<li>✅ The schema was checked live after its deploy (2026-10-05): Caddy's attribute names unchanged per logger; Pomerium authorize rows carry the email; no Alloy row lacks <code>service.name</code>, <code>service.instance.id</code> or <code>host.name</code>; <code>flood</code> shows <code>bilby/flood</code> and <code>pinelake/pinelake-flood</code>; no credential key in any attribute; no running container re-read (only stopped containers once, plus each container's last-read second, which Alloy re-sends on every restart); the five heartbeats green within five minutes of the last Alloy restart.</li>
 <li>✅ Severity fallback, Docker receive time and the timestamp lint, the rathole selector, JSON gates, Gatus levels, the journal audit sources, and heartbeats for bandicoot and voltaire.</li>
 </ul>
 
 <h2>Remaining work</h2>
 
-<h3>Check the schema live</h3>
-<p>The fixture harness proves the modules; these prove the deployed pipeline. Run each in HyperDX (SQL mode) or through the HyperDX MCP once every host's Alloy has redeployed. <span class="doc-badge">mechanical</span></p>
-<table>
-<thead><tr><th>Behaviour</th><th>Check</th></tr></thead>
-<tbody>
-<tr><td>Caddy's attribute names are unchanged, so saved searches on them still work</td><td><code>SELECT arrayJoin(mapKeys(LogAttributes)) AS key, count() FROM otel_logs WHERE Timestamp &gt; now() - INTERVAL 1 HOUR AND ServiceName = 'caddy' AND ResourceAttributes['host.name'] = 'fractal' AND LogAttributes['logger'] LIKE 'http.log.access.%' GROUP BY key</code> lists exactly <code>agent_id caller client duration level logger msg path remote_ip session_id status ts</code> plus <code>compose.service log.iostream log.source</code>. Before the switch the same rows were <code>ServiceName = 'fractal-caddy'</code> and carried the same twelve service fields; grouping by <code>LogAttributes['caller'], LogAttributes['path']</code> over a day gives the same callers and paths either side. If a service field's name changed, stop: this is the kill criterion, and the fallback is keeping JSON bodies whole in the parsers that reduced them.</td></tr>
-<tr><td>Pomerium's authentication trail arrives</td><td><code>SELECT count(), countIf(LogAttributes['email'] != '') FROM otel_logs WHERE Timestamp &gt; now() - INTERVAL 1 HOUR AND ServiceName = 'pomerium' AND Body = 'authorize check'</code>: the two counts are equal and non-zero.</td></tr>
-<tr><td>Every row carries the resource</td><td><code>SELECT ResourceAttributes['host.name'], count() FROM otel_logs WHERE Timestamp &gt; now() - INTERVAL 1 HOUR AND ServiceName NOT IN ('fenwick', 'indy-service', 'bookshelf', 'bookcard', 'bookbinder') AND (ResourceAttributes['service.name'] = '' OR ResourceAttributes['service.instance.id'] = '' OR ResourceAttributes['host.name'] = '') GROUP BY 1</code> returns nothing.</td></tr>
-<tr><td>One service, two instances</td><td><code>SELECT ResourceAttributes['service.instance.id'], ResourceAttributes['service.namespace'], ResourceAttributes['host.name'], count() FROM otel_logs WHERE Timestamp &gt; now() - INTERVAL 1 DAY AND ServiceName = 'flood' GROUP BY 1, 2, 3</code> shows <code>bilby/flood</code> and <code>pinelake/pinelake-flood</code>, and no new row has <code>ServiceName = 'pinelake-flood'</code>.</td></tr>
-<tr><td>Gatus heartbeats green</td><td>The five Telemetry Pipeline heartbeats and Pipeline Log Ingest stay green after the push. Each queries <code>host.name</code>, which a host's Alloy only sends once it has redeployed with this change, so a host whose Alloy deploy lags alerts until it lands.</td></tr>
-<tr><td>No running container's log was read again</td><td>Before the push, record each host's running containers (<code>docker ps --format '{{.Names}}'</code>). Only rows shipped by the new pipeline carry <code>log.source</code>, so one with an old timestamp was read again. With <code>&lt;deploy&gt;</code> the time the last host's Alloy redeployed, <code>SELECT ResourceAttributes['host.name'], ResourceAttributes['container.name'], LogAttributes['log.source'], count() FROM otel_logs WHERE Timestamp &gt; now() - INTERVAL 30 DAY AND Timestamp &lt; toDateTime('&lt;deploy&gt;') - INTERVAL 1 HOUR AND LogAttributes['log.source'] != '' GROUP BY 1, 2, 3</code> may list only <code>docker</code> rows from containers that were stopped at the push: every Alloy restart re-reads each stopped container's log once, by design. A tailed file or the journal in the list, or a container that was running, means a tailer's labels, rules or arguments changed: compare them with the pins in <code>logging/tests</code>.</td></tr>
-</tbody>
-</table>
 
 <h3>Services that ship their own telemetry</h3>
 <p>fenwick, fenwick-web-agent, indy-service and the book services export OTLP themselves and never pass through Alloy. Each sets <code>OTEL_RESOURCE_ATTRIBUTES=host.name=&lt;host&gt;,service.namespace=&lt;compose project&gt;,service.instance.id=&lt;host&gt;/&lt;container name&gt;</code> in its compose file, in its own repository. Today none has <code>host.name</code> or <code>service.namespace</code>, and only bookcard has an instance id (a random one). <span class="doc-badge">mechanical</span></p>
@@ -154,7 +142,6 @@
 
 <h2>Order of work</h2>
 <ol>
-<li>Check the schema live, after the push that deploys it.</li>
 <li>Stall healthcheck, autoheal, heartbeat thresholds, bilby's bounded retry, 5-second Docker discovery.</li>
 <li>Decisions once taken: LAN shipping path, access logs, Pomerium debug, the two OAuth values, naming, volume.</li>
 <li>Shipping module, with live module reload disabled.</li>
@@ -167,7 +154,7 @@
 <tbody>
 <tr><td>Lumen gone</td><td>✅ Zero randomly named services since the deploy; <code>lumen-sweep</code> rows fell to about a twelfth and are flat per 10-minute window.</td></tr>
 <tr><td>Pinelake time</td><td>A Syncthing row's timestamp within a minute of Docker's receive time.</td></tr>
-<tr><td>SSH trail</td><td>One login to bilby → one <code>Accepted publickey</code> row.</td></tr>
+<tr><td>SSH trail</td><td>✅ Logins to bilby and bandicoot arrive as <code>Accepted publickey</code> rows under identifier <code>sshd-session</code>, with session ends and sudo command lines beside them.</td></tr>
 <tr><td>Stall self-heals silently</td><td>Block voltaire's Alloy from the collector: unhealthy, autoheal restarts, Gatus green. Keep it blocked: Gatus red for voltaire only, after the threshold.</td></tr>
 <tr><td>Init containers tailed</td><td><code>plex-preferences-init</code> rows after the next Plex deploy.</td></tr>
 <tr><td>Config lint</td><td><code>alloy fmt</code> and <code>alloy validate</code> on every host config in <code>tools/pre-commit</code>.</td></tr>
