@@ -119,7 +119,7 @@ ansible/
   roles/
     base/                  timezone, baseline packages, dirs, laptop power policy
     disk_tmp/              Root-filesystem /tmp policy, activated at host restart
-    wsl/                   /etc/wsl.conf, hostname, chrony time sync
+    wsl/                   /etc/wsl.conf, hostname, no guest NTP daemon (Windows owns the clock)
     docker/                engine (where managed), daemon.json, host networks
     devbox/                the root-requiring half of a developer machine
     forgejo_runner/        Bandicoot's container-isolated Forgejo Actions runner

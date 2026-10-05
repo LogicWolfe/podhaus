@@ -218,50 +218,35 @@
     daemon_reload: "{{ wsl_x11_unit is changed }}"
 
 # ---- Time sync --------------------------------------------------------
-# The Hyper-V time driver sets the guest's clock from Windows at every start
-# and resume and whenever the guest falls 5 s behind it, so the guest mirrors
-# the Windows clock, and that clock runs fast. chrony corrects the guest
-# against the pool; `timedatectl`'s "synchronized: yes" only reflects the
-# driver. Spans and access logs line up across hosts only if the guest is right.
+# Windows owns the clock. WSL keeps the guest on Windows time from its own
+# system distro, so a second NTP daemon here would steer the same clock
+# against it: the guest runs none, and chrony is removed wherever it is
+# installed. docs/hosts.html#fractal-time
 
-- name: Install chrony
-  ansible.builtin.dnf:
-    name: chrony
-    state: present
-  register: wsl_chrony_package
+- name: Gather package facts
+  ansible.builtin.package_facts:
 
-- name: Create the chronyd drop-in directory
-  ansible.builtin.file:
-    path: /etc/systemd/system/chronyd.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-
-- name: Order chronyd after the Windows clock device
-  ansible.builtin.copy:
-    src: chronyd-after-ptp.conf
-    dest: /etc/systemd/system/chronyd.service.d/10-after-ptp.conf
-    owner: root
-    group: root
-    mode: "0644"
-  register: wsl_chronyd_drop_in
-  notify: Restart chronyd
-
-- name: Configure chrony
-  ansible.builtin.copy:
-    src: chrony.conf
-    dest: /etc/chrony.conf
-    owner: root
-    group: root
-    mode: "0644"
-  notify: Restart chronyd
-
-- name: Run chronyd
-  # A dry run that would install the package has no unit to inspect yet.
+- name: Stop and disable chronyd
+  # Keyed on the package that ships the unit: service facts also list units
+  # that are merely referenced, and stopping one with no unit file fails.
   ansible.builtin.systemd_service:
     name: chronyd.service
-    enabled: true
-    state: started
-    daemon_reload: "{{ wsl_chronyd_drop_in is changed }}"
-  when: not (ansible_check_mode and wsl_chrony_package is changed)
+    state: stopped
+    enabled: false
+  when: "'chrony' in ansible_facts.packages"
+
+- name: Remove chrony
+  ansible.builtin.dnf:
+    name: chrony
+    state: absent
+
+- name: Remove the chronyd drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/chronyd.service.d
+    state: absent
+  register: wsl_chronyd_drop_in
+
+- name: Reload systemd after removing the chronyd drop-in
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: wsl_chronyd_drop_in is changed
