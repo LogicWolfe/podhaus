@@ -32,7 +32,7 @@ services:
         printf '%s' "$${ORIGIN_CA_CERT_B64}" | base64 -d > /secrets/origin-ca.pem
         printf '%s' "$${SIGNING_KEY_B64}" | base64 -d > /secrets/signing-key.pem
     volumes:
-      - ${NUMBAT_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-numbat}/pomerium:/source:ro
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat/pomerium:/source:ro
       - pomerium-config:/config
       - pomerium-secrets:/secrets
     labels:
