@@ -507,8 +507,8 @@ identifier and are lined up by time.
 
 The watcher writes one JSON object per line: `ts`, `level`, `event`, `msg` and
 the event's fields. In ClickStack every field is an attribute under its own name
-(each slot's figures as `slots.<n>.<field>`), the body is `msg`, and the
-`llm-watcher` module also copies the event name to `llm_event`. The watcher measures every
+(the event name as `event`, each slot's figures as `slots.<n>.<field>`) and the
+body is `msg`. The watcher measures every
 duration on a monotonic clock; the timestamps in events are wall-clock times
 converted from it, so the gaps between an event's times are true durations.
 

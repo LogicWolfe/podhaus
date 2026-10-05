@@ -1,0 +1,44 @@
+// Per-service log parser — lumen-ollama
+//
+// See komodo-op.alloy for the pattern/rationale.
+//
+// lumen-ollama is the Ollama server that embeds code for Lumen's index on
+// each Lumen host. Its HTTP server (Gin) prints one line per request,
+// status and time taken after the date:
+//   [GIN] 2026/10/05 - 00:31:25 | 200 |      28.166µs |       127.0.0.1 | HEAD     "/"
+//   [GIN] 2026/10/05 - 00:35:43 | 200 |  9.195039508s |     172.18.0.28 | POST     "/api/embed"
+//   [GIN] 2026/10/05 - 03:37:25 | 200 |         1m25s |     172.18.0.14 | POST     "/api/embed"
+// The time is Go's duration text (ns, µs, ms, s, then 1m25s and 1h2m3s).
+// Most of them are the container's own healthcheck (`ollama list`, a HEAD /
+// and a GET /api/tags every 30 s) and Lumen's MCP sessions asking for the
+// model list; about 28,000 a day across bilby, fractal and voltaire
+// (measured 2026-10-05).
+//
+// Dropped: a request line with a 2xx status that took less than 10 seconds.
+// Kept: every other status, and every request that took 10 seconds or more.
+// Over the 14 days to 2026-10-05, 1% of embed requests took 10 s or more (91
+// of 9,170; the slowest 1m25s) and no healthcheck request took more than
+// 2.4 s, so a kept request line is an unusual one; 10 s is also the
+// container healthcheck's timeout. The model runner's own lines (slot
+// handling, model loading) are not request lines and are all kept.
+//
+// The level is enrich.alloy's, from the line's own words; this module sets
+// none.
+
+declare "lumen_ollama" {
+	argument "forward_to" { }
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector            = "{service=\"lumen-ollama\"} |~ \"^\\\\[GIN\\\\] [^|]+\\\\| 2\\\\d\\\\d \\\\|\\\\s+(?:\\\\d+(?:\\\\.\\\\d+)?(?:ns|µs|ms)|\\\\d(?:\\\\.\\\\d+)?s) \\\\|\""
+			action              = "drop"
+			drop_counter_reason = "lumen_ollama_fast_success"
+		}
+	}
+
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
+}

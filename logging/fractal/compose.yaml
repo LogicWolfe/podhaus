@@ -1,41 +1,20 @@
-services:
-  alloy-secrets-init:
-    build:
-      context: ../init-tools
-      args:
-        STACK_CONTENT_HASH: ${BUILD_HASH_ALLOY_SECRETS_INIT:-unset}
-    image: init-tools:local
-    pull_policy: never
-    restart: "no"
-    environment:
-      FRACTAL_CERT_B64: ${FRACTAL_CERT_B64}
-      FRACTAL_KEY_B64: ${FRACTAL_KEY_B64}
-    command:
-      - /bin/sh
-      - -ec
-      - |
-        umask 077
-        printf '%s' "$${FRACTAL_CERT_B64}" | base64 -d > /secrets/fractal-cert.pem
-        printf '%s' "$${FRACTAL_KEY_B64}" | base64 -d > /secrets/fractal-key.pem
-    volumes:
-      - alloy-secrets:/secrets
-    labels:
-      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+x-podhaus-content-paths:
+  - ../../config
 
+# fractal's logging overlay: the alloy-conf and shared module binds from the
+# linked podhaus clone and the journal Alloy tails here. Alloy ships across
+# the home LAN in plaintext, so it needs no client certificate.
+services:
   alloy:
-    depends_on:
-      alloy-secrets-init:
-        condition: service_completed_successfully
+    environment:
+      # The ClickStack collector's host, read by alloy-conf/config.alloy
+      # through sys.env(), supplied by config/lan-addresses.json through Komodo.
+      BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
     volumes:
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-fractal/logging/fractal/alloy-conf:/etc/alloy:ro
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-fractal/logging/alloy-modules:/etc/alloy-modules:ro
       # The systemd journal, tailed by config.alloy.
       - /var/log/journal:/var/log/journal:ro
       - /etc/machine-id:/etc/machine-id:ro
-      - alloy-secrets:/run/podhaus-secrets:ro
     labels:
-      podhaus.depends-on-alloy-secrets-init: ${BUILD_HASH_ALLOY_SECRETS_INIT:-unset}
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
-
-volumes:
-  alloy-secrets:

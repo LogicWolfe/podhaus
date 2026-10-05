@@ -44,14 +44,12 @@ podhaus.chain "run" {
 	forward_to = [podhaus.ship.run.receiver]
 }
 
-// Out to Numbat's relay address, through rathole to bilby's Caddy, which
-// checks this client certificate, and across the LAN to the collector on
-// bandicoot.
+// Plaintext across the home LAN to the collector's published port on
+// bandicoot, whose address the shared catalog supplies through
+// logging/fractal/stack.toml.
 podhaus.ship "run" {
-	host             = "fractal"
-	endpoint         = "https://logs-ingest.pod.haus"
-	client_cert_file = "/run/podhaus-secrets/fractal-cert.pem"
-	client_key_file  = "/run/podhaus-secrets/fractal-key.pem"
+	host     = "fractal"
+	endpoint = "http://" + sys.env("BANDICOOT_LAN_IPV4") + ":4318"
 }
 
 // Local model service (llm/): both containers expose Prometheus metrics on
@@ -92,7 +90,6 @@ otelcol.processor.transform "svc_llm_server" {
 		context    = "metric"
 		statements = [
 			`set(resource.attributes["service.name"], "llm-server")`,
-			`set(resource.attributes["host.name"], "fractal")`,
 		]
 	}
 
@@ -126,7 +123,6 @@ otelcol.processor.transform "svc_llm_watcher" {
 		context    = "metric"
 		statements = [
 			`set(resource.attributes["service.name"], "llm-watcher")`,
-			`set(resource.attributes["host.name"], "fractal")`,
 		]
 	}
 

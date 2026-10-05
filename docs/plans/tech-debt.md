@@ -93,21 +93,42 @@ Pomerium, which every protected name goes through. Push it on its own, when a
 short drop of both is acceptable, and confirm afterwards that the tunnels and a
 protected route are back.
 
-## Gatus's metrics carry no host name
+## ClickStack's comments name the old log shipping paths
 
-**Status:** Open.
+**Status:** Open. Fold into the next change to the ClickStack stack.
 
-Bilby's Alloy scrapes Gatus's Prometheus metrics and sets only their
-`service.name` to `gatus` (the `svc_gatus` transform in
-`logging/bilby/alloy-conf/config.alloy`). Every other series Alloy ships has a
-`host.name`: its own metrics through the shipping module, bilby's ESPHome
-scrape and fractal's two model-service scrapes through their own transforms.
-A query that selects Gatus's series by `host.name`, as the telemetry heartbeats
-do for Alloy's, finds nothing. Alloy's own spans have no `host.name` either:
-they reach the shipping module's input with only the resource Alloy's tracer
-gives them (`service.name = alloy`, version and SDK), as the log schema harness
-in `logging/tests/test_log_schema.py` shows.
+Three comments in the ClickStack stack describe who ships to the collector as
+it was before bandicoot and fractal shipped directly. `clickstack/compose.yaml`
+says, in its header list (around line 16) and above the published OTLP port
+(around lines 157–158), that port 4318 is published for kangaroo's and bilby's
+Alloy and for `logs-ingest.pod.haus`, and that bilby's Caddy forwards every
+other host. `clickstack/stack.toml` (around line 17) says the ingestion key is
+added to bilby's and kangaroo's logging stacks only. Today bandicoot's Alloy
+reaches the collector by container name, bilby, kangaroo and fractal use the
+published port, only Numbat, voltaire and Pinelake come through
+`logs-ingest.pod.haus`, and every host's logging stack carries the key
+([Monitoring](../monitoring.html#alloy) is current).
 
-Add `host.name = bilby` to `svc_gatus`, as `svc_esphome` does. For the spans,
-add the host in the shipping module's path for them, so every host gets it.
-Either change recreates the Alloys it touches, which is harmless.
+They were left because any edit in `clickstack/` changes the stack's content
+hash, and the push then recreates ClickHouse, HyperDX and the collector. Correct
+them in the same commit as the next ClickStack change, which recreates the
+stack anyway.
+
+## Two log-ingest client certificates nothing uses
+
+**Status:** Open. Removal needs a `terraform apply`.
+
+`terraform/pomerium.tf` still issues log-ingest client certificates for
+bandicoot and fractal (`bandicoot_log_client` and `fractal_log_client`, each a
+private key and a certificate signed by the log-ingest CA, valid for five
+years), and publishes them as the `bandicoot_cert_b64`, `bandicoot_key_b64`,
+`fractal_cert_b64` and `fractal_key_b64` fields of the **Log Ingest PKI**
+1Password item. Neither host ships through `logs-ingest.pod.haus` any more, so
+nothing reads them. Bilby's Caddy trusts every certificate the CA signed, so
+until they expire either one still authenticates to `logs-ingest.pod.haus` for
+anyone who holds its key.
+
+Remove both resource sets and their four fields, run `terraform plan` to see
+only those deletions, and apply. No stack references the matching
+`OP__KOMODO__LOG_INGEST_PKI__BANDICOOT_*` or `…__FRACTAL_*` Komodo Variables
+any more; afterwards, delete any of them Komodo still lists.

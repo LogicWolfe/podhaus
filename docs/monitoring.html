@@ -44,8 +44,9 @@ journald (Linux hosts)    ─┤   discover/tail → ANSI-strip → per-service 
                           │   enrich (the logging.md schema, severity, JSON
                           │   fields) → batch → OTLP/HTTP exporter
                           │
-bilby, kangaroo ──────────► 10.0.0.90:4318        (cross-LAN, plaintext)
-every other host ─────────► logs-ingest.pod.haus  (mTLS via bilby's Caddy → 10.0.0.90:4318)
+bandicoot ────────────────► clickstack-otel:4318  (same host, dockernet)
+bilby, kangaroo, fractal ─► bandicoot:4318        (cross-LAN, plaintext)
+numbat, voltaire, pinelake► logs-ingest.pod.haus  (mTLS via bilby's Caddy → bandicoot:4318)
                           │  (HyperDX ingestion API key on every request)
                           ▼
                   ClickStack OTel collector
@@ -209,7 +210,7 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         no model loaded the scrape fails, which is a yielded signal that
         <code>llm_watcher_state</code> confirms. Their logs follow the
         <a href="logging.md">logging schema</a>: every field of the watcher's JSON events
-        is an attribute, with the event name also copied to <code>llm_event</code>, and the
+        is an attribute, the event name among them as <code>event</code>, and the
         server's lines pass an allow-list that stores a line as printed only when it carries
         no prompt or reply text. Dashboards over these
         are not defined in the repository; they are created by hand in HyperDX. See the
@@ -291,7 +292,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
           the logs, so the query asserts a fresh
           per-host Alloy metric in a 15-minute window (<code>otel_metrics_gauge</code> where
           <code>ResourceAttributes['host.name']='&lt;host&gt;'</code>; the
-          <code>host.name</code> attribute is stamped by the <code>svc_alloy</code> transform in the
+          <code>host.name</code> attribute is stamped by the <code>host_name</code> transform in the
           ship module, <code>logging/alloy-modules/ship.alloy</code>, from the host name each
           host's <code>config.alloy</code> gives it). A wedged exporter, whose requests never return, is
           healed before the window empties: Alloy's healthcheck makes the container unhealthy
@@ -341,10 +342,11 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
           <code>https://watch.pod.haus</code>. Also hosts the OpAMP server the collector
           talks to.</li>
         <li><strong>OTel collector</strong> (<code>clickstack-otel</code>) — the bundled
-          OpenTelemetry collector. Its OTLP/HTTP port <code>4318</code> is published on the
-          LAN: bilby's and kangaroo's Alloy ship to it directly, and bilby's Caddy forwards
-          <code>logs-ingest.pod.haus</code> to it for every remote host after checking the
-          client certificate. HyperDX's <code>8080</code> (for <code>watch.pod.haus</code>,
+          OpenTelemetry collector. Bandicoot's Alloy reaches it by container name on
+          dockernet. Its OTLP/HTTP port <code>4318</code> is published on the LAN:
+          bilby's, kangaroo's and fractal's Alloy ship to it directly, and bilby's Caddy
+          forwards <code>logs-ingest.pod.haus</code> to it for Numbat, voltaire and pinelake
+          after checking the client certificate. HyperDX's <code>8080</code> (for <code>watch.pod.haus</code>,
           which still terminates on bilby) and ClickHouse's <code>8123</code> (for Gatus's
           pipeline heartbeats) are the other two LAN-published ports; the front doors
           stay on bilby, on the moved-service pattern.</li>
@@ -374,27 +376,27 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         to the ClickStack collector at the address each host gives it:
       </p>
       <ul>
-        <li><strong>bilby</strong> and <strong>kangaroo</strong> — cross-LAN to
-          <code>http://10.0.0.90:4318</code> (plaintext, LAN-only).</li>
-        <li><strong>bandicoot</strong> — HTTPS to <code>logs-ingest.pod.haus</code> like the
-          remote hosts. That name resolves only to Numbat's relay address, so the path goes
-          out to Numbat, back through rathole to bilby's Caddy, and across the LAN to the
-          collector on bandicoot.</li>
+        <li><strong>bandicoot</strong> — the collector's own host: plaintext to
+          <code>http://clickstack-otel:4318</code> by container name on dockernet.</li>
+        <li><strong>bilby</strong>, <strong>kangaroo</strong> and <strong>fractal</strong> — cross-LAN to
+          port 4318 at bandicoot's address from <code>config/lan-addresses.json</code>
+          (plaintext, home LAN only), which reaches each stack as
+          <code>BANDICOOT_LAN_IPV4</code>.</li>
         <li><strong>Numbat</strong>: HTTPS to <code>logs-ingest.pod.haus</code> through
           rathole and Caddy, with a dedicated client certificate.</li>
-        <li><strong>fractal</strong>: the same HTTPS ingress with its own client certificate.</li>
         <li><strong>voltaire</strong>: the same HTTPS ingress with its own client certificate.</li>
         <li><strong>pinelake</strong>: the same HTTPS ingress with its own client certificate.</li>
       </ul>
       <p>
         Every host opens a new connection for each request
-        (<code>disable_keep_alives</code>). Bilby and kangaroo need it: they reach the
-        collector at bandicoot's published port, where Docker's NAT keeps a kept-alive
+        (<code>disable_keep_alives</code>). Bilby, kangaroo and fractal need it: they reach
+        the collector at bandicoot's published port, where Docker's NAT keeps a kept-alive
         connection mapped to the old collector container after a recreate, and the next
         request hangs with no error (the 2026-06-19 exporter wedge under <a href="#known-issues">Known issues</a>).
-        The hosts that ship through <code>logs-ingest.pod.haus</code> reach bilby's Caddy,
-        which opens its own connections to the collector; they share the setting because a
-        new connection per request costs little at their volume.
+        Bandicoot reaches the collector by container name, and the hosts that ship through
+        <code>logs-ingest.pod.haus</code> reach bilby's Caddy, which opens its own
+        connections to the collector; they share the setting because a new connection per
+        request costs little at their volume.
       </p>
       <p>
         Every request carries a HyperDX <strong>ingestion API key</strong> in the
@@ -421,6 +423,15 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         attempt returns, so a request that never returns holds its worker whatever the
         budget; once every worker is held the exporter sends nothing, and the healthcheck
         below restarts it.
+      </p>
+      <p>
+        The exporter's queue is held in memory, so a recreate or reboot during a collector
+        or path outage drops whatever is queued. A disk-backed queue
+        (<code>otelcol.storage.file</code> in the <code>alloy-data</code> volume) would keep
+        it, but is not restart-safe in the collector release Alloy carries: on a graceful
+        shutdown while the destination is down, exporterhelper v0.161.0 drains the persisted
+        queue with one attempt per request and deletes every request that fails
+        (opentelemetry-collector issue 15677), and the storage component is public preview.
       </p>
 
       <h4 id="exporter-stall">Exporter-stall healthcheck</h4>

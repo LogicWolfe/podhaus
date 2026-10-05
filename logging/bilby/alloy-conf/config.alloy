@@ -94,7 +94,8 @@ otelcol.receiver.prometheus "gatus" {
 // Stamp a constant, mirroring the enrich processor's
 // `set(resource.attributes["service.name"], …)` idiom on the logs
 // path. "gatus" matches the service its own container logs already
-// resolve to via enrich, so logs+metrics unify under one service.
+// resolve to via enrich, so logs+metrics unify under one service. The
+// ship module adds host.name.
 otelcol.processor.transform "svc_gatus" {
 	error_mode = "ignore"
 
@@ -160,7 +161,6 @@ otelcol.processor.transform "svc_esphome" {
 		context    = "metric"
 		statements = [
 			`set(resource.attributes["service.name"], "esphome")`,
-			`set(resource.attributes["host.name"], "bilby")`,
 		]
 	}
 

@@ -16,9 +16,11 @@ docs/logging.md. Expected attributes for lines that carry a credential are
 written out literally, never computed with enrich.alloy's own rule, so a leak
 cannot pass by copying the bug.
 
-The same run proves the shipping module's other two paths and the healthcheck
+The same run proves the shipping module's other paths and the healthcheck
 that watches it: Alloy's own metrics arrive under the host's name, spans
-written to the module's input export arrive, and the compose file's
+written to the module's input export arrive under the host's name, metrics a
+host's own scrape writes there arrive under the host's name whatever host.name
+they carried, with their other attributes unchanged, and the compose file's
 healthcheck passes against this Alloy.
 
 Every tailer's label set, the Docker relabel rule list and the Docker
@@ -48,7 +50,13 @@ Captured from ClickStack: journal_dockerd_error, pomerium_authorize (email repla
 pomerium_callback (code and state replaced with stand-ins of the same shape),
 pocket_id_authorize (state replaced), flood_request, rustfs_no_message,
 komodo_ferretdb and backrest (bodies captured, the parser-stripped time and
-level prefix rebuilt from the module's documented shape). llm_server_prompt is
+level prefix rebuilt from the module's documented shape), and the lumen_sweep_*,
+lumen_ollama_*, gatus_passed, gatus_heartbeat_passed and gatus_push_receipt
+lines, except lumen_ollama_error, which is lumen_ollama_embed with its 200
+replaced by a 500, since no failed request was logged in the 14 days
+measured; gatus_passed_with_errors, which is gatus_passed reporting one error;
+and lumen_sweep_traceback and lumen_sweep_killed, written as the unforeseen
+failures the sweep's rule must keep. llm_server_prompt is
 from llm/tests/fixtures, as is caddy_remote_access. Every other line is the example in its module's
 header, completed where the header elides it, or written for the case it
 names (caddy_admin's credential header, the json_* credential and shape
@@ -81,6 +89,12 @@ HOST = "testhost"
 RUN_SECONDS = 120
 API_PORT = 12345
 COLLECTOR = "127.0.0.1:4318"
+# The service name of the harness's stand-in for a host's own scrape, the
+# host.name that scrape sets before the module, and an attribute it sets that
+# must arrive unchanged.
+HOST_SCRAPE = "host-scrape"
+DECOY_HOST = "not-this-host"
+SENTINEL = ("podhaus.test.sentinel", "kept as written")
 # Key words whose value is a credential. A row may carry none of them as any
 # dotted part of an attribute name.
 DENIED_WORDS = frozenset({
@@ -227,6 +241,11 @@ PLEX_LINE = r'''Sep 09, 2026 17:44:40.556 [281472660173024] DEBUG - Transcoder: 
 PLEX_IDENTITY = r'''Sep 09, 2026 17:44:41.002 [281472660173024] DEBUG - Request: [172.18.0.12:40112 (Subnet)] GET /identity (4 live) #1c0 Signed-in'''
 CLICKHOUSE_ERROR = r'''2026.05.16 12:00:24.261660 [ 747 ] {} <Error> default.otel_logs (b1c2d3e4-0000-4000-8000-000000000000): Code: 252. DB::Exception: Too many parts (300)'''
 DOCKERD_ERROR = r'''time="2026-10-04T18:52:30.318099418+08:00" level=error msg="healthcheck failed fatally" error="session healthcheck failed fatally: Unavailable: connection error: desc = \"transport: Error while dialing: only one connection allowed\""'''
+LUMEN_SWEEP_DOCKER_ERROR = r'''docker: Error response from daemon: failed to create task for container: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: mkdir /home/nathan/repos/indy-board-overview: read-only file system'''
+GATUS_PASSED = r'''2026/10/05 11:04:19 [watchdog.executeEndpoint] Monitored group=Komodo; endpoint=Pinelake Periphery (via Komodo); key=komodo_pinelake-periphery-(via-komodo); success=true; errors=0; duration=65ms'''
+GATUS_HEARTBEAT_PASSED = r'''2026/10/05 11:06:24 [watchdog.monitorExternalEndpointHeartbeat] Checked heartbeat for group=Cache; endpoint=Sky invalidation; key=cache_sky-invalidation; success=true; errors=0'''
+GATUS_PASSED_WITH_ERRORS = GATUS_PASSED.replace("errors=0", "errors=1")
+GATUS_PUSH_RECEIPT = r'''2026/10/05 11:05:00 [api.CreateExternalEndpointResult] Successfully inserted result for external endpoint with key=plex_streamfab-publish and success=true'''
 
 
 # One target of fractal's Caddy container as discovery.docker reported it
@@ -318,11 +337,9 @@ FIXTURES: tuple[Fixture, ...] = (
     Fixture("rustfs_no_message", compose("rustfs", "rustfs"), RUSTFS_NO_MESSAGE,
             Row("rustfs", RUSTFS_NO_MESSAGE, "ERROR", json_fields(RUSTFS_NO_MESSAGE))),
     Fixture("llm_watcher_resume", compose("llm-watcher", "llm-watcher", "fractal-llm"), LLM_WATCHER_RESUME,
-            Row("llm-watcher", "model ready", "INFO",
-                json_fields(LLM_WATCHER_RESUME) | {"llm_event": "handoff.resume"})),
+            Row("llm-watcher", "model ready", "INFO", json_fields(LLM_WATCHER_RESUME))),
     Fixture("llm_watcher_slots", compose("llm-watcher", "llm-watcher", "fractal-llm"), LLM_WATCHER_SLOTS,
-            Row("llm-watcher", "slot report changed", "INFO",
-                json_fields(LLM_WATCHER_SLOTS) | {"llm_event": "slots.changed"})),
+            Row("llm-watcher", "slot report changed", "INFO", json_fields(LLM_WATCHER_SLOTS))),
     Fixture("hyperdx_api", compose("hyperdx", "hyperdx", "clickstack"), "[API] " + HYPERDX_JSON,
             Row("hyperdx", "HTTP GET /health slow", "WARN", json_fields(HYPERDX_JSON) | {"component": "API"})),
     Fixture("clickstack_otel", compose("clickstack-otel", "otel-collector", "clickstack"), CLICKSTACK_OTEL,
@@ -419,6 +436,76 @@ FIXTURES: tuple[Fixture, ...] = (
             Row("gatus",
                 "2026/05/16 11:33:32 [watchdog.executeEndpoint] Monitored group=core; endpoint=forgejo; key=core_forgejo; success=false; errors=1; duration=12ms",
                 "WARN")),
+    # A check that passed is dropped; a push's receipt is not a check's result.
+    Fixture("gatus_passed", compose("gatus", "gatus"), GATUS_PASSED, None),
+    Fixture("gatus_heartbeat_passed", compose("gatus", "gatus"), GATUS_HEARTBEAT_PASSED, None),
+    Fixture("gatus_passed_with_errors", compose("gatus", "gatus"), GATUS_PASSED_WITH_ERRORS,
+            Row("gatus", GATUS_PASSED_WITH_ERRORS, "INFO")),
+    Fixture("gatus_push_receipt", compose("gatus", "gatus"), GATUS_PUSH_RECEIPT,
+            Row("gatus", GATUS_PUSH_RECEIPT, "INFO")),
+    # lumen-sweep drops its listed progress lines, one fixture per listed beginning, and keeps every other line.
+    Fixture("lumen_sweep_engine_info", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "INFO: Indexing /home/nathan/repos/podhaus (model: ordis/jina-embeddings-v2-base-code, dims: 768)", None),
+    Fixture("lumen_sweep_found", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "INFO: Found 0 files to index", None),
+    Fixture("lumen_sweep_progress", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "Indexing: 0/3 (0%)", None),
+    Fixture("lumen_sweep_root_hash", compose("lumen-sweep", "lumen-sweep", "lumen"),
+            "Root hash: dfa17912a7409259 -> b9f9f0365da7b5d8", None),
+    Fixture("lumen_sweep_reason", compose("lumen-sweep", "lumen-sweep", "lumen"),
+            "Reason: already fresh", None),
+    Fixture("lumen_sweep_up_to_date", compose("lumen-sweep", "lumen-sweep", "lumen"),
+            "Index is already up to date.", None),
+    Fixture("lumen_sweep_result", compose("lumen-sweep", "lumen-sweep", "lumen"),
+            "Files: 0 added, 0 modified, 0 removed (0 total in project)", None),
+    Fixture("lumen_sweep_done", compose("lumen-sweep", "lumen-sweep", "lumen"),
+            "Done. Indexed 0 files, 0 chunks in 171ms.", None),
+    Fixture("lumen_sweep_skipped_worktree", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "Skipping missing Git worktree: /tmp/postgres-results-review", None),
+    Fixture("lumen_sweep_source_unavailable", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "Repository source unavailable: claude-worktrees", None),
+    Fixture("lumen_sweep_docker_help", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "Run 'docker run --help' for more information", None),
+    Fixture("lumen_sweep_failed", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "Lumen failed: Lumen indexing failed: claude-worktrees, home, chezmoi",
+            Row("lumen-sweep", "Lumen failed: Lumen indexing failed: claude-worktrees, home, chezmoi", "ERROR")),
+    Fixture("lumen_sweep_traceback", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "KeyError: 'LUMEN_IMAGE'", Row("lumen-sweep", "KeyError: 'LUMEN_IMAGE'", None)),
+    Fixture("lumen_sweep_killed", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "Killed", Row("lumen-sweep", "Killed", None)),
+    Fixture("lumen_sweep_usage", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "Usage:", Row("lumen-sweep", "Usage:", None)),
+    Fixture("lumen_sweep_engine_error", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            "Error: indexing: build merkle tree: lstat /home/nathan/repos/indy-board-music-layout: no such file or directory",
+            Row("lumen-sweep",
+                "Error: indexing: build merkle tree: lstat /home/nathan/repos/indy-board-music-layout: no such file or directory",
+                "ERROR")),
+    Fixture("lumen_sweep_docker_error", compose("lumen-sweep", "lumen-sweep", "lumen", stream="stderr"),
+            LUMEN_SWEEP_DOCKER_ERROR, Row("lumen-sweep", LUMEN_SWEEP_DOCKER_ERROR, "ERROR")),
+    # lumen-ollama drops a request that succeeded in under 10 s and keeps the rest.
+    Fixture("lumen_ollama_healthcheck", compose("lumen-ollama", "lumen-ollama", "lumen"),
+            '[GIN] 2026/10/05 - 00:31:25 | 200 |      28.166µs |       127.0.0.1 | HEAD     "/"', None),
+    Fixture("lumen_ollama_model_list", compose("lumen-ollama", "lumen-ollama", "lumen"),
+            '[GIN] 2026/10/02 - 16:08:19 | 200 |    4.757052ms |       127.0.0.1 | GET      "/api/tags"', None),
+    Fixture("lumen_ollama_embed", compose("lumen-ollama", "lumen-ollama", "lumen"),
+            '[GIN] 2026/10/05 - 00:35:43 | 200 |  9.195039508s |     172.18.0.28 | POST     "/api/embed"', None),
+    Fixture("lumen_ollama_slow", compose("lumen-ollama", "lumen-ollama", "lumen"),
+            '[GIN] 2026/10/05 - 00:37:48 | 200 | 11.256962954s |     172.18.0.28 | POST     "/api/embed"',
+            Row("lumen-ollama",
+                '[GIN] 2026/10/05 - 00:37:48 | 200 | 11.256962954s |     172.18.0.28 | POST     "/api/embed"', None)),
+    Fixture("lumen_ollama_minutes", compose("lumen-ollama", "lumen-ollama", "lumen"),
+            '[GIN] 2026/10/05 - 03:37:25 | 200 |         1m25s |     172.18.0.14 | POST     "/api/embed"',
+            Row("lumen-ollama",
+                '[GIN] 2026/10/05 - 03:37:25 | 200 |         1m25s |     172.18.0.14 | POST     "/api/embed"', None)),
+    Fixture("lumen_ollama_error", compose("lumen-ollama", "lumen-ollama", "lumen"),
+            '[GIN] 2026/10/05 - 00:35:43 | 500 |  9.195039508s |     172.18.0.28 | POST     "/api/embed"',
+            Row("lumen-ollama",
+                '[GIN] 2026/10/05 - 00:35:43 | 500 |  9.195039508s |     172.18.0.28 | POST     "/api/embed"', None)),
+    Fixture("lumen_ollama_runner", compose("lumen-ollama", "lumen-ollama", "lumen", stream="stderr"),
+            'time=2026-10-05T00:35:34.876Z level=INFO source=llama_server.go:1362 msg="llama-server started in 0.50 seconds"',
+            Row("lumen-ollama",
+                'time=2026-10-05T00:35:34.876Z level=INFO source=llama_server.go:1362 msg="llama-server started in 0.50 seconds"',
+                "INFO")),
     Fixture("paperless", compose("paperless", "webserver"),
             "[2026-05-16 11:40:00,000] [WARNING] [celery.beat] Scheduler: Sending due task train_classifier",
             Row("paperless", "[2026-05-16 11:40:00,000] [WARNING] [celery.beat] Scheduler: Sending due task train_classifier",
@@ -723,6 +810,40 @@ tracing {{
   write_to          = [podhaus.ship.run.input]
 }}
 
+// A host's own scrape, handed to the module's input as bilby's Gatus and
+// ESPHome scrapes and fractal's model service scrapes are, under a job name
+// of its own so its metrics are told apart from the module's self-scrape.
+prometheus.scrape "host_scrape" {{
+  targets         = [{{"__address__" = "127.0.0.1:{API_PORT}"}}]
+  job_name        = "{HOST_SCRAPE}"
+  scrape_interval = "10s"
+  forward_to      = [otelcol.receiver.prometheus.host_scrape.receiver]
+}}
+
+otelcol.receiver.prometheus "host_scrape" {{
+  output {{
+    metrics = [otelcol.processor.transform.host_scrape.input]
+  }}
+}}
+
+// The scrape's resource as a host config might leave it: a host.name of its
+// own, which the module replaces, and an attribute the module must not touch.
+otelcol.processor.transform "host_scrape" {{
+  error_mode = "ignore"
+
+  metric_statements {{
+    context    = "resource"
+    statements = [
+      `set(attributes["host.name"], "{DECOY_HOST}")`,
+      `set(attributes["{SENTINEL[0]}"], "{SENTINEL[1]}")`,
+    ]
+  }}
+
+  output {{
+    metrics = [podhaus.ship.run.input]
+  }}
+}}
+
 // The stand-in collector.
 otelcol.receiver.otlp "collector" {{
   http {{
@@ -869,6 +990,10 @@ def alloys_own(resources: list[dict[str, object]]) -> list[dict[str, object]]:
     return [resource for resource in resources if resource.get("service.name") == "alloy"]
 
 
+def host_scrapes(resources: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [resource for resource in resources if resource.get("service.name") == HOST_SCRAPE]
+
+
 class AlloyRun:
     """One bounded `grafana/alloy` container running the harness config."""
 
@@ -912,7 +1037,8 @@ class AlloyRun:
 
     def wait_for_metrics_and_spans(self, deadline: float) -> None:
         """Alloy scrapes itself once a minute, at an offset within the minute that varies by run."""
-        self.wait_until(lambda: bool(alloys_own(self.metrics()) and alloys_own(self.spans())), deadline)
+        self.wait_until(lambda: bool(alloys_own(self.metrics()) and alloys_own(self.spans())
+                                     and host_scrapes(self.metrics())), deadline)
 
     def wait_until(self, arrived: Callable[[], bool], deadline: float) -> None:
         while not arrived() and time.monotonic() < deadline and self.process.poll() is None:
@@ -1092,9 +1218,18 @@ class LogSchemaTest(unittest.TestCase):
         self.assertIn(HOST, [resource.get("host.name") for resource in alloys_own(self.metrics)],
                       f"no metric of Alloy's own carries host.name {HOST}. Alloy said:\n{self.alloy_output}")
 
-    def test_spans_written_to_the_modules_input_arrive(self) -> None:
-        self.assertNotEqual(alloys_own(self.spans), [],
-                            f"no span of Alloy's own arrived. Alloy said:\n{self.alloy_output}")
+    def test_spans_written_to_the_modules_input_arrive_under_the_host(self) -> None:
+        spans = alloys_own(self.spans)
+        self.assertNotEqual(spans, [], f"no span of Alloy's own arrived. Alloy said:\n{self.alloy_output}")
+        self.assertEqual({resource.get("host.name") for resource in spans}, {HOST})
+
+    def test_metrics_written_to_the_modules_input_arrive_under_the_host(self) -> None:
+        """Where bilby's and fractal's own scrapes go: the module sets host.name and nothing else."""
+        scrapes = host_scrapes(self.metrics)
+        self.assertNotEqual(scrapes, [], f"no metric of the stand-in host scrape arrived. Alloy said:\n{self.alloy_output}")
+        arrived = {(resource.get("host.name"), resource.get("service.name"), resource.get(SENTINEL[0]))
+                   for resource in scrapes}
+        self.assertEqual(arrived, {(HOST, HOST_SCRAPE, SENTINEL[1])})
 
     def test_the_compose_healthcheck_passes_against_the_shipping_alloy(self) -> None:
         self.assertEqual(self.health.returncode, 0, self.health.stdout + self.health.stderr)

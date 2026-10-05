@@ -321,7 +321,8 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
         the same route via <code>127.0.0.1:2204</code> and the <code>ssh://fractal</code>
         Pomerium route through a chezmoi <code>Match originalhost</code> rewrite; on the
         home network a preceding <code>localnetwork</code> match connects direct via the
-        split-horizon record instead.
+        split-horizon record instead. Alloy ships logs across the home LAN in plaintext to
+        the ClickStack collector's published port on bandicoot, as bilby and kangaroo do.
       </p>
       <p id="fractal-llm">
         <strong>Local model service.</strong> <code>fractal-llm</code> (<code>llm/</code>)
@@ -429,8 +430,8 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
         Everything else in and out is a connection bandicoot makes, on the fractal
         pattern: the <code>bandicoot-relay</code> rathole client carries
         <code>ssh://bandicoot</code> (<code>127.0.0.1:2206</code> on numbat) and its own
-        mTLS HTTP origin (<code>127.0.0.1:8447</code>), and Alloy ships logs to
-        <code>logs-ingest.pod.haus</code> with a per-host mTLS client certificate. Komodo
+        mTLS HTTP origin (<code>127.0.0.1:8447</code>). Alloy ships logs to the
+        ClickStack collector on this host by container name over dockernet. Komodo
         Core runs on this host now, so its own Periphery dials the LAN name the published
         port answers on (<code>ws://bandicoot.pod.haus:9120</code>) instead of
         <code>core-connect.pod.haus</code> — no internet dependency for the connection to

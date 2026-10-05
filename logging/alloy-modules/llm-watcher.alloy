@@ -30,10 +30,10 @@
 //                           sampling stalled, and Docker restarts it
 //
 // The shared JSON step in enrich.alloy makes every field of the event an
-// attribute (requests_cut, busy_before_s, the first_activity_ts/released_ts
-// pair, each slot's tokens as `slots.<n>.<field>`, the raw samples) and the
-// body `msg`. The event name is also promoted here as `llm_event`, beside
-// the `event` attribute.
+// attribute (`event` itself, requests_cut, busy_before_s, the
+// first_activity_ts/released_ts pair, each slot's tokens as
+// `slots.<n>.<field>`, the raw samples) and the body `msg`. This module only
+// maps `level` onto the pipeline's level, folding `warning` onto WARN.
 //
 // Non-JSON lines (a traceback, an interpreter warning) are kept out of the
 // JSON stages by the line filter.
@@ -51,7 +51,7 @@ declare "llm_watcher" {
 				selector = "{service=\"llm-watcher\"} |~ \"^\\\\{\""
 
 				stage.json {
-					expressions = {lvl = "level", evt = "event"}
+					expressions = {lvl = "level"}
 				}
 
 				stage.template {
@@ -60,7 +60,7 @@ declare "llm_watcher" {
 				}
 
 				stage.labels {
-					values = {detected_level = "lvl", llm_event = "evt"}
+					values = {detected_level = "lvl"}
 				}
 			}
 		}

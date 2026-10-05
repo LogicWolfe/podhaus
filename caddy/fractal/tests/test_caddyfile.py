@@ -115,6 +115,10 @@ def relocated(node: object, moves: dict[str, str]) -> object:
     return node
 
 
+class PortTaken(Exception):
+    """Caddy exited because a chosen port was bound first by someone else."""
+
+
 class FractalCaddy:
     """fractal-caddy's plain-HTTP listeners, with `admitted` as bandicoot's
     address and `model` and `watcher` in place of the two containers."""
@@ -123,13 +127,27 @@ class FractalCaddy:
         caddy = shutil.which("caddy")
         if caddy is None:
             raise RuntimeError("caddy is not on PATH; run mise install")
-        local, lan = free_ports(2)
-        self.ports = {LOCAL: local, LAN: lan}
         self.compiled = self._compile(caddy, admitted)
         self._dir = tempfile.TemporaryDirectory()
-        path = Path(self._dir.name) / "caddy.json"
-        path.write_text(json.dumps(self._relocate(self.compiled, model, watcher)))
         self._log = Path(self._dir.name) / "caddy.log"
+        # A port chosen free can be taken by another test before Caddy binds
+        # it, so a lost race starts Caddy again on fresh ports.
+        for _ in range(5):
+            local, lan = free_ports(2)
+            self.ports = {LOCAL: local, LAN: lan}
+            self._start(caddy, self._relocate(self.compiled, model, watcher))
+            try:
+                self._await_listeners()
+                break
+            except PortTaken:
+                continue
+        else:
+            raise RuntimeError("caddy lost the port race five times")
+        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def _start(self, caddy: str, config: dict) -> None:
+        path = Path(self._dir.name) / "caddy.json"
+        path.write_text(json.dumps(config))
         # Caddy's own state goes in the test's directory, not the home.
         state = {"XDG_CONFIG_HOME": self._dir.name, "XDG_DATA_HOME": self._dir.name}
         with self._log.open("w") as log:
@@ -139,8 +157,6 @@ class FractalCaddy:
                 stdout=log,
                 stderr=subprocess.STDOUT,
             )
-        self._await_listeners()
-        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     @staticmethod
     def _compile(caddy: str, admitted: str) -> dict:
@@ -178,7 +194,10 @@ class FractalCaddy:
         for port in self.ports.values():
             while True:
                 if self._process.poll() is not None:
-                    raise RuntimeError(f"caddy exited:\n{self._log.read_text()}")
+                    output = self._log.read_text()
+                    if "address already in use" in output:
+                        raise PortTaken(output)
+                    raise RuntimeError(f"caddy exited:\n{output}")
                 try:
                     socket.create_connection((LOOPBACK, port), timeout=1).close()
                     break

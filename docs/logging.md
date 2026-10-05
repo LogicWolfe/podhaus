@@ -5,9 +5,9 @@ service or source wrote it. Alloy on each host reads container output, a few log
 files and the systemd journal, and the shared modules in `logging/alloy-modules/`
 fit each line to that schema before it ships. A new service fits by writing JSON
 lines; the pipeline needs no change. The services that export their own
-telemetry (fenwick, indy-service and the book services) bypass Alloy, and their
-rows fit only once each sets the one line described under [Services that ship
-their own telemetry](#services-that-ship-their-own-telemetry). This page covers what a row looks like, how to
+telemetry bypass Alloy for what they export and fit the schema by setting their
+resource in their compose files ([Services that ship their own
+telemetry](#services-that-ship-their-own-telemetry)). This page covers what a row looks like, how to
 find rows in HyperDX, and the rules a parser and a new service follow.
 Alerting, the pipeline's own health, and ClickStack itself are in
 [Monitoring](monitoring.html).
@@ -21,7 +21,8 @@ Plex, Flood, ClickHouse  ─┤  source module: names the service, records how t
 systemd journal          ─┘
         │
         ▼
-chain.alloy               one parser module per service, each setting the level only
+chain.alloy               one parser module per service, each setting the service's
+        │                   severity and making the approved whole-line drops (below)
         │
         ▼
 ship.alloy                everything after the parsers, the same on every host:
@@ -39,10 +40,17 @@ its parsing with no logging change. Each host's
 `logging/<host>/alloy-conf/config.alloy` lists which source modules it runs and
 gives the ship module its host name, the collector's address as that host
 reaches it, and, for a host that ships through `logs-ingest.pod.haus`, its
-client certificate. Two hosts also scrape metrics of their own (bilby: Gatus and
-ESPHome; fractal: the local model service) and hand them to the ship module's
-exporter. The ship module also carries Alloy's own metrics and the exporter's
-retry and queue settings ([Monitoring](monitoring.html#alloy)).
+client certificate. The collector runs on bandicoot: bandicoot's Alloy reaches
+it by container name on dockernet, bilby's, kangaroo's and fractal's across the
+home LAN in plaintext, and Numbat's, voltaire's and Pinelake's through
+`logs-ingest.pod.haus` with a client certificate
+([Monitoring](monitoring.html#alloy)). Two hosts also scrape metrics of their
+own (bilby: Gatus and ESPHome; fractal: the local model service) and hand them
+to the ship module, naming only their service. The ship module also carries
+Alloy's own metrics and spans and the exporter's retry and queue settings, and
+it sets `host.name` from its host argument on every metric and span it ships,
+whatever the metric or span carried before; a host config never sets
+`host.name` itself, which `logging/tests/test_alloy_health.py` checks.
 
 ## The schema
 
@@ -55,8 +63,8 @@ table (`log.source`, `log.iostream`, `compose.service`, `journal.unit`,
 `journal.reader`), including a nested field that flattens to one, such as
 `{"log":{"source":…}}`, is removed from every JSON line, so it is absent from a
 body that keeps its JSON as well. A service field spelled like an attribute a
-parser adds to that service's rows (`component`, `logger`, `llm_event`) is
-discarded, and the row keeps the parser's value. Two more losses come from
+parser adds to that service's rows (`component`, `logger`, the model server's
+`llm_*` names) is discarded, and the row keeps the parser's value. Two more losses come from
 flattening itself: an empty list or object leaves no attribute, and a key that
 appears twice in one object keeps only its last value.
 
@@ -67,7 +75,7 @@ appears twice in one object keeps only its last value.
 | `SeverityNumber` | column | The OpenTelemetry number for that level: 1, 5, 9, 13, 17, 21. | `13` |
 | `service.name` | resource | The service, the same on every host. | `flood` |
 | `ServiceName` | column | The collector's copy of `service.name`, which HyperDX's service filter reads. | `flood` |
-| `host.name` | resource | The machine that read the line. | `pinelake` |
+| `host.name` | resource | The machine that read the line. Alloy's metrics and spans, and the metrics a host scrapes, carry the same name, set by the ship module from its host argument. | `pinelake` |
 | `service.instance.id` | resource | This running copy: `<host>/<container>`, or `<host>/<service>` for a journal row. Never shared by two containers. | `pinelake/pinelake-flood` |
 | `service.namespace` | resource | The stack: the container's compose project. Container and file rows. | `pinelake-flood` |
 | `container.name` | resource | The Docker container. Container and file rows. | `fractal-llm-llm-model-1` |
@@ -80,11 +88,10 @@ appears twice in one object keeps only its last value.
 | `Body` | column | The message. For a JSON line, its `msg`, else `message`, else `log_message`; a JSON line with none of the three keeps its JSON. A text line is kept whole as printed, less ANSI colour codes. | `authorize check` |
 | everything else | attribute | The service's own JSON fields under their own names, nested objects and arrays flattened with dots, credential keys removed (see Secrets), reserved names discarded (above). | `email`, `request.headers.User-Agent.0`, `status` |
 
-A few parser modules add one attribute of their own: Home Assistant and
+A few parser modules add attributes of their own: Home Assistant and
 Paperless keep the `[component]` logger name of a text line as `logger`,
-HyperDX keeps the `[API]`-style prefix of its lines as `component`, the model
-watcher copies its event name to `llm_event`, and the model server's allow-list
-parser adds its `llm_*` attributes ([local model
+HyperDX keeps the `[API]`-style prefix of its lines as `component`, and the
+model server's allow-list parser adds its `llm_*` attributes ([local model
 runbook](runbooks/local-llm.md#logs-and-metrics)).
 
 ### How a container is named
@@ -198,9 +205,10 @@ change applies on that recreate and never inside a running Alloy.
   arguments and every tailer's labels, so a change fails `tools/pre-commit`
   until its pin is updated with it.
 - **A parser never drops a field.** It sets the level (the `detected_level`
-  label) and nothing else: it does not rewrite or shorten the body, does not
-  delete a label, and does not parse JSON itself (enrich does that for every
-  service). The exceptions are structural and named in the module header:
+  label) and nothing else about a line it keeps: it does not rewrite or shorten
+  the body, does not delete a label, and does not parse JSON itself (enrich
+  does that for every service). The exceptions are structural and named in the
+  module header:
   HyperDX's `[COMP] {…}` prefix is moved to an attribute so the JSON after it
   can be parsed, Home Assistant's and Paperless's logger name is kept as an
   attribute, and the model server's allow-list redacts text (see Secrets).
@@ -210,19 +218,48 @@ change applies on that recreate and never inside a running Alloy.
   of its own.** A parser's attribute is set before the JSON is merged, so the
   service's field of the same name is discarded.
 - **No timestamp stage** outside the three tailed-file modules (see Time).
-- **Whole lines are dropped only where the module header says why**: Alloy's
-  zero-byte read reports, Plex's `/identity` healthcheck and `Completed:`
-  response lines, the Flood `pinelake-stignore` heartbeat that changed nothing,
-  the model router's per-request "proxying request" line, and the container
-  copies of records that a service also exports itself (below).
+- **A whole line is dropped only where the owner has approved it.** Every
+  approved drop is in this list, with the lines it matches; the module's header
+  says why. A new drop needs the owner's approval and its entry here, in the
+  same commit as the module change.
+  - `alloy`: the Docker tailer's report of a read that wrote nothing, a
+    `finished transferring logs` line with `written=0`.
+  - `plex-server-log`: Plex's healthcheck requests, a line with `GET /identity`,
+    and the response line of every request, `] DEBUG - Completed: [`.
+  - `flood-job-logs`: the `pinelake-stignore` run that changed nothing, a line
+    of `pinelake-stignore.log` with `changed=0`.
+  - `gatus`: the result of a check that passed, a
+    `[watchdog.executeEndpoint] Monitored` or
+    `[watchdog.monitorExternalEndpointHeartbeat] Checked heartbeat for` line with
+    `success=true; errors=0`. A failing result, a passing one that reports
+    errors, and a push's `Successfully inserted result` receipt stay.
+  - `lumen-sweep`: the progress lines, which begin `INFO: Indexing `,
+    `INFO: Found <n> files to index`, `Indexing: <n>/<n>`, `Root hash: `,
+    `Reason: ` with one of its three reasons (already fresh, root hash changed,
+    fresh index), `Index is already up to date.`, `Files: <n> added`,
+    `Done. Indexed `, `Skipping missing Git worktree: `,
+    `Repository source unavailable: ` or `Run 'docker run --help'`. Every other line stays, so a failure line nobody
+    foresaw is never lost and a new progress line ships until it is listed.
+  - `lumen-ollama`: a request that succeeded in under 10 seconds, a `[GIN]` line
+    whose status is 2xx and whose time is in `ns`, `µs` or `ms` or under `10s`.
+    Every other status, every request of 10 seconds or more and the model
+    runner's own lines stay.
+  - `llm-server`: the router's per-request `proxying request to model` line, and
+    for privacy the lines that quote a client's request or carry its
+    conversation id: the `WARNING: JSON schema conversion` and
+    `error parsing grammar:` lines, the `conv_id=` lines, and blank lines
+    ([local model runbook](runbooks/local-llm.md#what-is-deliberately-not-recorded)).
+  - `fenwick` and `indy-service`: every container line, and `bookbinder`,
+    `bookcard` and `bookshelf`: every line that begins `{`, because each service
+    exports those records itself (below).
 - **Every module has a fixture** in `logging/tests/test_log_schema.py`, which
   runs the real modules, `ship.alloy` included, in a `grafana/alloy` container
   whose stand-in collector receives what the module exports. It checks each
   row's resource, attribute names, body and severity, and reads each tailer's
-  labels back through Alloy's HTTP API. The same run checks that Alloy's own
-  metrics arrive under the host's name, that spans written to the module's
-  input arrive, and that the compose file's healthcheck passes against that
-  Alloy. `tools/pre-commit` runs it; it needs Docker, and without Docker the
+  labels back through Alloy's HTTP API. The same run checks that every metric
+  and span the module ships carries the host's name with its other resource
+  attributes intact, and that the compose file's healthcheck passes against
+  that Alloy. `tools/pre-commit` runs it; it needs Docker, and without Docker the
   whole test class is skipped with the reason printed.
 - **Every module and host config is formatted, valid and loads.** Each file
   must be exactly what `alloy fmt` prints, `alloy validate` must pass on the
@@ -253,7 +290,8 @@ change applies on that recreate and never inside a running Alloy.
   module. `state` is an ordinary field elsewhere, so it is not removed
   fleet-wide. Pomerium's sign-in callback path still carries the one-time OAuth
   authorisation `code`, and Pocket ID's request `query` field still carries the
-  OAuth `state` blob.
+  OAuth `state` blob. Both stay on purpose: telemetry is for debugging, the code
+  is spent within seconds of being logged, and HyperDX is inside the house.
 - **Text lines are stored as printed.** Nothing scrubs a secret out of plain
   text, so a service that prints one puts it in ClickStack for 180 days. The fix
   belongs in the service.
@@ -265,16 +303,23 @@ change applies on that recreate and never inside a running Alloy.
 
 ## Services that ship their own telemetry
 
-fenwick, fenwick-web-agent, indy-service and the book services (bookshelf,
-bookcard, bookbinder) export to the ClickStack collector themselves over OTLP,
-so enrich never sees those rows. To keep each record from being stored twice,
-the `fenwick` and `indy-service` modules drop those containers' output whole,
-and the three book modules drop their JSON lines, letting through only the text
-a process prints when it fails outside its exporter. fenwick-web-agent's
-container output is collected like any container's.
+Nine services export to the ClickStack collector themselves over OTLP, so
+enrich never sees what they export:
 
-To fit the schema, each sets its resource in its compose file, one line beside
-its service name:
+- on bandicoot: fenwick, fenwick-web-agent, brinno-downloader and the book
+  services (bookshelf, bookcard, bookbinder)
+- on bilby: indy-service (the `indy-board` stack) and pets
+- docs-server, whose OTLP endpoint is set only on bilby's `docs` container
+
+To keep each record from being stored twice, the `fenwick` and `indy-service`
+modules drop those containers' output whole, and the three book modules drop
+their JSON lines, letting through only the text a process prints when it fails
+outside its exporter. The others' container output is collected like any
+container's. pets runs Deno's built-in exporter, which also exports what it
+prints, so each of its few console lines is stored twice.
+
+Each of the first eight sets its resource in its compose file, in its own
+repository, one line beside its service name:
 
 ```yaml
 environment:
@@ -282,9 +327,15 @@ environment:
   OTEL_RESOURCE_ATTRIBUTES: host.name=<host>,service.namespace=<compose project>,service.instance.id=<host>/<container name>
 ```
 
-None of them sets `OTEL_RESOURCE_ATTRIBUTES` yet, so their rows carry only the
-SDK's resource: `service.name`, and for bookcard a random
-`service.instance.id`. None has `host.name` or `service.namespace`.
+Their rows then carry `host.name`, `service.namespace` and
+`service.instance.id` as an Alloy row does. fenwick-web-agent also sets
+`OTEL_NODE_RESOURCE_DETECTORS=host,process,env`: the Node SDK lets the last
+detector win, and its host detector would otherwise name the container rather
+than the host.
+
+docs-server is the exception. Its compose file is shared by every docs host, so
+the values would have to come from each host's stack environment, and its spans
+carry only the SDK's resource: `service.name` `docs` and no `host.name`.
 
 ## What is collected
 
@@ -298,7 +349,12 @@ seconds, and a container is read only once a listing has seen it, so one that
 is removed within seconds of starting, such as a short `docker run --rm` job,
 may never be read. A stopped container stays in discovery, so an init
 container that has exited is read whole and one that Ofelia starts on a
-schedule resumes where it stopped.
+schedule resumes where it stopped. Within that output only the approved drops
+above are left out. Two services log more than most on purpose and ship all of
+it: Pomerium at debug, because ssh-auth-notify reads its keyboard-interactive
+line from `docker logs` (`pomerium/config.yaml`), and each host's Alloy at
+info, about 10,000 rows
+a host a day, which record what each Alloy loaded and when it re-evaluated.
 Every Alloy restart, whether the recreate a logging change brings or an
 autoheal restart of a wedged exporter ([Monitoring](monitoring.html#exporter-stall)),
 ships some lines twice: each stopped container's log is read again from the

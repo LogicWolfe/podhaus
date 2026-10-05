@@ -5,9 +5,10 @@
 # and Flood logs, the systemd journal, ClickHouse's error log).
 #
 # Alloy bridges container logs, tailed files and the journal to OTLP and
-# ships to the ClickStack collector on bandicoot: bilby and kangaroo
-# cross-LAN in plaintext, every other host through the mTLS ingest path.
-# The ingestion key and endpoint live in each host's config and stack TOML.
+# ships to the ClickStack collector on bandicoot: bandicoot by container
+# name, bilby, kangaroo and fractal across the home LAN in plaintext, and
+# numbat, voltaire and pinelake through the mTLS ingest path. The ingestion
+# key and endpoint live in each host's config and stack TOML.
 
 # ../alloy-modules is outside every host's stack directory, so on its own
 # a change there would not move STACK_CONTENT_HASH and the linked-repo

@@ -780,12 +780,10 @@ class WatcherEventParsingTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(name, comment)
 
-    def test_every_event_yields_level_and_event_name(self) -> None:
+    def test_every_event_yields_a_level(self) -> None:
         for event in self.events:
             with self.subTest(event=event["event"]):
-                got = self.extracted(event)
-                self.assertIn(got["lvl"], {"info", "warning", "error"})
-                self.assertEqual(got["evt"], event["event"])
+                self.assertIn(self.extracted(event)["lvl"], {"info", "warning", "error"})
 
     def test_the_row_keeps_dockers_receive_time(self) -> None:
         """Container rows are timed by Docker's nanosecond receive time; no parser overrides it."""
@@ -797,8 +795,9 @@ class WatcherEventParsingTest(unittest.TestCase):
             with self.subTest(event=event["event"]):
                 self.assertEqual(datetime.fromisoformat(event["ts"]).utcoffset().total_seconds(), 0)
 
-    def test_event_name_is_the_only_promoted_field_besides_level(self) -> None:
-        self.assertEqual(set(self.module.labels), {"detected_level", "llm_event"})
+    def test_level_is_the_only_label_the_module_sets(self) -> None:
+        """The event name reaches the row as the `event` attribute through the shared JSON step."""
+        self.assertEqual(set(self.module.labels), {"detected_level"})
 
     def test_body_keeps_the_whole_json_line_so_every_event_field_is_queryable(self) -> None:
         self.assertNotIn("stage.output", self.module.text)

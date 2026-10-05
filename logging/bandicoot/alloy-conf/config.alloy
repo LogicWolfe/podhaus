@@ -56,12 +56,9 @@ podhaus.chain "run" {
 	forward_to = [podhaus.ship.run.receiver]
 }
 
-// The collector is on this host, but the path goes out and back: out to
-// Numbat's relay address, through rathole to bilby's Caddy, which checks
-// this client certificate, and across the LAN to the collector's port here.
+// The collector runs on this host: plaintext to its container by name on
+// bandicoot's dockernet, which both containers join.
 podhaus.ship "run" {
-	host             = "bandicoot"
-	endpoint         = "https://logs-ingest.pod.haus"
-	client_cert_file = "/run/podhaus-secrets/bandicoot-cert.pem"
-	client_key_file  = "/run/podhaus-secrets/bandicoot-key.pem"
+	host     = "bandicoot"
+	endpoint = "http://clickstack-otel:4318"
 }

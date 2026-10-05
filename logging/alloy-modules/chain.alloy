@@ -143,6 +143,14 @@ declare "chain" {
 	}
 
 	pocket_id "run" {
+		forward_to = [lumen_sweep.run.receiver]
+	}
+
+	lumen_sweep "run" {
+		forward_to = [lumen_ollama.run.receiver]
+	}
+
+	lumen_ollama "run" {
 		forward_to = [llm_server.run.receiver]
 	}
 

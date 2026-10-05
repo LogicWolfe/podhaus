@@ -170,6 +170,15 @@ class HostConfigTest(unittest.TestCase):
                 self.assertEqual(len(SHIP_CALL.findall(text)), 1, f"{config} must call podhaus.ship \"run\" once")
                 self.assertNotIn("otelcol.exporter.", text, f"{config} has an exporter beside the ship module's")
 
+    def test_no_host_sets_host_name_itself(self) -> None:
+        # The ship module stamps host.name on everything it ships, from its
+        # host argument; a second spelling in a host config could only drift
+        # from it.
+        for host, config in host_configs():
+            with self.subTest(host=host):
+                setting = [line.strip() for line in config.read_text().splitlines() if 'attributes["host.name"]' in line]
+                self.assertEqual(setting, [], f"{config} sets host.name; the ship module's host argument is its one definition")
+
     def test_every_https_host_presents_its_client_certificate(self) -> None:
         # The ingest endpoint refuses a client without one at the handshake.
         # Each refusal still completes a request, so the healthcheck stays

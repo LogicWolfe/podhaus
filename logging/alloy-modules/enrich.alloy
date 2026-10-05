@@ -79,7 +79,7 @@
 //     `loki.attribute.labels` (a list of the label names) are deleted.
 //  5. The JSON fields are merged into the log attributes without
 //     overwriting: a service field named exactly like an attribute a parser
-//     added to the row (`component`, `logger` or `llm_event`) is discarded,
+//     added to the row (`component`, `logger` or an `llm_*` name) is discarded,
 //     and every other service field lands under its own name. The body
 //     becomes the message field (`msg`, else `message`, else
 //     `log_message`); a line with none keeps its JSON as the body,

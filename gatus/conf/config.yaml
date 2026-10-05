@@ -890,7 +890,7 @@ endpoints:
     # chatter (60→150 min, still false-firing: organic gaps hit 152 and
     # 170 min in the days before this change). The `host.name` resource
     # attribute that makes kangaroo's metrics selectable is stamped by
-    # the `svc_alloy` transform in logging/alloy-modules/ship.alloy, from
+    # the `host_name` transform in logging/alloy-modules/ship.alloy, from
     # the host name logging/kangaroo/alloy-conf/config.alloy gives it.
     #
     # `count() > 0` over a TimeUnix-windowed scan (not `max(TimeUnix) >
@@ -969,7 +969,7 @@ endpoints:
       - "[BODY] == 1"
     alerts:
       - type: custom
-        description: "No bandicoot Alloy metrics reached ClickHouse in 15+ minutes: the path to the collector is down, or Alloy's exporter is wedged and autoheal's restart of alloy has not cleared it. Bandicoot ships to logs-ingest.pod.haus, out through Numbat's rathole and back through bilby's Caddy to the collector on bandicoot. Check bandicoot-logging, the logs-ingest rathole service, bilby's Caddy, the mTLS client certificate, and the ClickStack ingestion key."
+        description: "No bandicoot Alloy metrics reached ClickHouse in 15+ minutes: the path to the collector is down, or Alloy's exporter is wedged and autoheal's restart of alloy has not cleared it. Bandicoot's Alloy ships to the collector on the same host, clickstack-otel:4318 by container name over dockernet. Check bandicoot-logging, that alloy and clickstack-otel are both on bandicoot's dockernet, the clickstack-otel container, and the ClickStack ingestion key."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true

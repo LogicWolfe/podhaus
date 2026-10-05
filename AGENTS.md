@@ -79,7 +79,8 @@ Docker container infrastructure for **seven** active hosts:
   split-horizon `fractal.pod.haus` resolves to it — so it reaches the fleet
   by dialing out: Periphery to
   `core-connect.pod.haus`, rathole to Numbat for `fractal.docs.pod.haus`
-  and `ssh://fractal`, Alloy to `logs-ingest.pod.haus`. **Provisioned by
+  and `ssh://fractal`, and Alloy across the home LAN to the ClickStack
+  collector's published port on bandicoot. **Provisioned by
   Ansible** rather than a bootstrap script, like numbat. It also runs the
   local model service (`llm/`), a llama.cpp server that borrows the desktop's
   GPU between games and is served at `llm.pod.haus`.
@@ -96,7 +97,8 @@ Docker container infrastructure for **seven** active hosts:
   Periphery dials Core directly (`ws://bandicoot.pod.haus:9120`, LAN,
   since they share a host) rather than `core-connect.pod.haus`, a rathole
   client (`relay/bandicoot`) carrying `ssh://bandicoot` and
-  `bandicoot.docs.pod.haus`, Alloy to `logs-ingest.pod.haus`; direct LAN
+  `bandicoot.docs.pod.haus`, Alloy to the ClickStack collector on the same
+  host by container name; direct LAN
   SSH via split-horizon `bandicoot.pod.haus`. Provisioned by Ansible
   (`playbooks/bandicoot.yml`, run locally — `ansible_connection: local`),
   with the `base` role's laptop policy so the lid never takes it offline,
@@ -266,7 +268,7 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `bandicoot/periphery/` | Bandicoot's own outbound Periphery, dialing Core directly (`ws://bandicoot.pod.haus:9120`) since they share a host. Installed by the `komodo_periphery` Ansible role. |
 | `bilby/periphery/` | Bilby's outbound Periphery (was the inbound service bundled in `komodo/ferretdb.compose.yaml` before Core moved to bandicoot), dialing `ws://bandicoot.pod.haus:9120`. Installed by the `komodo_periphery` Ansible role. |
 | `ansible/roles/docs_sources/` | Stable read-only repository source slots for docs-server on Bilby, Fractal, Voltaire, and Bandicoot. The recurring reconciler exposes each available user-owned checkout beneath `/opt/podhaus/docs-sources`; unavailable sources reveal a marker, making docs health red while other sources continue serving. |
-| `relay/fractal/`, `caddy/fractal/`, `logging/fractal/` | fractal's outbound ingress + observability: rathole client → Numbat (`fractal_http` → `127.0.0.1:8444`, `fractal_ssh` → `127.0.0.1:2204`), Caddy mTLS origin on `:4443` (docs and `llm.pod.haus`) plus two no-sign-in listeners for the local model service: one published on fractal's loopback only (`127.0.0.1:8085`), and one on `:8086` serving the model paths alone to Fenwick, which Caddy limits to bandicoot's address. `caddy/fractal/llm-setup/` is the self-service page at `llm.pod.haus/setup/` (behind the friends policy at Pomerium, then signs in with Pocket ID in the browser for the key; only its installer files are public, so `curl | sh` works) with its two `curl | sh` installers, the `llm-token` sign-in command, the `claude-podhaus` launcher and the pi extension; `caddy/fractal/tests/` run in `tools/pre-commit`, one of them running the real Caddyfile's plain-HTTP listeners under the mise-installed `caddy`. Alloy to `logs-ingest.pod.haus` (also scraping the model service's metrics). The `fractal-docs` stack and its multi-location repository catalog are defined in the **docs repo**, while Ansible owns the host source slots. |
+| `relay/fractal/`, `caddy/fractal/`, `logging/fractal/` | fractal's outbound ingress + observability: rathole client → Numbat (`fractal_http` → `127.0.0.1:8444`, `fractal_ssh` → `127.0.0.1:2204`), Caddy mTLS origin on `:4443` (docs and `llm.pod.haus`) plus two no-sign-in listeners for the local model service: one published on fractal's loopback only (`127.0.0.1:8085`), and one on `:8086` serving the model paths alone to Fenwick, which Caddy limits to bandicoot's address. `caddy/fractal/llm-setup/` is the self-service page at `llm.pod.haus/setup/` (behind the friends policy at Pomerium, then signs in with Pocket ID in the browser for the key; only its installer files are public, so `curl | sh` works) with its two `curl | sh` installers, the `llm-token` sign-in command, the `claude-podhaus` launcher and the pi extension; `caddy/fractal/tests/` run in `tools/pre-commit`, one of them running the real Caddyfile's plain-HTTP listeners under the mise-installed `caddy`. Alloy across the home LAN to the ClickStack collector on bandicoot (also scraping the model service's metrics). The `fractal-docs` stack and its multi-location repository catalog are defined in the **docs repo**, while Ansible owns the host source slots. |
 | `llm/` | **Local model service on fractal** (`fractal-llm`). `compose.yaml` runs `llm-model` (a one-shot download-and-checksum job for the model file), `llm-server` (llama.cpp in router mode, given the GPU; settings in `server/models.ini`, chat templates beside it) and `llm-watcher` (`watcher/`, standard-library Python that unloads the model when a Windows game wants the GPU and loads it again once the GPU is quiet; its thresholds are environment settings in `compose.yaml`). `tests/` run in `tools/pre-commit`. Reached at `llm.pod.haus` (Pomerium → fractal's Caddy; `/control` is Nathan-only) and at `127.0.0.1:8085` on fractal. **Every file under `llm/` is in the stack content hash**, so any edit recreates all three containers and leaves the model unloaded until the GPU has been quiet. See [`docs/runbooks/local-llm.md`](docs/runbooks/local-llm.md). |
 | `relay/voltaire/`, `logging/voltaire/`, `autoheal/voltaire/` | voltaire's outbound ingress + observability on the fractal pattern: rathole client → Numbat (`voltaire_ssh` only — no HTTPS service), Alloy to `logs-ingest.pod.haus`, autoheal. All linked-repo (`podhaus-voltaire`); the Fedora Workstation host runs SELinux enforcing, so every bind-mounting service carries `security_opt: [label=disable]`. |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
@@ -517,9 +519,12 @@ These have failure modes that you must not introduce:
   is discarded. Beyond that, the only values removed are credential keys,
   Pomerium's OAuth `state`, and the text the model server's allow-list
   redacts; flattening also loses empty lists and objects and all but the last
-  of a repeated key. Every module has a fixture in
-  `logging/tests/test_log_schema.py`, which `tools/pre-commit` runs. See
-  [`docs/logging.md`](docs/logging.md).
+  of a repeated key. A module drops a whole line only where Nathan has
+  approved that drop, and every approved drop is listed with the lines it
+  matches in [`docs/logging.md`](docs/logging.md) (the parser rules); a new
+  drop needs his approval and its entry there in the same commit. Every
+  module has a fixture in `logging/tests/test_log_schema.py`, which
+  `tools/pre-commit` runs. See [`docs/logging.md`](docs/logging.md).
 - **Never change the labels a log tailer gives a container, file or journal
   entry.** Alloy keys each source's saved read positions on the container ID
   or file path plus the tailer's whole label set, so a changed set makes every

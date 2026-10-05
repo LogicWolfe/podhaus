@@ -46,12 +46,29 @@
 //    triggered but its provider is not configured, watchdog/alerting.go:78
 //    and 114, logged by gatus as a warning).
 //  - INFO: everything else, including the stack-trace lines after a panic.
+//
+// Dropped: the result of a check that passed, a `Monitored` line
+// (watchdog/endpoint.go:57 at commit 1cf7927) or a heartbeat's `Checked
+// heartbeat` line (watchdog/external_endpoint.go:53, 66) with
+// `success=true; errors=0`. One per endpoint per interval, about 90% of
+// gatus's lines (59,000 of 66,000 a day, measured 2026-10-05), and the same
+// result is in Gatus's own database and in its metrics, which bilby's Alloy
+// scrapes. Gatus cannot silence them itself: it logs a passing and a failing
+// result with the same logr.Infof call, so GATUS_LOG_LEVEL=WARN would
+// silence the failures as well. A failing result, a passing one that reports
+// errors, and a push's "Successfully inserted result" receipt are kept.
 
 declare "gatus" {
 	argument "forward_to" { }
 
 	loki.process "this" {
 		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector            = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} \\\\[watchdog\\\\.(?:executeEndpoint\\\\] Monitored|monitorExternalEndpointHeartbeat\\\\] Checked heartbeat for) group=.*; success=true; errors=0(?:;|$)\""
+			action              = "drop"
+			drop_counter_reason = "gatus_check_passed"
+		}
 
 		stage.match {
 			selector = "{service=\"gatus\"}"

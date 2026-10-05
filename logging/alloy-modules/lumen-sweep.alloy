@@ -1,0 +1,73 @@
+// Per-service log parser — lumen-sweep
+//
+// See komodo-op.alloy for the pattern/rationale.
+//
+// lumen-sweep is the stopped container Ofelia starts every ten minutes on
+// each Lumen host to refresh the code-search index of every registered
+// repository and worktree (lumen/image/gateway.py `sweep`). Its output is
+// the gateway's own lines and, for each worktree, the output of the
+// `lumen-engine index` run it starts in the foreground:
+//   INFO: Indexing /home/nathan/repos/podhaus (model: ordis/jina-embeddings-v2-base-code, dims: 768)
+//   INFO: Found 3 files to index
+//   Indexing: 0/3 (0%)
+//   Root hash: ff7a2953de4b5690 -> f948afc9d1902942
+//   Reason: already fresh
+//   Index is already up to date.
+//   Files: 0 added, 0 modified, 0 removed (0 total in project)
+//   Done. Indexed 0 files, 0 chunks in 9ms.
+//   Skipping missing Git worktree: /tmp/postgres-results-review
+//   Repository source unavailable: claude-worktrees
+//   Error: indexing: build merkle tree: lstat /home/nathan/repos/x: no such file or directory
+//   docker: Error response from daemon: ... read-only file system
+//   Run 'docker run --help' for more information
+//   Lumen failed: Lumen indexing failed: claude-worktrees, home, chezmoi
+// After an engine `Error:` line the engine also prints its usage block
+// (`Usage:`, `  lumen index <project-path> [flags]`, `Flags:` and one line
+// per flag).
+//
+// Dropped: the progress lines, which begin `INFO: Indexing `, `INFO: Found `,
+// `Indexing: `, `Root hash: `, `Reason: `, `Index is already up to date.`,
+// `Files: `, `Done. Indexed `, `Skipping missing Git worktree: `,
+// `Repository source unavailable: ` or `Run 'docker run --help'`. Five to
+// seven per worktree on every run, about 240,000 rows a day across bilby,
+// fractal and voltaire (measured 2026-10-05), and none says anything a
+// failure line does not: the skipped worktrees and unavailable sources are
+// named again in `Lumen failed:`, and Docker's help hint follows the
+// `docker: Error` line, which is kept.
+//
+// The rule lists the chatter rather than the failures because the two
+// mistakes cost differently: a new progress line ships, visibly, until it is
+// added here, while a failure line nobody foresaw is never lost. Every other
+// line is kept, the usage block included, since the engine prints it only
+// when a command fails.
+//
+// Level: `Lumen failed:` is the gateway's report that the sweep failed and
+// names every source and worktree that did. It carries no level word, so it
+// is set to ERROR here. Every other kept line gets enrich.alloy's level from
+// its own words, which makes `Error:` and `docker: Error` lines ERROR.
+
+declare "lumen_sweep" {
+	argument "forward_to" { }
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector            = "{service=\"lumen-sweep\"} |~ \"^(?:INFO: Indexing |INFO: Found \\\\d+ files to index|Indexing: \\\\d+/\\\\d+|Root hash: |Reason: (?:already fresh|root hash changed|fresh index \\\\(no previous root hash\\\\))|Index is already up to date\\\\.|Files: \\\\d+ added|Done\\\\. Indexed |Skipping missing Git worktree: |Repository source unavailable: |Run 'docker run --help')\""
+			action              = "drop"
+			drop_counter_reason = "lumen_sweep_progress"
+		}
+
+		stage.match {
+			selector = "{service=\"lumen-sweep\"} |~ \"^Lumen failed: \""
+
+			stage.static_labels {
+				values = {detected_level = "ERROR"}
+			}
+		}
+	}
+
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
+}

@@ -3,29 +3,34 @@
 // the ClickStack collector, and Alloy's own metrics. A host's config.alloy
 // sends its parser chain to `receiver`, and its own scrapes and its tracing
 // block to `input`; Alloy allows a tracing block only in the root config.
+// The module sets host.name on everything it ships, so a host config never
+// sets it itself.
 //
 // Arguments:
 //   host              This host's name, the host.name of every log row
-//                     (enrich.alloy) and of Alloy's own metrics.
+//                     (enrich.alloy) and of every metric and span: Alloy's
+//                     own and whatever the host config sends to `input`.
 //   endpoint          The collector's OTLP/HTTP address as this host
 //                     reaches it.
 //   client_cert_file, client_key_file
 //                     This host's log-ingest client certificate, which its
-//                     alloy-secrets-init container renders. Every host that
-//                     sends to logs-ingest.pod.haus gives both; bilby and
-//                     kangaroo, which send across the LAN in plaintext, give
-//                     neither, and an https host that left them out would
-//                     have every request refused by Caddy.
+//                     alloy-secrets-init container renders. Numbat, voltaire
+//                     and pinelake, which send to logs-ingest.pod.haus, give
+//                     both; the hosts that send in plaintext give neither,
+//                     and an https host that left them out would have every
+//                     request refused by Caddy.
 //
 // The collector is clickstack-otel on bandicoot, which publishes port 4318
-// on the LAN. Bilby and kangaroo send to that port directly. Every other
-// host, bandicoot included, sends to https://logs-ingest.pod.haus, which
-// resolves to Numbat's relay address: Numbat's rathole carries the request
-// to bilby's Caddy, which checks the client certificate and forwards it
-// across the LAN to bandicoot's port 4318. Every request carries the
-// ClickStack ingestion key, which logging/compose.shared.yaml gives every
-// host as CLICKSTACK_INGESTION_KEY; an empty or wrong key makes every request
-// a 401, so nothing arrives (docs/monitoring.html#ingest-staleness).
+// on the LAN. Bandicoot's own Alloy sends to it by container name on
+// bandicoot's dockernet. Bilby, kangaroo and fractal, on the home LAN, send
+// to the published port in plaintext. Numbat, voltaire and pinelake send to
+// https://logs-ingest.pod.haus, which resolves to Numbat's relay address:
+// Numbat's rathole carries the request to bilby's Caddy, which checks the
+// client certificate and forwards it across the LAN to bandicoot's port 4318.
+// Every request carries the ClickStack ingestion key, which
+// logging/compose.shared.yaml gives every host as CLICKSTACK_INGESTION_KEY; an
+// empty or wrong key makes every request a 401, so nothing arrives
+// (docs/monitoring.html#ingest-staleness).
 //
 // Names that are read elsewhere: the healthcheck in
 // logging/compose.shared.yaml counts the requests of the exporter whose
@@ -81,8 +86,9 @@ declare "ship" {
 	// `integrations/self`, and keys the instance on the container's ID
 	// (service.instance.id, server.address, net.host.name), which a recreate
 	// changes; it gives no host.name. So the service is renamed `alloy`, the
-	// service of Alloy's own container logs and of its traces, and the host
-	// is added, which the Gatus heartbeats select on.
+	// service of Alloy's own container logs and of its traces, and the
+	// metrics go through host_name, which adds the host the Gatus heartbeats
+	// select on.
 	otelcol.processor.transform "svc_alloy" {
 		error_mode = "ignore"
 
@@ -90,12 +96,11 @@ declare "ship" {
 			context    = "metric"
 			statements = [
 				`set(resource.attributes["service.name"], "alloy")`,
-				`set(resource.attributes["host.name"], "` + argument.host.value + `")`,
 			]
 		}
 
 		output {
-			metrics = [otelcol.processor.batch.clickstack.input]
+			metrics = [otelcol.processor.transform.host_name.input]
 		}
 	}
 
@@ -114,15 +119,15 @@ declare "ship" {
 				"authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
 			}
 
-			// A new connection for every request. Bilby and kangaroo need it:
-			// they reach the collector at bandicoot's published port, where
-			// Docker's NAT keeps a kept-alive connection mapped to the old
-			// collector container after a recreate, and the next request
+			// A new connection for every request. Bilby, kangaroo and fractal
+			// need it: they reach the collector at bandicoot's published port,
+			// where Docker's NAT keeps a kept-alive connection mapped to the
+			// old collector container after a recreate, and the next request
 			// hangs with no error (the 2026-06-19 keep-alive wedge
-			// postmortem). The other hosts reach bilby's Caddy, which opens
-			// its own connections to the collector; they share the setting
-			// because a new connection per request costs little at their
-			// volume.
+			// postmortem). Bandicoot reaches the collector by container name,
+			// and the https hosts reach bilby's Caddy, which opens its own
+			// connections to the collector; they share the setting because a
+			// new connection per request costs little at their volume.
 			disable_keep_alives = true
 
 			tls {
@@ -152,7 +157,38 @@ declare "ship" {
 		value = otelcol.receiver.loki.clickstack.receiver
 	}
 
+	// The one place a metric or span gets its host.name, set whatever it
+	// carried before. Neither source gives one: the Prometheus→OTLP bridge
+	// names only the scrape job and target, and Alloy's own spans, from the
+	// host's tracing block, carry only service.name `alloy`, its version and
+	// the Go runtime, so every host's would look alike. A host config's
+	// scrapes name their own service. Logs written here pass through
+	// unchanged rather than being discarded.
+	otelcol.processor.transform "host_name" {
+		error_mode = "ignore"
+
+		metric_statements {
+			context    = "resource"
+			statements = [
+				`set(attributes["host.name"], "` + argument.host.value + `")`,
+			]
+		}
+
+		trace_statements {
+			context    = "resource"
+			statements = [
+				`set(attributes["host.name"], "` + argument.host.value + `")`,
+			]
+		}
+
+		output {
+			logs    = [otelcol.processor.batch.clickstack.input]
+			metrics = [otelcol.processor.batch.clickstack.input]
+			traces  = [otelcol.processor.batch.clickstack.input]
+		}
+	}
+
 	export "input" {
-		value = otelcol.processor.batch.clickstack.input
+		value = otelcol.processor.transform.host_name.input
 	}
 }
