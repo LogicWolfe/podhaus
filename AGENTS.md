@@ -532,6 +532,11 @@ These have failure modes that you must not introduce:
   `docs/plans/structured-logging.html`). Derive new facts in `enrich.alloy`,
   after the tailer. `logging/tests` pins the Docker rules and tailer arguments
   and every tailer's labels.
+- **Telemetry is for debugging.** A service's spans, logs and Bugsink
+  events carry whatever helps diagnose a failure: message text, provider
+  replies, URLs, headers, page state. A service redacts nothing; the few
+  removals the log pipeline makes above are the whole list. HyperDX and
+  Bugsink live inside the house.
 - **Never use single-file bind mounts** for any config the running
   service reads after startup. File-level binds pin the inode at mount
   time, so atomic-rename editor saves on the host leave the container
