@@ -222,6 +222,71 @@ output "pets_alive_assets_secret_key" {
   sensitive = true
 }
 
+# fenwick — the household bot's private object store. NOT publicly
+# readable: only Fenwick's scoped service account reaches it, from
+# bandicoot's dockernet at http://rustfs:9000.
+resource "aws_s3_bucket" "fenwick" {
+  bucket        = "fenwick"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "rustfs_policy" "fenwick" {
+  name = "fenwick"
+  statement = [
+    {
+      effect    = "Allow"
+      action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+      ressource = ["arn:aws:s3:::fenwick/*"]
+    },
+    {
+      effect    = "Allow"
+      action    = ["s3:ListBucket", "s3:GetBucketLocation"]
+      ressource = ["arn:aws:s3:::fenwick"]
+    },
+  ]
+}
+
+resource "rustfs_user" "fenwick" {
+  access_key = "fenwick"
+  secret_key = random_password.rustfs_user_fenwick.result
+  policy     = rustfs_policy.fenwick.name
+}
+
+resource "rustfs_serviceaccount" "fenwick" {
+  access_key  = "O4AJ5R2WN51FF9O0K7YC"
+  secret_key  = random_password.rustfs_serviceaccount_fenwick.result
+  name        = "fenwick"
+  description = ""
+  user        = rustfs_user.fenwick.access_key
+}
+
+# → OP__KOMODO__RUSTFS_FENWICK__ACCESS_KEY_ID / __SECRET_ACCESS_KEY.
+resource "onepassword_item" "rustfs_fenwick" {
+  vault    = data.onepassword_vault.homelab.uuid
+  title    = "RustFS Fenwick"
+  category = "secure_note"
+  tags     = ["terraform-managed", "fenwick"]
+
+  section_map = {
+    S3 = {
+      field_map = {
+        ACCESS_KEY_ID = {
+          type  = "STRING"
+          value = rustfs_serviceaccount.fenwick.access_key
+        }
+        SECRET_ACCESS_KEY = {
+          type  = "CONCEALED"
+          value = rustfs_serviceaccount.fenwick.secret_key
+        }
+      }
+    }
+  }
+}
+
 # doggos-indigo — Indigo's "Doggos Alive" site, exported from Blocs for
 # iPad and published by her over RustFS's SFTP server (see
 # docs/runbooks/doggos-indigo.md). Blocs logs in as the scoped IAM user

@@ -1,6 +1,6 @@
 # RustFS's native provider requires caller-supplied secrets for users and
-# service accounts. These resources are imported with the credentials already
-# in use before any apply; prevent_destroy makes accidental regeneration fail.
+# service accounts. Those spelling out every attribute were imported with the
+# credentials already in use; prevent_destroy makes accidental regeneration fail.
 
 resource "random_password" "rustfs_user_nathanbaxter_com_deploy" {
   length      = 56
@@ -183,6 +183,26 @@ resource "random_password" "rustfs_serviceaccount_sky_backups_monitor" {
   numeric     = true
   special     = true
   upper       = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# Alphanumeric: Fenwick's secret reaches its container through Komodo's .env
+# and Compose interpolation, which would expand a "$".
+resource "random_password" "rustfs_user_fenwick" {
+  length  = 56
+  special = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "random_password" "rustfs_serviceaccount_fenwick" {
+  length  = 40
+  special = false
 
   lifecycle {
     prevent_destroy = true
