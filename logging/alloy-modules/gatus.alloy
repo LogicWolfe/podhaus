@@ -9,11 +9,8 @@
 //
 // Two real shapes: a bracketed `[component]` (a Go function name like
 // `watchdog.executeEndpoint`, NOT a level) and bare lines with no
-// bracket (`Shutting down`). The regex makes the bracket optional so
-// both get the date and component stripped from Body. The row keeps
-// Docker's receive time; the in-line time is not parsed. The Fiber
-// startup banner (box-drawing lines, no timestamp) doesn't match and
-// passes through untouched.
+// bracket (`Shutting down`). The body is the whole line. The row keeps
+// Docker's receive time; the in-line time is not parsed.
 //
 // Severity: gatus prints NO level word. Its logger (TwiN/logr) is created
 // without the level prefix, so logr.Errorf and logr.Infof lines look the
@@ -42,16 +39,13 @@
 //  - ERROR: a Go crash header, `panic: ` or `fatal error: ` at the start of
 //    the line. gatus panics when its configuration or storage fails to
 //    load (main.go:32, 105, 243; storage/store/store.go:113); the runtime
-//    prints these without the date, so they never match the regex above.
+//    prints these without the date, so they never match the dated
+//    selectors above.
 //  - WARN: `success=false` (a monitored endpoint failing its conditions:
 //    the endpoint is down, not gatus), and "Not sending alert" (the alert
 //    triggered but its provider is not configured, watchdog/alerting.go:78
 //    and 114, logged by gatus as a warning).
 //  - INFO: everything else, including the stack-trace lines after a panic.
-//
-// Body: reduced to just the message; the `[component]` capture is
-// intentionally dropped (not lifted to a label — it's a high-cardinality
-// function name).
 
 declare "gatus" {
   argument "forward_to" { }
@@ -104,14 +98,6 @@ declare "gatus" {
         stage.static_labels {
           values = {detected_level = "ERROR"}
         }
-      }
-
-      stage.regex {
-        expression = "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} (?:\\[(?P<comp>[^\\]]+)\\]\\s+)?(?P<msg>.*)$"
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

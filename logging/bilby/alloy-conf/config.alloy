@@ -1,6 +1,6 @@
 // bilby's Alloy. Pipeline (all shared modules in ../alloy-modules):
 //   docker_logs → chain (per-service parsers) → Loki→OTLP bridge → enrich
-//   (host + service.name resource attributes, severity) → batch → the
+//   (the docs/logging.md schema, severity, JSON structuring) → batch → the
 //   ClickStack collector on bandicoot, cross-LAN. Plex's server log, the
 //   Flood job logs and the systemd journal ride the same path. Gatus,
 //   ESPHome and Alloy's own metrics are scraped here and bridged to OTLP.
@@ -11,7 +11,7 @@
 //
 // Per-service parsing is config-as-code in ../alloy-modules (one module per
 // service, one chain for every host), so a service moving between hosts
-// keeps its parsing with no change here. See docs/monitoring.html.
+// keeps its parsing with no change here. See docs/logging.md.
 
 // Alloy's own internal-pipeline tracing. A per-host `alloy` service in
 // HyperDX Traces showing component-eval spans — the pipeline diagnosing
@@ -32,18 +32,22 @@ podhaus.docker_logs "run" {
 }
 
 podhaus.plex_server_log "run" {
-	host       = "bilby"
-	container  = "plex"
-	logs_dir   = "/var/log/podhaus/plex"
-	timezone   = "Australia/Perth"
-	forward_to = [podhaus.chain.run.receiver]
+	host            = "bilby"
+	container       = "plex"
+	compose_project = "plex"
+	compose_service = "plex"
+	logs_dir        = "/var/log/podhaus/plex"
+	timezone        = "Australia/Perth"
+	forward_to      = [podhaus.chain.run.receiver]
 }
 
 podhaus.flood_job_logs "run" {
-	host       = "bilby"
-	container  = "rtorrent"
-	flood_db   = "/var/log/podhaus/flood-db"
-	forward_to = [podhaus.chain.run.receiver]
+	host            = "bilby"
+	container       = "rtorrent"
+	compose_project = "flood"
+	compose_service = "rtorrent"
+	flood_db        = "/var/log/podhaus/flood-db"
+	forward_to      = [podhaus.chain.run.receiver]
 }
 
 podhaus.journal "run" {
@@ -128,9 +132,10 @@ otelcol.receiver.prometheus "alloy_self" {
 // Same service.name stamping as svc_gatus. "alloy" matches both this
 // host's Alloy container logs (via enrich) and the tracing block's
 // service name, so all three signals unify under one `alloy` service.
-// `host` mirrors the logs path's loki label so each host's Alloy
-// self-metrics are distinguishable (the unified `alloy` service is set
-// by service.name, not host, so adding the dimension costs nothing).
+// `host.name` is the same resource attribute the logs carry, so each
+// host's Alloy self-metrics are distinguishable (the unified `alloy`
+// service is set by service.name, not host.name, so adding the dimension
+// costs nothing).
 otelcol.processor.transform "svc_alloy" {
   error_mode = "ignore"
 
@@ -138,7 +143,7 @@ otelcol.processor.transform "svc_alloy" {
     context = "metric"
     statements = [
       `set(resource.attributes["service.name"], "alloy")`,
-      `set(resource.attributes["host"], "bilby")`,
+      `set(resource.attributes["host.name"], "bilby")`,
     ]
   }
 
@@ -197,7 +202,7 @@ otelcol.processor.transform "svc_esphome" {
     context = "metric"
     statements = [
       `set(resource.attributes["service.name"], "esphome")`,
-      `set(resource.attributes["host"], "bilby")`,
+      `set(resource.attributes["host.name"], "bilby")`,
     ]
   }
 

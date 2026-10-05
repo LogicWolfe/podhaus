@@ -6,7 +6,7 @@
 //
 // Per-service parsing is config-as-code in ../alloy-modules (one module per
 // service, one chain for every host), so a service moving between hosts
-// keeps its parsing with no change here. See docs/monitoring.html.
+// keeps its parsing with no change here. See docs/logging.md.
 
 // Internal-pipeline tracing — unified `alloy` service in HyperDX
 // (same name on every host; one row per host).
@@ -28,11 +28,13 @@ podhaus.docker_logs "run" {
 // stack's TZ; logging/bandicoot/stack.toml passes the same Komodo variable
 // in as CLICKHOUSE_TZ.
 podhaus.clickhouse_error_log "run" {
-	host       = "bandicoot"
-	container  = "clickstack-clickhouse"
-	path       = "/var/log/podhaus/clickhouse/clickhouse-server.err.log"
-	timezone   = sys.env("CLICKHOUSE_TZ")
-	forward_to = [podhaus.chain.run.receiver]
+	host            = "bandicoot"
+	container       = "clickstack-clickhouse"
+	compose_project = "clickstack"
+	compose_service = "clickstack-clickhouse"
+	path            = "/var/log/podhaus/clickhouse/clickhouse-server.err.log"
+	timezone        = sys.env("CLICKHOUSE_TZ")
+	forward_to      = [podhaus.chain.run.receiver]
 }
 
 podhaus.journal "run" {
@@ -75,10 +77,11 @@ otelcol.receiver.prometheus "alloy_self" {
 }
 
 // The Prometheus→OTLP bridge carries no service.name resource attribute.
-// Stamp a constant (mirrors kangaroo/bilby). `host` makes each host's
-// Alloy self-metrics distinguishable — without it the only per-host key
-// is the ephemeral container ID (service.instance.id). The unified
-// `alloy` service view is set by service.name, not host, so adding the
+// Stamp a constant (mirrors kangaroo/bilby). `host.name`, the same
+// resource attribute the logs carry, makes each host's Alloy
+// self-metrics distinguishable — without it the only per-host key is the
+// ephemeral container ID (service.instance.id). The unified `alloy`
+// service view is set by service.name, not host.name, so adding the
 // dimension costs nothing.
 otelcol.processor.transform "svc_alloy" {
   error_mode = "ignore"
@@ -87,7 +90,7 @@ otelcol.processor.transform "svc_alloy" {
     context = "metric"
     statements = [
       `set(resource.attributes["service.name"], "alloy")`,
-      `set(resource.attributes["host"], "bandicoot")`,
+      `set(resource.attributes["host.name"], "bandicoot")`,
     ]
   }
 

@@ -8,19 +8,30 @@
 //   2026.05.16 12:00:24.261660 [ 747 ] {} <Error> default.otel_logs (...): ...
 // The container's zone is the clickstack stack's TZ, so the host config
 // passes that same value in as `timezone` and the time is parsed in it.
-// Level and Body are then shaped by the clickstack-clickhouse parser in
+// The level is then read by the clickstack-clickhouse parser in
 // chain.alloy, exactly as for the container's stdout.
 //
 // Tailing starts at the end of the file on first sight: it is large
 // (~90 MB) and long-lived, and only new lines matter.
 //
-// Labels: host, container and service=clickstack-clickhouse (so the chain's
-// parser and enrich.alloy treat these rows like the container's stdout),
-// log_file, stream=file.
+// The tailer's labels are host, container, service=clickstack-clickhouse
+// (so the chain's parser treats these rows like the container's stdout),
+// stream=file and log_file (the file's name), and they must stay exactly
+// that. loki.source.file keys the file's saved read position on its path
+// plus this label set, so any change to it abandons that position and the
+// file is read again from wherever a fresh tailer starts. Everything else the
+// schema needs is set after the tailer: the last stage gives these rows
+// the container's own service name (its name less this host's `<host>-`
+// prefix), compose project and compose service, so they share
+// service.name, service.namespace and compose.service with the container's
+// stdout. loki.source.file adds `filename`, which enrich.alloy makes
+// log.source.
 
 declare "clickhouse_error_log" {
 	argument "host" { }
 	argument "container" { }
+	argument "compose_project" { }
+	argument "compose_service" { }
 	argument "path" { }
 	argument "timezone" { }
 	argument "forward_to" { }
@@ -65,6 +76,14 @@ declare "clickhouse_error_log" {
 				source   = "ts"
 				format   = "2006.01.02 15:04:05.000000"
 				location = argument.timezone.value
+			}
+		}
+
+		stage.static_labels {
+			values = {
+				service         = string.trim_prefix(argument.container.value, argument.host.value + "-"),
+				compose_project = argument.compose_project.value,
+				compose_service = argument.compose_service.value,
 			}
 		}
 	}

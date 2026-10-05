@@ -12,9 +12,7 @@
 // which only recognises the words trace/debug/info/warn/error/fatal —
 // not Forgejo's single-letter tag — so a real [W]/[E]/[F] line (a
 // shutdown, a git-hook failure, a DB error) is silently reported as
-// INFO forever. The caller-info segment (`...eb/routing/logger.go:102:
-// func1()`) is dropped from Body along with the tag — it's the file
-// path, not part of the message.
+// INFO forever. The body is the whole line, caller info included.
 //
 // Levels: T(race)/D(ebug)/I(nfo)/W(arn)/E(rror)/F(atal)/C(ritical) —
 // Forgejo's own gitea logger vocabulary; C(ritical) folds to FATAL.
@@ -32,7 +30,7 @@ declare "forgejo" {
       selector = "{service=\"forgejo\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} .*\\\\[[TDIWEFC]\\\\] \""
 
       stage.regex {
-        expression = "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} .*?\\[(?P<lvl>[TDIWEFC])\\]\\s+(?P<msg>.*)$"
+        expression = "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} .*?\\[(?P<lvl>[TDIWEFC])\\]\\s"
       }
 
       stage.template {
@@ -42,10 +40,6 @@ declare "forgejo" {
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

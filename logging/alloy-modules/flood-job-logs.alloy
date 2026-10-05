@@ -15,21 +15,31 @@
 //   rtorrent.log (flood/conf/rtorrent.rc log.open_file; epoch seconds
 //     and a level letter C/E/W/N/I/D):
 //     1757408695 N Using 'epoll' based polling.
+// A line's time, where it has one, becomes the row's timestamp, and its
+// level, where it has one, the severity. The body is the whole line.
 //
 // pinelake-stignore reports "changed=0" every five minutes on bilby
 // (~26k lines); those lines are dropped here and the file stays as the
 // on-disk heartbeat. rtorrent-cleanup.log is a dead file from 2026-06
 // and is not tailed.
 //
-// Labels: host, container (the rTorrent container, so enrich.alloy files
-// these under the same service.name as its stdout), service=flood-jobs
-// (its own parser key: with `flood` the chain's flood.alloy would run its
-// pino template over these lines and stamp an empty level), log_file,
-// stream=file.
+// The tailer's labels are host, container, service=flood-jobs,
+// stream=file and log_file (the file's name), and they must stay exactly
+// that. loki.source.file keys each file's saved read position on its path
+// plus this label set, so any change to it re-reads every file and ships
+// every line again with its original timestamp. Everything the schema
+// needs is set after the tailer instead: the last stage gives these rows
+// the rTorrent container's own service name (its name less this host's
+// `<host>-` prefix; no chain parser is keyed on it), compose project and
+// compose service, so they share service.name, service.namespace and
+// compose.service with rTorrent's stdout. loki.source.file adds
+// `filename`, which enrich.alloy makes log.source.
 
 declare "flood_job_logs" {
 	argument "host" { }
 	argument "container" { }
+	argument "compose_project" { }
+	argument "compose_service" { }
 	argument "flood_db" { }
 	argument "forward_to" { }
 
@@ -70,7 +80,7 @@ declare "flood_job_logs" {
 			selector = "{log_file=~\"flood-publish.log|plex-label-sync.log|pinelake-stignore.log\"} |~ \"^\\\\[\\\\d{4}-\""
 
 			stage.regex {
-				expression = "^\\[(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) UTC\\] (?P<msg>.*)$"
+				expression = "^\\[(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) UTC\\] "
 			}
 
 			stage.timestamp {
@@ -78,20 +88,16 @@ declare "flood_job_logs" {
 				format   = "2006-01-02 15:04:05"
 				location = "UTC"
 			}
-
-			stage.output {
-				source = "msg"
-			}
 		}
 
 		// Only the job scripts' explicit `WARN:` / `ERROR:` prefixes carry a
 		// level; a bare `detected_level` label on every other line would
 		// override the body-keyword fallback with an empty value.
 		stage.match {
-			selector = "{log_file=~\"flood-publish.log|plex-label-sync.log|pinelake-stignore.log\"} |~ \"^(ERROR|WARN):\""
+			selector = "{log_file=~\"flood-publish.log|plex-label-sync.log|pinelake-stignore.log\"} |~ \"^\\\\[[^]]+\\\\] (ERROR|WARN):\""
 
 			stage.regex {
-				expression = "^(?P<lvl>ERROR|WARN):"
+				expression = "^\\[[^]]+\\] (?P<lvl>ERROR|WARN):"
 			}
 
 			stage.labels {
@@ -103,7 +109,7 @@ declare "flood_job_logs" {
 			selector = "{log_file=\"rtorrent-extract.log\"} |~ \"^=== \""
 
 			stage.regex {
-				expression = "^=== (?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) UTC (?P<msg>.*) ===$"
+				expression = "^=== (?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) UTC "
 			}
 
 			stage.timestamp {
@@ -111,29 +117,13 @@ declare "flood_job_logs" {
 				format   = "2006-01-02 15:04:05"
 				location = "UTC"
 			}
-
-			stage.output {
-				source = "msg"
-			}
-		}
-
-		stage.match {
-			selector = "{log_file=\"rtorrent-extract.log\"} |~ \"^\\\\[rtorrent-extract\\\\] \""
-
-			stage.regex {
-				expression = "^\\[rtorrent-extract\\] (?P<msg>.*)$"
-			}
-
-			stage.output {
-				source = "msg"
-			}
 		}
 
 		stage.match {
 			selector = "{log_file=\"rtorrent.log\"} |~ \"^\\\\d{9,10} [A-Z] \""
 
 			stage.regex {
-				expression = "^(?P<ts>\\d{9,10}) (?P<lvl>[A-Z]) (?P<msg>.*)$"
+				expression = "^(?P<ts>\\d{9,10}) (?P<lvl>[A-Z]) "
 			}
 
 			stage.timestamp {
@@ -149,9 +139,13 @@ declare "flood_job_logs" {
 			stage.labels {
 				values = {detected_level = "lvl"}
 			}
+		}
 
-			stage.output {
-				source = "msg"
+		stage.static_labels {
+			values = {
+				service         = string.trim_prefix(argument.container.value, argument.host.value + "-"),
+				compose_project = argument.compose_project.value,
+				compose_service = argument.compose_service.value,
 			}
 		}
 	}

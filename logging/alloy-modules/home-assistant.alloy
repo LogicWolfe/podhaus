@@ -4,28 +4,25 @@
 //
 // Home Assistant (Python logging) format. The leading timestamp is
 // LOCAL wall-clock in the container's TZ, millisecond precision, then
-// level / thread / component / message:
+// level / thread / logger name / message:
 //   2026-05-16 11:34:52.126 ERROR (MainThread) [homeassistant.components.twinkly.coordinator] Error fetching twinkly data: ...
 //
 // ANSI color codes (HA wraps lines in \e[31m … \e[0m) are already
-// stripped upstream by loki.process "containers" stage.decolorize, same
-// as komodo-core.
+// stripped upstream by docker-logs.alloy's stage.decolorize.
+//
+// The body is the whole line. The bracketed logger name is also kept as
+// the `logger` attribute, so one integration's lines are one filter away.
+// The local timestamp is not parsed: every row keeps Docker's nanosecond
+// receive time, which also keeps a traceback's continuation lines in
+// order after their header.
 //
 // Lines that don't match the timestamp prefix pass through untouched:
 //   - s6 supervisor startup banners ("s6-rc: info: service … started")
 //   - multiline Python traceback continuations ("Traceback …", "  File …")
-// stage.regex leaves Body unchanged when it doesn't match, so these keep
-// their original line and stay attached after the parsed header line in
-// HyperDX.
-//
-// The local timestamp is stripped from Body and not parsed: every row
-// keeps Docker's nanosecond receive time, which also keeps a traceback's
-// continuation lines in order after their header.
 //
 // Level vocabulary is Python's: DEBUG / INFO / WARNING / ERROR /
-// CRITICAL. Mapped to the canonical set the rest of the pipeline /
-// OTTL severity mapping expects: WARNING → WARN, CRITICAL → FATAL;
-// the others pass through unchanged.
+// CRITICAL. CRITICAL becomes FATAL here; enrich.alloy folds WARNING onto
+// WARN.
 
 declare "home_assistant" {
   argument "forward_to" { }
@@ -34,23 +31,19 @@ declare "home_assistant" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{service=\"home-assistant\"}"
+      selector = "{service=\"home-assistant\"} |~ \"^\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d+ [A-Z]+ \\\\([^)]+\\\\) \\\\[[^\\\\]]+\\\\]\""
 
       stage.regex {
-        expression = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+ (?P<lvl>[A-Z]+) \\((?P<thread>[^)]+)\\) \\[(?P<comp>[^\\]]+)\\]\\s+(?P<msg>.*)$"
+        expression = "^\\S+ \\S+ (?P<lvl>[A-Z]+) \\([^)]+\\) \\[(?P<logger>[^\\]]+)\\]"
       }
 
       stage.template {
-        source   = "level"
-        template  = "{{ if eq .lvl \"WARNING\" }}WARN{{ else if eq .lvl \"CRITICAL\" }}FATAL{{ else }}{{ .lvl }}{{ end }}"
+        source   = "lvl"
+        template = "{{ if eq .Value \"CRITICAL\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
       }
 
       stage.labels {
-        values = { detected_level = "level" }
-      }
-
-      stage.output {
-        source = "msg"
+        values = { detected_level = "lvl", logger = "logger" }
       }
     }
   }

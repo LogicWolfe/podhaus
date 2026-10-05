@@ -11,21 +11,17 @@
 //   Sep  9 10:26:11.801 WRN Shutting down the process signal=terminated
 //
 // The printed time is the container's own local wall clock (from its TZ
-// env var), so it differs by host. It is stripped from Body and not
-// parsed: the row keeps Docker's receive time, which is right on every
-// host.
+// env var), so it differs by host. It is not parsed: the row keeps
+// Docker's receive time, which is right on every host. The body is the
+// whole line.
 //
 // Severity: the zerolog console short levels TRC/DBG/INF/WRN/ERR/FTL/PNC
 // map to TRACE/DEBUG/INFO/WARN/ERROR/FATAL/FATAL (only INF, WRN and ERR
 // have appeared in real output; the rest are mapped so they never land
-// as a bare tag). Without this parser, today's ERROR labels
-// on real job failures are an accident of the ClickStack collector's
-// keyword scan matching the word "error" inside the job's own
-// `error="..."` field — not the ERR tag — so a real failure with no
-// literal "error" substring (a bare non-zero exit with no message)
-// would go unflagged. Body is reduced to the message; the level tag (now
-// the severity) and the printed time (Docker's receive time stands) are
-// dropped from it.
+// as a bare tag). Without this parser the level would come from the word
+// "error" inside a job's own `error="..."` field, so a real failure with
+// no literal "error" substring (a bare non-zero exit with no message)
+// would go unflagged.
 
 declare "ofelia" {
   argument "forward_to" { }
@@ -37,7 +33,7 @@ declare "ofelia" {
       selector = "{service=\"ofelia\"} |~ \"^[A-Za-z]{3}\\\\s+\\\\d{1,2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d{3} [A-Z]{3} \""
 
       stage.regex {
-        expression = "^[A-Za-z]{3}\\s+\\d{1,2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} (?P<lvl>[A-Z]{3}) (?P<msg>.*)$"
+        expression = "^[A-Za-z]{3}\\s+\\d{1,2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} (?P<lvl>[A-Z]{3}) "
       }
 
       stage.template {
@@ -47,10 +43,6 @@ declare "ofelia" {
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

@@ -13,8 +13,9 @@
 // canonical OTTL token via stage.template:
 //   1 -> ERROR   2 -> WARN   3 -> INFO   4 -> DEBUG   5 -> TRACE
 // Anything outside 1..5 falls back to INFO (a valid token — never drop
-// severity). The `(X) ` prefix is intentionally left on the Body: it is
-// short and human-meaningful.
+// severity). The shared JSON step in enrich.alloy makes `level` and
+// `timestamp` attributes and the body `log_message`, `(X) ` prefix
+// included.
 //
 // `timestamp` is not parsed: the row keeps Docker's receive time.
 //
@@ -33,10 +34,7 @@ declare "op_connect_api" {
 			selector = "{service=\"op-connect-api\"} |~ \"^\\\\{\""
 
 			stage.json {
-				expressions = {
-					log_message = "log_message",
-					lvl         = "level",
-				}
+				expressions = {lvl = "level"}
 			}
 
 			stage.template {
@@ -46,10 +44,6 @@ declare "op_connect_api" {
 
 			stage.labels {
 				values = {detected_level = "lvl"}
-			}
-
-			stage.output {
-				source = "log_message"
 			}
 		}
 	}

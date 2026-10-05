@@ -5,19 +5,21 @@
 // composed by chain.alloy. Adding a service = add a file here + one line
 // in chain.alloy. Selectors match the `service` label (the container
 // name with the host's own prefix stripped, so `pinelake-flood` and
-// `flood` hit the same parser). See docs/monitoring.html.
+// `flood` hit the same parser). See docs/logging.md.
+//
+// The rule every parser follows: it sets the severity and nothing else
+// about the line. It reads the service's own level into `detected_level`
+// (enrich.alloy upper-cases and normalises it), never rewrites or shortens
+// the body, and never drops a field. A text line stays whole as the body;
+// a JSON line is structured by the shared step in enrich.alloy. The
+// in-line time is not parsed: a container's row keeps Docker's nanosecond
+// receive time, which is correct whatever time zone the container prints
+// in. Only a file source whose lines carry the only time parses it.
+// Streams of other services pass through untouched (stage.match only acts
+// on its selector).
 //
 // komodo-op log format (UTC):
 //   2026/05/16 03:27:18 [INFO] Syncing Komodo secret 'OP__...'
-//
-// Shaping: lift the level into a `detected_level` label (OTTL maps it to
-// OTLP severity), and reduce Body to just the message — so HyperDX shows
-// a clean line with no duplicated timestamp/level. The in-line time is
-// not parsed: a container's row keeps Docker's nanosecond receive time,
-// which is correct whatever time zone the container prints in. Only a
-// file source whose lines carry the only time parses it. Non-komodo-op
-// streams pass through this component untouched (stage.match only acts
-// on its selector).
 
 declare "komodo_op" {
   argument "forward_to" { }
@@ -29,15 +31,11 @@ declare "komodo_op" {
       selector = "{service=\"komodo-op\"}"
 
       stage.regex {
-        expression = "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} \\[(?P<lvl>[A-Z]+)\\]\\s+(?P<msg>.*)$"
+        expression = "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} \\[(?P<lvl>[A-Z]+)\\]\\s"
       }
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

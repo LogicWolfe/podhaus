@@ -66,13 +66,15 @@
       </p>
       <h2 id="upload-errors">Diagnosing failed uploads</h2>
       <p>
-        Search ClickStack for <code>ServiceName=flood</code> (or
-        <code>pinelake-flood</code>) and <code>Request failed</code> at the failure time.
+        Search ClickStack for <code>ServiceName = 'flood'</code> and
+        <code>Request failed</code> at the failure time; add
+        <code>ResourceAttributes['host.name'] = 'pinelake'</code> for Pinelake's.
         The complete structured record contains the exception message, stack, code,
         request identifier, method, route and response status. Server failures are errors;
         client failures are warnings. Arbitrary error properties, request bodies, cookies
         and authorization headers are excluded from this diagnostic record.
-        Alloy preserves the full record and uses its timestamp and severity.
+        Every field of the record is an attribute in ClickStack and the record's level is
+        the row's severity; the row's time is Docker's receive time.
         File-add requests that pass authentication and destination validation but fail
         in the torrent client gateway also save their original torrent bytes and an
         <code>error.json</code> record under <code>/tmp/failed-uploads/request-*</code>.
@@ -104,8 +106,9 @@
       <p>
         Locally, use <code>docker logs --since 10m flood</code> and
         <code>docker logs --since 10m rtorrent</code>, substituting the Pinelake names
-        there. Engine and job files under <code>/flood-db</code> reach ClickStack as
-        <code>rtorrent</code> or <code>pinelake-rtorrent</code>. The remote-control
+        there. Engine and job files under <code>/flood-db</code> reach ClickStack as service
+        <code>rtorrent</code> on both hosts, with the file in <code>log.source</code>. The
+        remote-control
         request limit is 10,000,000 bytes. The deployed socket connection sends one
         engine request per torrent within a single web upload, so do not infer an
         engine size-limit failure from the combined batch size. Use the logged exception.

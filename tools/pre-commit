@@ -67,6 +67,14 @@
 #   - fractal Caddy listener tests: the real Caddyfile's loopback and LAN
 #                                   listeners run under the mise-installed
 #                                   caddy, with stand-in upstreams.
+#   - log schema tests:             one captured line per Alloy parser
+#                                   module run through the real modules
+#                                   and enrich step in a short-lived
+#                                   grafana/alloy container; each row's
+#                                   resource, attribute names, body and
+#                                   severity must match docs/logging.md.
+#                                   Needs Docker; without it the tests are
+#                                   skipped with the reason printed.
 set -e
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -120,5 +128,7 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/llm/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/caddy/fractal/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/logging/tests"
 mise exec -- node --test "$root/caddy/fractal/tests/podhaus.test.ts"
 mise exec -- node --test "$root/caddy/fractal/tests/setup-page.test.ts"

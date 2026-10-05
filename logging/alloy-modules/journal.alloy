@@ -28,14 +28,20 @@
 // denials, ~1.6k a day on voltaire from the SSH remote-forward every
 // session requests) match none of these.
 //
-// Labels: host, service_name=journald (enrich.alloy maps it to
-// service.name), unit, identifier, transport, priority. detected_level
-// comes from the priority where the priority is the program's own:
-// 0–4 always, and 5–7 except on the stdout transport. A program writing
-// to stdout (dockerd, earlyoom) gets its unit's default priority, 6, for
-// every line, so dockerd's `level=error` lines also sit at priority 6;
-// those keep no detected_level and enrich.alloy reads the level word.
-// earlyoom's kill lines carry no level word and are stamped WARN.
+// Labels: host, service_name=journald, stream=journal on every source,
+// then unit, identifier, transport and priority from each entry, and `job`
+// (the source component, which loki.source.journal adds itself).
+// enrich.alloy turns them into the docs/logging.md schema and deletes
+// them. The sources' labels, relabel rules and other arguments stay
+// exactly as deployed: Alloy reloads this module in the running process
+// on a push, a changed argument restarts the source, and anything new is
+// derived in enrich.alloy instead. detected_level comes
+// from the priority where the priority is the program's own: 0–4 always,
+// and 5–7 except on the stdout transport. A program writing to stdout
+// (dockerd, earlyoom) gets its unit's default priority, 6, for every line,
+// so dockerd's `level=error` lines also sit at priority 6; those keep no
+// detected_level and enrich.alloy reads the level word. earlyoom's kill
+// lines carry no level word and are stamped WARN.
 
 declare "journal" {
 	argument "host" { }
@@ -110,7 +116,24 @@ declare "journal" {
 		forward_to    = [loki.process.severity.receiver]
 	}
 
+	// Passes everything on unchanged. It keeps the name every source above
+	// forwards to, so their arguments stay exactly as deployed (see the
+	// top), while the mapping itself lives in journal_levels.
 	loki.process "severity" {
+		forward_to = [journal_levels.this.receiver]
+	}
+
+	journal_levels "this" {
+		forward_to = argument.forward_to.value
+	}
+}
+
+// The journal priority as a level. Its own declare so logging/tests can run
+// it on stand-in entries without a journal.
+declare "journal_levels" {
+	argument "forward_to" { }
+
+	loki.process "this" {
 		forward_to = argument.forward_to.value
 
 		stage.match {
@@ -164,5 +187,9 @@ declare "journal" {
 				values = {detected_level = "FATAL"}
 			}
 		}
+	}
+
+	export "receiver" {
+		value = loki.process.this.receiver
 	}
 }

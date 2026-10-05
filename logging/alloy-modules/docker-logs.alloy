@@ -2,22 +2,44 @@
 // → ANSI strip. Shared by every host; the only per-host input is the
 // host name.
 //
-// Labels:
-//   host            the host name, for HyperDX filtering and the Gatus
-//                   staleness checks (mirrored onto the OTLP resource by
-//                   enrich.alloy, where a JSON `host` field in a log body
-//                   cannot overwrite it).
-//   container       the container name as Docker reports it.
+// Labels (enrich.alloy turns them into the docs/logging.md schema and
+// deletes them):
+//   host            this host's name, set by the tailer.
 //   service         the container name with this host's own `<host>-`
 //                   prefix stripped, so `pinelake-flood` on Pinelake and
-//                   `flood` on bilby select the same parser module.
+//                   `flood` on bilby select the same parser module; Lumen's
+//                   per-worktree index containers are all `lumen-warm`.
+//                   enrich.alloy names containers outside a compose project
+//                   from these labels (`forgejo-actions-task`, `unmanaged`).
+//   container       the container name as Docker reports it.
 //   stream          stdout / stderr.
 //   compose_project, compose_service  from the compose labels.
 //
+// These labels, the relabel rules that make them and the tailer's
+// arguments are the tailer's identity, and none of them may change while
+// Alloy reloads this module in a running process. Two mechanisms:
+//  - loki.source.docker keys each container's saved read position on the
+//    container ID plus its whole label set. A changed label starts that
+//    container's tailer again from the first line of its retained log,
+//    and every line is shipped a second time with its original timestamp.
+//  - On a push, the running Alloy reloads this module from the pulled
+//    checkout before its own container is recreated. A changed rule list,
+//    Docker host or client setting restarts every tailer, and a tailer
+//    stopped while Alloy keeps running deletes its saved position, so
+//    every running container's log is shipped again, even with every label
+//    unchanged.
+// Derive or rename anything new in enrich.alloy, which runs after the
+// tailer and keys nothing. logging/tests pins the rules and the labels.
+//
 // Not collected: Lumen's throwaway `docker run --rm` search containers
 // (label podhaus.lumen=true without podhaus.lumen.worktree); their stdout
-// is the code-search request stream, source snippets included. See the
-// first relabel rule.
+// is the code-search request stream, source snippets included.
+//
+// The log schema test's Alloy containers (label podhaus.harness=true, see
+// logging/tests) are collected like any other. They log with Docker's
+// `none` driver, which has nothing to read, so while one runs this host's
+// Alloy ships about two minutes of "could not fetch logs" error rows for
+// it. Accepted while the rule list cannot change.
 
 declare "docker_logs" {
 	argument "host" { }
@@ -46,8 +68,43 @@ declare "docker_logs" {
 		}
 	}
 
-	discovery.relabel "container_logs" {
+	docker_targets "this" {
+		host    = argument.host.value
 		targets = discovery.docker.containers.targets
+	}
+
+	// The rules run twice: on the discovered targets, and again inside the
+	// tailer, which adds the per-stream `__meta_docker_container_log_stream`
+	// label that only exists there. Every argument here, the rules and the
+	// labels they make are the tailer's identity described at the top:
+	// change none of them.
+	loki.source.docker "containers" {
+		host          = "unix:///var/run/docker.sock"
+		targets       = docker_targets.this.output
+		forward_to    = [loki.process.decolorize.receiver]
+		relabel_rules = docker_targets.this.rules
+		labels        = {"host" = argument.host.value}
+	}
+
+	// Universal pre-shaping: strip ANSI so the per-service parsers (and
+	// JSON stages) never see colour codes. komodo-core, home-assistant,
+	// flood etc. emit raw ANSI.
+	loki.process "decolorize" {
+		forward_to = argument.forward_to.value
+
+		stage.decolorize { }
+	}
+}
+
+// The relabel rules that turn a discovered container into the labels
+// above. Their own declare so logging/tests can run them on stand-in
+// targets without a Docker socket.
+declare "docker_targets" {
+	argument "host" { }
+	argument "targets" { }
+
+	discovery.relabel "this" {
+		targets = argument.targets.value
 
 		// Drop the network and port labels. loki.source.docker keys each
 		// tailer and its saved read position on the container ID plus this
@@ -93,10 +150,8 @@ declare "docker_logs" {
 		}
 
 		// Give the per-worktree `lumen-warm-<hash>` containers one `service`
-		// label, so one parser selector covers them. Must follow the generic
-		// name rule above so it wins. HyperDX's ServiceName still comes from
-		// the `container` label (enrich.alloy) and stays per-hash until the
-		// service-naming change in docs/plans/structured-logging.html.
+		// label, so one parser selector and one service.name cover them.
+		// Must follow the generic name rule above so it wins.
 		rule {
 			source_labels = ["__meta_docker_container_label_podhaus_lumen_worktree"]
 			regex         = ".+"
@@ -120,20 +175,11 @@ declare "docker_logs" {
 		}
 	}
 
-	loki.source.docker "containers" {
-		host          = "unix:///var/run/docker.sock"
-		targets       = discovery.relabel.container_logs.output
-		forward_to    = [loki.process.decolorize.receiver]
-		relabel_rules = discovery.relabel.container_logs.rules
-		labels        = {"host" = argument.host.value}
+	export "output" {
+		value = discovery.relabel.this.output
 	}
 
-	// Universal pre-shaping: strip ANSI so the per-service parsers (and
-	// JSON stages) never see colour codes. komodo-core, home-assistant,
-	// flood etc. emit raw ANSI.
-	loki.process "decolorize" {
-		forward_to = argument.forward_to.value
-
-		stage.decolorize { }
+	export "rules" {
+		value = discovery.relabel.this.rules
 	}
 }

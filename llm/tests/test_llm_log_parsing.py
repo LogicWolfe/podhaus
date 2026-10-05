@@ -47,20 +47,6 @@ MODULES = ROOT / "logging" / "alloy-modules"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-def alloy_string(literal: str) -> str:
-    """The value of an Alloy string literal, given its source text between the quotes."""
-    return json.loads(f'"{literal}"')
-
-
-STRING = r'"((?:[^"\\]|\\.)*)"'
-
-
-def selector_passes(selector: str, text: str) -> bool:
-    """The selector's line filters, as loki.process applies them to the current line."""
-    parsed = Selector.read(selector)
-    return parsed.passes(text, {name: value for name, op, value in parsed.matchers if op == "="})
-
-
 def server_pipeline() -> Pipeline:
     return Pipeline.from_module(MODULES / "llm-server.alloy")
 
@@ -826,18 +812,14 @@ class WatcherEventParsingTest(unittest.TestCase):
 
 
 class CaddyAccessRecordTest(unittest.TestCase):
-    """The ingress worker's access line: kept whole, with exactly these keys."""
+    """The ingress worker's access line has exactly these keys. That every one of
+    them reaches ClickStack as an attribute is tested by logging/tests, which runs
+    the first of these lines through the real Alloy modules."""
 
     KEYS = {"level", "ts", "logger", "msg", "client", "session_id", "agent_id", "path", "status", "duration"}
 
     @classmethod
     def setUpClass(cls) -> None:
-        text = (MODULES / "caddy.alloy").read_text()
-        gate = re.search(
-            rf'stage\.match \{{\s*selector\s*=\s*{STRING}\s*stage\.template \{{\s*source\s*=\s*"line"', text
-        )
-        assert gate, "caddy.alloy has no gate over its line shaping"
-        cls.shaping_selector = alloy_string(gate.group(1))
         cls.lines = (FIXTURES / "caddy_llm_access_sample.jsonl").read_text().splitlines()
 
     def test_the_fixture_has_the_keys_the_ingress_worker_logs(self) -> None:
@@ -855,14 +837,6 @@ class CaddyAccessRecordTest(unittest.TestCase):
         self.assertTrue(subagent["agent_id"])
         self.assertEqual(local["logger"], "http.log.access.llm_local")
         self.assertNotIn("caller", local)
-
-    def test_both_access_loggers_keep_their_whole_json_line(self) -> None:
-        for line in self.lines[:3]:
-            with self.subTest(logger=json.loads(line)["logger"]):
-                self.assertFalse(selector_passes(self.shaping_selector, line))
-
-    def test_other_caddy_lines_are_still_reduced_to_logger_and_message(self) -> None:
-        self.assertTrue(selector_passes(self.shaping_selector, self.lines[3]))
 
 
 class ChainWiringTest(unittest.TestCase):
@@ -885,19 +859,6 @@ class ChainWiringTest(unittest.TestCase):
                 text = (MODULES / file).read_text()
                 self.assertIn(f'selector = "{{service=\\"{service}\\"}}"', text)
                 self.assertNotIn('service=\\"caddy\\"', text)
-
-
-class CaddyAccessLogTest(unittest.TestCase):
-    def test_access_log_lines_keep_their_json_body(self) -> None:
-        """Reducing an access line to "logger: msg" would drop caller, status and duration."""
-        text = (MODULES / "caddy.alloy").read_text()
-        gate = re.search(
-            rf'stage\.match \{{\s*selector\s*=\s*{STRING}\s*stage\.template \{{\s*source\s*=\s*"line"', text
-        )
-        self.assertIsNotNone(gate, "line shaping must sit under a selector of its own")
-        self.assertEqual(
-            alloy_string(gate.group(1)), '{service="caddy"} != "\\"logger\\":\\"http.log.access"'
-        )
 
 
 class StackLogLevelTest(unittest.TestCase):

@@ -1,38 +1,99 @@
-// OTTL enrichment of bridged logs before export, shared by every host.
+// OTTL enrichment of bridged logs before export, shared by every host. It
+// fits every row Alloy ships to the schema in docs/logging.md.
 //
-//  1. Stamp the host name as a RESOURCE attribute. The Loki→OTLP bridge
-//     only carries the `host` label as a log attribute, and the ClickStack
-//     collector promotes JSON body fields over log attributes — Pomerium,
-//     Caddy's admin API and FerretDB all emit their own `host` field, so
-//     LogAttributes['host'] lies for ~35k rows a day. ResourceAttributes
-//     ['host'] is untouched by that promotion and is what the Gatus
-//     staleness checks query.
-//  2. Set service.name from the Docker container name. Without this
-//     HyperDX's ServiceName column, Service Map and service filters are
-//     all blank. File and journal sources that carry no container set
-//     `service_name` instead.
-//  3. Severity. The level is taken from the parser's `detected_level` when
-//     there is one: parser modules set it from the service's real level
-//     field, and it runs last and wins. Otherwise it is the FIRST level
-//     word in the first ~60 characters of the body: the word must follow
-//     the start of the line, `[`, whitespace, `=` or `"`, and be followed
-//     by `]`, `:`, whitespace, `"` or the end. That reads `INFO:` in column
-//     one, `level=warn`, `"level":"info"` and `[INFO]`, and the first word
-//     winning keeps "[INFO] retrying after error: boom" INFO. A word must
-//     stand alone, so "errors" is not "error". Lines with neither keep
-//     whatever ClickStack infers.
+// It runs after every tailer on purpose. A tailer's labels are the key of
+// its saved read position, so they stay exactly as deployed and everything
+// the schema needs is derived here, where nothing is keyed.
 //
-//     Known limitation, accepted: because `=` and `"` count as delimiters,
-//     a key or value that is a level word and comes before the real level
-//     is read as the level. Measured live, the only case is indy-service's
-//     `reset=Panic`, which reads as FATAL (7 rows in 22 hours); the
-//     delimiters fix far more lines than that breaks.
+//  1. Pipeline facts. The source modules and the Loki→OTLP bridge hand
+//     them over as log attributes named after Loki labels, which a field
+//     of the same name in a JSON body would collide with. Each becomes a
+//     namespaced name:
+//       resource  host.name            this host (the module argument)
+//                 service.name         `service` (the stripped service name
+//                                      the parsers key on), or
+//                                      `service_name` on journal rows. A
+//                                      container with no compose project
+//                                      label is named here, not at the
+//                                      tailer: `forgejo-actions-task` for a
+//                                      Forgejo Actions job, otherwise
+//                                      `unmanaged`. Such a container is one
+//                                      nobody declared, and its random or
+//                                      per-run name would otherwise become a
+//                                      service of its own; `container.name`
+//                                      keeps it. Lumen's gateway starts its
+//                                      index containers with plain `docker
+//                                      run`; they carry compose project
+//                                      `lumen` and service `lumen-tools` only
+//                                      because Docker copies the labels of
+//                                      the Compose-built image, and so keep
+//                                      the `lumen-warm` name docker-logs
+//                                      gives them.
+//                 service.namespace    `compose_project`
+//                 container.name       `container`
+//                 service.instance.id  <host>/<container>, or
+//                                      <host>/<service.name> with no container
+//       log       compose.service      `compose_service`
+//                 log.iostream         `stream`, when it is stdout or stderr
+//                 log.source           docker (a stdout or stderr stream),
+//                                      journal (stream=journal), or the
+//                                      tailed file's path (`filename`)
+//                 journal.unit, journal.identifier, journal.transport,
+//                 journal.priority     the journal's fields
+//                 journal.reader       `job`: the journal source component
+//  2. JSON. A body that is one JSON object, surrounding whitespace allowed,
+//     is parsed; nested objects and arrays are flattened with dots
+//     (`request.headers.User-Agent.0`), the same names the ClickStack
+//     collector gives a JSON body it parses itself. Every key with a
+//     credential word as any of its dotted parts (authorization, cookie,
+//     set-cookie, password, access_token, refresh_token, id_token, any
+//     case) is removed, so `password.new` and `headers.Cookie.0.value` go
+//     as well as `password`. The pipeline's own attribute names (log.source,
+//     log.iostream, compose.service, journal.*) are removed too, so a
+//     service field spelled like one never reaches the row, not even
+//     through a body that keeps its JSON. A line that only looks like JSON
+//     fails to parse, is logged once by Alloy and ships unchanged.
+//  3. Severity, strongest first: the parser's `detected_level` (parser
+//     modules set it from the service's real level field); then the JSON
+//     object's own string `level` field, else its `severity` field; then
+//     the FIRST level word in the first ~60 characters of the line as
+//     written: the word must follow the start of the line, `[`,
+//     whitespace, `=` or `"`, and be followed by `]`, `:`, whitespace, `"`
+//     or the end. That reads `INFO:` in column one, `level=warn` and
+//     `[INFO]`, and the first word winning keeps "[INFO] retrying after
+//     error: boom" INFO. A word must stand alone, so "errors" is not
+//     "error". Lines with none of these keep whatever ClickStack infers.
 //
-//     Every level is normalised to TRACE DEBUG INFO WARN ERROR FATAL with
-//     its OpenTelemetry number (1 5 9 13 17 21): WARNING folds to WARN,
-//     ERR to ERROR, PANIC and zap's DPANIC to FATAL, and MongoDB's debug
-//     verbosities D1–D5 to DEBUG. A parser level outside that vocabulary
-//     keeps its own text and gets no number.
+//     Known limitation, accepted: in a text line, because `=` and `"`
+//     count as delimiters, a key or value that is a level word and comes
+//     before the real level is read as the level. Measured live, the only
+//     case is indy-service's `reset=Panic`, which reads as FATAL (7 rows in
+//     22 hours).
+//
+//     Every level is upper-cased and normalised to TRACE DEBUG INFO WARN
+//     ERROR FATAL with its OpenTelemetry number (1 5 9 13 17 21): WARNING
+//     folds to WARN, ERR to ERROR, PANIC and zap's DPANIC to FATAL, and
+//     MongoDB's debug verbosities D1–D5 to DEBUG. A level outside that
+//     vocabulary keeps its own text and gets no number.
+//  4. The labels from step 1, `detected_level` and the bridge's
+//     `loki.attribute.labels` (a list of the label names) are deleted.
+//  5. The JSON fields are merged into the log attributes without
+//     overwriting: a service field named exactly like an attribute a parser
+//     added to the row (`component`, `logger` or `llm_event`) is discarded,
+//     and every other service field lands under its own name. The body
+//     becomes the message field (`msg`, else `message`, else
+//     `log_message`); a line with none keeps its JSON as the body,
+//     re-written without the keys step 2 removed when it had any.
+//
+// What this does not cover: the stock ClickStack collector parses any
+// `{...}` it finds in a body again, with no credential removal, and
+// overwrites attributes of the same name. So a message that itself embeds
+// a JSON object (or a text line with one, such as FerretDB's and
+// Backrest's) is neither scrubbed nor protected from overwriting.
+//
+// error_mode "ignore": a statement that errors (ParseJSON on a line that
+// only looks like JSON) is logged and skipped, and the row ships with the
+// statements that did apply. "propagate" would drop the whole batch.
 
 declare "enrich" {
 	argument "host" { }
@@ -44,14 +105,38 @@ declare "enrich" {
 		log_statements {
 			context = "log"
 			statements = [
-				`set(resource.attributes["host"], "` + argument.host.value + `")`,
-
-				`set(resource.attributes["service.name"], attributes["container"]) where attributes["container"] != nil`,
+				`set(resource.attributes["host.name"], "` + argument.host.value + `")`,
+				`set(resource.attributes["service.name"], attributes["service"]) where attributes["service"] != nil`,
 				`set(resource.attributes["service.name"], attributes["service_name"]) where attributes["service_name"] != nil`,
+				`set(resource.attributes["service.name"], "unmanaged") where (attributes["stream"] == "stdout" or attributes["stream"] == "stderr") and attributes["compose_project"] == nil`,
+				`set(resource.attributes["service.name"], "forgejo-actions-task") where attributes["compose_project"] == nil and IsMatch(attributes["container"], "^FORGEJO-ACTIONS-TASK-")`,
+				`set(resource.attributes["service.namespace"], attributes["compose_project"]) where attributes["compose_project"] != nil`,
+				`set(resource.attributes["container.name"], attributes["container"]) where attributes["container"] != nil`,
+				`set(resource.attributes["service.instance.id"], Concat(["` + argument.host.value + `", attributes["container"]], "/")) where attributes["container"] != nil`,
+				`set(resource.attributes["service.instance.id"], Concat(["` + argument.host.value + `", resource.attributes["service.name"]], "/")) where attributes["container"] == nil`,
+
+				`set(attributes["compose.service"], attributes["compose_service"]) where attributes["compose_service"] != nil`,
+				`set(attributes["log.iostream"], attributes["stream"]) where attributes["stream"] == "stdout" or attributes["stream"] == "stderr"`,
+				`set(attributes["log.source"], "docker") where attributes["stream"] == "stdout" or attributes["stream"] == "stderr"`,
+				`set(attributes["log.source"], "journal") where attributes["stream"] == "journal"`,
+				`set(attributes["log.source"], attributes["filename"]) where attributes["filename"] != nil`,
+				`set(attributes["journal.unit"], attributes["unit"]) where attributes["unit"] != nil`,
+				`set(attributes["journal.identifier"], attributes["identifier"]) where attributes["identifier"] != nil`,
+				`set(attributes["journal.transport"], attributes["transport"]) where attributes["transport"] != nil`,
+				`set(attributes["journal.priority"], attributes["priority"]) where attributes["priority"] != nil`,
+				`set(attributes["journal.reader"], attributes["job"]) where attributes["job"] != nil`,
+
+				`set(cache["json"], ParseJSON(body)) where IsMatch(body, "^\\s*\\{.*\\}\\s*$")`,
+				`flatten(cache["json"]) where IsMap(cache["json"])`,
+				`set(cache["fields"], Len(cache["json"])) where IsMap(cache["json"])`,
+				`delete_matching_keys(cache["json"], "(?i)(^|\\.)(authorization|cookie|set-cookie|password|access_token|refresh_token|id_token)(\\.|$)") where IsMap(cache["json"])`,
+				`delete_matching_keys(cache["json"], "^(log\\.source|log\\.iostream|compose\\.service|journal\\.(unit|identifier|transport|priority|reader))$") where IsMap(cache["json"])`,
 
 				`merge_maps(cache, ExtractPatterns(body, "(?i)^.{0,60}?(?:^|[\\[\\s=\"])(?P<level>trace|debug|info|warning|warn|error|err|fatal|panic)(?:[\\]:\\s\"]|$)"), "upsert")`,
-				`set(cache["level"], ConvertCase(cache["level"], "upper")) where cache["level"] != nil`,
+				`set(cache["level"], cache["json"]["severity"]) where IsMap(cache["json"]) and IsString(cache["json"]["severity"])`,
+				`set(cache["level"], cache["json"]["level"]) where IsMap(cache["json"]) and IsString(cache["json"]["level"])`,
 				`set(cache["level"], attributes["detected_level"]) where attributes["detected_level"] != nil`,
+				`set(cache["level"], ConvertCase(cache["level"], "upper")) where cache["level"] != nil`,
 
 				`set(cache["level"], "WARN") where cache["level"] == "WARNING"`,
 				`set(cache["level"], "ERROR") where cache["level"] == "ERR"`,
@@ -65,6 +150,15 @@ declare "enrich" {
 				`set(severity_number, 13) where cache["level"] == "WARN"`,
 				`set(severity_number, 17) where cache["level"] == "ERROR"`,
 				`set(severity_number, 21) where cache["level"] == "FATAL"`,
+
+				`delete_matching_keys(attributes, "^(host|service|service_name|compose_project|container|compose_service|stream|log_file|filename|unit|identifier|transport|priority|job|detected_level|loki\\.attribute\\.labels)$")`,
+
+				`merge_maps(attributes, cache["json"], "insert") where IsMap(cache["json"])`,
+				`set(cache["message"], cache["json"]["log_message"]) where IsMap(cache["json"]) and IsString(cache["json"]["log_message"])`,
+				`set(cache["message"], cache["json"]["message"]) where IsMap(cache["json"]) and IsString(cache["json"]["message"])`,
+				`set(cache["message"], cache["json"]["msg"]) where IsMap(cache["json"]) and IsString(cache["json"]["msg"])`,
+				`set(body, cache["message"]) where cache["message"] != nil`,
+				`set(body, String(cache["json"])) where cache["message"] == nil and IsMap(cache["json"]) and Len(cache["json"]) != cache["fields"]`,
 			]
 		}
 

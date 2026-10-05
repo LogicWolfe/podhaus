@@ -4,15 +4,11 @@
 //
 // komodo-core (Rust tracing) log format, whitespace-separated, RFC3339
 // nanosecond UTC timestamp; ANSI already stripped upstream by
-// loki.process "containers" stage.decolorize:
+// docker-logs.alloy's stage.decolorize:
 //   2026-05-16T03:27:18.601938Z INFO WriteRequest{req_id=...} ...
-//   2026-05-16T03:11:51.174Z    INFO middleware/dispatcher.go:131 ...
 //
-// (komodo-ferretdb uses the same shape but tab-separated; \s+ here
-// would cover it too, but ferretdb gets its own file when we extend.)
-//
-// The timestamp is stripped from Body and not parsed: the row keeps
-// Docker's receive time.
+// The level word becomes `detected_level`; the body is the whole line.
+// The timestamp is not parsed: the row keeps Docker's receive time.
 
 declare "komodo_core" {
   argument "forward_to" { }
@@ -24,15 +20,11 @@ declare "komodo_core" {
       selector = "{service=\"komodo-core\"}"
 
       stage.regex {
-        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
+        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\s+(?P<lvl>[A-Z]+)\\s"
       }
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

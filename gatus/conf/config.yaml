@@ -870,13 +870,13 @@ endpoints:
     # container happened to log. This replaces the old organic-log-volume
     # proxy, whose window was an ever-widening guess against irregular
     # chatter (60→150 min, still false-firing: organic gaps hit 152 and
-    # 170 min in the days before this change). The `host` resource
+    # 170 min in the days before this change). The `host.name` resource
     # attribute that makes kangaroo's metrics selectable is stamped by
     # the `svc_alloy` transform in logging/kangaroo/alloy-conf/config.alloy.
     #
     # `count() > 0` over a TimeUnix-windowed scan (not `max(TimeUnix) >
     # now() - X` unbounded): the Map predicate (`ResourceAttributes
-    # ['host']=…`) defeats primary-key pruning, so without the explicit
+    # ['host.name']=…`) defeats primary-key pruning, so without the explicit
     # TimeUnix filter the query scans every active part and times out at
     # gatus's 10 s budget. count() also matches the criterion directly.
     #
@@ -887,7 +887,7 @@ endpoints:
     # arrived (the 15-min window empties, then two failed 5-min checks),
     # instead of 150. See 2026-06-20 in the alloy-exporter-keepalive-
     # wedge postmortem.
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='kangaroo'"
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host.name']='kangaroo'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
@@ -906,7 +906,7 @@ endpoints:
     headers:
       X-ClickHouse-User: default
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='numbat'"
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host.name']='numbat'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
@@ -925,7 +925,7 @@ endpoints:
     headers:
       X-ClickHouse-User: default
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='pinelake'"
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host.name']='pinelake'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
@@ -944,7 +944,7 @@ endpoints:
     headers:
       X-ClickHouse-User: default
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='bandicoot'"
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host.name']='bandicoot'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
@@ -963,7 +963,7 @@ endpoints:
     headers:
       X-ClickHouse-User: default
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host']='voltaire'"
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host.name']='voltaire'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
@@ -984,11 +984,11 @@ endpoints:
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
     # See Kangaroo check above for why this is count() over a windowed
     # scan rather than max(Timestamp) over the whole table. The host is
-    # the RESOURCE attribute stamped by the shared enrich module
-    # (logging/alloy-modules/enrich.alloy): the collector promotes a JSON
-    # `host` field in a log body over LogAttributes['host'], so the log
-    # attribute is wrong for Pomerium, Caddy and FerretDB lines.
-    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 10 MINUTE AND ResourceAttributes['host']='bilby'"
+    # the `host.name` resource attribute stamped by the shared enrich
+    # module (logging/alloy-modules/enrich.alloy, docs/logging.md). A log
+    # attribute named `host` is the logging service's own field (Caddy's
+    # and Pomerium's request host), never the machine.
+    body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 10 MINUTE AND ResourceAttributes['host.name']='bilby'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"

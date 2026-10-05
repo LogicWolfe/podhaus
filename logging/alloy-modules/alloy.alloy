@@ -6,22 +6,13 @@
 //   ts=2026-05-16T03:56:20.117255871Z level=info msg="finished
 //     transferring logs" component_path=/ component_id=... written=956
 //
-// Shaping: lift the level into a `detected_level` label
-// (uppercase-normalized so the OTTL severity mapping matches the other
-// services), and reduce Body to just the message. The row keeps Docker's
-// receive time; `ts` is not parsed. The extra logfmt fields
-// (component_id, component_path, written, trace_id, …) are intentionally
-// dropped from Body — they remain visible in the raw stream but the
-// shaped line is just the human-readable message, matching
-// komodo-core/komodo-op. Non-alloy streams pass through untouched
-// (stage.match only acts on its selector).
+// The `level` field becomes `detected_level` (enrich.alloy upper-cases it).
+// The body is the whole line, so every logfmt field stays readable and
+// searchable in it. The row keeps Docker's receive time; `ts` is not parsed.
 //
-// stage.logfmt mapping semantics (verified against Loki/Alloy
-// behavior): keys are the *extracted* variable names, values are the
-// logfmt keys to read; an empty-string value means "use a logfmt key
-// with the same name as the extracted variable". So `lvl = "level"`
-// reads logfmt key `level` → var `lvl`; `msg = ""` reads logfmt key
-// `msg` → var `msg`.
+// stage.logfmt mapping semantics: keys are the *extracted* variable names,
+// values are the logfmt keys to read, so `lvl = "level"` reads logfmt key
+// `level` into `lvl`.
 
 declare "alloy" {
   argument "forward_to" { }
@@ -47,23 +38,11 @@ declare "alloy" {
       stage.logfmt {
         mapping = {
           lvl = "level",
-          msg = "",
         }
-      }
-
-      // level is a lowercase word (debug/info/warn/error); uppercase it
-      // so it lines up with the other services' detected_level values.
-      stage.template {
-        source   = "lvl"
-        template = "{{ ToUpper .Value }}"
       }
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

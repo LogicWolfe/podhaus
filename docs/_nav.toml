@@ -28,6 +28,8 @@ path = "scheduling.html"
 [[item]]
 path = "monitoring.html"
 [[item]]
+path = "logging.md"
+[[item]]
 path = "backup-and-recovery.html"
 [[item]]
 path = "disaster-recovery.html"

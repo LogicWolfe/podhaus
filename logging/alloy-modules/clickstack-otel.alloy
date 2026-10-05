@@ -7,11 +7,11 @@
 //   {"level":"info","ts":1778902378.3935137,"logger":"supervisor",
 //    "caller":"supervisor/supervisor.go:668","msg":"Connected ..."}
 //
-// `ts` is not parsed: the row keeps Docker's receive time. `level` is a
-// lowercase zap word; we uppercase it and fold zap's dpanic/panic onto
-// FATAL so it lands on a canonical TRACE|DEBUG|INFO|WARN|ERROR|FATAL set
-// before OTTL maps it to OTLP severity. Body is reduced to just `msg`.
-// Non-JSON lines (and other streams) pass through untouched.
+// This parser only reads `level` into `detected_level`; enrich.alloy
+// upper-cases it and folds zap's dpanic/panic onto FATAL. The shared JSON
+// step in enrich.alloy makes every field an attribute and the body `msg`.
+// `ts` is not parsed: the row keeps Docker's receive time. Non-JSON lines
+// pass through untouched.
 
 declare "clickstack_otel" {
   argument "forward_to" { }
@@ -20,23 +20,14 @@ declare "clickstack_otel" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{service=\"clickstack-otel\"}"
+      selector = "{service=\"clickstack-otel\"} |~ \"^\\\\{\""
 
       stage.json {
-        expressions = {lvl = "level", msg = "msg"}
-      }
-
-      stage.template {
-        source   = "lvl"
-        template = "{{ $u := ToUpper .Value }}{{ if or (eq $u \"DPANIC\") (eq $u \"PANIC\") }}FATAL{{ else }}{{ $u }}{{ end }}"
+        expressions = {lvl = "level"}
       }
 
       stage.labels {
         values = {detected_level = "lvl"}
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

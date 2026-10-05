@@ -1,4 +1,4 @@
-// Per-service log parser — backrest (kangaroo)
+// Per-service log parser — backrest
 //
 // See komodo-op.alloy for the pattern/rationale.
 //
@@ -6,16 +6,16 @@
 // offset (no colon — NOT standard RFC3339), level word, message, then
 // an optional trailing JSON detail object. The field separator differs
 // by host/version — kangaroo's backrest uses a space, bandicoot's uses
-// a literal tab — so the regex accepts either (`\s+`, not a literal
-// `" "`; the original space-only pattern silently passed every
-// bandicoot line straight through, unparsed):
+// a literal tab — so the regex accepts either (`\s+`):
 //   2026-05-16T04:20:39.162+0800 INFO running task {"task": "forget ...   (kangaroo)
 //   2026-09-09T21:08:03.190+0800	INFO	running task	{"task": "forget ...  (bandicoot)
 //
-// Level words (INFO/WARN/ERROR/DEBUG) map directly. Body keeps the
-// message + any trailing JSON (useful context). The in-line time is
-// stripped and not parsed: the row keeps Docker's receive time.
-// Non-matching lines pass through to the generic OTTL fallback.
+// Level words (INFO/WARN/ERROR/DEBUG) map directly. The body is the whole
+// line, mixed text and JSON, so enrich.alloy leaves it as text; the
+// ClickStack collector promotes the trailing JSON object's fields (`task`,
+// `runAt`, ...) to attributes itself. The in-line time is not parsed: the
+// row keeps Docker's receive time. Non-matching lines pass through to the
+// generic OTTL fallback.
 
 declare "backrest" {
   argument "forward_to" { }
@@ -27,15 +27,11 @@ declare "backrest" {
       selector = "{service=\"backrest\"}"
 
       stage.regex {
-        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+[+-]\\d{4}\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
+        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+[+-]\\d{4}\\s+(?P<lvl>[A-Z]+)\\s"
       }
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

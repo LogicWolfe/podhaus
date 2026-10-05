@@ -450,7 +450,7 @@ What to check:
 ## Logs and metrics
 
 All container output goes through fractal's Alloy to ClickStack like every other
-service ([Monitoring](../monitoring.html)). Dashboards are not defined in the
+service ([Logging](../logging.md)). Dashboards are not defined in the
 repository; they are made by hand in HyperDX.
 
 ### Request record
@@ -469,7 +469,8 @@ identifier and are lined up by time.
   object, response headers, sizes and user id are deleted, so no other header
   (the sign-in token included) and no body can reach it. Only `llm.pod.haus` is
   logged on the shared `:4443` listener; the docs server's requests are not.
-  The Alloy `caddy` module keeps these lines whole.
+  In ClickStack each field is an attribute under its own name and the body is
+  the line's message, `handled request`.
 - **The model server's own lines**, at `LLAMA_ARG_LOG_VERBOSITY` 4: slot choice,
   prompt size, tokens reused, tokens read and generated with timings, draft
   acceptance, forced full re-reads, conversation saves, restores and discards,
@@ -505,8 +506,9 @@ identifier and are lined up by time.
 ### Watcher events
 
 The watcher writes one JSON object per line: `ts`, `level`, `event`, `msg` and
-the event's fields. The `llm-watcher` module keeps the whole line as the log
-body and promotes only the event name as `llm_event`. The watcher measures every
+the event's fields. In ClickStack every field is an attribute under its own name
+(each slot's figures as `slots.<n>.<field>`), the body is `msg`, and the
+`llm-watcher` module also copies the event name to `llm_event`. The watcher measures every
 duration on a monotonic clock; the timestamps in events are wall-clock times
 converted from it, so the gaps between an event's times are true durations.
 
@@ -523,7 +525,7 @@ converted from it, so the gaps between an event's times are true durations.
 ### Metrics
 
 Alloy scrapes both containers every 15 seconds and bridges them to ClickStack
-with `service.name` set to the container name and `host` to `fractal`.
+with `service.name` set to the container name and `host.name` to `fractal`.
 
 - **`llm-watcher`**: `llm_watcher_state` (one series per state, 1 for the current
   one; the authoritative state), `llm_watcher_last_sample_age_seconds`,

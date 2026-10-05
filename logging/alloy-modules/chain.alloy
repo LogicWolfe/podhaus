@@ -11,8 +11,9 @@
 // non-JSON lines) and so run first.
 //
 // To parse a new service: add `<service>.alloy` here and insert one link
-// below. Anything not in the chain still ships and gets the generic OTTL
-// severity fallback in enrich.alloy.
+// below. Anything not in the chain still ships, structured by the shared
+// JSON step and the severity fallback in enrich.alloy. The parser rules
+// are in komodo-op.alloy's header and docs/logging.md.
 
 declare "chain" {
 	argument "forward_to" { }

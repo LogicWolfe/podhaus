@@ -107,25 +107,20 @@ plane.
 **Verify:** edit a comment in `relay/bilby/numbat-client.toml.tmpl` and push
 it to `main` — Stage 1 should list `bilby-relay` and not `numbat-relay`.
 
-## Fractal has no monitoring coverage
+## Fractal gets no telemetry heartbeat, by decision
 
-- [ ] Add a fractal Periphery check to Gatus.
-- [ ] Add a fractal telemetry heartbeat to Gatus.
+Decided: fractal gets no telemetry heartbeat and no further alert. It is down
+intermittently by design (a Windows desktop running Fedora under WSL), and the
+*Docs (fractal, via Komodo)* check is the one fractal alert wanted. Gatus
+carries five telemetry heartbeats, for kangaroo, Numbat, Pinelake, bandicoot
+and voltaire, and Periphery checks for bilby, kangaroo, Numbat, fractal,
+voltaire and Pinelake.
 
-`gatus/conf/config.yaml` carries Periphery checks for bilby, kangaroo, and
-numbat, plus telemetry heartbeats for kangaroo and numbat. Fractal has
-neither, despite running four stacks and shipping cross-network Alloy the
-same way kangaroo does — which is exactly the silent-wedge failure mode the
-[2026-06-19 postmortem](../postmortems/2026-06-19-alloy-exporter-keepalive-wedge.md)
-documents, and which only the staleness heartbeat caught.
-[Monitoring](../monitoring.html) already asserts the fractal pipeline
-exists, so the docs claim coverage the config does not provide.
-
-**Fix:** copy the "Numbat Periphery (via Komodo)" endpoint with
-`"server":"fractal"` in the body, and the "Numbat Telemetry Pipeline
-(heartbeat)" endpoint with `ResourceAttributes['host']='fractal'`.
-
-**Verify:** both endpoints appear green on `gatus.pod.haus` after deploy.
+- [ ] Decide whether *Fractal Periphery (via Komodo)* keeps its alerts. It
+  alerts through the shared Gatus alert list today, a second fractal alert
+  beside the docs check, against the decision above. Trade-off: it reports a
+  dead fractal Periphery (deploys to fractal failing quietly) sooner, at the
+  cost of an alert every time the desktop is off.
 
 ## HyperDX MCP credentials sit in the log store
 

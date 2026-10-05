@@ -2,33 +2,31 @@
 //
 // See komodo-op.alloy for the pattern/rationale.
 //
-// Pomerium (zap) emits one JSON object per line from several internal
+// Pomerium (zerolog) emits one JSON object per line from several internal
 // sub-loggers (envoy, authorize, autocert, identity_manager, the proxy
-// itself, ...); the sub-logger name — when present — is its own
-// "service" field, distinct from the `service` Loki label this whole
-// pipeline keys parsers on:
+// itself, ...); the sub-logger name, when present, is its own `service`
+// field, which lands as the `service` attribute beside the pipeline's
+// service.name:
 //   {"level":"info","service":"envoy","...","time":"2026-09-09T21:27:56+08:00","message":"http-request"}
 //   {"level":"debug","server-name":"all","...","time":"2026-09-09T21:27:55+08:00","message":"no session handle from request"}
 //   {"level":"info","component":"idp-token-session-creator","...","time":"2026-09-09T21:27:55+08:00","message":"idp-token-session-creator.CreateSession succeeded"}
 //
 // `time` is not parsed: the row keeps Docker's nanosecond receive time.
 // Most lines put the human text in `message`; the autocert sub-logger uses
-// `msg` instead.
+// `msg` instead. The shared JSON step in enrich.alloy makes every field an
+// attribute and the body the message.
 //
-// Known collision until the attribute namespacing in
-// docs/plans/structured-logging.html lands: the collector copies the JSON
-// `service` field (envoy, authorize, ...) over the pipeline's `service`
-// log attribute on about half of these rows. ServiceName is unaffected.
-//
-// The body is deliberately left as the whole JSON line. Pomerium's
-// authorize and http-request lines are, with Pocket ID's, the fleet's
-// authentication trail: they carry the user's email, session id, request path, status,
-// client IP and user agent, and all of it must reach HyperDX. The
-// collector promotes every field of a JSON-object body into
-// LogAttributes, so the fields stay queryable; rewriting the body to
-// plain text would lose them. This parser therefore only sets a
-// `detected_level` from `level`; a non-JSON line (a panic dump) does not
-// get one and falls through to the enrich.alloy severity heuristic.
+// Pomerium's authorize and http-request lines are, with Pocket ID's, the
+// fleet's authentication trail: they carry the user's email, session id,
+// request path, status, client IP and user agent, and all of it must reach
+// HyperDX. This parser sets a `detected_level` from `level` (a non-JSON
+// line, such as a panic dump, gets none and falls through to the
+// enrich.alloy heuristic), and removes one value: the OAuth `state`
+// parameter in the sign-in callback's query string
+// (`/oauth2/callback?code=...&state=<blob>`), an encrypted session blob
+// with no use to a reader. `state=` stays, so the request's shape is kept.
+// It is removed here rather than in enrich.alloy because `state` is an
+// ordinary field elsewhere (llm-watcher and RustFS report one).
 
 declare "pomerium" {
   argument "forward_to" { }
@@ -39,8 +37,13 @@ declare "pomerium" {
     stage.match {
       selector = "{service=\"pomerium\"}"
 
+      stage.replace {
+        expression = "[?&]state=([^&\"\\s]+)"
+        replace    = ""
+      }
+
       // The gate keeps non-JSON lines (the startup banner, a panic dump)
-      // out of the JSON stages.
+      // out of the JSON stage.
       stage.match {
         selector = "{service=\"pomerium\"} |~ \"^\\\\{\""
 
@@ -48,11 +51,6 @@ declare "pomerium" {
           expressions = {
             lvl = "level",
           }
-        }
-
-        stage.template {
-          source   = "lvl"
-          template = "{{ ToUpper .Value }}"
         }
 
         stage.labels {

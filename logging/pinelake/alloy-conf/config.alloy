@@ -6,7 +6,7 @@
 //
 // Per-service parsing is config-as-code in ../alloy-modules (one module per
 // service, one chain for every host), so a service moving between hosts
-// keeps its parsing with no change here. See docs/monitoring.html.
+// keeps its parsing with no change here. See docs/logging.md.
 
 // Internal-pipeline tracing — unified `alloy` service in HyperDX
 // (same name on every host; one row per host).
@@ -25,18 +25,22 @@ podhaus.docker_logs "run" {
 }
 
 podhaus.plex_server_log "run" {
-	host       = "pinelake"
-	container  = "pinelake-plex"
-	logs_dir   = "/var/log/podhaus/plex"
-	timezone   = "America/Edmonton"
-	forward_to = [podhaus.chain.run.receiver]
+	host            = "pinelake"
+	container       = "pinelake-plex"
+	compose_project = "pinelake-plex"
+	compose_service = "pinelake-plex"
+	logs_dir        = "/var/log/podhaus/plex"
+	timezone        = "America/Edmonton"
+	forward_to      = [podhaus.chain.run.receiver]
 }
 
 podhaus.flood_job_logs "run" {
-	host       = "pinelake"
-	container  = "pinelake-rtorrent"
-	flood_db   = "/var/log/podhaus/flood-db"
-	forward_to = [podhaus.chain.run.receiver]
+	host            = "pinelake"
+	container       = "pinelake-rtorrent"
+	compose_project = "pinelake-flood"
+	compose_service = "pinelake-rtorrent"
+	flood_db        = "/var/log/podhaus/flood-db"
+	forward_to      = [podhaus.chain.run.receiver]
 }
 
 podhaus.chain "run" {
@@ -74,7 +78,7 @@ otelcol.processor.transform "svc_alloy" {
     context = "metric"
     statements = [
       `set(resource.attributes["service.name"], "alloy")`,
-      `set(resource.attributes["host"], "pinelake")`,
+      `set(resource.attributes["host.name"], "pinelake")`,
     ]
   }
   output {

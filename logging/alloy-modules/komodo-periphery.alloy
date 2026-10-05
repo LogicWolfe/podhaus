@@ -1,14 +1,14 @@
-// Per-service log parser — komodo-periphery (kangaroo)
+// Per-service log parser — komodo-periphery
 //
-// See komodo-core.alloy for the pattern/rationale.
-// komodo-periphery is the same Komodo (Rust tracing) codebase as
-// komodo-core, so the format is assumed identical:
+// See komodo-core.alloy: komodo-periphery is the same Komodo (Rust
+// tracing) codebase as komodo-core, so the format is assumed identical:
 //   2026-05-16T03:33:14.137997Z  INFO <message>
 // (whitespace-separated, RFC3339-nanosecond UTC; ANSI already stripped
 // upstream). It logs very little, so this is unverified against live
 // data — if periphery ever diverges, non-matching lines simply pass
-// through to the generic OTTL fallback (non-breaking). The timestamp is
-// stripped from Body and not parsed: the row keeps Docker's receive time.
+// through to the generic OTTL fallback (non-breaking). The body is the
+// whole line; the timestamp is not parsed: the row keeps Docker's receive
+// time.
 
 declare "komodo_periphery" {
   argument "forward_to" { }
@@ -20,15 +20,11 @@ declare "komodo_periphery" {
       selector = "{service=\"komodo-periphery\"}"
 
       stage.regex {
-        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
+        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\s+(?P<lvl>[A-Z]+)\\s"
       }
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

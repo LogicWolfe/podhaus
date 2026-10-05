@@ -1,7 +1,6 @@
 // Per-service log parser — flood (rtorrent web UI)
 //
-// See komodo-op.alloy for the pattern/rationale. Replaces the
-// legacy stage.match for flood that lived in loki.process "containers".
+// See komodo-op.alloy for the pattern/rationale.
 //
 // flood emits pino JSON, e.g.:
 //   {"level":30,"time":"2026-05-16T04:01:34.737Z","pid":7,
@@ -10,12 +9,12 @@
 // ANSI already stripped upstream) — those don't match stage.json and
 // pass through untouched.
 //
-// Keep the JSON body intact: ClickStack needs the request ID, request,
-// response and error fields to correlate failures. Reducing it to msg
-// discards those fields before the collector can extract them.
-// Only pino records enter the severity stages; plain-text access logs
-// must not acquire a fabricated severity. Every row keeps Docker's
-// receive time; pino's `time` stays in the body and is not parsed.
+// This parser maps pino's numeric `level` onto `detected_level`. The
+// shared JSON step in enrich.alloy makes every field an attribute
+// (`reqId`, `req.url`, `res.statusCode`, `err.stack`, ...) and the body
+// `msg`. Only pino records enter the severity stages; plain-text access
+// logs must not acquire a fabricated severity. Every row keeps Docker's
+// receive time; pino's `time` is kept as an attribute and not parsed.
 
 declare "flood" {
 	argument "forward_to" { }

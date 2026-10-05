@@ -6,12 +6,12 @@
 // TZ), bracketed fields:
 //   [2026-05-16 11:40:00,000] [INFO] [celery.beat] Scheduler: Sending due task ...
 //
-// The bracketed local time is stripped from Body and not parsed: the row
-// keeps Docker's receive time. Levels are Python logging words; normalize
-// WARNING→WARN and CRITICAL→FATAL so the detected_level label matches the
-// canonical TRACE|DEBUG|INFO|WARN|ERROR|FATAL set (OTTL maps it to OTLP
-// severity). Multiline tracebacks and any non-matching lines fall
-// through stage.match untouched.
+// The body is the whole line. The third bracket, the Python logger name,
+// is also kept as the `logger` attribute. The bracketed local time is not
+// parsed: the row keeps Docker's receive time. Levels are Python logging
+// words: CRITICAL becomes FATAL here; enrich.alloy folds WARNING onto
+// WARN. Multiline tracebacks and any non-matching lines fall through
+// stage.match untouched.
 
 declare "paperless" {
   argument "forward_to" { }
@@ -20,23 +20,19 @@ declare "paperless" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{service=\"paperless\"}"
+      selector = "{service=\"paperless\"} |~ \"^\\\\[\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2},\\\\d{3}\\\\] \\\\[[A-Z]+\\\\] \\\\[[^\\\\]]+\\\\]\""
 
       stage.regex {
-        expression = "^\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3}\\] \\[(?P<lvl>[A-Z]+)\\] \\[(?P<comp>[^\\]]+)\\]\\s+(?P<msg>.*)$"
+        expression = "^\\[[^\\]]+\\] \\[(?P<lvl>[A-Z]+)\\] \\[(?P<logger>[^\\]]+)\\]"
       }
 
       stage.template {
         source   = "lvl"
-        template = "{{ if eq .Value \"WARNING\" }}WARN{{ else if eq .Value \"CRITICAL\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
+        template = "{{ if eq .Value \"CRITICAL\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
       }
 
       stage.labels {
-        values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
+        values = { detected_level = "lvl", logger = "logger" }
       }
     }
   }

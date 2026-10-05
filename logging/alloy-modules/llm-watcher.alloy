@@ -29,14 +29,14 @@
 //                           watcher ends its own process because its GPU
 //                           sampling stalled, and Docker restarts it
 //
-// The body stays the whole JSON line, unlike the services that reduce it to a
-// message. The dashboards read the event's own fields (requests_cut,
-// busy_before_s, the first_activity_ts/released_ts pair, each slot's tokens,
-// the raw samples) and those exist nowhere else. Only the event name is
-// promoted, as `llm_event`, so a query can select events without parsing.
+// The shared JSON step in enrich.alloy makes every field of the event an
+// attribute (requests_cut, busy_before_s, the first_activity_ts/released_ts
+// pair, each slot's tokens as `slots.<n>.<field>`, the raw samples) and the
+// body `msg`. The event name is also promoted here as `llm_event`, beside
+// the `event` attribute.
 //
 // Non-JSON lines (a traceback, an interpreter warning) are kept out of the
-// JSON stages by the line filter, for the reason given in pomerium.alloy.
+// JSON stages by the line filter.
 
 declare "llm_watcher" {
   argument "forward_to" { }

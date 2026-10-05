@@ -4,15 +4,16 @@
 //
 // komodo-ferretdb (FerretDB / Go zap) log format, TAB-separated,
 // RFC3339 millisecond UTC timestamp; fields are
-// <ts>\t<LEVEL>\t<caller>\t<message...> where message may itself
-// contain tabs + a trailing JSON object — captured greedily:
+// <ts>\t<LEVEL>\t<caller>\t<message...> where the message may end in a
+// tab and a JSON object:
 //   2026-05-16T03:57:41.742Z	INFO	middleware/dispatcher.go:131	Command handled	{"command":"hello",...}
 //
 // Levels are already uppercase zap words (INFO/WARN/ERROR/DPANIC/...);
-// enrich.alloy folds DPANIC and PANIC to FATAL.
-// Shaping: lift the level into a `detected_level` label, reduce Body to
-// just the message. The row keeps Docker's receive time; `ts` is stripped
-// and not parsed.
+// enrich.alloy folds DPANIC and PANIC to FATAL. The body is the whole
+// line, mixed text and JSON, so enrich.alloy leaves it as text; the
+// ClickStack collector promotes the trailing JSON object's fields
+// (`command`, `duration`, ...) to attributes itself. The row keeps
+// Docker's receive time; `ts` is not parsed.
 
 declare "komodo_ferretdb" {
   argument "forward_to" { }
@@ -24,15 +25,11 @@ declare "komodo_ferretdb" {
       selector = "{service=\"komodo-ferretdb\"}"
 
       stage.regex {
-        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\t(?P<lvl>[A-Z]+)\\t[^\\t]*\\t(?P<msg>.*)$"
+        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\t(?P<lvl>[A-Z]+)\\t"
       }
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

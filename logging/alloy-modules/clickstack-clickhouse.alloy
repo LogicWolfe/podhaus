@@ -10,9 +10,9 @@
 //   2026.05.16 12:00:25.324953 [ 700 ] {} <Trace> default.otel_logs (...): Removed 1 old parts
 //
 // Fields: <ts YYYY.MM.DD HH:MM:SS.uuuuuu> [ <thread> ] {<query_id>}
-// <Level> <message>. The query id is frequently empty ({}). Level
-// words are full English (Information, not INFO) — mapped below to the
-// canonical UPPERCASE set the OTTL severity step expects.
+// <Level> <message>. The level words are full English: Information and
+// Notice become INFO here; enrich.alloy upper-cases the rest and folds
+// Warning onto WARN. The body is the whole line.
 //
 // Time: this parser never sets it. A stdout line keeps Docker's receive
 // time. The same lines also arrive from ClickHouse's error-log file, whose
@@ -21,8 +21,7 @@
 //
 // Entrypoint / init lines (e.g. `/entrypoint.sh: create new user
 // 'default' instead 'default'`) do not match the regex and pass
-// through this component unchanged — acceptable, they are startup
-// noise with no native timestamp/level to lift.
+// through this component unchanged.
 
 declare "clickstack_clickhouse" {
   argument "forward_to" { }
@@ -31,30 +30,19 @@ declare "clickstack_clickhouse" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{service=\"clickstack-clickhouse\"}"
+      selector = "{service=\"clickstack-clickhouse\"} |~ \"^\\\\d{4}\\\\.\\\\d{2}\\\\.\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d+ \\\\[ \\\\d+ \\\\] \\\\{[^}]*\\\\} <[A-Za-z]+> \""
 
       stage.regex {
-        expression = "^\\d{4}\\.\\d{2}\\.\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+ \\[ (?P<thread>\\d+) \\] \\{(?P<qid>[^}]*)\\} <(?P<lvl>[A-Za-z]+)> (?P<msg>.*)$"
-      }
-
-      // ClickHouse level words → canonical UPPERCASE severity. lower
-      // first so the mapping table only needs one key per level.
-      stage.template {
-        source   = "lvl"
-        template = "{{ ToLower .Value }}"
+        expression = "^\\S+ \\S+ \\[ \\d+ \\] \\{[^}]*\\} <(?P<lvl>[A-Za-z]+)> "
       }
 
       stage.template {
         source   = "lvl"
-        template = "{{ if eq .Value \"trace\" }}TRACE{{ else if eq .Value \"debug\" }}DEBUG{{ else if eq .Value \"information\" }}INFO{{ else if eq .Value \"notice\" }}INFO{{ else if eq .Value \"warning\" }}WARN{{ else if eq .Value \"error\" }}ERROR{{ else if eq .Value \"fatal\" }}FATAL{{ else }}{{ ToUpper .Value }}{{ end }}"
+        template = "{{ if or (eq .Value \"Information\") (eq .Value \"Notice\") }}INFO{{ else }}{{ .Value }}{{ end }}"
       }
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

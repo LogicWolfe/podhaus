@@ -5,9 +5,9 @@
 // komodo-core/komodo-periphery:
 //   2026-09-09T11:02:25.303752Z  WARN handle{service=pinelake_ssh}:run: rathole::client: Failed to run the data channel: Failed to read cmd: early eof
 //
-// Shaping: the level word becomes `detected_level` and Body is reduced to
-// the message. The row keeps Docker's receive time, which is when rathole
-// wrote the line, so the in-line timestamp is not parsed.
+// The level word becomes `detected_level`; the body is the whole line. The
+// row keeps Docker's receive time, which is when rathole wrote the line,
+// so the in-line timestamp is not parsed.
 //
 // One file for every container flavour. docker-logs.alloy strips only the
 // host's own `<host>-` prefix from the container name, so the service
@@ -26,15 +26,11 @@ declare "rathole" {
       selector = "{service=~\".*rathole-client|rathole-server\"}"
 
       stage.regex {
-        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\s+(?P<lvl>[A-Z]+)\\s+(?P<msg>.*)$"
+        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\s+(?P<lvl>[A-Z]+)\\s"
       }
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

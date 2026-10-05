@@ -8,7 +8,9 @@
         email so the watcher of Fenwick never routes through Fenwick. ClickStack
         (ClickHouse + HyperDX) is the observability backend; Alloy on all active hosts ships
         container logs and Gatus metrics to it over OTLP. Autoheal restarts unhealthy
-        containers locally on each host.
+        containers locally on each host. What a log row carries and how to find it is in
+        <a href="logging.md">Logging</a>; this page covers alerting and the health of the
+        pipeline itself.
       </p>
 
       <h2 id="components">Components</h2>
@@ -26,8 +28,9 @@
               collector, Mongo app-state</td></tr>
           <tr><td>Alloy (<code>logging</code> / <code>&lt;host&gt;-logging</code>)</td>
             <td><code>logging/</code> (every host)</td>
-            <td>Container logs, tailed log files and journald, parsed by the shared
-              modules in <code>logging/alloy-modules/</code> and bridged to OTLP</td></tr>
+            <td>Container logs, tailed log files and journald, fitted to one schema by the
+              shared modules in <code>logging/alloy-modules/</code>
+              (<a href="logging.md">Logging</a>) and bridged to OTLP</td></tr>
           <tr><td>Autoheal</td><td><code>autoheal/</code> (every host)</td>
             <td>Restarts unhealthy labelled containers on the local daemon</td></tr>
         </tbody>
@@ -37,8 +40,8 @@
       <pre><code>Docker logs (every host) ─┐
 Plex + Flood log files    ─┤  Alloy (per-host config, shared modules)
 journald (Linux hosts)    ─┤   discover/tail → ANSI-strip → per-service parser
-                          │   chain → Loki→OTLP bridge → OTTL enrich (host +
-                          │   service.name resource attributes, severity)
+                          │   chain → Loki→OTLP bridge → OTTL enrich (the
+                          │   logging.md schema, severity, JSON fields)
                           │   → batch → OTLP/HTTP exporter
                           │
 bilby, kangaroo ──────────► 10.0.0.90:4318        (cross-LAN, plaintext)
@@ -198,22 +201,17 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         fractal's Alloy scrapes <code>llm-watcher:8081/metrics</code> and
         <code>llm-server:8080/metrics</code> every 15 s and bridges them through the
         same exporter, landing under <code>service.name = llm-watcher</code> and
-        <code>llm-server</code> with <code>host = fractal</code>. The watcher's series are
+        <code>llm-server</code> with <code>host.name = fractal</code>. The watcher's series are
         its state (<code>llm_watcher_state</code>, one series per state), GPU use, memory,
         power and temperature, the guest's memory and the slot pool. The server's are
         llama.cpp's request and token counters; the router forwards the scrape to the
         model process, so it names the model and sets <code>autoload=false</code>, and with
         no model loaded the scrape fails, which is a yielded signal that
-        <code>llm_watcher_state</code> confirms. Two parsers handle the logs.
-        <code>llm-watcher</code> writes one JSON event per line, kept whole as the body with
-        the event name promoted as <code>llm_event</code>. <code>llm-server</code>'s lines are
-        parsed into per-request attributes (<code>llm_line</code>, <code>llm_slot</code>,
-        <code>llm_task</code> and the figures). That parser is an allow-list: an entry is
-        stored as printed only if it matches, in full, a known shape that carries no text;
-        every other entry (the model loader's start-up lines included) is stored as its
-        level, its heading and "text removed", and a person who needs the line reads
-        <code>docker logs llm-server</code> on fractal. The router's per-request "proxying
-        request" line is dropped for volume. Dashboards over these
+        <code>llm_watcher_state</code> confirms. Their logs follow the
+        <a href="logging.md">logging schema</a>: every field of the watcher's JSON events
+        is an attribute, with the event name also copied to <code>llm_event</code>, and the
+        server's lines pass an allow-list that stores a line as printed only when it carries
+        no prompt or reply text. Dashboards over these
         are not defined in the repository; they are created by hand in HyperDX. See the
         <a href="/runbooks/local-llm.md#logs-and-metrics">local model runbook</a>.
       </p>
@@ -273,11 +271,11 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         <code>[STATUS] == 200</code> and <code>[BODY] == 1</code>. Use
         <code>count() &gt; 0</code> over an explicitly time-windowed scan, not
         <code>max(Timestamp) &gt; now() - INTERVAL N</code> over an unbounded one — the Map
-        predicate (<code>...['host']=…</code>) defeats primary-key pruning, so without the
+        predicate (<code>...['host.name']=…</code>) defeats primary-key pruning, so without the
         time filter the query scans every active part and times out at gatus's 10 s budget:
       </p>
       <pre><code>SELECT toUInt8(count() &gt; 0) FROM default.otel_logs
-WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['host']='&lt;host&gt;'</code></pre>
+WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['host.name']='&lt;host&gt;'</code></pre>
       <p>
         Six live endpoints in <code>gatus/conf/config.yaml</code>, of two kinds:
         <em>heartbeats</em> (assert a fresh Alloy <strong>self-metric</strong> reached
@@ -291,8 +289,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
           scrapes its own self-metrics every 60 s and ships them through the same exporter as
           the logs, so the query asserts a fresh
           per-host Alloy metric in a 15-minute window (<code>otel_metrics_gauge</code> where
-          <code>ResourceAttributes['host']='&lt;host&gt;'</code>; the <code>host</code>
-          attribute is stamped by the <code>svc_alloy</code> transform in each host's
+          <code>ResourceAttributes['host.name']='&lt;host&gt;'</code>; the
+          <code>host.name</code> attribute is stamped by the <code>svc_alloy</code> transform in each host's
           <code>config.alloy</code>). A genuine stall alerts about 20–25 minutes after the
           last metric arrived: the window must first empty (15 minutes), the check runs every
           5 minutes, and it alerts on the second failure in a row. Fractal deliberately has
@@ -310,7 +308,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         env block <em>and</em> the <code>gatus/compose.yaml</code> service
         <code>environment:</code> (see the
         <a href="/secrets.html">secrets doc</a>'s stack.toml↔compose env rule). To add
-        another source, copy an endpoint block and change the <code>host=</code> filter and
+        another source, copy an endpoint block and change the <code>host.name</code> filter and
         window.
       </p>
 
@@ -356,7 +354,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         <code>logging/alloy-modules/</code>; each host's
         <code>logging/&lt;host&gt;/alloy-conf/config.alloy</code> is a short list of which
         shared modules to run, plus that host's scrapes and exporter. Alloy tails each
-        host's Docker socket (and the files and journal below), bridges Loki-format
+        host's Docker socket (and the files and journal listed in
+        <a href="logging.md#what-is-collected">Logging</a>), bridges Loki-format
         input to OTLP (<code>otelcol.receiver.loki</code> → enrich → batch →
         <code>otelcol.exporter.otlphttp</code>) and ships to the ClickStack collector:
       </p>
@@ -387,141 +386,9 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         with no silent fallback to the old sink.
       </p>
       <p>
-        Container discovery (<code>docker-logs.alloy</code>) is the same on every host:
-      </p>
-      <ul>
-        <li>Lumen's throwaway code-search containers (Docker label
-          <code>podhaus.lumen</code> without a worktree label) are not collected: their
-          stdout is the search request stream, source snippets included. The long-lived
-          Lumen services and the <code>lumen-warm-*</code> index containers are collected,
-          the index containers under the one <code>service</code> label
-          <code>lumen-warm</code>.</li>
-        <li>Stopped containers stay discovered, with their network and port labels
-          dropped, so a container that Ofelia starts on a schedule resumes where it
-          stopped instead of being re-read from its first line on every run. Alloy
-          forgets a container's read position once its log stream ends, so an Alloy
-          restart re-reads each stopped container's log once. A stopped container that
-          never printed a line is polled every five seconds for as long as it exists;
-          Alloy's zero-byte report of each poll is not shipped.</li>
-      </ul>
-
-      <h3 id="sources">Beyond container stdout</h3>
-      <p>
-        Container output is the default source everywhere. Services that write their
-        real log to a file inside a volume, and the host itself, are covered by shared
-        source modules that a host opts into with a few lines in its
-        <code>config.alloy</code> and a read-only bind in its compose overlay:
-      </p>
-      <ul>
-        <li><strong>Plex Media Server.log</strong> (<code>plex_server_log</code>, bilby and
-          pinelake) — playback decisions, client sessions and scanner results; stdout
-          carries three lines a day. Debug level is kept on purpose (that is where the
-          decisions are); the Gatus <code>/identity</code> healthcheck pair and the
-          <code>Completed:</code> response lines are dropped. Lands under the Plex
-          container's service with <code>log_file</code> set.</li>
-        <li><strong>Flood job logs + rtorrent.log</strong> (<code>flood_job_logs</code>,
-          bilby and pinelake) — <code>flood-publish</code>, <code>rtorrent-extract</code>,
-          <code>plex-label-sync</code> and <code>pinelake-stignore</code> redirect their own
-          output to files under flood-db because rtorrent's finish hooks discard stdout;
-          rtorrent's own log is opened by <code>flood/conf/rtorrent.rc</code>.
-          These records are attributed to <code>rtorrent</code> or <code>pinelake-rtorrent</code>.
-          Flood request errors retain their complete structured exception record, timestamp
-          and severity under the corresponding web service name. The
-          five-minute <code>changed=0</code> stignore heartbeat is dropped in Alloy.</li>
-        <li><strong>ClickHouse error log</strong> (<code>clickhouse_error_log</code>,
-          bandicoot) — the only place ClickHouse's own errors land; tailed from the end
-          under the <code>clickstack-clickhouse</code> service so the same parser shapes
-          it. Its lines carry ClickHouse's local time with no zone, so the module parses
-          them in the zone bandicoot's <code>config.alloy</code> passes in as
-          <code>CLICKHOUSE_TZ</code>, the same Komodo <code>TZ</code> variable the clickstack
-          stack runs with.</li>
-        <li><strong>Local model request record</strong> (fractal): fractal's Caddy
-          writes one access line per request to <code>llm.pod.haus</code>, on both its
-          Pomerium-facing and loopback listeners, with <code>caller</code> (remote only),
-          <code>client</code>, <code>session_id</code>, <code>agent_id</code>,
-          <code>path</code>, <code>status</code> and <code>duration</code>. The request
-          object is deleted whole, so no other header and no body can reach the line and
-          the sign-in token cannot. The <code>caddy</code> module keeps access lines whole instead of reducing
-          them to <code>logger: msg</code>. <code>llm-server</code>'s own lines carry the
-          rest of each request (slot, tokens read and reused, timings) and no path or
-          status. The two share no identifier.</li>
-        <li><strong>systemd journal</strong> (<code>journal</code>, bilby, bandicoot,
-          Numbat, fractal, voltaire) — priority warning and worse from every unit, plus
-          every priority from four audit sources: OpenSSH (matched by its syslog identifiers
-          <code>sshd</code> and <code>sshd-session</code>, so each login's
-          <code>Accepted publickey</code> line and its disconnect and
-          <code>session closed</code> lines, which land under the login's session scope or no
-          unit at all), sudo (matched by its syslog identifier: its command and
-          <code>session opened</code> lines), <code>earlyoom.service</code> (its
-          kill reports) and <code>docker.service</code> (the Docker daemon's whole log). Rows
-          land as service <code>journald</code> with <code>unit</code>,
-          <code>identifier</code>, <code>transport</code> and <code>priority</code> attributes.
-          Severity comes from the journal priority, except that dockerd and earlyoom write to
-          stdout, where every line has the unit's default priority (6); for those the
-          severity is read from the line's own level word, so dockerd's
-          <code>level=error</code> lines are ERROR, and earlyoom's
-          <code>sending SIGTERM/SIGKILL to process</code> kill lines are WARN. Kernel faults, OOM kills and mount
-          failures live here too. Kangaroo (QTS) has no journald; Pinelake's macOS unified
-          log has no Alloy source.</li>
-      </ul>
-
-      <h3 id="parsers">Per-service log parsing</h3>
-      <p>
-        Log parsing is config-as-code and <strong>host-independent</strong>. Each parsed
-        service has one module at <code>logging/alloy-modules/&lt;service&gt;.alloy</code>
-        — an Alloy <code>declare</code> — and <code>chain.alloy</code> composes every module
-        into one chain that every host runs. A module only touches its own service's
-        streams (<code>stage.match</code> on the <code>service</code> label: the container
-        name with the host's own <code>&lt;host&gt;-</code> prefix stripped, so
-        <code>pinelake-flood</code> and <code>flood</code> hit the same parser) and passes
-        everything else through, so a service moving between hosts takes its parsing
-        with it and no logging change is needed. Each module:
-      </p>
-      <ul>
-        <li>normalizes the level to a <code>detected_level</code> attribute,</li>
-        <li>leaves the row's time alone: a container's row keeps Docker's nanosecond receive
-          time, which is right whatever time zone the container prints in. Only file sources,
-          whose lines carry the only time there is, parse it, each in the zone it is written
-          in: Plex's <code>Media Server.log</code> in the zone each host's
-          <code>config.alloy</code> writes beside the module call (Perth on bilby, Edmonton on
-          pinelake); ClickHouse's error file in the zone bandicoot's <code>config.alloy</code>
-          reads from the logging stack's <code>CLICKHOUSE_TZ</code>, set from the fleet
-          <code>TZ</code> variable; the Flood job logs in UTC; and <code>rtorrent.log</code> as
-          epoch seconds. <code>tools/lint-alloy-timestamps.py</code> rejects a timestamp stage
-          in any other module and any time zone written into a module,</li>
-        <li>retains the full structured Body for Flood request diagnostics and for the two authentication sources, Pomerium and Pocket ID, whose authorize and request lines (email, session id, path, status, client address, user agent, OIDC client id) are the fleet's authentication trail; the collector promotes every field of a JSON body into <code>LogAttributes</code>. Other parsers may still reduce the body to the message; <a href="plans/structured-logging.html">the structured-logging plan</a> removes that.</li>
-      </ul>
-      <p>
-        After the chain, the shared <code>enrich.alloy</code> OTTL module stamps the host
-        and <code>service.name</code> (from the container name) as <strong>resource</strong>
-        attributes and maps <code>detected_level</code> → OTLP severity. The host is a
-        resource attribute because the ClickStack collector promotes JSON body fields over
-        log attributes: Pomerium, Caddy's admin API and FerretDB emit their own
-        <code>host</code> field, so <code>LogAttributes['host']</code> lies for those rows;
-        <code>ResourceAttributes['host']</code> does not, and is what the Gatus staleness
-        checks query. The parser's level is authoritative. For a line with no parsed level
-        the fallback takes the <em>first</em> level word (trace, debug, info, warn, warning,
-        error, err, fatal, panic, any case) in the first ~60 characters, where the word
-        follows the start of the line, <code>[</code>, whitespace, <code>=</code> or
-        <code>"</code> and is followed by <code>]</code>, <code>:</code>, whitespace,
-        <code>"</code> or the end. So uvicorn's <code>INFO:</code> in column one and
-        logfmt's <code>level=warn</code> are read, <code>[INFO] retrying after error</code>
-        stays INFO, and "Total errors encountered: 0" is not ERROR. Every level, parsed or
-        found, is normalized to TRACE, DEBUG, INFO, WARN, ERROR or FATAL with its
-        OpenTelemetry severity number (WARNING → WARN, ERR → ERROR, PANIC and zap's DPANIC →
-        FATAL, MongoDB's D1–D5 → DEBUG). Services without a parser (<code>docs</code>,
-        <code>sonarr</code>, <code>mumble</code>) rely on that fallback, and when it finds no
-        level either, the ClickStack collector guesses one from the body. That guess is the
-        baseline; a service whose lines it mislabels gets its own module.
-      </p>
-      <p>
-        To parse a new service: add <code>logging/alloy-modules/&lt;service&gt;.alloy</code>
-        and insert one link in <code>chain.alloy</code>. That is the whole change, for every
-        host at once. The module directory sits outside every host's stack directory, so
-        <code>logging/compose.shared.yaml</code> lists it under
-        <code>x-podhaus-content-paths</code> and the content-hash action folds it into each
-        logging stack's <code>STACK_CONTENT_HASH</code>; without that the linked-repo hosts
-        would never pull a module-only change.
+        Which containers, files and journal entries are collected, how each service is
+        named, the parser rules and the schema every row follows are in
+        <a href="logging.md">Logging</a>.
       </p>
 
       <h3 id="retention">Retention</h3>
@@ -618,7 +485,7 @@ $DK restart alloy backrest                           # reattach by name + rebuil
               process. <strong>Verify with the data, not the container:</strong> rerun the
               log-rows query
               (<code>SELECT count() FROM default.otel_logs WHERE Timestamp &gt; now() -
-              INTERVAL 5 MINUTE AND LogAttributes['host']='kangaroo'</code> on
+              INTERVAL 5 MINUTE AND ResourceAttributes['host.name']='kangaroo'</code> on
               <code>clickstack-clickhouse</code>) and confirm rows resume — a passing egress
               test or a healthy container is not proof of ingest. The kangaroo
               <code>autorun.sh</code> reconcile heals both the phantom network and

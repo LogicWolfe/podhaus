@@ -8,19 +8,16 @@
 //    accepted","attr":{...}}
 //
 // Field map: s = severity (single char), c = component, msg = the
-// human message, attr = structured detail (dropped from Body — it's
-// noisy and varies per event; keep Body to component + message).
+// human message, attr = structured detail.
 //
-// Shaping: Mongo severity → canonical `detected_level` label (OTTL maps it
-// to OTLP severity; the debug verbosities D1–D5 pass through and
-// enrich.alloy folds them to DEBUG), Body reduced to
-// "<component>  <message>". The row keeps Docker's receive time; `t` is
-// not parsed.
+// This parser maps `s` onto a `detected_level` (the debug verbosities
+// D1–D5 pass through and enrich.alloy folds them to DEBUG). The shared
+// JSON step in enrich.alloy makes every field an attribute (`c`, `ctx`,
+// `attr.remote`, `t.$date`, ...) and the body `msg`. The row keeps
+// Docker's receive time; `t` is not parsed.
 //
-// The stages are gated on a JSON line filter: a non-JSON line (an
-// entrypoint message) would otherwise leave every extracted value unset
-// and the templates would write "<no value>" into the level and Body. See
-// hyperdx.alloy for that failure mode.
+// The stages are gated on a JSON line filter, so a non-JSON line (an
+// entrypoint message) passes through untouched.
 
 declare "clickstack_mongo" {
   argument "forward_to" { }
@@ -32,29 +29,16 @@ declare "clickstack_mongo" {
       selector = "{service=\"clickstack-mongo\"} |~ \"^\\\\{\""
 
       stage.json {
-        expressions = {
-          sev  = "s",
-          comp = "c",
-          msg  = "msg",
-        }
+        expressions = {sev = "s"}
       }
 
       stage.template {
-        source   = "lvl"
-        template = "{{ if eq .sev \"D\" }}DEBUG{{ else if eq .sev \"I\" }}INFO{{ else if eq .sev \"W\" }}WARN{{ else if eq .sev \"E\" }}ERROR{{ else if eq .sev \"F\" }}FATAL{{ else }}{{ .sev }}{{ end }}"
+        source   = "sev"
+        template = "{{ if eq .Value \"D\" }}DEBUG{{ else if eq .Value \"I\" }}INFO{{ else if eq .Value \"W\" }}WARN{{ else if eq .Value \"E\" }}ERROR{{ else if eq .Value \"F\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
       }
 
       stage.labels {
-        values = { detected_level = "lvl" }
-      }
-
-      stage.template {
-        source   = "body"
-        template = "{{ .comp }}  {{ .msg }}"
-      }
-
-      stage.output {
-        source = "body"
+        values = { detected_level = "sev" }
       }
     }
   }

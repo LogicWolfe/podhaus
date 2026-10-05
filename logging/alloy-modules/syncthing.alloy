@@ -7,8 +7,8 @@
 //   2026-05-16 10:24:04 INF Established secure connection (device=...)
 //   2026-05-16 10:55:05 WRN Failed to sync (path="WORK FOLDERS" ...)
 //
-// Levels: DBG/INF/WRN/ERR → canonical. Body = message. The local time is
-// stripped and not parsed: the row keeps Docker's receive time, which is
+// Levels: DBG/INF/WRN/ERR → canonical. The body is the whole line. The
+// local time is not parsed: the row keeps Docker's receive time, which is
 // right on every host whatever the container's time zone. Non-matching
 // lines pass through to the generic OTTL fallback.
 
@@ -19,10 +19,10 @@ declare "syncthing" {
     forward_to = argument.forward_to.value
 
     stage.match {
-      selector = "{service=\"syncthing\"}"
+      selector = "{service=\"syncthing\"} |~ \"^\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} [A-Z]{3} \""
 
       stage.regex {
-        expression = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} (?P<lvl>[A-Z]{3}) (?P<msg>.*)$"
+        expression = "^\\S+ \\S+ (?P<lvl>[A-Z]{3}) "
       }
 
       stage.template {
@@ -32,10 +32,6 @@ declare "syncthing" {
 
       stage.labels {
         values = { detected_level = "lvl" }
-      }
-
-      stage.output {
-        source = "msg"
       }
     }
   }

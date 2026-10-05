@@ -5,6 +5,8 @@
 //
 // Line shape (local wall-clock in the container's TZ, hence `timezone`):
 //   Sep 09, 2026 17:44:40.556 [281472660173024] DEBUG - Request: [...] GET /identity ...
+// The time is parsed into the row's timestamp and the level word (VERBOSE
+// read as TRACE) becomes its severity. The body is the whole line.
 //
 // Dropped before parsing: the Gatus /identity healthcheck pair (a request
 // and its completion every minute) and every other `Completed:` line,
@@ -12,14 +14,23 @@
 // is debug level by design — the debug lines are the playback decisions
 // — so the level is not filtered.
 //
-// Labels: host, container (the Plex container, so enrich.alloy files it
-// under the same service.name as its stdout), service=plex-server-log
-// (its own parser key — the `plex` key would hand these already-shaped
-// lines to a stdout parser in chain.alloy), log_file, stream=file.
+// The tailer's labels are host, container, service=plex-server-log,
+// log_file and stream=file, and they must stay exactly that.
+// loki.source.file keys the file's saved read position on its path plus
+// this label set, so any change to it re-reads the whole file and ships
+// every line again with its original timestamp. Everything the schema
+// needs is set after the tailer instead: the last stage gives these rows
+// the Plex container's own service name (its name less this host's
+// `<host>-` prefix; no chain parser is keyed on it), compose project and
+// compose service, so they share service.name, service.namespace and
+// compose.service with Plex's stdout. loki.source.file adds `filename`,
+// which enrich.alloy makes log.source.
 
 declare "plex_server_log" {
 	argument "host" { }
 	argument "container" { }
+	argument "compose_project" { }
+	argument "compose_service" { }
 	argument "logs_dir" { }
 	argument "timezone" { }
 	argument "forward_to" { }
@@ -55,7 +66,7 @@ declare "plex_server_log" {
 			selector = "{service=\"plex-server-log\"} |~ \"^[A-Z][a-z]{2} \\\\d{2}, \\\\d{4} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d{3} \\\\[\""
 
 			stage.regex {
-				expression = "^(?P<ts>[A-Z][a-z]{2} \\d{2}, \\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[(?P<thread>\\d+)\\] (?P<lvl>[A-Z]+) - (?P<msg>.*)$"
+				expression = "^(?P<ts>[A-Z][a-z]{2} \\d{2}, \\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) \\[\\d+\\] (?P<lvl>[A-Z]+) - "
 			}
 
 			stage.timestamp {
@@ -72,9 +83,13 @@ declare "plex_server_log" {
 			stage.labels {
 				values = {detected_level = "lvl"}
 			}
+		}
 
-			stage.output {
-				source = "msg"
+		stage.static_labels {
+			values = {
+				service         = string.trim_prefix(argument.container.value, argument.host.value + "-"),
+				compose_project = argument.compose_project.value,
+				compose_service = argument.compose_service.value,
 			}
 		}
 	}

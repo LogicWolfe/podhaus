@@ -30,7 +30,8 @@ Consult these pages before acting:
 | Public website caching and invalidation | [`docs/caching.md`](docs/caching.md) |
 | Storage tier rule (local / Jump / Pouch) | [`docs/storage.html`](docs/storage.html) |
 | Backup / restore / off-site sync | [`docs/backup-and-recovery.html`](docs/backup-and-recovery.html) |
-| Gatus alerts, log pipeline, autoheal | [`docs/monitoring.html`](docs/monitoring.html) |
+| Gatus alerts, pipeline health, autoheal | [`docs/monitoring.html`](docs/monitoring.html) |
+| What a log row carries, finding logs in HyperDX, a new service's logs, Alloy parser modules | [`docs/logging.md`](docs/logging.md) |
 | Cron / ofelia jobs | [`docs/scheduling.html`](docs/scheduling.html) |
 | DR rebuild runbooks | [`docs/disaster-recovery.html`](docs/disaster-recovery.html) |
 | Provisioning a host; the Ansible / chezmoi boundary | [`docs/host-provisioning.md`](docs/host-provisioning.md) |
@@ -253,7 +254,7 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. |
 | `tools/lint-stack-toml.py` | Pre-commit lint: rejects `deploy = true` on any podhaus-tagged stack. See "Hard rules" for why — Komodo's `Sync Deploy` sub-stage in `RunSync` would auto-deploy on Stage 0 and break on transient linked-repo timeouts. |
 | `mise.toml` + `Pipfile` | Current stable Python and Pipenv plus the unpinned Python tooling dependencies, and Node for the two `node --test` suites the hook runs. Bootstrap with the commands in `README.md`; no lock file is kept. |
-| `tools/pre-commit` | The pre-commit hook runner. Invokes `lint-stack-env.py` + `lint-stack-content-hash.py` + `lint-stack-toml.py` + `lint-alloy-timestamps.py` (no `stage.timestamp` outside the file-source Alloy modules, no time zone written into a shared module; zones arrive as arguments from each host's config) through Pipenv. Install with `ln -sf ../../tools/pre-commit .git/hooks/pre-commit` so future edits to the hook are live. |
+| `tools/pre-commit` | The pre-commit hook runner. Invokes `lint-stack-env.py` + `lint-stack-content-hash.py` + `lint-stack-toml.py` + `lint-alloy-timestamps.py` (no `stage.timestamp` outside the file-source Alloy modules, no time zone written into a shared module; zones arrive as arguments from each host's config) through Pipenv, then the unit-test suites, among them `logging/tests/` (every Alloy parser module's fixture run through the real modules in a short-lived `grafana/alloy` container, checked against the `docs/logging.md` schema; skipped with the reason printed when Docker is unavailable). Install with `ln -sf ../../tools/pre-commit .git/hooks/pre-commit` so future edits to the hook are live. |
 | `komodo-stop` | Stop Komodo Core |
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |
@@ -505,6 +506,32 @@ These have failure modes that you must not introduce:
   the from-anywhere `terraform/` root and contradicts the rule above.
   Data-plane isolation is done with per-bucket least-priv keys (e.g.
   per-site service accounts), not network filtering.
+- **A log parser never drops a field.** A module in
+  `logging/alloy-modules/` sets its service's severity and nothing else: it
+  never rewrites or shortens a body, never deletes a label, and never parses
+  JSON itself. The shared `enrich.alloy` step does that for every service:
+  each field of a line that is one JSON object becomes an attribute under the
+  service's own name and the message becomes the body. The pipeline's own
+  facts live under namespaced names (`host.name`, `service.instance.id`,
+  `log.source`, …) that are reserved: a service field spelled exactly like one
+  is discarded. Beyond that, the only values removed are credential keys,
+  Pomerium's OAuth `state`, and the text the model server's allow-list
+  redacts; flattening also loses empty lists and objects and all but the last
+  of a repeated key. Every module has a fixture in
+  `logging/tests/test_log_schema.py`, which `tools/pre-commit` runs. See
+  [`docs/logging.md`](docs/logging.md).
+- **Never change a log tailer's labels, relabel rules or arguments.** Alloy
+  keys each source's saved read positions on the container ID or file path
+  plus the tailer's whole label set, so a changed set makes every host re-read
+  its retained logs from the start and store every line a second time at its
+  original timestamp. And each host's Alloy reloads a changed module from the
+  pulled checkout before its container is recreated: a changed Docker relabel
+  rule list restarts every container tailer, which deletes every saved read
+  position, so every running container's log is stored twice even with the
+  labels unchanged. This holds until live module reload is disabled (see
+  `docs/plans/structured-logging.html`). Derive new facts in `enrich.alloy`,
+  after the tailer. `logging/tests` pins the Docker rules and tailer arguments
+  and every tailer's labels.
 - **Never use single-file bind mounts** for any config the running
   service reads after startup. File-level binds pin the inode at mount
   time, so atomic-rename editor saves on the host leave the container
@@ -675,6 +702,7 @@ The full set of pages on `docs.pod.haus`:
 **Operations**
 - [Backup & recovery](docs/backup-and-recovery.html)
 - [Monitoring](docs/monitoring.html)
+- [Logging](docs/logging.md)
 - [Scheduling](docs/scheduling.html)
 - [Disaster recovery](docs/disaster-recovery.html)
 

@@ -74,21 +74,3 @@ Make a failed child deployment fail the action and enclosing procedure, with
 the affected stack named in the error. Verify both a returned unsuccessful
 update and a thrown execution error, plus the batch deployment path. A failed
 image build must never produce an overall successful deployment result.
-
-## Caddy collection discards structured diagnostic fields
-
-**Status:** Open. Superseded by the shared JSON step in
-[structured-logging](structured-logging.html), which removes body reduction
-from every parser.
-
-`logging/alloy-modules/caddy.alloy` replaces each non-access record with
-logger name and message, so a failed certificate reads `tls.obtain: could not
-get certificate from issuer` with no domain or reason. The structured fields
-exist in the container's own line and never reach central logs.
-
-Keep those fields while retaining correct timestamps and severity. Richer
-records must not copy credentials into central storage: the key denylist that
-strips them is planned in the shared JSON step and not yet built. Verify a
-representative Caddy error record end to end in ClickStack and assert that
-credential canaries remain absent. Pomerium and Pocket ID already ship their
-whole JSON line; see [monitoring](../monitoring.html#parsers).
