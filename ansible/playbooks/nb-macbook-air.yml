@@ -3,10 +3,11 @@
 # managed development surface (machine identity, op-vault, managed SSH via
 # chezmoi) but none of Podhaus runtime management.
 #
-# Run from bilby (or any meshed development machine on the home LAN):
+# Run on the MacBook itself; the play connects locally, so managing the Mac
+# needs no network path to it from another machine:
 #   cd ansible
-#   ansible-playbook playbooks/nb-macbook-air.yml -K --check --diff
-#   ansible-playbook playbooks/nb-macbook-air.yml -K
+#   pipenv run ansible-playbook playbooks/nb-macbook-air.yml -K --check --diff
+#   pipenv run ansible-playbook playbooks/nb-macbook-air.yml -K
 # -K because escalation is Nathan's account password; the Mac has no
 # passwordless sudo rule and must not gain one.
 #
@@ -15,7 +16,16 @@
 ---
 - name: Manage the MacBook development client
   hosts: mac_clients
+  connection: local
   gather_facts: true
+
+  pre_tasks:
+    - name: Refuse to run anywhere but on a Mac
+      # The connection is local, so started on another machine this play
+      # would apply the MacBook's root policy to that machine instead.
+      ansible.builtin.assert:
+        that: ansible_facts.system == "Darwin"
+        fail_msg: Run playbooks/nb-macbook-air.yml on the MacBook itself.
 
   roles:
     - role: mac_ssh

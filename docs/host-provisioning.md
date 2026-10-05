@@ -92,10 +92,13 @@ route. Its `pinelake_macos` role is separate from every Linux role.
 **kangaroo is not an Ansible target and never will be** — QTS ships no
 Python interpreter, so `kangaroo_bootstrap` is its permanent supported
 path. Nathan's MacBook is present only in the `mac_clients` group and has a
-dedicated `playbooks/nb-macbook-air.yml` entry point. It receives the narrow
-root-owned SSH policy in `mac_ssh`; it is not in `provisioned`, `docker_hosts`,
-`komodo_periphery_hosts`, or `homelab_targets`. Chezmoi remains the owner of
-its user-level development configuration.
+dedicated `playbooks/nb-macbook-air.yml` entry point, which runs on the Mac
+itself over a local connection (`pipenv run ansible-playbook
+playbooks/nb-macbook-air.yml -K` from `ansible/`), so managing it needs no
+route to it. It receives the narrow root-owned SSH policy in `mac_ssh` and the
+repository source list in `mac_docs_sources`; it is not in `provisioned`,
+`docker_hosts`, `komodo_periphery_hosts`, or `homelab_targets`. Chezmoi remains
+the owner of its user-level development configuration.
 
 ## Layout
 

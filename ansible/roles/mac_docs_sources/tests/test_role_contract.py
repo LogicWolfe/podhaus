@@ -39,6 +39,13 @@ class RoleContractTest(unittest.TestCase):
         play = yaml.safe_load((ANSIBLE / "playbooks" / "nb-macbook-air.yml").read_text())[0]
         self.assertIn("mac_docs_sources", [entry["role"] for entry in play["roles"]])
 
+    def test_the_mac_playbook_runs_on_the_mac_and_nowhere_else(self) -> None:
+        play = yaml.safe_load((ANSIBLE / "playbooks" / "nb-macbook-air.yml").read_text())[0]
+        self.assertEqual(play["connection"], "local")
+        guard = play["pre_tasks"][0]["ansible.builtin.assert"]
+        self.assertEqual(guard["that"], 'ansible_facts.system == "Darwin"')
+        self.assertNotIn("ansible_host", host_vars("nb-macbook-air"))
+
 
 if __name__ == "__main__":
     unittest.main()

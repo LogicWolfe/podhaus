@@ -3,13 +3,12 @@
 # Alloy, Komodo, or log shipping — playbooks/nb-macbook-air.yml owns only
 # root SSH policy, safety assertions and the repository source list.
 #
-# Reached over the home LAN only (split-horizon nb-macbook-air.pod.haus →
-# UniFi-reserved wifi address, both in terraform/). It has no inbound path
-# from outside the home network and dials out for everything else.
+# Ansible runs on the MacBook itself (playbooks/nb-macbook-air.yml connects
+# locally), so managing it needs no route to it. The split-horizon
+# nb-macbook-air.pod.haus record and its UniFi-reserved wifi address, both in
+# terraform/, serve SSH into the Mac from the development mesh on the home
+# LAN; there is no inbound path from outside the home network.
 ---
-ansible_host: nb-macbook-air.pod.haus
-ansible_user: nathan
-
 # macOS ships no system Python and the Command Line Tools one (3.9) is too
 # old for current ansible-core managed-node support. The mise-managed
 # interpreter tracks the current stable minor and keeps this path.
