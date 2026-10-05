@@ -7,15 +7,17 @@
         replace it: HyperDX owns logs + traces + exploratory debugging; Bugsink
         owns exception <em>aggregation</em> — stack-trace fingerprinting,
         grouping repeats into one issue, first/last-seen, regression detection.
-        Single-user, SQLite, one intended client: <strong>fenwick</strong>.
+        Single-user, SQLite, three clients, one project each: <strong>fenwick</strong>
+        (id 1), <strong>fenwick-web-agent</strong> (id 3) and
+        <strong>brinno-downloader</strong> (id 4); <em>Pets</em> (id 2) is unrelated.
       </p>
 
       <blockquote>
-        <p><strong>fenwick is wired up</strong></p>
-        fenwick reports exceptions here (project <code>fenwick</code>,
-        id 1) via <code>@sentry/deno</code> at its single
-        <code>recordError</code> seam, verified end to end. As-built
-        detail: <a href="#wiring-fenwick">Wiring fenwick</a>.
+        <p><strong>Fenwick's three services are wired up</strong></p>
+        The bot reports via <code>@sentry/deno</code> at its single
+        <code>recordError</code> seam; the browser service via the Sentry Node
+        SDK; the footage service via the Python SDK. Each has its own project
+        and DSN. As-built detail: <a href="#wiring-fenwick">Wiring Fenwick</a>.
       </blockquote>
 
       <h2 id="topology">Topology</h2>
@@ -133,22 +135,32 @@
         <li>Browse <code>https://bugs.pod.haus</code> → Pomerium
           (Family) → Bugsink login with the superuser credentials (the
           "Bugsink Create Superuser" 1Password item).</li>
-        <li>Create a <strong>project</strong> (e.g. <code>fenwick</code>) and
-          copy its DSN — this is the only manual UI step; Bugsink has no
-          headless project-create that fits this flow.</li>
+        <li>Create a <strong>project</strong> per client. Bugsink has no
+          headless project-create, but the Django shell does it without the
+          UI: <code>docker exec bugsink bugsink-manage shell -c '…'</code> with
+          <code>Project.objects.get_or_create(name=…, team=Team.objects.get(name="Bugsink"),
+          defaults={"slug": …})</code>; the project's <code>dsn</code> property
+          gives the key and id. Rewrite the host to the LAN form below and pipe
+          it straight into <code>op item create</code> so the key is never
+          printed. This is how all three Fenwick projects were made.</li>
       </ol>
 
-      <h2 id="wiring-fenwick">Wiring fenwick (as-built)</h2>
-      <p>Done and verified end to end. How it is wired:</p>
+      <h2 id="wiring-fenwick">Wiring Fenwick (as-built)</h2>
+      <p>How the three services are wired:</p>
       <ul>
-        <li><strong>Project</strong> <code>fenwick</code> (id 1, team
-          Bugsink) — created via <code>bugsink-manage shell</code>
-          (Bugsink has no headless project-create).</li>
-        <li><strong>DSN</strong> in 1Password Homelab item
-          <code>Bugsink Fenwick DSN</code>, internal dockernet form
-          <code>http://&lt;key&gt;@bugsink:8000/1</code>, synced by
-          komodo-op as
-          <code>OP__KOMODO__BUGSINK_FENWICK_DSN__CREDENTIAL</code>.
+        <li><strong>Projects</strong> <code>fenwick</code> (id 1),
+          <code>fenwick-web-agent</code> (id 3) and
+          <code>brinno-downloader</code> (id 4), all in team Bugsink,
+          created via <code>bugsink-manage shell</code>.</li>
+        <li><strong>DSNs</strong> in 1Password Homelab items
+          <code>Bugsink Fenwick DSN</code>, <code>Bugsink Web Agent DSN</code>
+          and <code>Bugsink Brinno DSN</code>, LAN form
+          <code>http://&lt;key&gt;@bilby.pod.haus:8000/&lt;id&gt;</code>: the
+          Fenwick containers run on bandicoot and reach Bugsink on the port bilby
+          publishes, by its split-horizon name. komodo-op syncs them as
+          <code>OP__KOMODO__BUGSINK_FENWICK_DSN__CREDENTIAL</code>,
+          <code>OP__KOMODO__BUGSINK_WEB_AGENT_DSN__CREDENTIAL</code> and
+          <code>OP__KOMODO__BUGSINK_BRINNO_DSN__CREDENTIAL</code>.
           Provisioned via the <code>op</code> CLI with the podhaus
           service-account token (the Connect token is read-only by
           design).</li>
