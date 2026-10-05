@@ -19,7 +19,7 @@ services:
     read_only: true
     cap_drop: [all]
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     environment:
       TZ: ${TZ}
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}

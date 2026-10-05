@@ -31,10 +31,10 @@ services:
       alloy-secrets-init:
         condition: service_completed_successfully
     # SELinux enforcing denies cross-label writes to docker.sock and reads
-    # of the bind-mounted config dir; label:disable covers both (bilby
+    # of the bind-mounted config dir; label=disable covers both (bilby
     # pattern).
     security_opt:
-      - label:disable
+      - label=disable
     volumes:
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-voltaire/logging/voltaire/alloy-conf:/etc/alloy:ro
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-voltaire/logging/alloy-modules:/etc/alloy-modules:ro

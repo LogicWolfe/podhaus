@@ -10,6 +10,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     security_opt:
       # SELinux is enforcing on Fedora Asahi Remix; the socket is cross-label.
-      - label:disable
+      - label=disable
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

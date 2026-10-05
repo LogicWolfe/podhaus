@@ -15,9 +15,9 @@ services:
     restart: unless-stopped
     init: true
     # SELinux is enforcing on Fedora Workstation; cross-label access to
-    # docker.sock and the bind-mounted config dirs needs label:disable.
+    # docker.sock and the bind-mounted config dirs needs label=disable.
     security_opt:
-      - label:disable
+      - label=disable
     environment:
       PERIPHERY_PRIVATE_KEY: file:/config/keys/periphery.key
       PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub

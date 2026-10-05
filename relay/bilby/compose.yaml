@@ -11,8 +11,8 @@ services:
     pull_policy: never
     restart: unless-stopped
     security_opt:
-      - label:disable
-      - no-new-privileges:true
+      - label=disable
+      - no-new-privileges=true
     environment:
       RATHOLE_CONFIG_TEMPLATE: /etc/rathole/numbat-client.toml.tmpl
       RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}

@@ -44,6 +44,8 @@ services:
       - ferretdb-state:/state
     environment:
       FERRETDB_POSTGRESQL_URL: postgres://${KOMODO_DB_USERNAME}:${KOMODO_DB_PASSWORD}@postgres:5432/postgres
+      # FerretDB logs one info line per database command; the per-command trail is not worth the rows.
+      FERRETDB_LOG_LEVEL: warn
     # No healthcheck — ferretdb image is distroless, no shell available
     # to probe from inside. Komodo Core's own healthcheck covers the pair
     # (Core depends on ferretdb so Core unhealthy == ferretdb broken).
@@ -63,10 +65,10 @@ services:
       - "git.pod.haus:${BILBY_LAN_IPV4}"
     init: true
     # SELinux enforcing on Fedora Asahi denies the container from reading
-    # the bind-mounted repo at /syncs/podhaus; label:disable lifts that
+    # the bind-mounted repo at /syncs/podhaus; label=disable lifts that
     # so ResourceSync can scan the repo contents.
     security_opt:
-      - label:disable
+      - label=disable
     depends_on:
       - ferretdb
     ports:

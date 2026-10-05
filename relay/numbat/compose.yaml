@@ -10,8 +10,8 @@ services:
     restart: unless-stopped
     network_mode: host
     security_opt:
-      - label:disable
-      - no-new-privileges:true
+      - label=disable
+      - no-new-privileges=true
     environment:
       RATHOLE_CONFIG_TEMPLATE: /etc/rathole/server.toml.tmpl
       RATHOLE_NOISE_LOCAL_PRIVATE_KEY: ${RATHOLE_NOISE_LOCAL_PRIVATE_KEY}

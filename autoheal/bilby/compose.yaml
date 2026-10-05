@@ -1,10 +1,10 @@
-# Bilby's autoheal overlay. Adds SELinux label:disable for Fedora Asahi,
+# Bilby's autoheal overlay. Adds SELinux label=disable for Fedora Asahi,
 # which denies cross-label writes to /var/run/docker.sock without it.
 
 
 services:
   autoheal:
     security_opt:
-      - label:disable
+      - label=disable
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

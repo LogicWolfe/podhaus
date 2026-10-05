@@ -30,9 +30,9 @@ services:
   backrest:
     # Backrest shell hooks need docker socket access to exec into other
     # containers for live DB dumps (plex library, paperless pg, komodo pg).
-    # label:disable lifts SELinux confinement for that.
+    # label=disable lifts SELinux confinement for that.
     security_opt:
-      - label:disable
+      - label=disable
     environment:
       GATUS_BACKREST_ENDPOINT_ID: ${GATUS_BACKREST_ENDPOINT_ID}
     image: podhaus-backrest:local

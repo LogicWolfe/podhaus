@@ -117,7 +117,7 @@ services:
         echo "forgejo storage preflight passed"
     volumes: *forgejo-volumes
     security_opt:
-      - label:disable
+      - label=disable
     restart: "no"
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
@@ -133,7 +133,7 @@ services:
     environment: *forgejo-environment
     volumes: *forgejo-volumes
     security_opt:
-      - label:disable
+      - label=disable
     networks:
       - dockernet
     labels:
@@ -164,7 +164,7 @@ services:
       FORGEJO_OIDC_CLIENT_SECRET: ${FORGEJO_OIDC_CLIENT_SECRET}
     volumes: *forgejo-volumes
     security_opt:
-      - label:disable
+      - label=disable
     networks:
       - dockernet
     entrypoint: ["/bin/sh", "-ec"]

@@ -33,7 +33,7 @@ services:
     image: podhaus-rustfs:local
     pull_policy: never
     restart: unless-stopped
-    security_opt: [label:disable]
+    security_opt: [label=disable]
     depends_on:
       rustfs-secrets-init:
         condition: service_completed_successfully

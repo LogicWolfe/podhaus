@@ -398,7 +398,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
         Two workarounds, both already in use:
       </p>
       <ul>
-        <li><strong><code>security_opt: label:disable</code></strong> on the service — lifts
+        <li><strong><code>security_opt: label=disable</code></strong> on the service — lifts
           confinement entirely. Used by <code>gatus</code>,
           <code>ofelia</code>, <code>autoheal</code>, <code>backrest</code>, <code>alloy</code>,
           <code>clickstack</code>.</li>
@@ -592,7 +592,7 @@ chmod +x .git/hooks/pre-commit</code></pre>
         <li>☐ All bind mounts are <strong>directory</strong> binds, never single files (see above)</li>
         <li>☐ Every service has the <code>podhaus.stack-content-hash</code> label so a config-only
           push recreates startup-read processes through the Stage-1 reconcile</li>
-        <li>☐ SELinux flag (<code>:z</code> or <code>label:disable</code>) on bilby-targeted bind mounts</li>
+        <li>☐ SELinux flag (<code>:z</code> or <code>label=disable</code>) on bilby-targeted bind mounts</li>
         <li>☐ Healthcheck + <code>autoheal: "true"</code> label (unless distroless image)</li>
         <li>☐ Any soft-NFS healthcheck uses the share sentinel under a bounded
           <code>timeout</code>; it never performs an unbounded directory listing</li>

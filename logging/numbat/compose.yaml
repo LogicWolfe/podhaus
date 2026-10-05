@@ -24,7 +24,7 @@ services:
 
   alloy:
     security_opt:
-      - label:disable
+      - label=disable
     depends_on:
       alloy-secrets-init:
         condition: service_completed_successfully

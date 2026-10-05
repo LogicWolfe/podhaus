@@ -57,7 +57,7 @@ services:
     # SELinux enforcing on Fedora Asahi Remix; NFS bind (Pouch) plus the
     # local NVMe binds below.
     security_opt:
-      - label:disable
+      - label=disable
     environment:
       TZ: ${TZ}
       PUID: "1000"

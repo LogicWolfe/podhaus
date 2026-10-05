@@ -42,7 +42,7 @@ services:
     # the bind-mounted Caddyfile; same pattern as every other bilby
     # stack (docs-server / gatus).
     security_opt:
-      - label:disable
+      - label=disable
     depends_on:
       caddy-secrets-init:
         condition: service_completed_successfully

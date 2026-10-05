@@ -28,9 +28,9 @@ services:
     image: clickhouse/clickhouse-server:26.1-alpine
     restart: unless-stopped
     # SELinux enforcing on Fedora Asahi Remix: clickhouse writes its data
-    # dir and reads the bound config.d; label:disable covers both.
+    # dir and reads the bound config.d; label=disable covers both.
     security_opt:
-      - label:disable
+      - label=disable
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
@@ -92,7 +92,7 @@ services:
     image: mongo:5.0.32-focal
     restart: unless-stopped
     security_opt:
-      - label:disable
+      - label=disable
     environment:
       TZ: ${TZ}
       # Heartbeat push token for /scripts/mongo-dump.sh → Gatus

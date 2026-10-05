@@ -9,7 +9,7 @@ services:
     pull_policy: never
     restart: unless-stopped
     cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
+    security_opt: [no-new-privileges=true]
     environment:
       RATHOLE_CONFIG_TEMPLATE: /etc/rathole/client.toml.tmpl
       RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}

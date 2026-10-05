@@ -21,9 +21,9 @@ services:
       LED_STRIP_GRASSHOPPER_IPV4: ${LED_STRIP_GRASSHOPPER_IPV4}
     # SELinux enforcing on Fedora Asahi denies both cross-label writes
     # to /var/run/docker.sock and cross-label reads into bind-mounted
-    # config files; label:disable covers both.
+    # config files; label=disable covers both.
     security_opt:
-      - label:disable
+      - label=disable
     volumes:
       # Directory binds, per docs/stack-conventions.html#bind-mounts. Alloy
       # reads config.alloy and the shared modules only when the container

@@ -19,9 +19,9 @@ services:
     restart: unless-stopped
     init: true
     # SELinux is enforcing on Fedora Asahi Remix; cross-label access to
-    # docker.sock and the bind-mounted config dirs needs label:disable.
+    # docker.sock and the bind-mounted config dirs needs label=disable.
     security_opt:
-      - label:disable
+      - label=disable
     extra_hosts:
       - "git.pod.haus:${BILBY_LAN_IPV4}"
     environment:

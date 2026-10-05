@@ -54,7 +54,7 @@ services:
     cap_add:
       - NET_BIND_SERVICE
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges=true
     depends_on:
       pomerium-secrets-init:
         condition: service_completed_successfully

@@ -183,7 +183,7 @@ class Runtime:
         worktrees = self.catalog.worktrees()
         if args[0] not in {"stdio", "version", "help", "clean"} and not any(cwd.is_relative_to(path) for path in worktrees):
             raise ValueError(f"Not a registered repository worktree: {cwd}")
-        command = ["docker", "run", "--pull", "never", "--init", "--security-opt", "label:disable",
+        command = ["docker", "run", "--pull", "never", "--init", "--security-opt", "label=disable",
                    "--user", f"{self.uid}:{self.gid}", "--network", "dockernet",
                    "--label", "podhaus.lumen=true", "--workdir", str(cwd),
                    "--mount", "type=volume,src=lumen-data,dst=/data",

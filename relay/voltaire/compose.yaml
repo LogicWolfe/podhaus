@@ -21,9 +21,9 @@ services:
       - ALL
     security_opt:
       # SELinux enforcing on Fedora Workstation denies cross-label reads of
-      # the bind-mounted config dir without label:disable (bilby pattern).
-      - label:disable
-      - no-new-privileges:true
+      # the bind-mounted config dir without label=disable (bilby pattern).
+      - label=disable
+      - no-new-privileges=true
     environment:
       RATHOLE_CONFIG_TEMPLATE: /etc/rathole/client.toml.tmpl
       RATHOLE_NOISE_REMOTE_PUBLIC_KEY: ${RATHOLE_NOISE_REMOTE_PUBLIC_KEY}

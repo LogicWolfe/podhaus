@@ -31,10 +31,10 @@ services:
       alloy-secrets-init:
         condition: service_completed_successfully
     # SELinux enforcing denies cross-label writes to docker.sock and reads
-    # of the bind-mounted config dir; label:disable covers both (bilby
+    # of the bind-mounted config dir; label=disable covers both (bilby
     # pattern).
     security_opt:
-      - label:disable
+      - label=disable
     environment:
       # The zone ClickHouse writes its error log in: the clickstack stack's
       # own TZ, read by config.alloy through sys.env(). An empty zone would

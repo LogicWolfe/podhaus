@@ -11,10 +11,10 @@ services:
     image: search-indexer:local
     pull_policy: never
     restart: unless-stopped
-    # SELinux: same label:disable pattern as every other bilby stack so the
+    # SELinux: same label=disable pattern as every other bilby stack so the
     # bind-mounted scripts dir is readable.
     security_opt:
-      - label:disable
+      - label=disable
     networks:
       - dockernet
     volumes:

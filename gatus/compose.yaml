@@ -7,9 +7,9 @@ services:
     image: ghcr.io/twin/gatus:latest
     restart: unless-stopped
     # SELinux enforcing on Fedora Asahi denies cross-label reads into
-    # the bind-mounted config file; label:disable lifts confinement.
+    # the bind-mounted config file; label=disable lifts confinement.
     security_opt:
-      - label:disable
+      - label=disable
     environment:
       TZ: ${TZ}
       # LAN addresses of the hosts probed directly (bandicoot's published

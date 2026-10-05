@@ -3,6 +3,6 @@
 services:
   autoheal:
     security_opt:
-      - label:disable
+      - label=disable
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

@@ -15,8 +15,8 @@ services:
     restart: "no"
     security_opt:
       # SELinux enforcing on Fedora Workstation denies cross-label reads of
-      # the bind-mounted config dir without label:disable (bilby pattern).
-      - label:disable
+      # the bind-mounted config dir without label=disable (bilby pattern).
+      - label=disable
     environment:
       POMERIUM_ORIGIN_CA_CERT_B64: ${POMERIUM_ORIGIN_CA_CERT_B64}
       POMERIUM_ORIGIN_SERVER_CERT_B64: ${POMERIUM_ORIGIN_SERVER_CERT_B64}
@@ -43,8 +43,8 @@ services:
         condition: service_completed_successfully
     security_opt:
       # SELinux enforcing on Fedora Workstation denies cross-label reads of
-      # the bind-mounted config dir without label:disable (bilby pattern).
-      - label:disable
+      # the bind-mounted config dir without label=disable (bilby pattern).
+      - label=disable
     volumes:
       # Directory binds only.
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-voltaire/caddy/voltaire:/etc/caddy:ro

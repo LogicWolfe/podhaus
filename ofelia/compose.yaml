@@ -17,10 +17,10 @@ services:
       # The socket grants Docker API access, including starting scheduled jobs.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     # SELinux enforcing on Fedora Asahi denies cross-label access to the
-    # docker socket from the container's default context. label:disable
+    # docker socket from the container's default context. label=disable
     # lets ofelia talk to Docker.
     security_opt:
-      - label:disable
+      - label=disable
     networks:
       - dockernet
     # No healthcheck: ofelia is a long-running daemon with no endpoint to

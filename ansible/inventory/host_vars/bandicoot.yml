@@ -45,7 +45,7 @@ podhaus_usb_autosuspend_exempt:
     comment: Genesys Logic USB 3.1 hub in the dock
 
 # Fresh engine, live-restore from day one. SELinux remains enforcing;
-# the bind-mount stacks explicitly carry label:disable.
+# the bind-mount stacks explicitly carry label=disable.
 podhaus_docker_engine_managed: true
 podhaus_docker_live_restore: true
 

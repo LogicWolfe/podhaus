@@ -31,10 +31,10 @@ services:
     # from marking the stack Unhealthy when the deliberate exit-0
     # happens.
     restart: "no"
-    # SELinux enforcing on bilby — without label:disable the build
+    # SELinux enforcing on bilby — without label=disable the build
     # context bind hits EACCES (same fix as fenwick / nathanbaxter-dev).
     security_opt:
-      - label:disable
+      - label=disable
     environment:
       TZ: ${TZ}
       S3_ACCESS_KEY: ${NATHANBAXTER_S3_ACCESS_KEY}

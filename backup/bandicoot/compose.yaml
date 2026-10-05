@@ -20,7 +20,7 @@ services:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   backrest:
     security_opt:
-      - label:disable
+      - label=disable
     # Overrides the shared healthcheck with the Jump sentinel check, as
     # bilby's does: the repo bind must be the real NFS share, never a stub.
     healthcheck:

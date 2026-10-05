@@ -34,7 +34,7 @@
       </ul>
       <blockquote>
         <p><strong>SELinux on Fedora Asahi</strong></p>
-        Most container bind mounts need <code>security_opt: label:disable</code> or the
+        Most container bind mounts need <code>security_opt: label=disable</code> or the
         <code>:z</code> volume flag. Pattern documented in
         <a href="/stack-conventions.html#selinux">Stack conventions</a>.
       </blockquote>
@@ -394,7 +394,7 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
       <p>
         SELinux is enforcing (Fedora Workstation default), so every podhaus service that
         bind-mounts host paths or the Docker socket carries
-        <code>security_opt: [label:disable]</code> in its compose overlay.
+        <code>security_opt: [label=disable]</code> in its compose overlay.
       </p>
       <p>
         Docker is the host's <strong>single container engine</strong>. The rootless
@@ -510,7 +510,7 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
         <code>~/.config/machine-ssh/pin</code> — the PIN's only copy anywhere, inert without
         the token, and replaceable by minting a new key if lost. SELinux is enforcing
         (Fedora Workstation default), so every bind-mounting service carries
-        <code>security_opt: [label:disable]</code>. Fedora's preinstalled Toolbox went with
+        <code>security_opt: [label=disable]</code>. Fedora's preinstalled Toolbox went with
         podman: Docker is the single container engine.
       </p>
       <p>

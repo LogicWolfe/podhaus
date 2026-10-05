@@ -57,7 +57,7 @@ services:
     init: true
     restart: "no"
     command: [sweep]
-    security_opt: [label:disable]
+    security_opt: [label=disable]
     environment:
       LUMEN_UID: "1000"
       LUMEN_GID: "1000"
