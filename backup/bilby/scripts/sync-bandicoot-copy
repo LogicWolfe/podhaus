@@ -30,8 +30,10 @@ done
 
 restic -r "$destination_repository" --retry-lock 1h copy \
   --from-repo "$source_repository" --tag 'created-by:bandicoot'
+# No host in the grouping: restic's host is the Backrest container ID, which
+# changes on every recreate and would keep each old container's group forever.
 restic -r "$destination_repository" --retry-lock 1h forget \
-  --tag 'created-by:bandicoot' --group-by host,paths,tags \
+  --tag 'created-by:bandicoot' --group-by paths,tags \
   --keep-daily 14 --keep-weekly 4 --keep-monthly 6
 
 for plan in $expected_plans; do

@@ -63,7 +63,7 @@ class OffsiteContractTest(unittest.TestCase):
         )
         self.assertIn('"created-by:bandicoot,plan:$plan"', copy_script)
         self.assertNotIn("--latest 1", copy_script)
-        self.assertIn("--group-by host,paths,tags", copy_script)
+        self.assertIn("--group-by paths,tags", copy_script)
         self.assertIn("--keep-daily 14 --keep-weekly 4 --keep-monthly 6", copy_script)
         self.assertNotIn("--prune", copy_script)
         self.assertNotIn("--no-lock", copy_script)
