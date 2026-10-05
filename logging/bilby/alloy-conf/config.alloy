@@ -22,8 +22,15 @@ tracing {
 	write_to          = [otelcol.processor.batch.clickstack.input]
 }
 
+// The shared modules are read once, when the container starts. A push that
+// changes one reaches this Alloy through the container recreate its content
+// hash triggers, never as a reload inside the running process (see the tailer
+// rule in docs/logging.md). Alloy has no read-once setting; a poll every ten
+// years is one.
 import.file "podhaus" {
-	filename = "/etc/alloy-modules"
+	filename       = "/etc/alloy-modules"
+	detector       = "poll"
+	poll_frequency = "87600h"
 }
 
 podhaus.docker_logs "run" {
@@ -236,14 +243,14 @@ otelcol.exporter.otlphttp "clickstack" {
     }
   }
 
-  // Retry forever, unlike the other six hosts' bounded 30m. That bound
-  // is held back here on purpose: the 2026-08-08 postmortem records the
-  // 30m budget running out and leaving fractal's exporter permanently
-  // stopped while it reported healthy. Bilby takes the bounded retry
-  // together with the exporter-stall healthcheck and autoheal restart that
-  // recover from that, not before.
+  // Bounded retry, like every host: a failed batch is retried for at most
+  // 30 minutes, then dropped, and its queue worker takes the next. The
+  // budget is checked only when an attempt returns, so a request that never
+  // returns holds its worker whatever the budget; once every worker is held
+  // the exporter sends nothing, and the container's healthcheck has autoheal
+  // restart it (logging/compose.shared.yaml).
   retry_on_failure {
-    max_elapsed_time = "0s"
+    max_elapsed_time = "30m"
   }
   sending_queue {
     queue_size = 100000

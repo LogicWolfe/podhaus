@@ -152,8 +152,15 @@ notable is the Alloy failure mode, not fractal's general state.
 
 - [x] **2026-08-08**: fractal Alloy restarted; ingestion verified
   end-to-end rather than by container health.
-- [ ] Decide a durable fix for the Alloy wedge — the bounded retry needs to
-  resume rather than stop permanently once its budget expires.
+- [x] **2026-10-05**: durable fix for the Alloy wedge. A request that never
+  returns holds its exporter queue worker whatever the retry budget, and
+  once every worker is held the exporter sends nothing. Every Alloy's
+  healthcheck now fails when its exporter has completed no request across
+  five checks a minute apart, and autoheal restarts it, so a wedged exporter
+  resumes within about 8 minutes. A collector or path outage leaves Alloy
+  running with its queue for the 30-minute retry; the Gatus heartbeats alert
+  when delivery has not resumed
+  (`logging/compose.shared.yaml`, [Monitoring](../monitoring.html#exporter-stall)).
 
 ## What we learned
 

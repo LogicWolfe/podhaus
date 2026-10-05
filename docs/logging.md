@@ -167,26 +167,30 @@ add one link to `chain.alloy`, and add a fixture for it to
 `logging/tests/test_log_schema.py`. The module directory sits outside every
 host's stack directory, so `logging/compose.shared.yaml` lists it under
 `x-podhaus-content-paths`, which is what makes a module-only change redeploy
-every host's Alloy.
+every host's Alloy. Each host's Alloy reads the modules once, when its
+container starts (the `import.file` block in its `config.alloy`), so a module
+change applies on that recreate and never inside a running Alloy.
 
 ## Rules for a source or parser module
 
-- **A tailer's labels, its relabel rules and its arguments never change**
-  while Alloy reloads modules in a running process, which it does today.
-  Each source module's tailer keys its saved read positions on its full label
-  set (the container ID or file path plus every label), so adding, removing,
-  renaming or revaluing a label makes every host re-read that source's
-  retained logs from the start and ship them a second time with their
-  original timestamps. Each host's Alloy imports the modules from the checkout
-  a push pulls, and reloads a changed module before its own container is
-  recreated. A change to the Docker relabel rules (or the Docker host or client
-  settings) then restarts every container tailer, and a tailer stopped while
-  Alloy keeps running deletes its saved position, so every running container's
-  log is shipped again even with every label unchanged. A new fact is derived
-  in `enrich.alloy`, or set after the tailer in the module's own processing
-  stage, never added to the tailer. The harness pins the Docker rule list,
-  the Docker tailer's arguments and every tailer's labels, so a change fails
-  `tools/pre-commit` on purpose.
+- **A tailer's labels never change.** Each source module's tailer keys its
+  saved read positions on its full label set (the container ID or file path
+  plus every label), so adding, removing, renaming or revaluing a label makes
+  every host re-read that source's retained logs from the start and ship them
+  a second time with their original timestamps. The tailer's relabel rules,
+  its arguments and the discovery settings may change, provided every existing
+  container, file and journal entry keeps exactly the labels it has: the
+  change applies when the container is recreated, and an Alloy that stops
+  keeps every saved position. A new fact is derived in `enrich.alloy`, or set
+  after the tailer in the module's own processing stage, never added to the
+  tailer. Nor is a tailer, its `declare`, a host's instance label or the
+  `import.file` label ever renamed: saved positions live under Alloy's storage
+  path at `<import label>.<declare>.<instance label>/<component>.<label>/positions.yml`
+  (`podhaus.docker_logs.run/loki.source.docker.containers/positions.yml`), so a
+  rename loses every position and re-reads every retained log. The harness
+  pins the Docker rule list, the Docker tailer's arguments and every tailer's
+  labels, so a change fails `tools/pre-commit` until its pin is updated with
+  it.
 - **A parser never drops a field.** It sets the level (the `detected_level`
   label) and nothing else: it does not rewrite or shorten the body, does not
   delete a label, and does not parse JSON itself (enrich does that for every
@@ -212,9 +216,8 @@ every host's Alloy.
   and without Docker the whole test class is skipped with the reason printed.
   Its container logs with Docker's `none` driver, so a run on a host with
   Alloy adds about two minutes of "could not fetch logs" error rows from that
-  host's Alloy, accepted while the Docker rule list cannot change. The
-  container carries the Docker label `podhaus.harness=true` for a skip rule
-  once it can.
+  host's Alloy. The container carries the Docker label `podhaus.harness=true`
+  for a Docker rule that drops it, which is not written yet.
 
 ## Secrets
 
@@ -272,9 +275,13 @@ SDK's resource: `service.name`, and for bookcard a random
 running or stopped, except Lumen's throwaway code-search containers (Docker
 label `podhaus.lumen` without a worktree label), whose output is the search
 request stream with source snippets in it. A stopped container stays in
-discovery so one that Ofelia starts on a schedule resumes where it stopped;
-Alloy forgets that position when it restarts, so an Alloy restart re-reads each
-stopped container's log once.
+discovery so one that Ofelia starts on a schedule resumes where it stopped.
+Every Alloy restart, whether the recreate a logging change brings or an
+autoheal restart of a wedged exporter ([Monitoring](monitoring.html#exporter-stall)),
+ships some lines twice: each stopped container's log is read again from the
+start once, because a tailer forgets its position when the log stream ends,
+and each running container's lines from the last second Alloy read are sent
+again, because positions are saved to the second.
 
 **Tailed files**, on the hosts that opt in with a few lines in `config.alloy`
 and a read-only bind in the compose overlay:
@@ -319,5 +326,6 @@ source.
 | `logging/alloy-modules/enrich.alloy` | The schema: resource, namespaced attributes, severity, JSON, credential removal |
 | `logging/<host>/alloy-conf/config.alloy` | Which sources a host runs, its scrapes and its exporter |
 | `logging/tests/test_log_schema.py` | The fixture harness, run by `tools/pre-commit` |
+| `logging/tests/test_alloy_health.py` | The exporter-stall healthcheck run against live exporters, run by `tools/pre-commit` |
 | `tools/lint-alloy-timestamps.py` | The time-parsing rule, run by `tools/pre-commit` |
 | `llm/tests/` | The model server parser's own tests |

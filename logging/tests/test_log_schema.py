@@ -18,11 +18,10 @@ Every tailer's label set, the Docker relabel rule list and the Docker
 tailer's arguments are pinned too, read back from the running Alloy through
 its HTTP API, and each pin is what is deployed. A tailer keys its saved read
 positions on its labels, so a changed label makes every host re-read and
-re-ship that source's retained logs. And a host's running Alloy reloads a
-changed module before its container is recreated, so a changed rule list or
-argument restarts every container tailer, which deletes every saved position:
-every running container's log is shipped again. A pin that fails is the point;
-see docs/logging.md before changing one.
+re-ship that source's retained logs. A rule or argument may change when every
+source keeps its labels, since a host's Alloy reads the modules only when its
+container starts; the pins make that change deliberate. A pin that fails is the
+point; see docs/logging.md before changing one.
 
 What stands in for the real sources: a Docker fixture is a file read by
 loki.source.file under the labels docker_targets gives a discovered container,
@@ -829,8 +828,8 @@ class AlloyRun:
         # No log driver: the host's own Alloy would otherwise ship this
         # container's output. Its output still reaches this process. That
         # Alloy still discovers the container and reports it cannot read its
-        # logs while it runs; the podhaus.harness label is for a skip rule
-        # once the Docker rule list can change (docker-logs.alloy).
+        # logs while it runs; the podhaus.harness label is for a Docker rule
+        # in docker-logs.alloy that drops it, which is not written yet.
         self.process = subprocess.Popen([
             "docker", "run", "--rm", "--log-driver", "none", "--name", self.name,
             "--label", "podhaus.harness=true", "-p", f"127.0.0.1::{API_PORT}",

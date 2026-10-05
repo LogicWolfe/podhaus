@@ -840,10 +840,11 @@ endpoints:
         send-on-resolved: true
 
   # --- Observability-pipeline staleness ---
-  # The Komodo badge and Alloy's :12345 port-check both prove "process
-  # alive", not "logs actually arriving". A wedged exporter / dead
-  # cross-LAN path is silent. These query ClickHouse directly (gatus is
-  # on dockernet) and assert recent log arrival per host — absence of
+  # The Komodo badge proves "process alive", and Alloy's own healthcheck
+  # proves only that its exporter's requests are completing, not that they
+  # arrive: a dead path to the collector leaves Alloy healthy on purpose,
+  # so its retry keeps the queue. These query ClickHouse directly (gatus is
+  # on dockernet) and assert recent arrival per host — absence of
   # telemetry is itself the signal. ClickHouse always 200s; freshness is
   # in the body: `1` = a row within the window, `0` = stale.
   # The per-host heartbeat checks (kangaroo, numbat, pinelake, bandicoot,
@@ -854,6 +855,23 @@ endpoints:
   # they measure. Fractal deliberately has no heartbeat: the existing
   # "Docs (fractal, via Komodo)" check is the one alert wanted for fractal,
   # and no further fractal alert is added.
+  #
+  # Thresholds: a wedged exporter that the restart heals never fails a
+  # check; a path that stays down, or a wedge the restart does not cure,
+  # alerts. Alloy's healthcheck (logging/compose.shared.yaml) makes a host's
+  # alloy unhealthy 5-6 min after its exporter's last request completed,
+  # autoheal restarts it within 30 s, and the restarted Alloy delivers its
+  # first 60 s self-scrape within about 90 s:
+  #   6 min (unhealthy) + 0.5 (autoheal poll) + ~0.25 (stop and start)
+  #   + 1.25 (first scrape and send) = about 8 min without a metric
+  # The 15-min window outlasts that by 7 min, so a healed wedge fails no
+  # check. A down path never restarts Alloy: its requests keep completing
+  # with errors, and the retry delivers the queue once the path is back.
+  # A path down longer than the window, or an uncured wedge, empties it 15
+  # min after the last metric: the first failing check comes 15-20 min after
+  # it (5-min interval) and the second, which alerts (failure-threshold 2),
+  # 20-25 min after it. One failure alone never alerts, so a single slow
+  # ClickHouse query does not page.
   - name: Kangaroo Telemetry Pipeline (heartbeat)
     url: http://${BANDICOOT_LAN_IPV4}:8123/
     method: POST
@@ -880,20 +898,20 @@ endpoints:
     # TimeUnix filter the query scans every active part and times out at
     # gatus's 10 s budget. count() also matches the criterion directly.
     #
-    # 15-min window @ 60 s cadence = ~15 expected scrapes; the 30 m
-    # bounded exporter retry rides out a transient collector restart
-    # (metrics queue and flush), so only a genuine stall empties the
-    # window. A real stoppage alerts about 20–25 min after the last metric
-    # arrived (the 15-min window empties, then two failed 5-min checks),
-    # instead of 150. See 2026-06-20 in the alloy-exporter-keepalive-
-    # wedge postmortem.
+    # 15-min window @ 60 s cadence = ~15 expected scrapes. A collector
+    # restart is ridden out by the exporter's 30-minute retry (metrics queue
+    # and flush once it is back), and a wedged exporter is restarted by
+    # Alloy's healthcheck within about 8 min; either way metrics resume
+    # inside the window. Only a path down for longer, or a wedge the restart
+    # does not cure, empties it (timeline above). See 2026-06-20 in the
+    # alloy-exporter-keepalive-wedge postmortem.
     body: "SELECT toUInt8(count() > 0) FROM default.otel_metrics_gauge WHERE TimeUnix > now() - INTERVAL 15 MINUTE AND ResourceAttributes['host.name']='kangaroo'"
     conditions:
       - "[STATUS] == 200"
       - "[BODY] == 1"
     alerts:
       - type: custom
-        description: "No kangaroo Alloy metrics reached ClickHouse in 15+ min — the cross-LAN Alloy->collector pipeline is down (the 60 s self-metric heartbeat stopped). Two causes, two fixes: an exporter wedge (no errors in alloy's log, just silence) clears with `RestartStack kangaroo-logging`; a dockernet detach / phantom network (alloy log shows 'network is unreachable') needs the disconnect/rm/create/restart repair. Full runbook: docs/monitoring.html#known-issues."
+        description: "No kangaroo Alloy metrics reached ClickHouse in 15+ min — the cross-LAN Alloy->collector pipeline is down (the 60 s self-metric heartbeat stopped), or its exporter is wedged and autoheal's restart of alloy has not cleared it. If alloy's log shows 'network is unreachable', dockernet has detached or gone phantom and needs the disconnect/rm/create/restart repair; otherwise check the collector on bandicoot. Full runbook: docs/monitoring.html#known-issues."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true
@@ -912,7 +930,7 @@ endpoints:
       - "[BODY] == 1"
     alerts:
       - type: custom
-        description: "No Numbat Alloy metrics reached ClickHouse in 15+ min. Check numbat-logging, the logs-ingest rathole service, Caddy mTLS, and the ClickStack ingestion key."
+        description: "No Numbat Alloy metrics reached ClickHouse in 15+ min: the path to the collector is down, or Alloy's exporter is wedged and autoheal's restart of alloy has not cleared it. Check numbat-logging, the logs-ingest rathole service, Caddy mTLS, and the ClickStack ingestion key."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true
@@ -931,7 +949,7 @@ endpoints:
       - "[BODY] == 1"
     alerts:
       - type: custom
-        description: "No Pinelake Alloy metrics reached ClickHouse in 15+ minutes. Check pinelake-logging, outbound HTTPS, the mTLS client certificate, and the ClickStack ingestion key."
+        description: "No Pinelake Alloy metrics reached ClickHouse in 15+ minutes: the path to the collector is down, or Alloy's exporter is wedged and autoheal's restart of alloy has not cleared it. Check pinelake-logging, outbound HTTPS, the mTLS client certificate, and the ClickStack ingestion key."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true
@@ -950,7 +968,7 @@ endpoints:
       - "[BODY] == 1"
     alerts:
       - type: custom
-        description: "No bandicoot Alloy metrics reached ClickHouse in 15+ minutes. Bandicoot ships to logs-ingest.pod.haus, out through Numbat's rathole and back through bilby's Caddy to the collector on bandicoot. Check bandicoot-logging, the logs-ingest rathole service, bilby's Caddy, the mTLS client certificate, and the ClickStack ingestion key."
+        description: "No bandicoot Alloy metrics reached ClickHouse in 15+ minutes: the path to the collector is down, or Alloy's exporter is wedged and autoheal's restart of alloy has not cleared it. Bandicoot ships to logs-ingest.pod.haus, out through Numbat's rathole and back through bilby's Caddy to the collector on bandicoot. Check bandicoot-logging, the logs-ingest rathole service, bilby's Caddy, the mTLS client certificate, and the ClickStack ingestion key."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true
@@ -969,7 +987,7 @@ endpoints:
       - "[BODY] == 1"
     alerts:
       - type: custom
-        description: "No voltaire Alloy metrics reached ClickHouse in 15+ minutes. Check voltaire-logging, outbound HTTPS to logs-ingest.pod.haus, the mTLS client certificate, and the ClickStack ingestion key."
+        description: "No voltaire Alloy metrics reached ClickHouse in 15+ minutes: the path to the collector is down, or Alloy's exporter is wedged and autoheal's restart of alloy has not cleared it. Check voltaire-logging, outbound HTTPS to logs-ingest.pod.haus, the mTLS client certificate, and the ClickStack ingestion key."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true
@@ -987,7 +1005,9 @@ endpoints:
     # the `host.name` resource attribute stamped by the shared enrich
     # module (logging/alloy-modules/enrich.alloy, docs/logging.md). A log
     # attribute named `host` is the logging service's own field (Caddy's
-    # and Pomerium's request host), never the machine.
+    # and Pomerium's request host), never the machine. A healed wedge of
+    # bilby's own exporter (timeline above) leaves a log gap of at most
+    # about 8 min, inside the 10-min window.
     body: "SELECT toUInt8(count() > 0) FROM default.otel_logs WHERE Timestamp > now() - INTERVAL 10 MINUTE AND ResourceAttributes['host.name']='bilby'"
     conditions:
       - "[STATUS] == 200"

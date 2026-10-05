@@ -73,6 +73,13 @@
 #                                   grafana/alloy container; each row's
 #                                   resource, attribute names, body and
 #                                   severity must match docs/logging.md.
+#                                   Alongside them, Alloy's exporter-stall
+#                                   healthcheck from the shared compose file
+#                                   runs against a delivering exporter, a
+#                                   refusing collector, a collector stopped
+#                                   mid-run, requests that stop returning,
+#                                   requests that never returned, and no
+#                                   state directory.
 #                                   Needs Docker; without it the tests are
 #                                   skipped with the reason printed.
 set -e

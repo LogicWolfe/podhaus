@@ -14,8 +14,15 @@ tracing {
 	write_to          = [otelcol.processor.batch.clickstack.input]
 }
 
+// The shared modules are read once, when the container starts. A push that
+// changes one reaches this Alloy through the container recreate its content
+// hash triggers, never as a reload inside the running process (see the tailer
+// rule in docs/logging.md). Alloy has no read-once setting; a poll every ten
+// years is one.
 import.file "podhaus" {
-	filename = "/etc/alloy-modules"
+	filename       = "/etc/alloy-modules"
+	detector       = "poll"
+	poll_frequency = "87600h"
 }
 
 podhaus.docker_logs "run" {
@@ -114,13 +121,13 @@ otelcol.exporter.otlphttp "clickstack" {
     disable_keep_alives = true
   }
 
-  // Retry across a collector outage, but BOUNDED. `0s` (retry forever)
-  // was the OTel infinite-retry footgun: combined with the hung stale
-  // connection that disable_keep_alives now prevents, consumers retried
-  // a request that never returned — never failing, never giving up — so
-  // the exporter went permanently silent (the wedge). 30m rides out any
-  // realistic collector restart while still letting a genuinely stuck
-  // batch fail and free the queue instead of wedging forever.
+  // Retry across a collector outage for at most 30 minutes, then drop the
+  // batch; 30m rides out any realistic collector restart. The budget is
+  // checked only when an attempt returns: a request that never returns
+  // (the hung stale connection that disable_keep_alives now prevents)
+  // holds its queue worker whatever the budget, and the container's
+  // healthcheck restarts an exporter whose requests have stopped
+  // completing (logging/compose.shared.yaml).
   retry_on_failure {
     max_elapsed_time = "30m"
   }

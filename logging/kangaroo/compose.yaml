@@ -16,12 +16,11 @@ services:
       # path resolution doesn't match the QNAP host's view of the cloned
       # repo, and ${PODHAUS_REPO} doesn't exist on kangaroo.
       #
-      # Directory bind (not file bind) — alloy reloads config on file
-      # change; an atomic-rename save on host would otherwise pin the
-      # inode and silently hide updates. The bound dir contains exactly
-      # config.alloy, matching the path alloy is told to read via the
-      # shared compose's `command:` line. See
-      # docs/stack-conventions.html#bind-mounts.
+      # Directory binds, per docs/stack-conventions.html#bind-mounts. Alloy
+      # reads config.alloy and the shared modules only when the container
+      # starts, so a change reaches it through the recreate its content hash
+      # triggers. The bound dir contains exactly config.alloy, matching the
+      # path alloy is told to read via the shared compose's `command:` line.
       - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/logging/kangaroo/alloy-conf:/etc/alloy:ro
       - /share/CACHEDEV2_DATA/Container/komodo-periphery/etc-komodo/repos/podhaus/logging/alloy-modules:/etc/alloy-modules:ro
     labels:

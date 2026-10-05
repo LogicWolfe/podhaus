@@ -36,18 +36,61 @@ services:
       - alloy-data:/var/lib/alloy/data
     networks:
       - dockernet
+    # The healthcheck's memory of the previous check. A tmpfs is emptied
+    # on every start, so a restarted Alloy, whose counters begin again at
+    # zero, is never compared with the process it replaced.
+    tmpfs:
+      - /run/alloy-health
     labels:
       autoheal: "true"
-    # Alloy's base image is minimal Debian with no curl/wget/nc; we use
-    # bash's /dev/tcp shortcut to test the metrics-port socket as the
-    # liveness probe.
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+    # Healthy while the exporter's requests are completing. A process can
+    # keep its port open while sending nothing (docs/postmortems/2026-06-19
+    # and 2026-08-08), so the check reads, from Alloy's own metrics, how
+    # many HTTP requests the clickstack exporter has completed, whatever
+    # their outcome, and fails when that count has not risen since the
+    # previous check. Every host's config.alloy sends Alloy's own metrics
+    # through that exporter every 60 s, so a working exporter completes a
+    # request every minute however quiet the host's logs are.
+    #
+    # Completed, not delivered: while the collector or the path to it is
+    # down, every request still ends (refused, unresolvable, or cut off by
+    # the 30 s timeout), so the count keeps rising, Alloy is not restarted,
+    # and the 30-minute retry delivers its in-memory queue once the path is
+    # back. A restart would drop that queue. The count stops only when
+    # requests never return, the shape of both recorded wedges: such a
+    # request holds its queue worker whatever the retry budget, and with
+    # every worker held the exporter sends nothing until it is restarted.
+    # Autoheal restarts the container once it is unhealthy; the restart
+    # drops what the wedged exporter had queued and ships some lines twice
+    # (docs/logging.md#what-is-collected).
+    #
+    # Five failed checks a minute apart: unhealthy 5-6 minutes after the
+    # last request completed, depending on where the wedge falls between
+    # checks; a pause under 5 minutes never trips it.
+    #
+    # The image has bash but no curl, wget or nc, so the request goes
+    # through bash's /dev/tcp. `$$` is Compose's escape for a literal `$`.
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/12345' 2>/dev/null || exit 1"]
+      test:
+        - CMD
+        - bash
+        - -c
+        - |
+          exec 3<>/dev/tcp/127.0.0.1/12345 || exit 1
+          printf 'GET /metrics HTTP/1.0\r\n\r\n' >&3
+          completed=$$(awk '/^http_client_request_duration_seconds_count[{]/ && /component_id="otelcol[.]exporter[.]otlphttp[.]clickstack"/ { total += $$NF; found = 1 } END { if (found) printf "%.0f", total }' <&3)
+          if [ -z "$$completed" ]; then
+            echo "Alloy reports no completed requests by otelcol.exporter.otlphttp.clickstack"
+            exit 1
+          fi
+          previous=$$(cat /run/alloy-health/completed 2>/dev/null)
+          echo "$$completed" > /run/alloy-health/completed || exit 1
+          echo "exporter requests completed: $$completed, at the previous check: $${previous:-none}"
+          [ "$$completed" != "$$previous" ]
       interval: 60s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
 
 networks:
   dockernet:

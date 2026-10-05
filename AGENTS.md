@@ -520,18 +520,22 @@ These have failure modes that you must not introduce:
   of a repeated key. Every module has a fixture in
   `logging/tests/test_log_schema.py`, which `tools/pre-commit` runs. See
   [`docs/logging.md`](docs/logging.md).
-- **Never change a log tailer's labels, relabel rules or arguments.** Alloy
-  keys each source's saved read positions on the container ID or file path
-  plus the tailer's whole label set, so a changed set makes every host re-read
-  its retained logs from the start and store every line a second time at its
-  original timestamp. And each host's Alloy reloads a changed module from the
-  pulled checkout before its container is recreated: a changed Docker relabel
-  rule list restarts every container tailer, which deletes every saved read
-  position, so every running container's log is stored twice even with the
-  labels unchanged. This holds until live module reload is disabled (see
-  `docs/plans/structured-logging.html`). Derive new facts in `enrich.alloy`,
-  after the tailer. `logging/tests` pins the Docker rules and tailer arguments
-  and every tailer's labels.
+- **Never change the labels a log tailer gives a container, file or journal
+  entry.** Alloy keys each source's saved read positions on the container ID
+  or file path plus the tailer's whole label set, so a changed set makes every
+  host re-read its retained logs from the start and store every line a second
+  time at its original timestamp. A tailer's relabel rules and arguments may
+  change when every existing source keeps exactly the labels it has: each
+  host's Alloy reads the shared modules once, when its container starts, so a
+  module change applies on the next container recreate, and an Alloy that
+  stops keeps every saved position. Never rename a tailer, its `declare`, a
+  host's instance label or the `import.file` label either: saved positions
+  live under Alloy's storage path at
+  `<import label>.<declare>.<instance label>/<component>.<label>/positions.yml`,
+  so a rename loses every position and re-reads every retained log. Derive
+  new facts in `enrich.alloy`, after the tailer. `logging/tests` pins the
+  Docker rules and tailer arguments and every tailer's labels; a change there
+  updates its pin in the same commit.
 - **Telemetry is for debugging.** A service's spans, logs and Bugsink
   events carry whatever helps diagnose a failure: message text, provider
   replies, URLs, headers, page state. A service redacts nothing; the few

@@ -32,10 +32,9 @@
 // then unit, identifier, transport and priority from each entry, and `job`
 // (the source component, which loki.source.journal adds itself).
 // enrich.alloy turns them into the docs/logging.md schema and deletes
-// them. The sources' labels, relabel rules and other arguments stay
-// exactly as deployed: Alloy reloads this module in the running process
-// on a push, a changed argument restarts the source, and anything new is
-// derived in enrich.alloy instead. detected_level comes
+// them. The sources' labels never change (see the top of
+// docker-logs.alloy); Alloy reads this module once, when its container
+// starts, and anything new is derived in enrich.alloy. detected_level comes
 // from the priority where the priority is the program's own: 0–4 always,
 // and 5–7 except on the stdout transport. A program writing to stdout
 // (dockerd, earlyoom) gets its unit's default priority, 6, for every line,

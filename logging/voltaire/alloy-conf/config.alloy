@@ -14,8 +14,15 @@ tracing {
 	write_to          = [otelcol.processor.batch.clickstack.input]
 }
 
+// The shared modules are read once, when the container starts. A push that
+// changes one reaches this Alloy through the container recreate its content
+// hash triggers, never as a reload inside the running process (see the tailer
+// rule in docs/logging.md). Alloy has no read-once setting; a poll every ten
+// years is one.
 import.file "podhaus" {
-	filename = "/etc/alloy-modules"
+	filename       = "/etc/alloy-modules"
+	detector       = "poll"
+	poll_frequency = "87600h"
 }
 
 podhaus.docker_logs "run" {

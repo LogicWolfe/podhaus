@@ -15,21 +15,29 @@
 //   stream          stdout / stderr.
 //   compose_project, compose_service  from the compose labels.
 //
-// These labels, the relabel rules that make them and the tailer's
-// arguments are the tailer's identity, and none of them may change while
-// Alloy reloads this module in a running process. Two mechanisms:
-//  - loki.source.docker keys each container's saved read position on the
-//    container ID plus its whole label set. A changed label starts that
-//    container's tailer again from the first line of its retained log,
-//    and every line is shipped a second time with its original timestamp.
-//  - On a push, the running Alloy reloads this module from the pulled
-//    checkout before its own container is recreated. A changed rule list,
-//    Docker host or client setting restarts every tailer, and a tailer
-//    stopped while Alloy keeps running deletes its saved position, so
-//    every running container's log is shipped again, even with every label
-//    unchanged.
-// Derive or rename anything new in enrich.alloy, which runs after the
-// tailer and keys nothing. logging/tests pins the rules and the labels.
+// These labels are the tailer's identity and never change.
+// loki.source.docker keys each container's saved read position on the
+// container ID plus its whole label set, so a changed label starts that
+// container's tailer again from the first line of its retained log, and
+// every line is shipped a second time with its original timestamp. Derive
+// or rename anything new in enrich.alloy, which runs after the tailer and
+// keys nothing.
+//
+// Names are identity too. Saved positions live under the storage path at
+// <import label>.<declare>.<instance label>/<component>.<label>/positions.yml
+// (podhaus.docker_logs.run/loki.source.docker.containers/positions.yml), so
+// renaming the tailer, this declare, a host's instance label or the
+// import.file label loses every position and re-reads every retained log.
+//
+// The relabel rules, the discovery settings and the tailer's arguments may
+// change, provided every container keeps exactly the labels it has now.
+// Alloy reads this module once, when its container starts (the import in
+// each host's config.alloy), so a change reaches it through the container
+// recreate, and an Alloy that stops keeps every saved position. Changed in
+// a running Alloy, a rule or Docker setting would restart every tailer, and
+// a tailer stopped while Alloy keeps running deletes its saved position.
+// logging/tests pins the rules, the tailer's arguments and the labels, so a
+// change there is made deliberately, with its pins.
 //
 // Not collected: Lumen's throwaway `docker run --rm` search containers
 // (label podhaus.lumen=true without podhaus.lumen.worktree); their stdout
@@ -39,7 +47,7 @@
 // logging/tests) are collected like any other. They log with Docker's
 // `none` driver, which has nothing to read, so while one runs this host's
 // Alloy ships about two minutes of "could not fetch logs" error rows for
-// it. Accepted while the rule list cannot change.
+// it, until a rule here drops containers with that label.
 
 declare "docker_logs" {
 	argument "host" { }
@@ -75,9 +83,8 @@ declare "docker_logs" {
 
 	// The rules run twice: on the discovered targets, and again inside the
 	// tailer, which adds the per-stream `__meta_docker_container_log_stream`
-	// label that only exists there. Every argument here, the rules and the
-	// labels they make are the tailer's identity described at the top:
-	// change none of them.
+	// label that only exists there. Whatever changes here must leave every
+	// container's labels exactly as they are (see the top of this file).
 	loki.source.docker "containers" {
 		host          = "unix:///var/run/docker.sock"
 		targets       = docker_targets.this.output

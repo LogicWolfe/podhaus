@@ -258,8 +258,9 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
       <h2 id="ingest-staleness">Ingest-staleness alerts</h2>
       <p>
         Monitor for the <strong>absence</strong> of expected telemetry, not just service
-        up/down. A process can be "healthy" (port open) while delivering no data — a wedged
-        Alloy exporter, a dead cross-LAN path — invisible to an ordinary up/down check. This
+        up/down. A process can be healthy while delivering no data: Alloy's own healthcheck
+        stays green while the path to the collector is down, on purpose, so its queue
+        survives, and a dead cross-LAN path is invisible to an ordinary up/down check. This
         is the guard for the recurring kangaroo cross-LAN exporter failure class.
       </p>
       <p>
@@ -291,15 +292,24 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
           per-host Alloy metric in a 15-minute window (<code>otel_metrics_gauge</code> where
           <code>ResourceAttributes['host.name']='&lt;host&gt;'</code>; the
           <code>host.name</code> attribute is stamped by the <code>svc_alloy</code> transform in each host's
-          <code>config.alloy</code>). A genuine stall alerts about 20–25 minutes after the
-          last metric arrived: the window must first empty (15 minutes), the check runs every
-          5 minutes, and it alerts on the second failure in a row. Fractal deliberately has
-          none: the existing <em>Docs (fractal, via Komodo)</em> check is the one alert wanted
-          for fractal, and no further fractal alert is added.</li>
+          <code>config.alloy</code>). A wedged exporter, whose requests never return, is
+          healed before the window empties: Alloy's healthcheck makes the container unhealthy
+          5–6 minutes after the exporter's last request completed, autoheal restarts it within
+          30 seconds, and the restarted Alloy delivers its first self-metric within about 90
+          seconds, so metrics resume within about 8 minutes of the last one and no check
+          fails (<a href="#exporter-stall">exporter-stall healthcheck</a>). A path to the
+          collector that is down never restarts Alloy, which keeps its queue and delivers it
+          once the path is back. A path down for longer than the window, or a wedge the
+          restart does not cure, alerts 20–25 minutes after the last metric arrived: the
+          window must first empty (15 minutes), the check runs every 5 minutes, and it alerts
+          on the second failure in a row. Fractal deliberately has none: the existing <em>Docs (fractal, via
+          Komodo)</em> check is the one alert wanted for fractal, and no further fractal alert
+          is added.</li>
         <li><strong>Pipeline Log Ingest (bilby / total)</strong> is a 10-minute
           <code>count()</code> check that detects total collector, ClickHouse, or Alloy failure.
-          The heartbeats cover the other hosts' complete shipping paths without assuming a
-          minimum log volume.</li>
+          A healed wedge of bilby's own exporter leaves a gap of at most about 8 minutes in its
+          logs, inside the window. The heartbeats cover the other hosts' complete shipping paths
+          without assuming a minimum log volume.</li>
       </ul>
       <p>
         These are service checks, so their alerts ride the default Gatus → Fenwick chain.
@@ -362,10 +372,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
       <ul>
         <li><strong>bilby</strong> and <strong>kangaroo</strong> — cross-LAN to
           <code>http://10.0.0.90:4318</code> (plaintext, LAN-only), each with
-          <code>disable_keep_alives</code> for the published-port reason below.
-          Kangaroo, like every host but bilby, retries a failed batch for at most 30
-          minutes; bilby retries forever, because nothing on bilby restarts an exporter whose
-          30-minute budget is spent.</li>
+          <code>disable_keep_alives</code> for the published-port reason below.</li>
         <li><strong>bandicoot</strong> — HTTPS to <code>logs-ingest.pod.haus</code> like the
           remote hosts. That name resolves only to Numbat's relay address, so the path goes
           out to Numbat, back through rathole to bilby's Caddy, and across the LAN to the
@@ -389,6 +396,74 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         Which containers, files and journal entries are collected, how each service is
         named, the parser rules and the schema every row follows are in
         <a href="logging.md">Logging</a>.
+      </p>
+      <p>
+        Every host's exporter retries a failed batch for at most 30 minutes
+        (<code>retry_on_failure</code> in each <code>config.alloy</code>), then drops that
+        batch and its queue worker takes the next. The budget is checked only when an
+        attempt returns, so a request that never returns holds its worker whatever the
+        budget; once every worker is held the exporter sends nothing, and the healthcheck
+        below restarts it.
+      </p>
+
+      <h4 id="exporter-stall">Exporter-stall healthcheck</h4>
+      <p>
+        An Alloy whose exporter has wedged is restarted, and nothing alerts unless the
+        restart fails to bring delivery back. A wedged exporter is one whose requests never
+        return: each such request holds one of the exporter's queue workers whatever the
+        retry budget, and once every worker is held nothing more is sent. Both recorded
+        wedges had that shape: no log line, no completed request, and a listening port
+        (fractal's Alloy kept its port open through 2h41m of sending nothing,
+        <a href="/postmortems/2026-08-08-bilby-oom-session-teardown.md">2026-08-08</a>).
+      </p>
+      <p>
+        The healthcheck in <code>logging/compose.shared.yaml</code> reads, from Alloy's own
+        <code>:12345/metrics</code>, how many HTTP requests the clickstack exporter has
+        completed: <code>http_client_request_duration_seconds_count</code> for
+        <code>component_id="otelcol.exporter.otlphttp.clickstack"</code>, summed over every
+        status code, error type and HTTP version. It fails when that count has not risen
+        since the previous check, a minute earlier. Every host scrapes Alloy's own metrics
+        every 60 seconds through the same exporter, so a working exporter completes a
+        request every minute however quiet the host's logs are.
+      </p>
+      <p>
+        The count is of completed requests, not delivered ones. While the collector or the
+        path to it is down, every request still ends, refused, unresolvable or cut off by the
+        exporter's 30-second timeout, so the count keeps rising and Alloy is not restarted:
+        it keeps its in-memory queue and the 30-minute retry delivers it once the path is
+        back. A restart would drop that queue. An outage that outlasts the heartbeat window
+        alerts through the heartbeats above.
+      </p>
+      <p>
+        Five failed checks a minute apart make the container unhealthy, 5–6 minutes after
+        the last request completed depending on where the wedge falls between checks, and
+        autoheal, which runs on every host and acts on the <code>alloy</code> container's
+        <code>autoheal</code> label, restarts it within 30 seconds. A pause under 5 minutes
+        never trips it. The <em>Komodo stacks</em> check, which counts unhealthy stacks,
+        alerts only after three failures a minute apart, longer than the 30 seconds at most
+        that an Alloy stays unhealthy. The image has no curl, wget or nc, so the check speaks
+        HTTP through bash's <code>/dev/tcp</code>. It keeps the previous count in a tmpfs that
+        every start empties, so a restarted Alloy, whose counters begin again at zero, is
+        never compared with the process it replaced, and a check that cannot write that
+        state fails. <code>docker inspect alloy --format '{{json .State.Health}}'</code> shows
+        the counts the last five checks read. A restart drops what the wedged exporter had
+        queued, which it was not sending anyway, and ships some lines twice
+        (<a href="logging.md#what-is-collected">Logging</a>).
+      </p>
+      <p>
+        <strong>Known risk: a renamed metric restarts every Alloy silently.</strong> The check
+        depends on the metric's name and the exporter's <code>component_id</code> label. If an
+        Alloy release changed either, every check would fail and every Alloy would restart
+        every 5–6 minutes with no alert: delivery continues between restarts, so the
+        heartbeats stay green, and no Alloy stays unhealthy long enough for the
+        <em>Komodo stacks</em> check. Each restart drops the queue and reads every stopped
+        container's log again. <code>logging/tests/test_alloy_health.py</code>, run by
+        <code>tools/pre-commit</code>, runs the exact command from the compose file against a
+        delivering, a refusing, a stopping and a never-answering collector, but in the
+        <code>grafana/alloy</code> image cached on the machine that commits, which changes
+        only when someone pulls it, while hosts pull the current image on every deploy. A
+        rename can therefore reach the hosts before any test sees it; an alert on repeated
+        Alloy restarts is a decision in the structured-logging plan.
       </p>
 
       <h3 id="retention">Retention</h3>
@@ -439,10 +514,13 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         <li><strong>kangaroo Alloy log ingest can go stale — two distinct causes, two
           different fixes.</strong> The <em>Kangaroo Telemetry Pipeline (heartbeat)</em> Gatus
           check fires for both — since 2026-06-20 it's a 60 s self-metric heartbeat (above), which
-          rides the same exporter as the logs, so a stall in either alerts about 20–25 minutes
+          rides the same exporter as the logs, so either, left unrepaired, alerts about 20–25 minutes
           after the last metric arrived.
-          The port-only container healthcheck detects neither (the socket
-          stays open, so the container reads healthy and autoheal ignores it). Read the alloy
+          A wedge stops the exporter's requests completing, so the
+          <a href="#exporter-stall">exporter-stall healthcheck</a> fails and autoheal restarts
+          alloy; the heartbeat alerts only when the restart has not brought delivery back. A
+          lost network fails every request at once, so the healthcheck stays green (a restart
+          would not fix it) and the heartbeat is the alert. Read the alloy
           log to tell them apart — <code>GetContainerLog kangaroo alloy</code>:
           <ul>
             <li><strong>Exporter wedge (root cause fixed 2026-06-19)</strong> — the exporter
@@ -458,18 +536,19 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
               cross-network exporters' <code>config.alloy</code>: a fresh connection per batch
               always reaches the current collector. (A host that ships in-network by container
               name — DNS re-resolves — never hits this; since the move to bandicoot, bilby's
-              exporter is cross-network too and carries <code>disable_keep_alives</code>, but
-              still retries forever: nothing restarts a stopped exporter on bilby.) Validated by recreating the collector and
-              confirming kangaroo shipped straight across it. If a wedge somehow recurs despite
-              this, <code>RestartStack kangaroo-logging</code> remains the fallback.</li>
+              exporter is cross-network too and carries <code>disable_keep_alives</code> and the
+              same bounded retry.) Validated by recreating the collector and
+              confirming kangaroo shipped straight across it. A wedge that recurs is cleared by
+              the healthcheck's restart before the heartbeat can alert.</li>
             <li><strong>dockernet detach / phantom network</strong> — the log shows
               <code>dial tcp &lt;bandicoot&gt;:4318: connect: network is unreachable</code>. alloy
               has lost its dockernet attachment (<code>NetworkSettings.Networks</code> empty),
               usually because dockernet went <em>phantom</em> after Container Station churn:
               the libnetwork record survives (<code>network inspect</code> passes) but the
               bridge datapath is gone, so attaches fail with
-              <code>network &lt;id&gt; does not exist</code>. A <code>RestartStack</code> does
-              <em>not</em> fix this — the container restarts and still has no usable network.
+              <code>network &lt;id&gt; does not exist</code>. Neither autoheal's restarts nor a
+              <code>RestartStack</code> fix this — the container restarts and still has no
+              usable network.
               Repair over SSH (<code>admin@10.0.0.25</code>;
               <code>DK=/share/CACHEDEV2_DATA/.qpkg/container-station/usr/bin/docker</code>):
               <pre><code>$DK network disconnect -f dockernet alloy backrest   # clear dangling refs
@@ -595,6 +674,12 @@ $DK restart alloy backrest                           # reattach by name + rebuil
         would turn a controlled degraded state into a restart loop. Gatus alerts on
         the red health state; Docker's <code>unless-stopped</code> policy still handles
         process exit.
+      </p>
+      <p>
+        Alloy's healthcheck checks that its exporter's requests are completing rather than
+        that its port is open, with five retries, so autoheal restarts an Alloy whose exporter
+        has wedged and leaves one whose collector is unreachable running with its queue
+        (<a href="#exporter-stall">exporter-stall healthcheck</a>).
       </p>
 
       <h2 id="alerting-flow">Alerting flow</h2>
