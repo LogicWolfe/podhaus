@@ -39,10 +39,11 @@ services:
       BASE_URL: https://bugs.pod.haus
       # Explicit comma-separated override (independent of BASE_URL) so
       # internal dockernet ingest with Host: bugsink is accepted while
-      # the public UI host stays bugs.pod.haus. Fenwick runs on bandicoot,
-      # so it reaches Bugsink over the LAN on bilby's published :8000, not
-      # dockernet — hence bilby's address in the list.
-      ALLOWED_HOSTS: bugs.pod.haus,bugsink,localhost,127.0.0.1,${BILBY_LAN_IPV4}
+      # the public UI host stays bugs.pod.haus. Fenwick's three services run
+      # on bandicoot and reach Bugsink over the LAN on bilby's published
+      # :8000, not dockernet — hence bilby's split-horizon name (what the
+      # DSNs carry) and its address in the list.
+      ALLOWED_HOSTS: bugs.pod.haus,bugsink,localhost,127.0.0.1,bilby.pod.haus,${BILBY_LAN_IPV4}
       # TLS terminates at the Cloudflare edge; origin is plain HTTP.
       # Required or the login POST fails CSRF behind the tunnel.
       BEHIND_HTTPS_PROXY: "true"
