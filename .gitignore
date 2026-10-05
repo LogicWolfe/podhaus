@@ -15,7 +15,7 @@ dns/.env
 komodo/.runtime/
 __pycache__/
 *.pyc
-.venv/
+.venv
 Pipfile.lock
 
 # Unrelated WIP, kept local
