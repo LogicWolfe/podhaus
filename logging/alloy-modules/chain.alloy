@@ -18,40 +18,141 @@
 declare "chain" {
 	argument "forward_to" { }
 
-	indy_service "run" { forward_to = [fenwick.run.receiver] }
-	fenwick "run" { forward_to = [bookbinder.run.receiver] }
-	bookbinder "run" { forward_to = [bookcard.run.receiver] }
-	bookcard "run" { forward_to = [bookshelf.run.receiver] }
-	bookshelf "run" { forward_to = [komodo_op.run.receiver] }
-	komodo_op "run" { forward_to = [komodo_core.run.receiver] }
-	komodo_core "run" { forward_to = [komodo_periphery.run.receiver] }
-	komodo_periphery "run" { forward_to = [komodo_ferretdb.run.receiver] }
-	komodo_ferretdb "run" { forward_to = [komodo_postgres.run.receiver] }
-	komodo_postgres "run" { forward_to = [umami_postgres.run.receiver] }
-	umami_postgres "run" { forward_to = [paperless_postgres.run.receiver] }
-	paperless_postgres "run" { forward_to = [op_connect_api.run.receiver] }
-	op_connect_api "run" { forward_to = [op_connect_sync.run.receiver] }
-	op_connect_sync "run" { forward_to = [clickstack_mongo.run.receiver] }
-	clickstack_mongo "run" { forward_to = [hyperdx.run.receiver] }
-	hyperdx "run" { forward_to = [clickstack_otel.run.receiver] }
-	clickstack_otel "run" { forward_to = [clickstack_clickhouse.run.receiver] }
-	clickstack_clickhouse "run" { forward_to = [alloy.run.receiver] }
-	alloy "run" { forward_to = [gatus.run.receiver] }
-	gatus "run" { forward_to = [paperless.run.receiver] }
-	paperless "run" { forward_to = [home_assistant.run.receiver] }
-	home_assistant "run" { forward_to = [autoheal.run.receiver] }
-	autoheal "run" { forward_to = [syncthing.run.receiver] }
-	syncthing "run" { forward_to = [backrest.run.receiver] }
-	backrest "run" { forward_to = [pomerium.run.receiver] }
-	pomerium "run" { forward_to = [caddy.run.receiver] }
-	caddy "run" { forward_to = [forgejo.run.receiver] }
-	forgejo "run" { forward_to = [rathole.run.receiver] }
-	rathole "run" { forward_to = [flood.run.receiver] }
-	flood "run" { forward_to = [ofelia.run.receiver] }
-	ofelia "run" { forward_to = [pocket_id.run.receiver] }
-	pocket_id "run" { forward_to = [llm_server.run.receiver] }
-	llm_server "run" { forward_to = [llm_watcher.run.receiver] }
-	llm_watcher "run" { forward_to = argument.forward_to.value }
+	indy_service "run" {
+		forward_to = [fenwick.run.receiver]
+	}
+
+	fenwick "run" {
+		forward_to = [bookbinder.run.receiver]
+	}
+
+	bookbinder "run" {
+		forward_to = [bookcard.run.receiver]
+	}
+
+	bookcard "run" {
+		forward_to = [bookshelf.run.receiver]
+	}
+
+	bookshelf "run" {
+		forward_to = [komodo_op.run.receiver]
+	}
+
+	komodo_op "run" {
+		forward_to = [komodo_core.run.receiver]
+	}
+
+	komodo_core "run" {
+		forward_to = [komodo_periphery.run.receiver]
+	}
+
+	komodo_periphery "run" {
+		forward_to = [komodo_ferretdb.run.receiver]
+	}
+
+	komodo_ferretdb "run" {
+		forward_to = [komodo_postgres.run.receiver]
+	}
+
+	komodo_postgres "run" {
+		forward_to = [umami_postgres.run.receiver]
+	}
+
+	umami_postgres "run" {
+		forward_to = [paperless_postgres.run.receiver]
+	}
+
+	paperless_postgres "run" {
+		forward_to = [op_connect_api.run.receiver]
+	}
+
+	op_connect_api "run" {
+		forward_to = [op_connect_sync.run.receiver]
+	}
+
+	op_connect_sync "run" {
+		forward_to = [clickstack_mongo.run.receiver]
+	}
+
+	clickstack_mongo "run" {
+		forward_to = [hyperdx.run.receiver]
+	}
+
+	hyperdx "run" {
+		forward_to = [clickstack_otel.run.receiver]
+	}
+
+	clickstack_otel "run" {
+		forward_to = [clickstack_clickhouse.run.receiver]
+	}
+
+	clickstack_clickhouse "run" {
+		forward_to = [alloy.run.receiver]
+	}
+
+	alloy "run" {
+		forward_to = [gatus.run.receiver]
+	}
+
+	gatus "run" {
+		forward_to = [paperless.run.receiver]
+	}
+
+	paperless "run" {
+		forward_to = [home_assistant.run.receiver]
+	}
+
+	home_assistant "run" {
+		forward_to = [autoheal.run.receiver]
+	}
+
+	autoheal "run" {
+		forward_to = [syncthing.run.receiver]
+	}
+
+	syncthing "run" {
+		forward_to = [backrest.run.receiver]
+	}
+
+	backrest "run" {
+		forward_to = [pomerium.run.receiver]
+	}
+
+	pomerium "run" {
+		forward_to = [caddy.run.receiver]
+	}
+
+	caddy "run" {
+		forward_to = [forgejo.run.receiver]
+	}
+
+	forgejo "run" {
+		forward_to = [rathole.run.receiver]
+	}
+
+	rathole "run" {
+		forward_to = [flood.run.receiver]
+	}
+
+	flood "run" {
+		forward_to = [ofelia.run.receiver]
+	}
+
+	ofelia "run" {
+		forward_to = [pocket_id.run.receiver]
+	}
+
+	pocket_id "run" {
+		forward_to = [llm_server.run.receiver]
+	}
+
+	llm_server "run" {
+		forward_to = [llm_watcher.run.receiver]
+	}
+
+	llm_watcher "run" {
+		forward_to = argument.forward_to.value
+	}
 
 	export "receiver" {
 		value = indy_service.run.receiver

@@ -20,30 +20,30 @@
 // entrypoint message) passes through untouched.
 
 declare "clickstack_mongo" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"clickstack-mongo\"} |~ \"^\\\\{\""
+		stage.match {
+			selector = "{service=\"clickstack-mongo\"} |~ \"^\\\\{\""
 
-      stage.json {
-        expressions = {sev = "s"}
-      }
+			stage.json {
+				expressions = {sev = "s"}
+			}
 
-      stage.template {
-        source   = "sev"
-        template = "{{ if eq .Value \"D\" }}DEBUG{{ else if eq .Value \"I\" }}INFO{{ else if eq .Value \"W\" }}WARN{{ else if eq .Value \"E\" }}ERROR{{ else if eq .Value \"F\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
-      }
+			stage.template {
+				source   = "sev"
+				template = "{{ if eq .Value \"D\" }}DEBUG{{ else if eq .Value \"I\" }}INFO{{ else if eq .Value \"W\" }}WARN{{ else if eq .Value \"E\" }}ERROR{{ else if eq .Value \"F\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
+			}
 
-      stage.labels {
-        values = { detected_level = "sev" }
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "sev"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

@@ -1,18 +1,21 @@
-// Pinelake's Alloy. Shared modules in ../alloy-modules do the work:
-//   docker_logs → chain (per-service parsers) → Loki→OTLP bridge → enrich
-//   → batch → logs-ingest.pod.haus with Pinelake's dedicated client
-//   certificate. Plex's server log and the Flood job logs ride the same
-//   path. macOS has no journald and the unified log has no Alloy source.
+// Pinelake's Alloy. Shared modules in ../alloy-modules do the work: the
+// sources below (containers, Plex's server log and the Flood job logs) →
+// chain (per-service parsers) → ship (Loki→OTLP bridge, enrich, batch,
+// Alloy's own metrics, and the exporter to the ClickStack collector on
+// bandicoot). macOS has no journald and the unified log has no Alloy source.
 //
 // Per-service parsing is config-as-code in ../alloy-modules (one module per
 // service, one chain for every host), so a service moving between hosts
 // keeps its parsing with no change here. See docs/logging.md.
 
-// Internal-pipeline tracing — unified `alloy` service in HyperDX
-// (same name on every host; one row per host).
+// Alloy's own pipeline spans under service `alloy`, sampled at 10%: span
+// volume grows with the number of components, and they are kept for the
+// pipeline's health, not request flow. Alloy allows a tracing block only in
+// the root config. Its own log lines are not sent this way; the Docker source
+// already reads them, and they would arrive twice.
 tracing {
 	sampling_fraction = 0.1
-	write_to          = [otelcol.processor.batch.clickstack.input]
+	write_to          = [podhaus.ship.run.input]
 }
 
 // The shared modules are read once, when the container starts. A push that
@@ -51,70 +54,15 @@ podhaus.flood_job_logs "run" {
 }
 
 podhaus.chain "run" {
-	forward_to = [otelcol.receiver.loki.clickstack.receiver]
+	forward_to = [podhaus.ship.run.receiver]
 }
 
-otelcol.receiver.loki "clickstack" {
-	output {
-		logs = [podhaus.enrich.run.input]
-	}
-}
-
-podhaus.enrich "run" {
-	host   = "pinelake"
-	output = [otelcol.processor.batch.clickstack.input]
-}
-
-prometheus.exporter.self "alloy" { }
-
-prometheus.scrape "alloy_self" {
-  targets         = prometheus.exporter.self.alloy.targets
-  scrape_interval = "60s"
-  forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
-}
-
-otelcol.receiver.prometheus "alloy_self" {
-  output {
-    metrics = [otelcol.processor.transform.svc_alloy.input]
-  }
-}
-
-otelcol.processor.transform "svc_alloy" {
-  error_mode = "ignore"
-  metric_statements {
-    context = "metric"
-    statements = [
-      `set(resource.attributes["service.name"], "alloy")`,
-      `set(resource.attributes["host.name"], "pinelake")`,
-    ]
-  }
-  output {
-    metrics = [otelcol.processor.batch.clickstack.input]
-  }
-}
-
-otelcol.processor.batch "clickstack" {
-  output {
-    logs    = [otelcol.exporter.otlphttp.clickstack.input]
-    metrics = [otelcol.exporter.otlphttp.clickstack.input]
-    traces  = [otelcol.exporter.otlphttp.clickstack.input]
-  }
-}
-
-otelcol.exporter.otlphttp "clickstack" {
-  client {
-    endpoint = "https://logs-ingest.pod.haus"
-    headers  = {"authorization" = sys.env("CLICKSTACK_INGESTION_KEY")}
-    tls {
-      cert_file = "/run/podhaus-secrets/pinelake-cert.pem"
-      key_file  = "/run/podhaus-secrets/pinelake-key.pem"
-    }
-    disable_keep_alives = true
-  }
-  retry_on_failure {
-    max_elapsed_time = "30m"
-  }
-  sending_queue {
-    queue_size = 100000
-  }
+// Over the internet to Numbat's relay address, through rathole to bilby's
+// Caddy, which checks this client certificate, and across bilby's LAN to the
+// collector on bandicoot.
+podhaus.ship "run" {
+	host             = "pinelake"
+	endpoint         = "https://logs-ingest.pod.haus"
+	client_cert_file = "/run/podhaus-secrets/pinelake-cert.pem"
+	client_key_file  = "/run/podhaus-secrets/pinelake-key.pem"
 }

@@ -20,6 +20,14 @@
 #                                   file-source Alloy modules (a container
 #                                   row keeps Docker's receive time) and any
 #                                   time zone pinned in a logging config.
+#   - lint-alloy-config.py:        every host config and shared Alloy module
+#                                   formatted exactly as `alloy fmt` prints
+#                                   it, the modules passing `alloy validate`,
+#                                   and each host config, unmodified,
+#                                   starting in Alloy against them with no
+#                                   network, in a short-lived grafana/alloy
+#                                   container. Needs Docker; without it the
+#                                   lint is skipped with the reason printed.
 #   - render-pomerium-keys.py --verify:
 #                                   catches pomerium/config.yaml or
 #                                   stack.toml key material that no longer
@@ -106,6 +114,7 @@ mise exec -- pipenv run python "$root/tools/lint-stack-env.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-content-hash.py"
 mise exec -- pipenv run python "$root/tools/lint-stack-toml.py"
 mise exec -- pipenv run python "$root/tools/lint-alloy-timestamps.py"
+mise exec -- pipenv run python "$root/tools/lint-alloy-config.py"
 mise exec -- pipenv run python "$root/tools/render-pomerium-keys.py" --verify
 mise exec -- pipenv run python "$root/tools/render-lan-addresses.py" --verify
 # These tests create repositories whose git commands need their own index.

@@ -1,0 +1,158 @@
+// The shipping half of every host's Alloy, shared by every host: the
+// Loki→OTLP bridge, the schema (enrich.alloy), one batch and one exporter to
+// the ClickStack collector, and Alloy's own metrics. A host's config.alloy
+// sends its parser chain to `receiver`, and its own scrapes and its tracing
+// block to `input`; Alloy allows a tracing block only in the root config.
+//
+// Arguments:
+//   host              This host's name, the host.name of every log row
+//                     (enrich.alloy) and of Alloy's own metrics.
+//   endpoint          The collector's OTLP/HTTP address as this host
+//                     reaches it.
+//   client_cert_file, client_key_file
+//                     This host's log-ingest client certificate, which its
+//                     alloy-secrets-init container renders. Every host that
+//                     sends to logs-ingest.pod.haus gives both; bilby and
+//                     kangaroo, which send across the LAN in plaintext, give
+//                     neither, and an https host that left them out would
+//                     have every request refused by Caddy.
+//
+// The collector is clickstack-otel on bandicoot, which publishes port 4318
+// on the LAN. Bilby and kangaroo send to that port directly. Every other
+// host, bandicoot included, sends to https://logs-ingest.pod.haus, which
+// resolves to Numbat's relay address: Numbat's rathole carries the request
+// to bilby's Caddy, which checks the client certificate and forwards it
+// across the LAN to bandicoot's port 4318. Every request carries the
+// ClickStack ingestion key, which logging/compose.shared.yaml gives every
+// host as CLICKSTACK_INGESTION_KEY; an empty or wrong key makes every request
+// a 401, so nothing arrives (docs/monitoring.html#ingest-staleness).
+//
+// Names that are read elsewhere: the healthcheck in
+// logging/compose.shared.yaml counts the requests of the exporter whose
+// component_id is otelcol.exporter.otlphttp.clickstack, and the Gatus
+// Telemetry Pipeline heartbeats find each host's self-metrics by host.name.
+
+declare "ship" {
+	argument "host" { }
+
+	argument "endpoint" { }
+
+	argument "client_cert_file" {
+		optional = true
+		default  = ""
+	}
+
+	argument "client_key_file" {
+		optional = true
+		default  = ""
+	}
+
+	otelcol.receiver.loki "clickstack" {
+		output {
+			logs = [enrich.run.input]
+		}
+	}
+
+	enrich "run" {
+		host   = argument.host.value
+		output = [otelcol.processor.batch.clickstack.input]
+	}
+
+	// Alloy's own metrics every 60 s, through the same exporter as the logs.
+	// They are the host's pipeline heartbeat: a Gatus check looks for one in
+	// the last 15 minutes by host.name. And they make the exporter complete a
+	// request every minute however quiet the host's logs are, which is what
+	// the healthcheck counts.
+	prometheus.exporter.self "alloy" { }
+
+	prometheus.scrape "alloy_self" {
+		targets         = prometheus.exporter.self.alloy.targets
+		scrape_interval = "60s"
+		forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
+	}
+
+	otelcol.receiver.prometheus "alloy_self" {
+		output {
+			metrics = [otelcol.processor.transform.svc_alloy.input]
+		}
+	}
+
+	// The Prometheus→OTLP bridge names the service after the scrape job,
+	// `integrations/self`, and keys the instance on the container's ID
+	// (service.instance.id, server.address, net.host.name), which a recreate
+	// changes; it gives no host.name. So the service is renamed `alloy`, the
+	// service of Alloy's own container logs and of its traces, and the host
+	// is added, which the Gatus heartbeats select on.
+	otelcol.processor.transform "svc_alloy" {
+		error_mode = "ignore"
+
+		metric_statements {
+			context    = "metric"
+			statements = [
+				`set(resource.attributes["service.name"], "alloy")`,
+				`set(resource.attributes["host.name"], "` + argument.host.value + `")`,
+			]
+		}
+
+		output {
+			metrics = [otelcol.processor.batch.clickstack.input]
+		}
+	}
+
+	otelcol.processor.batch "clickstack" {
+		output {
+			logs    = [otelcol.exporter.otlphttp.clickstack.input]
+			metrics = [otelcol.exporter.otlphttp.clickstack.input]
+			traces  = [otelcol.exporter.otlphttp.clickstack.input]
+		}
+	}
+
+	otelcol.exporter.otlphttp "clickstack" {
+		client {
+			endpoint = argument.endpoint.value
+			headers  = {
+				"authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
+			}
+
+			// A new connection for every request. Bilby and kangaroo need it:
+			// they reach the collector at bandicoot's published port, where
+			// Docker's NAT keeps a kept-alive connection mapped to the old
+			// collector container after a recreate, and the next request
+			// hangs with no error (the 2026-06-19 keep-alive wedge
+			// postmortem). The other hosts reach bilby's Caddy, which opens
+			// its own connections to the collector; they share the setting
+			// because a new connection per request costs little at their
+			// volume.
+			disable_keep_alives = true
+
+			tls {
+				cert_file = argument.client_cert_file.value
+				key_file  = argument.client_key_file.value
+			}
+		}
+
+		// A failed batch is retried for at most 30 minutes, which rides out
+		// a collector restart or a path outage, then dropped, and its queue
+		// worker takes the next. The budget is checked only when an attempt
+		// returns, so a request that never returns holds its worker whatever
+		// the budget; once every worker is held the exporter sends nothing,
+		// and the healthcheck in logging/compose.shared.yaml has autoheal
+		// restart Alloy.
+		retry_on_failure {
+			max_elapsed_time = "30m"
+		}
+
+		// Held in memory: a restart or recreate drops whatever is queued.
+		sending_queue {
+			queue_size = 100000
+		}
+	}
+
+	export "receiver" {
+		value = otelcol.receiver.loki.clickstack.receiver
+	}
+
+	export "input" {
+		value = otelcol.processor.batch.clickstack.input
+	}
+}

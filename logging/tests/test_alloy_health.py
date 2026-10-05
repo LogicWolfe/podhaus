@@ -30,13 +30,17 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ROOT / "logging" / "compose.shared.yaml"
+SHIP = ROOT / "logging" / "alloy-modules" / "ship.alloy"
 IMAGE = "grafana/alloy:latest"
 LABEL = "podhaus.harness=true"
-# The component the healthcheck names; every host's exporter carries it.
+# The component the healthcheck names, in the ship module every host runs.
+# Inside a module its metrics keep this component_id and add a component_path.
 EXPORTER = 'otelcol.exporter.otlphttp "clickstack"'
 # What makes the count rise every minute on a quiet host: Alloy's own metrics,
 # scraped every 60 s and sent through that exporter.
 SELF_SCRAPE = re.compile(r'prometheus\.scrape "alloy_self" \{[^}]*scrape_interval\s*=\s*"60s"')
+SHIP_CALL = re.compile(r'^podhaus\.ship "run" \{\n(.*?)^\}', re.M | re.S)
+ARGUMENT = re.compile(r'^\s*(\w+)\s*=\s*(.+?)\s*$', re.M)
 
 # Accepts what the exporter sends and discards it. The receiver must hand it
 # to a component that consumes it (a receiver with no output never listens,
@@ -55,44 +59,51 @@ otelcol.exporter.debug "drop" {
 }
 """
 
-# A host's self-scrape and exporter, scraping every second instead of every
-# minute so each case takes seconds. TIMEOUT is empty for the hosts' default
-# 30 s request timeout, or `timeout = "0s"` for none: the only way to make a
-# request never return on purpose.
+# The ship module's self-scrape and exporter, scraping every second instead of
+# every minute so each case takes seconds, inside a module called the way every
+# host calls podhaus.ship: the check matches the exporter's component_id, which
+# must hold for an exporter running inside a module.
+# TIMEOUT is empty for the hosts' default 30 s request timeout, or
+# `timeout = "0s"` for none: the only way to make a request never return on
+# purpose.
 SHIPPER = """
-prometheus.exporter.self "alloy" { }
+declare "ship" {
+  prometheus.exporter.self "alloy" { }
 
-prometheus.scrape "alloy_self" {
-  targets         = prometheus.exporter.self.alloy.targets
-  scrape_interval = "1s"
-  scrape_timeout  = "1s"
-  forward_to     = [otelcol.receiver.prometheus.alloy_self.receiver]
-}
-
-otelcol.receiver.prometheus "alloy_self" {
-  output { metrics = [otelcol.processor.batch.clickstack.input] }
-}
-
-otelcol.processor.batch "clickstack" {
-  timeout = "100ms"
-  output { metrics = [otelcol.exporter.otlphttp.clickstack.input] }
-}
-
-otelcol.exporter.otlphttp "clickstack" {
-  client {
-    endpoint            = "ENDPOINT"
-    disable_keep_alives = true
-    TIMEOUT
+  prometheus.scrape "alloy_self" {
+    targets         = prometheus.exporter.self.alloy.targets
+    scrape_interval = "1s"
+    scrape_timeout  = "1s"
+    forward_to     = [otelcol.receiver.prometheus.alloy_self.receiver]
   }
-  // Short backoff keeps a refused collector's attempts dense for the whole
-  // run; production's default backoff would leave 3 s windows flat after
-  // about 50 s.
-  retry_on_failure {
-    initial_interval = "100ms"
-    max_interval     = "500ms"
-    max_elapsed_time = "30m"
+
+  otelcol.receiver.prometheus "alloy_self" {
+    output { metrics = [otelcol.processor.batch.clickstack.input] }
+  }
+
+  otelcol.processor.batch "clickstack" {
+    timeout = "100ms"
+    output { metrics = [otelcol.exporter.otlphttp.clickstack.input] }
+  }
+
+  otelcol.exporter.otlphttp "clickstack" {
+    client {
+      endpoint            = "ENDPOINT"
+      disable_keep_alives = true
+      TIMEOUT
+    }
+    // Short backoff keeps a refused collector's attempts dense for the whole
+    // run; production's default backoff would leave 3 s windows flat after
+    // about 50 s.
+    retry_on_failure {
+      initial_interval = "100ms"
+      max_interval     = "500ms"
+      max_elapsed_time = "30m"
+    }
   }
 }
+
+ship "run" { }
 """
 NO_TIMEOUT = 'timeout = "0s"'
 
@@ -123,12 +134,19 @@ def healthcheck() -> tuple[list[str], str]:
     return [part.replace("$$", "$") for part in command], state
 
 
+def host_configs() -> list[tuple[str, Path]]:
+    configs = sorted((ROOT / "logging").glob("*/alloy-conf/config.alloy"))
+    if len(configs) != 7:
+        raise AssertionError(f"expected seven host configs, found {len(configs)}")
+    return [(config.parent.parent.name, config) for config in configs]
+
+
 def docker_unavailable() -> str | None:
     if shutil.which("docker") is None:
         return "the docker command is not installed"
     probe = subprocess.run(["docker", "info"], capture_output=True, timeout=30)
     if probe.returncode != 0:
-        return probe.stderr.decode(errors="replace").strip().splitlines()[-1]
+        return f"`docker info` exited {probe.returncode}: {probe.stderr.decode(errors='replace').strip()}"
     return None
 
 
@@ -138,17 +156,33 @@ def docker(*args: str) -> str:
 
 
 class HostConfigTest(unittest.TestCase):
-    """What the check assumes of every host's config.alloy; needs no Docker."""
+    """What the check assumes of the ship module and every host's config.alloy; needs no Docker."""
 
-    def test_every_host_has_the_exporter_and_self_scrape_the_check_relies_on(self) -> None:
-        configs = sorted((ROOT / "logging").glob("*/alloy-conf/config.alloy"))
-        self.assertEqual(len(configs), 7)
-        for config in configs:
-            with self.subTest(host=config.parent.parent.name):
+    def test_the_ship_module_has_the_exporter_and_self_scrape_the_check_relies_on(self) -> None:
+        text = SHIP.read_text()
+        self.assertEqual(text.count(EXPORTER), 1, f"{SHIP} must hold exactly one {EXPORTER}")
+        self.assertTrue(SELF_SCRAPE.search(text), f"{SHIP} has no prometheus.scrape \"alloy_self\" every 60s")
+
+    def test_every_host_ships_through_the_module_and_no_exporter_of_its_own(self) -> None:
+        for host, config in host_configs():
+            with self.subTest(host=host):
                 text = config.read_text()
-                self.assertTrue(EXPORTER in text, f"{config} has no {EXPORTER}")
-                self.assertTrue(SELF_SCRAPE.search(text),
-                                f"{config} has no prometheus.scrape \"alloy_self\" every 60s")
+                self.assertEqual(len(SHIP_CALL.findall(text)), 1, f"{config} must call podhaus.ship \"run\" once")
+                self.assertNotIn("otelcol.exporter.", text, f"{config} has an exporter beside the ship module's")
+
+    def test_every_https_host_presents_its_client_certificate(self) -> None:
+        # The ingest endpoint refuses a client without one at the handshake.
+        # Each refusal still completes a request, so the healthcheck stays
+        # green while nothing arrives.
+        for host, config in host_configs():
+            with self.subTest(host=host):
+                [call] = SHIP_CALL.findall(config.read_text())
+                arguments = dict(ARGUMENT.findall(call))
+                if not arguments["endpoint"].startswith('"https://'):
+                    continue
+                for argument, suffix in (("client_cert_file", "cert"), ("client_key_file", "key")):
+                    self.assertEqual(arguments.get(argument), f'"/run/podhaus-secrets/{host}-{suffix}.pem"',
+                                     f"{config} ships over https without its {argument}")
 
 
 class AlloyHealthTest(unittest.TestCase):

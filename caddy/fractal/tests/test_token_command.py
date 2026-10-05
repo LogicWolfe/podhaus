@@ -245,7 +245,9 @@ class FirstRunTest(TokenCommandTest):
 
 class CachedTokenTest(TokenCommandTest):
     def test_a_fresh_token_is_printed_without_a_request(self) -> None:
-        self.write_cache("access-1", "refresh-1", seconds_left=601)
+        # Well clear of the 600 s renewal margin: the command reads the clock
+        # after this test does, and a second can tick over in between.
+        self.write_cache("access-1", "refresh-1", seconds_left=660)
         result = self.run_command()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "access-1\n")

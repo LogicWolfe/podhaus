@@ -4,15 +4,22 @@ Each fixture below is one line as a service prints it. All of them go through
 the modules a host runs, inside one `grafana/alloy:latest` container:
 docker-logs.alloy's relabel rules (`docker_targets`, on stand-in Docker
 targets), journal.alloy's priority mapping (`journal_levels`), the three
-file-source modules, chain.alloy with every parser, and enrich.alloy. An OTLP
-file exporter writes what would have been shipped. Each fixture's row must
-carry exactly the schema's resource attributes, exactly the schema's pipeline
-attributes plus the service's own fields (every field of a JSON line, flattened
-with dots, credentials removed, plus what a parser promotes), the expected body
-and the expected severity. A fixture that a module drops must produce no row.
-The schema is docs/logging.md. Expected attributes for lines that carry a
-credential are written out literally, never computed with enrich.alloy's own
-rule, so a leak cannot pass by copying the bug.
+file-source modules, chain.alloy with every parser, and ship.alloy, which runs
+enrich.alloy and exports over OTLP as every host's Alloy does. Its endpoint is
+a stand-in collector in the same Alloy: an OTLP receiver whose file exporters
+write what arrived. Each fixture's row must carry exactly the schema's resource
+attributes, exactly the schema's pipeline attributes plus the service's own
+fields (every field of a JSON line, flattened with dots, credentials removed,
+plus what a parser promotes), the expected body and the expected severity. A
+fixture that a module drops must produce no row. The schema is
+docs/logging.md. Expected attributes for lines that carry a credential are
+written out literally, never computed with enrich.alloy's own rule, so a leak
+cannot pass by copying the bug.
+
+The same run proves the shipping module's other two paths and the healthcheck
+that watches it: Alloy's own metrics arrive under the host's name, spans
+written to the module's input export arrive, and the compose file's
+healthcheck passes against this Alloy.
 
 Every tailer's label set, the Docker relabel rule list and the Docker
 tailer's arguments are pinned too, read back from the running Alloy through
@@ -52,6 +59,7 @@ Needs Docker. Without it the whole class is skipped with the reason printed.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
@@ -64,12 +72,15 @@ import time
 import unittest
 import urllib.request
 
+from test_alloy_health import healthcheck
+
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = ROOT / "logging" / "alloy-modules"
 IMAGE = "grafana/alloy:latest"
 HOST = "testhost"
 RUN_SECONDS = 120
 API_PORT = 12345
+COLLECTOR = "127.0.0.1:4318"
 # Key words whose value is a credential. A row may carry none of them as any
 # dotted part of an attribute name.
 DENIED_WORDS = frozenset({
@@ -469,6 +480,8 @@ FIXTURES: tuple[Fixture, ...] = (
             Row("lumen-warm", "Lumen indexed 412 files in 3.1s", None)),
     Fixture("lumen_search", docker("brave_booth", "lumen", "lumen-tools", docker_labels=(("podhaus_lumen", "true"),)),
             '{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}', None),
+    Fixture("test_container", docker("podhaus-log-schema-4242", docker_labels=(("podhaus_harness", "true"),)),
+            "a line a test container's none log driver would never let a tailer read", None),
     Fixture("fenwick", compose("fenwick", "fenwick"), '{"level":"info","msg":"turn complete"}', None),
     Fixture("indy_service", compose("indy-service", "indy-service", "indy-board"), "device alive", None),
     Fixture("bookbinder_json", compose("bookbinder", "bookbinder", "books"), '{"level":"info","msg":"decoded"}', None),
@@ -693,20 +706,46 @@ podhaus.clickhouse_error_log "run" {{
 }}
 
 podhaus.chain "run" {{
-  forward_to = [otelcol.receiver.loki.out.receiver]
+  forward_to = [podhaus.ship.run.receiver]
 }}
 
-otelcol.receiver.loki "out" {{
-  output {{ logs = [podhaus.enrich.run.input] }}
+podhaus.ship "run" {{
+  host     = "{HOST}"
+  endpoint = "http://{COLLECTOR}"
 }}
 
-podhaus.enrich "run" {{
-  host   = "{HOST}"
-  output = [otelcol.exporter.file.out.input]
+// Alloy's own spans, written to the module's input export as on every host;
+// all of them rather than a host's tenth, so every run has one to find. Each
+// export's own spans feed the next export, a bounded cycle of a few spans
+// every 5 s; the log rows go to a separate file the cycle never touches.
+tracing {{
+  sampling_fraction = 1
+  write_to          = [podhaus.ship.run.input]
 }}
 
-otelcol.exporter.file "out" {{
+// The stand-in collector.
+otelcol.receiver.otlp "collector" {{
+  http {{
+    endpoint = "{COLLECTOR}"
+  }}
+
+  output {{
+    logs    = [otelcol.exporter.file.logs.input]
+    metrics = [otelcol.exporter.file.metrics.input]
+    traces  = [otelcol.exporter.file.traces.input]
+  }}
+}}
+
+otelcol.exporter.file "logs" {{
   path = "/out/logs.jsonl"
+}}
+
+otelcol.exporter.file "metrics" {{
+  path = "/out/metrics.jsonl"
+}}
+
+otelcol.exporter.file "traces" {{
+  path = "/out/traces.jsonl"
 }}
 """
 
@@ -816,6 +855,20 @@ def read_rows(path: Path) -> list[Shipped]:
     return rows
 
 
+def read_resources(path: Path, batches: str) -> list[dict[str, object]]:
+    """The resource of every batch the stand-in collector wrote, of one signal ("resourceMetrics", "resourceSpans")."""
+    if not path.exists():
+        return []
+    # Only whole lines: the exporter may be part-way through writing the last.
+    return [otlp_map(batch["resource"].get("attributes", []))
+            for line in path.read_text().split("\n")[:-1]
+            for batch in json.loads(line)[batches]]
+
+
+def alloys_own(resources: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [resource for resource in resources if resource.get("service.name") == "alloy"]
+
+
 class AlloyRun:
     """One bounded `grafana/alloy` container running the harness config."""
 
@@ -823,17 +876,18 @@ class AlloyRun:
         self.workdir = workdir
         self.name = f"podhaus-log-schema-{os.getpid()}"
         self.process: subprocess.Popen[bytes] | None = None
+        self.check, self.check_state = healthcheck()
 
     def start(self) -> None:
         # No log driver: the host's own Alloy would otherwise ship this
-        # container's output. Its output still reaches this process. That
-        # Alloy still discovers the container and reports it cannot read its
-        # logs while it runs; the podhaus.harness label is for a Docker rule
-        # in docker-logs.alloy that drops it, which is not written yet.
+        # container's output. Its output still reaches this process. The
+        # podhaus.harness label makes docker-logs.alloy's rules drop the
+        # container, so that Alloy never tries to read it.
         self.process = subprocess.Popen([
             "docker", "run", "--rm", "--log-driver", "none", "--name", self.name,
             "--label", "podhaus.harness=true", "-p", f"127.0.0.1::{API_PORT}",
-            "--user", f"{os.getuid()}:{os.getgid()}",
+            "--user", f"{os.getuid()}:{os.getgid()}", "--tmpfs", self.check_state,
+            "-e", "CLICKSTACK_INGESTION_KEY=stand-in-ingestion-key",
             "-v", f"{MODULES}:/etc/alloy-modules:ro",
             "-v", f"{self.workdir / 'fixtures'}:/fixtures:ro",
             "-v", f"{self.workdir / 'out'}:/out",
@@ -853,12 +907,27 @@ class AlloyRun:
         return Component(api_fields(detail["arguments"]), api_fields(detail["exports"]),
                          api_fields(detail["debugInfo"]))
 
-    def wait_for_rows(self, count: int, deadline: float) -> list[Shipped]:
-        rows = read_rows(self.workdir / "out" / "logs.jsonl")
-        while len(rows) < count and time.monotonic() < deadline and self.process.poll() is None:
+    def wait_for_rows(self, count: int, deadline: float) -> None:
+        self.wait_until(lambda: len(read_rows(self.workdir / "out" / "logs.jsonl")) >= count, deadline)
+
+    def wait_for_metrics_and_spans(self, deadline: float) -> None:
+        """Alloy scrapes itself once a minute, at an offset within the minute that varies by run."""
+        self.wait_until(lambda: bool(alloys_own(self.metrics()) and alloys_own(self.spans())), deadline)
+
+    def wait_until(self, arrived: Callable[[], bool], deadline: float) -> None:
+        while not arrived() and time.monotonic() < deadline and self.process.poll() is None:
             time.sleep(0.5)
-            rows = read_rows(self.workdir / "out" / "logs.jsonl")
-        return rows
+
+    def metrics(self) -> list[dict[str, object]]:
+        return read_resources(self.workdir / "out" / "metrics.jsonl", "resourceMetrics")
+
+    def spans(self) -> list[dict[str, object]]:
+        return read_resources(self.workdir / "out" / "traces.jsonl", "resourceSpans")
+
+    def run_healthcheck(self) -> subprocess.CompletedProcess[str]:
+        """The compose file's healthcheck, run in the container as Docker runs it."""
+        return subprocess.run(["docker", "exec", self.name, *self.check], capture_output=True, text=True,
+                              timeout=30)
 
     def stop(self) -> str:
         """Stops the container; a daemon that will not stop it fails the run rather than hanging it."""
@@ -875,7 +944,7 @@ def docker_unavailable() -> str | None:
         return "the docker command is not installed"
     probe = subprocess.run(["docker", "info"], capture_output=True, timeout=30)
     if probe.returncode != 0:
-        return probe.stderr.decode(errors="replace").strip().splitlines()[-1]
+        return f"`docker info` exited {probe.returncode}: {probe.stderr.decode(errors='replace').strip()}"
     return None
 
 
@@ -890,6 +959,7 @@ TAILERS = {
     "docker_rules": "podhaus.docker_targets.fixtures/discovery.relabel.this",
     "docker_probe_rules": "podhaus.docker_logs.probe/docker_targets.this/discovery.relabel.this",
     "docker": "podhaus.docker_logs.probe/loki.source.docker.containers",
+    "docker_discovery": "podhaus.docker_logs.probe/discovery.docker.containers",
     "plex": "podhaus.plex_server_log.run/loki.source.file.this",
     "flood": "podhaus.flood_job_logs.run/loki.source.file.this",
     "clickhouse": "podhaus.clickhouse_error_log.run/loki.source.file.this",
@@ -903,6 +973,9 @@ class LogSchemaTest(unittest.TestCase):
     unmatched: list[Shipped]
     alloy_output: str
     tailers: dict[str, Component]
+    metrics: list[dict[str, object]]
+    spans: list[dict[str, object]]
+    health: subprocess.CompletedProcess[str]
     maxDiff = None  # the label pins are long; a failure shows every differing label
 
     @classmethod
@@ -923,10 +996,14 @@ class LogSchemaTest(unittest.TestCase):
             run.wait_for_rows(len([f for f in kept if f.name not in LATE]), deadline)
             append_late(workdir / "fixtures", FIXTURES)
             run.wait_for_rows(len(kept), deadline)
+            run.wait_for_metrics_and_spans(deadline)
             time.sleep(4)  # a dropped line that was not dropped arrives alongside the rest
             cls.tailers = {name: run.component(component_id) for name, component_id in TAILERS.items()}
+            cls.health = run.run_healthcheck()
         finally:
             cls.alloy_output = run.stop()
+        cls.metrics = run.metrics()
+        cls.spans = run.spans()
         by_file_line = {
             (f"{FILE_ROOT}/{f.source.path}", f.line): f.name for f in FIXTURES if isinstance(f.source, File)
         }
@@ -1007,20 +1084,42 @@ class LogSchemaTest(unittest.TestCase):
     def test_enrich_warns_only_about_the_line_that_is_not_json(self) -> None:
         """A statement that failed on every row would flood Alloy's own log."""
         warnings = [line for line in self.alloy_output.splitlines()
-                    if "component_path=/podhaus.enrich.run" in line and ("level=warn" in line or "level=error" in line)]
+                    if "component_path=/podhaus.ship.run/enrich.run" in line and ("level=warn" in line or "level=error" in line)]
         self.assertEqual(len(warnings), 1, "\n".join(warnings))
         self.assertIn("ParseJSON", warnings[0])
 
+    def test_alloys_own_metrics_arrive_under_the_host(self) -> None:
+        self.assertIn(HOST, [resource.get("host.name") for resource in alloys_own(self.metrics)],
+                      f"no metric of Alloy's own carries host.name {HOST}. Alloy said:\n{self.alloy_output}")
+
+    def test_spans_written_to_the_modules_input_arrive(self) -> None:
+        self.assertNotEqual(alloys_own(self.spans), [],
+                            f"no span of Alloy's own arrived. Alloy said:\n{self.alloy_output}")
+
+    def test_the_compose_healthcheck_passes_against_the_shipping_alloy(self) -> None:
+        self.assertEqual(self.health.returncode, 0, self.health.stdout + self.health.stderr)
+        self.assertRegex(self.health.stdout, r"exporter requests completed: [1-9]\d*, at the previous check: none")
+
     # The pins below are what is deployed. A changed label re-reads and
-    # re-ships that source's retained logs; a changed Docker rule or tailer
-    # argument, reloaded by a running Alloy, re-ships every running
-    # container's log. See docs/logging.md before changing one.
+    # re-ships that source's retained logs, and so does a renamed tailer,
+    # declare, instance label or import.file label, the parts every saved
+    # position's path is built from: none of those may change. A relabel rule,
+    # a discovery setting or a tailer argument may, provided every existing
+    # container keeps exactly its labels: each host's Alloy reads the modules
+    # once, when its container starts, so the change applies on the recreate
+    # its content hash triggers, and an Alloy that stops keeps every saved
+    # position. Only a running Alloy reloading the change would restart every
+    # tailer and lose them. See docs/logging.md before changing one.
     def test_the_docker_relabel_rules_are_the_deployed_list(self) -> None:
         deployed = [
             {"regex": "__address__|__meta_docker_network_.*|__meta_docker_port_.*", "action": "labeldrop"},
             {"source_labels": ["__meta_docker_container_label_podhaus_lumen",
                                "__meta_docker_container_label_podhaus_lumen_worktree"],
              "regex": "true;", "action": "drop"},
+            # Drops only containers labelled podhaus.harness=true; every
+            # other container keeps exactly its labels.
+            {"source_labels": ["__meta_docker_container_label_podhaus_harness"], "regex": "true",
+             "action": "drop"},
             {"source_labels": ["__meta_docker_container_name"], "regex": "/(.*)", "target_label": "container"},
             {"source_labels": ["__meta_docker_container_name"], "regex": "/(?:testhost-)?(.*)",
              "target_label": "service"},
@@ -1046,6 +1145,16 @@ class LogSchemaTest(unittest.TestCase):
         })
         self.assertEqual(self.tailers["docker"].arguments["forward_to"],
                          ["podhaus.docker_logs.probe/loki.process.decolorize.receiver"])
+
+    def test_docker_discovery_is_the_deployed_set(self) -> None:
+        """Every 5 s, which narrows the window in which a container removed soon after it starts
+        is never listed; stopped containers listed, so a container's tailer keeps its position
+        across a stop."""
+        self.assertEqual(self.tailers["docker_discovery"].arguments, {
+            "host": "unix:///var/run/docker.sock",
+            "refresh_interval": "5s",
+            "filter": [{"name": "status", "values": ["restarting", "running", "paused", "exited"]}],
+        })
 
     def docker_tailer_labels(self, fixture: str) -> dict[str, str]:
         """Everything the relabel rules leave on a stand-in, plus the tailer's own labels."""

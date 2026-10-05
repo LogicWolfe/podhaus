@@ -29,38 +29,38 @@
 // ordinary field elsewhere (llm-watcher and RustFS report one).
 
 declare "pomerium" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"pomerium\"}"
+		stage.match {
+			selector = "{service=\"pomerium\"}"
 
-      stage.replace {
-        expression = "[?&]state=([^&\"\\s]+)"
-        replace    = ""
-      }
+			stage.replace {
+				expression = "[?&]state=([^&\"\\s]+)"
+				replace    = ""
+			}
 
-      // The gate keeps non-JSON lines (the startup banner, a panic dump)
-      // out of the JSON stage.
-      stage.match {
-        selector = "{service=\"pomerium\"} |~ \"^\\\\{\""
+			// The gate keeps non-JSON lines (the startup banner, a panic dump)
+			// out of the JSON stage.
+			stage.match {
+				selector = "{service=\"pomerium\"} |~ \"^\\\\{\""
 
-        stage.json {
-          expressions = {
-            lvl = "level",
-          }
-        }
+				stage.json {
+					expressions = {
+						lvl = "level",
+					}
+				}
 
-        stage.labels {
-          values = { detected_level = "lvl" }
-        }
-      }
-    }
-  }
+				stage.labels {
+					values = {detected_level = "lvl"}
+				}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

@@ -254,7 +254,7 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. |
 | `tools/lint-stack-toml.py` | Pre-commit lint: rejects `deploy = true` on any podhaus-tagged stack. See "Hard rules" for why — Komodo's `Sync Deploy` sub-stage in `RunSync` would auto-deploy on Stage 0 and break on transient linked-repo timeouts. |
 | `mise.toml` + `Pipfile` | Current stable Python and Pipenv plus the unpinned Python tooling dependencies, and Node for the two `node --test` suites the hook runs. Bootstrap with the commands in `README.md`; no lock file is kept. |
-| `tools/pre-commit` | The pre-commit hook runner. Invokes `lint-stack-env.py` + `lint-stack-content-hash.py` + `lint-stack-toml.py` + `lint-alloy-timestamps.py` (no `stage.timestamp` outside the file-source Alloy modules, no time zone written into a shared module; zones arrive as arguments from each host's config) through Pipenv, then the unit-test suites, among them `logging/tests/` (every Alloy parser module's fixture run through the real modules in a short-lived `grafana/alloy` container, checked against the `docs/logging.md` schema; skipped with the reason printed when Docker is unavailable). Install with `ln -sf ../../tools/pre-commit .git/hooks/pre-commit` so future edits to the hook are live. |
+| `tools/pre-commit` | The pre-commit hook runner. Invokes `lint-stack-env.py` + `lint-stack-content-hash.py` + `lint-stack-toml.py` + `lint-alloy-timestamps.py` (no `stage.timestamp` outside the file-source Alloy modules, no time zone written into a shared module; zones arrive as arguments from each host's config) + `lint-alloy-config.py` (every host's `config.alloy` and every shared Alloy module exactly as `alloy fmt` prints it, the modules passing `alloy validate` and each host config, unmodified, starting in Alloy against them with no network, in a short-lived `grafana/alloy` container; skipped with the reason printed when Docker is unavailable) through Pipenv, then the unit-test suites, among them `logging/tests/` (every Alloy parser module's fixture run through the real modules in a short-lived `grafana/alloy` container, checked against the `docs/logging.md` schema; skipped with the reason printed when Docker is unavailable). Install with `ln -sf ../../tools/pre-commit .git/hooks/pre-commit` so future edits to the hook are live. |
 | `komodo-stop` | Stop Komodo Core |
 | `komodo-status` | Show Komodo Core container status |
 | `komodo-upgrade` | Pull latest images + restart Komodo |
@@ -534,8 +534,8 @@ These have failure modes that you must not introduce:
   `<import label>.<declare>.<instance label>/<component>.<label>/positions.yml`,
   so a rename loses every position and re-reads every retained log. Derive
   new facts in `enrich.alloy`, after the tailer. `logging/tests` pins the
-  Docker rules and tailer arguments and every tailer's labels; a change there
-  updates its pin in the same commit.
+  Docker rules, discovery settings and tailer arguments and every tailer's
+  labels; a change there updates its pin in the same commit.
 - **Telemetry is for debugging.** A service's spans, logs and Bugsink
   events carry whatever helps diagnose a failure: message text, provider
   replies, URLs, headers, page state. A service redacts nothing; the few

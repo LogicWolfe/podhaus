@@ -97,13 +97,14 @@
 
 declare "enrich" {
 	argument "host" { }
+
 	argument "output" { }
 
 	otelcol.processor.transform "this" {
 		error_mode = "ignore"
 
 		log_statements {
-			context = "log"
+			context    = "log"
 			statements = [
 				`set(resource.attributes["host.name"], "` + argument.host.value + `")`,
 				`set(resource.attributes["service.name"], attributes["service"]) where attributes["service"] != nil`,
@@ -114,7 +115,6 @@ declare "enrich" {
 				`set(resource.attributes["container.name"], attributes["container"]) where attributes["container"] != nil`,
 				`set(resource.attributes["service.instance.id"], Concat(["` + argument.host.value + `", attributes["container"]], "/")) where attributes["container"] != nil`,
 				`set(resource.attributes["service.instance.id"], Concat(["` + argument.host.value + `", resource.attributes["service.name"]], "/")) where attributes["container"] == nil`,
-
 				`set(attributes["compose.service"], attributes["compose_service"]) where attributes["compose_service"] != nil`,
 				`set(attributes["log.iostream"], attributes["stream"]) where attributes["stream"] == "stdout" or attributes["stream"] == "stderr"`,
 				`set(attributes["log.source"], "docker") where attributes["stream"] == "stdout" or attributes["stream"] == "stderr"`,
@@ -125,24 +125,20 @@ declare "enrich" {
 				`set(attributes["journal.transport"], attributes["transport"]) where attributes["transport"] != nil`,
 				`set(attributes["journal.priority"], attributes["priority"]) where attributes["priority"] != nil`,
 				`set(attributes["journal.reader"], attributes["job"]) where attributes["job"] != nil`,
-
 				`set(cache["json"], ParseJSON(body)) where IsMatch(body, "^\\s*\\{.*\\}\\s*$")`,
 				`flatten(cache["json"]) where IsMap(cache["json"])`,
 				`set(cache["fields"], Len(cache["json"])) where IsMap(cache["json"])`,
 				`delete_matching_keys(cache["json"], "(?i)(^|\\.)(authorization|cookie|set-cookie|password|access_token|refresh_token|id_token)(\\.|$)") where IsMap(cache["json"])`,
 				`delete_matching_keys(cache["json"], "^(log\\.source|log\\.iostream|compose\\.service|journal\\.(unit|identifier|transport|priority|reader))$") where IsMap(cache["json"])`,
-
 				`merge_maps(cache, ExtractPatterns(body, "(?i)^.{0,60}?(?:^|[\\[\\s=\"])(?P<level>trace|debug|info|warning|warn|error|err|fatal|panic)(?:[\\]:\\s\"]|$)"), "upsert")`,
 				`set(cache["level"], cache["json"]["severity"]) where IsMap(cache["json"]) and IsString(cache["json"]["severity"])`,
 				`set(cache["level"], cache["json"]["level"]) where IsMap(cache["json"]) and IsString(cache["json"]["level"])`,
 				`set(cache["level"], attributes["detected_level"]) where attributes["detected_level"] != nil`,
 				`set(cache["level"], ConvertCase(cache["level"], "upper")) where cache["level"] != nil`,
-
 				`set(cache["level"], "WARN") where cache["level"] == "WARNING"`,
 				`set(cache["level"], "ERROR") where cache["level"] == "ERR"`,
 				`set(cache["level"], "FATAL") where cache["level"] == "PANIC" or cache["level"] == "DPANIC"`,
 				`set(cache["level"], "DEBUG") where IsMatch(cache["level"], "^D[1-5]$")`,
-
 				`set(severity_text, cache["level"]) where cache["level"] != nil`,
 				`set(severity_number, 1) where cache["level"] == "TRACE"`,
 				`set(severity_number, 5) where cache["level"] == "DEBUG"`,
@@ -150,9 +146,7 @@ declare "enrich" {
 				`set(severity_number, 13) where cache["level"] == "WARN"`,
 				`set(severity_number, 17) where cache["level"] == "ERROR"`,
 				`set(severity_number, 21) where cache["level"] == "FATAL"`,
-
 				`delete_matching_keys(attributes, "^(host|service|service_name|compose_project|container|compose_service|stream|log_file|filename|unit|identifier|transport|priority|job|detected_level|loki\\.attribute\\.labels)$")`,
-
 				`merge_maps(attributes, cache["json"], "insert") where IsMap(cache["json"])`,
 				`set(cache["message"], cache["json"]["log_message"]) where IsMap(cache["json"]) and IsString(cache["json"]["log_message"])`,
 				`set(cache["message"], cache["json"]["message"]) where IsMap(cache["json"]) and IsString(cache["json"]["message"])`,

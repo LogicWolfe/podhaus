@@ -14,25 +14,25 @@
 // pass through untouched.
 
 declare "clickstack_otel" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"clickstack-otel\"} |~ \"^\\\\{\""
+		stage.match {
+			selector = "{service=\"clickstack-otel\"} |~ \"^\\\\{\""
 
-      stage.json {
-        expressions = {lvl = "level"}
-      }
+			stage.json {
+				expressions = {lvl = "level"}
+			}
 
-      stage.labels {
-        values = {detected_level = "lvl"}
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

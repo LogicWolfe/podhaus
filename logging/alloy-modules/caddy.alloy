@@ -16,25 +16,25 @@
 // stage by the line filter, so they pass through untouched.
 
 declare "caddy" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"caddy\"} |~ \"^\\\\{\""
+		stage.match {
+			selector = "{service=\"caddy\"} |~ \"^\\\\{\""
 
-      stage.json {
-        expressions = {lvl = "level"}
-      }
+			stage.json {
+				expressions = {lvl = "level"}
+			}
 
-      stage.labels {
-        values = {detected_level = "lvl"}
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

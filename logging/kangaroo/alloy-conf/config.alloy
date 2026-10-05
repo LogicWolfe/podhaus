@@ -1,17 +1,21 @@
 // kangaroo's Alloy. Shared modules in ../alloy-modules do the work:
-//   docker_logs → chain (per-service parsers) → Loki→OTLP bridge → enrich
-//   → batch → the ClickStack collector on bandicoot, cross-LAN plaintext.
-//   QTS has no journald, so container output is the only log source.
+//   docker_logs → chain (per-service parsers) → ship (Loki→OTLP bridge,
+//   enrich, batch, Alloy's own metrics, and the exporter to the ClickStack
+//   collector on bandicoot). QTS has no journald, so container output is the
+//   only log source.
 //
 // Per-service parsing is config-as-code in ../alloy-modules (one module per
 // service, one chain for every host), so a service moving between hosts
 // keeps its parsing with no change here. See docs/logging.md.
 
-// Internal-pipeline tracing — unified `alloy` service in HyperDX
-// (same name on every host; one row per host).
+// Alloy's own pipeline spans under service `alloy`, sampled at 10%: span
+// volume grows with the number of components, and they are kept for the
+// pipeline's health, not request flow. Alloy allows a tracing block only in
+// the root config. Its own log lines are not sent this way; the Docker source
+// already reads them, and they would arrive twice.
 tracing {
 	sampling_fraction = 0.1
-	write_to          = [otelcol.processor.batch.clickstack.input]
+	write_to          = [podhaus.ship.run.input]
 }
 
 // The shared modules are read once, when the container starts. A push that
@@ -31,107 +35,13 @@ podhaus.docker_logs "run" {
 }
 
 podhaus.chain "run" {
-	forward_to = [otelcol.receiver.loki.clickstack.receiver]
+	forward_to = [podhaus.ship.run.receiver]
 }
 
-otelcol.receiver.loki "clickstack" {
-	output {
-		logs = [podhaus.enrich.run.input]
-	}
-}
-
-podhaus.enrich "run" {
-	host   = "kangaroo"
-	output = [otelcol.processor.batch.clickstack.input]
-}
-
-// Alloy self metrics — Prometheus→OTLP bridge (net-new on kangaroo;
-// it has no Gatus scrape). Surfaces this host's pipeline throughput,
-// queue depth and exporter-retry counters — the cross-LAN exporter's
-// own health, the thing that used to die silently.
-prometheus.exporter.self "alloy" { }
-
-prometheus.scrape "alloy_self" {
-  targets         = prometheus.exporter.self.alloy.targets
-  scrape_interval = "60s"
-  forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
-}
-
-otelcol.receiver.prometheus "alloy_self" {
-  output {
-    metrics = [otelcol.processor.transform.svc_alloy.input]
-  }
-}
-
-// The Prometheus→OTLP bridge carries no service.name resource
-// attribute. Stamp a constant (mirrors bilby's svc_alloy and the
-// enrich logs idiom). "alloy" matches this host's Alloy container
-// logs and the tracing block, unifying all three signals under one
-// `alloy` service. `host.name` is the same resource attribute the logs
-// carry, so each host's Alloy self-metrics are distinguishable — without
-// it the only per-host key is the ephemeral container ID
-// (service.instance.id), useless for a durable query. The 60 s
-// self-scrape on this stable `host.name` key is the kangaroo log-pipeline
-// liveness heartbeat (Gatus).
-otelcol.processor.transform "svc_alloy" {
-  error_mode = "ignore"
-
-  metric_statements {
-    context = "metric"
-    statements = [
-      `set(resource.attributes["service.name"], "alloy")`,
-      `set(resource.attributes["host.name"], "kangaroo")`,
-    ]
-  }
-
-  output {
-    metrics = [otelcol.processor.batch.clickstack.input]
-  }
-}
-
-otelcol.processor.batch "clickstack" {
-  output {
-    logs    = [otelcol.exporter.otlphttp.clickstack.input]
-    metrics = [otelcol.exporter.otlphttp.clickstack.input]
-    traces  = [otelcol.exporter.otlphttp.clickstack.input]
-  }
-}
-
-otelcol.exporter.otlphttp "clickstack" {
-  client {
-    // bandicoot's LAN address, from config/lan-addresses.json through
-    // logging/kangaroo/stack.toml.
-    endpoint = "http://" + sys.env("BANDICOOT_LAN_IPV4") + ":4318"
-    headers  = {
-      // ClickStack ingestion API key (same key every host uses; injected via
-      // logging/kangaroo/stack.toml ← 1Password). Empty ⇒ 401 ⇒ no
-      // data — loud failure, no silent fallback.
-      "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
-    }
-    // No keepalive: kangaroo pushes cross-LAN to a FIXED IP behind
-    // bandicoot's published :4318 + NAT. When the collector container
-    // recreates, the IP is unchanged but the backend isn't — an existing
-    // keepalive TCP connection stays mapped (conntrack) to the dead old
-    // container, so the next send blackholes and HANGS silently (no RST).
-    // A fresh connection per batch always reaches the current collector.
-    // bandicoot ships in-network by container name (DNS re-resolves) and
-    // needs no equivalent. Low volume makes the per-batch connection cost
-    // negligible (the docs' overhead caveat is for high-throughput
-    // exporters). Root cause of the recurring kangaroo wedge, 2026-06-19.
-    disable_keep_alives = true
-  }
-
-  // Retry across a collector outage for at most 30 minutes, then drop the
-  // batch; 30m rides out any realistic collector restart. The budget is
-  // checked only when an attempt returns: a request that never returns
-  // (the hung stale connection that disable_keep_alives now prevents)
-  // holds its queue worker whatever the budget, and the container's
-  // healthcheck restarts an exporter whose requests have stopped
-  // completing (logging/compose.shared.yaml).
-  retry_on_failure {
-    max_elapsed_time = "30m"
-  }
-  sending_queue {
-    queue_size = 100000
-  }
+// Plaintext across the LAN to the collector's published port on bandicoot,
+// whose address the shared catalog supplies through
+// logging/kangaroo/stack.toml.
+podhaus.ship "run" {
+	host     = "kangaroo"
+	endpoint = "http://" + sys.env("BANDICOOT_LAN_IPV4") + ":4318"
 }

@@ -13,30 +13,30 @@
 // lines pass through to the generic OTTL fallback.
 
 declare "syncthing" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"syncthing\"} |~ \"^\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} [A-Z]{3} \""
+		stage.match {
+			selector = "{service=\"syncthing\"} |~ \"^\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} [A-Z]{3} \""
 
-      stage.regex {
-        expression = "^\\S+ \\S+ (?P<lvl>[A-Z]{3}) "
-      }
+			stage.regex {
+				expression = "^\\S+ \\S+ (?P<lvl>[A-Z]{3}) "
+			}
 
-      stage.template {
-        source   = "lvl"
-        template = "{{ if eq .Value \"DBG\" }}DEBUG{{ else if eq .Value \"INF\" }}INFO{{ else if eq .Value \"WRN\" }}WARN{{ else if eq .Value \"ERR\" }}ERROR{{ else }}{{ .Value }}{{ end }}"
-      }
+			stage.template {
+				source   = "lvl"
+				template = "{{ if eq .Value \"DBG\" }}DEBUG{{ else if eq .Value \"INF\" }}INFO{{ else if eq .Value \"WRN\" }}WARN{{ else if eq .Value \"ERR\" }}ERROR{{ else }}{{ .Value }}{{ end }}"
+			}
 
-      stage.labels {
-        values = { detected_level = "lvl" }
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

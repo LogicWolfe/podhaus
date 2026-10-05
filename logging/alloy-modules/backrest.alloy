@@ -18,25 +18,25 @@
 // generic OTTL fallback.
 
 declare "backrest" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"backrest\"}"
+		stage.match {
+			selector = "{service=\"backrest\"}"
 
-      stage.regex {
-        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+[+-]\\d{4}\\s+(?P<lvl>[A-Z]+)\\s"
-      }
+			stage.regex {
+				expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d+[+-]\\d{4}\\s+(?P<lvl>[A-Z]+)\\s"
+			}
 
-      stage.labels {
-        values = { detected_level = "lvl" }
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

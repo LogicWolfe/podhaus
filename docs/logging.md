@@ -24,19 +24,25 @@ systemd journal          ─┘
 chain.alloy               one parser module per service, each setting the level only
         │
         ▼
-Loki → OTLP bridge        labels become log attributes
+ship.alloy                everything after the parsers, the same on every host:
+  Loki → OTLP bridge        labels become log attributes
         │
         ▼
-enrich.alloy              the schema: resource attributes, namespaced pipeline
-        │                 attributes, severity, JSON fields, message body
+  enrich.alloy              the schema: resource attributes, namespaced pipeline
+        │                   attributes, severity, JSON fields, message body
         ▼
-batch → exporter → ClickStack collector → ClickHouse otel_logs (180 days)
+  batch → exporter → ClickStack collector → ClickHouse otel_logs (180 days)
 ```
 
 The same modules run on every host, so a service that moves between hosts keeps
 its parsing with no logging change. Each host's
-`logging/<host>/alloy-conf/config.alloy` only lists which source modules it
-runs and where it ships.
+`logging/<host>/alloy-conf/config.alloy` lists which source modules it runs and
+gives the ship module its host name, the collector's address as that host
+reaches it, and, for a host that ships through `logs-ingest.pod.haus`, its
+client certificate. Two hosts also scrape metrics of their own (bilby: Gatus and
+ESPHome; fractal: the local model service) and hand them to the ship module's
+exporter. The ship module also carries Alloy's own metrics and the exporter's
+retry and queue settings ([Monitoring](monitoring.html#alloy)).
 
 ## The schema
 
@@ -188,9 +194,9 @@ change applies on that recreate and never inside a running Alloy.
   path at `<import label>.<declare>.<instance label>/<component>.<label>/positions.yml`
   (`podhaus.docker_logs.run/loki.source.docker.containers/positions.yml`), so a
   rename loses every position and re-reads every retained log. The harness
-  pins the Docker rule list, the Docker tailer's arguments and every tailer's
-  labels, so a change fails `tools/pre-commit` until its pin is updated with
-  it.
+  pins the Docker rule list, the Docker discovery settings, the Docker tailer's
+  arguments and every tailer's labels, so a change fails `tools/pre-commit`
+  until its pin is updated with it.
 - **A parser never drops a field.** It sets the level (the `detected_level`
   label) and nothing else: it does not rewrite or shorten the body, does not
   delete a label, and does not parse JSON itself (enrich does that for every
@@ -210,14 +216,25 @@ change applies on that recreate and never inside a running Alloy.
   the model router's per-request "proxying request" line, and the container
   copies of records that a service also exports itself (below).
 - **Every module has a fixture** in `logging/tests/test_log_schema.py`, which
-  runs the real modules in a `grafana/alloy` container and checks each row's
-  resource, attribute names, body and severity, and reads each tailer's labels
-  back through Alloy's HTTP API. `tools/pre-commit` runs it; it needs Docker,
-  and without Docker the whole test class is skipped with the reason printed.
-  Its container logs with Docker's `none` driver, so a run on a host with
-  Alloy adds about two minutes of "could not fetch logs" error rows from that
-  host's Alloy. The container carries the Docker label `podhaus.harness=true`
-  for a Docker rule that drops it, which is not written yet.
+  runs the real modules, `ship.alloy` included, in a `grafana/alloy` container
+  whose stand-in collector receives what the module exports. It checks each
+  row's resource, attribute names, body and severity, and reads each tailer's
+  labels back through Alloy's HTTP API. The same run checks that Alloy's own
+  metrics arrive under the host's name, that spans written to the module's
+  input arrive, and that the compose file's healthcheck passes against that
+  Alloy. `tools/pre-commit` runs it; it needs Docker, and without Docker the
+  whole test class is skipped with the reason printed.
+- **Every module and host config is formatted, valid and loads.** Each file
+  must be exactly what `alloy fmt` prints, `alloy validate` must pass on the
+  module directory, and each host config, unmodified, must start in Alloy
+  against the modules with no network. `tools/lint-alloy-config.py` checks all
+  three in a `grafana/alloy` container from `tools/pre-commit`, prints the
+  Alloy version it ran, and is skipped with the reason printed without Docker.
+  Starting the config is the check that reaches into the modules a host config
+  imports: `alloy validate` on a host config does not open them, so a wrong
+  argument or a reference to an export a module does not have fails only when
+  Alloy loads the config. A host's secrets, certificates and sockets are absent
+  in the lint; they only leave components unhealthy and do not stop the load.
 
 ## Secrets
 
@@ -274,8 +291,14 @@ SDK's resource: `service.name`, and for bookcard a random
 **Containers**, on every host: the stdout and stderr of every container,
 running or stopped, except Lumen's throwaway code-search containers (Docker
 label `podhaus.lumen` without a worktree label), whose output is the search
-request stream with source snippets in it. A stopped container stays in
-discovery so one that Ofelia starts on a schedule resumes where it stopped.
+request stream with source snippets in it, and the containers podhaus's tests
+and lints start (label `podhaus.harness=true`), which log with Docker's `none`
+driver and have nothing to read. Discovery lists the containers every 5
+seconds, and a container is read only once a listing has seen it, so one that
+is removed within seconds of starting, such as a short `docker run --rm` job,
+may never be read. A stopped container stays in discovery, so an init
+container that has exited is read whole and one that Ofelia starts on a
+schedule resumes where it stopped.
 Every Alloy restart, whether the recreate a logging change brings or an
 autoheal restart of a wedged exporter ([Monitoring](monitoring.html#exporter-stall)),
 ships some lines twice: each stopped container's log is read again from the
@@ -324,8 +347,10 @@ source.
 | `logging/alloy-modules/chain.alloy` | The order every parser module runs in |
 | `logging/alloy-modules/<service>.alloy` | One service's parser |
 | `logging/alloy-modules/enrich.alloy` | The schema: resource, namespaced attributes, severity, JSON, credential removal |
-| `logging/<host>/alloy-conf/config.alloy` | Which sources a host runs, its scrapes and its exporter |
+| `logging/alloy-modules/ship.alloy` | The Loki → OTLP bridge, enrich, batch, the exporter and Alloy's own metrics, the same on every host |
+| `logging/<host>/alloy-conf/config.alloy` | Which sources a host runs, its own scrapes, and its values for the ship module |
 | `logging/tests/test_log_schema.py` | The fixture harness, run by `tools/pre-commit` |
 | `logging/tests/test_alloy_health.py` | The exporter-stall healthcheck run against live exporters, run by `tools/pre-commit` |
 | `tools/lint-alloy-timestamps.py` | The time-parsing rule, run by `tools/pre-commit` |
+| `tools/lint-alloy-config.py` | Every host config and module formatted as `alloy fmt` prints it, the module directory validated, and every host config loaded unmodified beside the modules, run by `tools/pre-commit` |
 | `llm/tests/` | The model server parser's own tests |

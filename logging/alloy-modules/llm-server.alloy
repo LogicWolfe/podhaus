@@ -86,571 +86,611 @@
 // llm/tests keeps the list of what real output the rule reduces.
 
 declare "llm_server" {
-  argument "forward_to" { }
-
-  loki.process "this" {
-    forward_to = argument.forward_to.value
-
-    stage.match {
-      selector = "{service=\"llm-server\"}"
-
-      // The join applies to this container's lines only. The limit on lines
-      // is generous so that a long reply is never cut into an entry that
-      // starts without a prefix. A message's trailing blank lines (the router
-      // forwards the model's blank lines as a bare tag) are not part of it.
-      stage.multiline {
-        firstline     = "^(?:\\[ *\\d+\\] )?(?:\\d+\\.\\d{2}\\.\\d{3}\\.\\d{3} [IWED] |WARNING: JSON schema conversion|\\w+: error parsing grammar: )"
-        max_wait_time = "3s"
-        max_lines     = 100000
-      }
-
-      stage.replace {
-        expression = "((?:\\n(?:\\[ *\\d+\\] ?)?)+\\z)"
-        replace    = ""
-      }
-
-      // Selectors that start at the beginning of an entry match with or
-      // without the router's `[ port] ` tag.
-      stage.match {
-        selector = "{service=\"llm-server\"} |~ \"^(?:\\\\[ *\\\\d+\\\\] )?(?:WARNING: JSON schema conversion|\\\\w+: error parsing grammar: )\""
-        action   = "drop"
-      }
-
-      stage.match {
-        selector = "{service=\"llm-server\"} |~ \"^\\\\d+\\\\.\\\\d{2}\\\\.\\\\d{3}\\\\.\\\\d{3} I srv +proxy_reques: proxying request to model \""
-        action   = "drop"
-      }
-
-      stage.match {
-        selector = "{service=\"llm-server\"} |~ \"^(?:\\\\[ *\\\\d+\\\\] )?\\\\d+\\\\.\\\\d{2}\\\\.\\\\d{3}\\\\.\\\\d{3} [IWED] srv +\\\\S+: (?:conv_id=|request for conv_id=)\""
-        action   = "drop"
-      }
-
-      stage.match {
-        selector = "{service=\"llm-server\"} |~ \"^(?:\\\\[ *\\\\d+\\\\] ?)?\\\\z\""
-        action   = "drop"
-      }
-
-      // An entry that starts with a level prefix gets its level and loses
-      // the prefix; one that does not is judged as it came, with no level.
-      stage.match {
-        selector = "{service=\"llm-server\"} |~ \"^(?:\\\\[ *\\\\d+\\\\] )?\\\\d+\\\\.\\\\d{2}\\\\.\\\\d{3}\\\\.\\\\d{3} [IWED] \""
-
-        stage.regex {
-          expression = "(?s)^(?:\\[ *\\d+\\] )?\\d+\\.\\d{2}\\.\\d{3}\\.\\d{3} (?P<lvl>[IWED]) (?P<text>.*)$"
-        }
-
-        stage.template {
-          source   = "lvl"
-          template = "{{ if eq .Value \"W\" }}WARN{{ else if eq .Value \"E\" }}ERROR{{ else if eq .Value \"D\" }}DEBUG{{ else }}INFO{{ end }}"
-        }
-
-        stage.labels {
-          values = {detected_level = "lvl"}
-        }
-
-        stage.output {
-          source = "text"
-        }
-      }
-
-      // The allow-list. Each block below matches one whole entry, from its
-      // first character to its last, and sets `llm_line` on it. Nothing else
-      // is stored as the server printed it. A selector must pass only lines
-      // its expression matches: loki.process keeps values extracted by an
-      // earlier stage and applies a block's labels even when its expression
-      // found nothing.
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +get_availabl: id +(?P<slot>\\\\d+) \\\\| task -?\\\\d+ \\\\| selected slot by (?P<by>LCP) similarity, f_sim_best = (?P<fsim>[0-9.]+) \\\\(> [0-9.]+ thold\\\\), f_keep = (?P<fkeep>[0-9.]+)\\\\z\""
-          stage.regex {
-            expression = "^slot +get_availabl: id +(?P<slot>\\d+) \\| task -?\\d+ \\| selected slot by (?P<by>LCP) similarity, f_sim_best = (?P<fsim>[0-9.]+) \\(> [0-9.]+ thold\\), f_keep = (?P<fkeep>[0-9.]+)\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_select_by = "by", llm_f_sim = "fsim", llm_f_keep = "fkeep"}
-          }
-          stage.static_labels {
-            values = {llm_line = "slot_selected"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +get_availabl: id +(?P<slot>\\\\d+) \\\\| task -?\\\\d+ \\\\| selected slot by (?P<by>LRU), t_last = -?\\\\d+\\\\z\""
-          stage.regex {
-            expression = "^slot +get_availabl: id +(?P<slot>\\d+) \\| task -?\\d+ \\| selected slot by (?P<by>LRU), t_last = -?\\d+\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_select_by = "by"}
-          }
-          stage.static_labels {
-            values = {llm_line = "slot_selected"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +operator\\\\(\\\\): id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| new prompt, n_ctx_slot = \\\\d+, n_keep = \\\\d+, task\\\\.n_tokens = (?P<n>\\\\d+)\\\\z\""
-          stage.regex {
-            expression = "^slot +operator\\(\\): id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| new prompt, n_ctx_slot = \\d+, n_keep = \\d+, task\\.n_tokens = (?P<n>\\d+)\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task", llm_prompt_tokens = "n"}
-          }
-          stage.static_labels {
-            values = {llm_line = "prompt"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +launch_slot_: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| processing task, is_child = \\\\d+\\\\z\""
-          stage.regex {
-            expression = "^slot +launch_slot_: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| processing task, is_child = \\d+\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task"}
-          }
-          stage.static_labels {
-            values = {llm_line = "task_started"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +operator\\\\(\\\\): id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| cached n_tokens = (?P<n>\\\\d+), memory_seq_rm \\\\[\\\\d+, end\\\\)\\\\z\""
-          stage.regex {
-            expression = "^slot +operator\\(\\): id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| cached n_tokens = (?P<n>\\d+), memory_seq_rm \\[\\d+, end\\)\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task", llm_cached_tokens = "n"}
-          }
-          stage.static_labels {
-            values = {llm_line = "reuse"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +operator\\\\(\\\\): id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| forcing full prompt re-processing due to lack of cache data \\\\(likely due to SWA or hybrid/recurrent memory, see https://github\\\\.com/ggml-org/llama\\\\.cpp/pull/13194#issuecomment-\\\\d+\\\\)\\\\z\""
-          stage.regex {
-            expression = "^slot +operator\\(\\): id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| forcing full prompt re-processing due to lack of cache data \\(likely due to SWA or hybrid/recurrent memory, see https://github\\.com/ggml-org/llama\\.cpp/pull/13194#issuecomment-\\d+\\)\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task"}
-          }
-          stage.static_labels {
-            values = {llm_line = "full_reread"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| prompt eval time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\\\d+) tokens \\\\( *(?:[0-9.]+|-?nan|inf) ms per token, +(?P<tps>(?:[0-9.]+|-?nan|inf)) tokens per second\\\\)\\\\z\""
-          stage.regex {
-            expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| prompt eval time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\d+) tokens \\( *(?:[0-9.]+|-?nan|inf) ms per token, +(?P<tps>(?:[0-9.]+|-?nan|inf)) tokens per second\\)\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task", llm_read_ms = "ms", llm_read_tokens = "n", llm_read_tps = "tps"}
-          }
-          stage.static_labels {
-            values = {llm_line = "read_timing"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| +eval time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\\\d+) tokens \\\\( *(?:[0-9.]+|-?nan|inf) ms per token, +(?P<tps>(?:[0-9.]+|-?nan|inf)) tokens per second\\\\)\\\\z\""
-          stage.regex {
-            expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| +eval time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\d+) tokens \\( *(?:[0-9.]+|-?nan|inf) ms per token, +(?P<tps>(?:[0-9.]+|-?nan|inf)) tokens per second\\)\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task", llm_output_ms = "ms", llm_output_tokens = "n", llm_output_tps = "tps"}
-          }
-          stage.static_labels {
-            values = {llm_line = "output_timing"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| +total time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\\\d+) tokens\\\\z\""
-          stage.regex {
-            expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| +total time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\d+) tokens\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task", llm_total_ms = "ms", llm_total_tokens = "n"}
-          }
-          stage.static_labels {
-            values = {llm_line = "total_timing"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| draft acceptance = (?:[0-9.]+|-?nan|inf) \\\\( *(?P<acc>\\\\d+) accepted / +(?P<gen>\\\\d+) generated\\\\), mean len = +(?:[0-9.]+|-?nan|inf)\\\\z\""
-          stage.regex {
-            expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| draft acceptance = (?:[0-9.]+|-?nan|inf) \\( *(?P<acc>\\d+) accepted / +(?P<gen>\\d+) generated\\), mean len = +(?:[0-9.]+|-?nan|inf)\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task", llm_draft_accepted = "acc", llm_draft_generated = "gen"}
-          }
-          stage.static_labels {
-            values = {llm_line = "draft"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +release: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| stop processing: n_tokens = (?P<n>\\\\d+), truncated = (?P<trunc>\\\\d+)\\\\z\""
-          stage.regex {
-            expression = "^slot +release: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| stop processing: n_tokens = (?P<n>\\d+), truncated = (?P<trunc>\\d+)\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task", llm_final_tokens = "n", llm_truncated = "trunc"}
-          }
-          stage.static_labels {
-            values = {llm_line = "finished"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| prompt processing, n_tokens = +(?P<n>\\\\d+), progress = (?P<progress>[0-9.]+), t = +(?P<seconds>[0-9.]+) s / +[0-9.]+ tokens per second\\\\z\""
-          stage.regex {
-            expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| prompt processing, n_tokens = +(?P<n>\\d+), progress = (?P<progress>[0-9.]+), t = +(?P<seconds>[0-9.]+) s / +[0-9.]+ tokens per second\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task", llm_read_tokens = "n", llm_progress = "progress", llm_read_seconds = "seconds"}
-          }
-          stage.static_labels {
-            values = {llm_line = "read_progress"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^srv +prompt_save: +- saving prompt with length (?P<n>\\\\d+), total state size = (?P<mib>[0-9.]+) MiB(?: \\\\(draft: [0-9.]+ MiB\\\\))?\\\\z\""
-          stage.regex {
-            expression = "^srv +prompt_save: +- saving prompt with length (?P<n>\\d+), total state size = (?P<mib>[0-9.]+) MiB(?: \\(draft: [0-9.]+ MiB\\))?\\z"
-          }
-          stage.labels {
-            values = {llm_saved_tokens = "n", llm_saved_mib = "mib"}
-          }
-          stage.static_labels {
-            values = {llm_line = "conversation_saved"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^srv +load: +- found better prompt with f_keep = (?P<fkeep>[0-9.]+), f_sim = (?P<fsim>[0-9.]+)\\\\z\""
-          stage.regex {
-            expression = "^srv +load: +- found better prompt with f_keep = (?P<fkeep>[0-9.]+), f_sim = (?P<fsim>[0-9.]+)\\z"
-          }
-          stage.labels {
-            values = {llm_restored_f_keep = "fkeep", llm_restored_f_sim = "fsim"}
-          }
-          stage.static_labels {
-            values = {llm_line = "conversation_restored"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^srv +alloc: +- making room for prompt cache entry, removing oldest entry \\\\(size = (?P<mib>[0-9.]+) MiB\\\\)\\\\z\""
-          stage.regex {
-            expression = "^srv +alloc: +- making room for prompt cache entry, removing oldest entry \\(size = (?P<mib>[0-9.]+) MiB\\)\\z"
-          }
-          stage.labels {
-            values = {llm_discarded_mib = "mib"}
-          }
-          stage.static_labels {
-            values = {llm_line = "conversation_discarded"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^srv +alloc: +- prompt state size (?P<mib>[0-9.]+) MiB exceeds cache size limit (?P<limit>[0-9.]+) MiB, skipping\\\\z\""
-          stage.regex {
-            expression = "^srv +alloc: +- prompt state size (?P<mib>[0-9.]+) MiB exceeds cache size limit (?P<limit>[0-9.]+) MiB, skipping\\z"
-          }
-          stage.labels {
-            values = {llm_unsaved_mib = "mib", llm_unsaved_limit_mib = "limit"}
-          }
-          stage.static_labels {
-            values = {llm_line = "conversation_unsaved"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^srv +try_clear_id: purging slot (?P<slot>\\\\d+) with (?P<n>\\\\d+) tokens\\\\z\""
-          stage.regex {
-            expression = "^srv +try_clear_id: purging slot (?P<slot>\\d+) with (?P<n>\\d+) tokens\\z"
-          }
-          stage.labels {
-            values = {llm_slot = "slot", llm_purged_tokens = "n"}
-          }
-          stage.static_labels {
-            values = {llm_line = "slot_purged"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^srv +decode: (?:failed to find free space in the KV cache, retrying with smaller batch size,|Context size has been exceeded\\\\.) off = \\\\d+, n_batch = (?P<batch>\\\\d+), ret = -?\\\\d+\\\\z\""
-          stage.regex {
-            expression = "^srv +decode: (?:failed to find free space in the KV cache, retrying with smaller batch size,|Context size has been exceeded\\.) off = \\d+, n_batch = (?P<batch>\\d+), ret = -?\\d+\\z"
-          }
-          stage.labels {
-            values = {llm_batch_size = "batch"}
-          }
-          stage.static_labels {
-            values = {llm_line = "pool_full"}
-          }
-        }
-
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^srv +send_error: task id = (?P<task>\\\\d+), error: (?P<error>Cannot run multiple aLoRAs in a single request|Prompt contains invalid tokens|Invalid slot ID|Unable to save slot|context shift is disabled|context shift cannot be used for shared prompt|the current context does not support logits computation\\\\. skipping|failed to process mtmd chunk|Context size has been exceeded\\\\.|Invalid input batch\\\\.|Compute error\\\\.|input \\\\(\\\\d+ tokens\\\\) is too large to process\\\\. increase the physical batch size \\\\(current batch size: \\\\d+\\\\)|input \\\\(\\\\d+ tokens\\\\) is larger than the max context size \\\\(\\\\d+ tokens\\\\)\\\\. skipping|request \\\\(\\\\d+ tokens\\\\) exceeds the available context size \\\\(\\\\d+ tokens\\\\), try increasing it)\\\\z\""
-          stage.regex {
-            expression = "^srv +send_error: task id = (?P<task>\\d+), error: (?P<error>Cannot run multiple aLoRAs in a single request|Prompt contains invalid tokens|Invalid slot ID|Unable to save slot|context shift is disabled|context shift cannot be used for shared prompt|the current context does not support logits computation\\. skipping|failed to process mtmd chunk|Context size has been exceeded\\.|Invalid input batch\\.|Compute error\\.|input \\(\\d+ tokens\\) is too large to process\\. increase the physical batch size \\(current batch size: \\d+\\)|input \\(\\d+ tokens\\) is larger than the max context size \\(\\d+ tokens\\)\\. skipping|request \\(\\d+ tokens\\) exceeds the available context size \\(\\d+ tokens\\), try increasing it)\\z"
-          }
-          stage.labels {
-            values = {llm_task = "task", llm_error = "error"}
-          }
-          stage.static_labels {
-            values = {llm_line = "request_error"}
-          }
-        }
-
-        stage.match {
-          selector = "{service=\"llm-server\"} |~ \"^(?:(?:srv +load_model: initializing, n_slots = \\\\d+, n_ctx_slot = \\\\d+, kv_unified = '(?:true|false)')|(?:srv +llama_server: model loaded)|(?:srv +llama_server: listening on http://[0-9.]+:\\\\d+)|(?:srv +llama_server: security: router mode enabled - do not expose to untrusted environments)|(?:srv +llama_server: starting server in router mode\\\\. models will be automatically loaded on-demand)|(?:slot +get_availabl: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| +- (?:skipping, slot is empty|skipping, is_processing = \\\\d|checking sim = [0-9.]+ \\\\(\\\\d+/\\\\d+\\\\) > [0-9.]+))|(?:srv +get_availabl: (?:updating prompt cache|prompt cache update took [0-9.]+ ms))|(?:srv +load: +- looking for better prompt, base f_keep = -?[0-9.]+, f_sim = [0-9.]+)|(?:srv +load: +- prompt with length +\\\\d+, lcp = +\\\\d+, f_keep = [0-9.]+, f_sim = [0-9.]+)|(?:srv +update: +- cache state: \\\\d+ prompts, [0-9.]+ MiB \\\\(limits: [0-9.]+ MiB, \\\\d+ tokens, \\\\d+ est\\\\))|(?:srv +update: +- prompt 0x[0-9a-f]{1,16}: +\\\\d+ tokens, checkpoints: +\\\\d+, +[0-9.]+ MiB)|(?:slot +launch_slot_: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| sampler chain: logits(?: -> \\\\??(?:penalties|dry|top-n-sigma|top-k|typical|top-p|min-p|xtc|temp-ext|temp|dist|infill|mirostat|mirostat-v2|adaptive-p|logit-bias))+)|(?:slot +launch_slot_: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| sampler params: ?(?:\\\\n(?:\\\\[ *\\\\d+\\\\] )?\\\\t(?:repeat_last_n|repeat_penalty|frequency_penalty|presence_penalty|dry_multiplier|dry_base|dry_allowed_length|dry_penalty_last_n|top_k|top_p|min_p|xtc_probability|xtc_threshold|typical_p|top_n_sigma|temp|mirostat|mirostat_lr|mirostat_ent|adaptive_target|adaptive_decay) = -?[0-9.]+(?:, (?:repeat_last_n|repeat_penalty|frequency_penalty|presence_penalty|dry_multiplier|dry_base|dry_allowed_length|dry_penalty_last_n|top_k|top_p|min_p|xtc_probability|xtc_threshold|typical_p|top_n_sigma|temp|mirostat|mirostat_lr|mirostat_ent|adaptive_target|adaptive_decay) = -?[0-9.]+)*)*)|(?:slot +process_sing: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| saving idle slot to prompt cache)|(?:slot +prompt_clear: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| clearing prompt with \\\\d+ tokens)|(?:slot +operator\\\\(\\\\): id +\\\\d+ \\\\| task \\\\d+ \\\\| checking checkpoint with \\\\[\\\\d+, \\\\d+\\\\] against \\\\d+\\\\.\\\\.\\\\.)|(?:slot +operator\\\\(\\\\): id +\\\\d+ \\\\| task \\\\d+ \\\\| restored context checkpoint \\\\(pos_min = \\\\d+, pos_max = \\\\d+, n_tokens = \\\\d+, n_past = \\\\d+, size = [0-9.]+ MiB\\\\))|(?:slot +operator\\\\(\\\\): id +\\\\d+ \\\\| task \\\\d+ \\\\| erased invalidated context checkpoint \\\\(pos_min = \\\\d+, pos_max = \\\\d+, n_tokens = \\\\d+, n_swa = \\\\d+, pos_next = \\\\d+, size = [0-9.]+ MiB\\\\))|(?:slot +create_check: id +\\\\d+ \\\\| task \\\\d+ \\\\| created context checkpoint \\\\d+ of \\\\d+ \\\\(pos_min = \\\\d+, pos_max = \\\\d+, n_tokens = \\\\d+, size = [0-9.]+ MiB\\\\))|(?:slot +create_check: id +\\\\d+ \\\\| task \\\\d+ \\\\| superseding context checkpoint at n_tokens = \\\\d+)|(?:slot +create_check: id +\\\\d+ \\\\| task \\\\d+ \\\\| erasing (?:old context checkpoint|context checkpoint too close to an earlier one) \\\\(pos_min = \\\\d+, pos_max = \\\\d+, n_tokens = \\\\d+, size = [0-9.]+ MiB\\\\))|(?:slot +init_sampler: id +\\\\d+ \\\\| task \\\\d+ \\\\| init sampler, took [0-9.]+ ms, tokens: text = \\\\d+, total = \\\\d+)|(?:slot +print_timing: id +\\\\d+ \\\\| task \\\\d+ \\\\| +(?:n_gen = +\\\\d+, tg = [0-9.]+ t/s, tg_3s = [0-9.]+ t/s|graphs reused = +\\\\d+|acc per pos = \\\\([0-9., ]+\\\\)))|(?:spec +common_specu: statistics +draft-mtp: #calls\\\\(b,g,a\\\\) = +\\\\d+ +\\\\d+ +\\\\d+, #gen drafts = +\\\\d+, #acc drafts = +\\\\d+, #gen tokens = +\\\\d+, #acc tokens = +\\\\d+, #mean acc len = [0-9.]+, #acc rate/pos = \\\\([0-9., ]+\\\\), dur\\\\(b,g,a\\\\) = [0-9.]+, [0-9.]+, [0-9.]+ ms)|(?:cmn +common_reaso: (?:activated, budget=\\\\d+ tokens|deactivated \\\\(natural end\\\\)))|(?:init_batch: failed to prepare attention ubatches)|(?:decode: failed to find a memory slot for batch of size \\\\d+)|(?:srv +stop: cancel task, id_task = \\\\d+)|(?:srv +update_slots: all slots are idle)|(?:srv +operator\\\\(\\\\): chat format: (?:Content-only|peg-simple|peg-native|peg-gemma4|peg-minimax-m3))|(?:srv +operator\\\\(\\\\): (?:Available models \\\\(\\\\d+\\\\):|  \\\\[ +preset\\\\] [A-Za-z0-9._-]{1,64}|operator\\\\(\\\\): cleaning up before exit\\\\.\\\\.\\\\.|exit command received, exiting\\\\.\\\\.\\\\.|http client error: Failed to read connection))|(?:srv +load: spawning server instance with name=[A-Za-z0-9._-]{1,64} on port \\\\d+)|(?:srv +unload: stopping model instance name=[A-Za-z0-9._-]{1,64})|(?:srv +run: (?:instance name=[A-Za-z0-9._-]{1,64} exited with status \\\\d+|force-killing model instance name=[A-Za-z0-9._-]{1,64} after timeout))|(?:CUDA error: (?:unknown error|out of memory|an illegal memory access was encountered|the launch timed out and was terminated|misaligned address|device-side assert triggered|invalid argument|unspecified launch failure|no kernel image is available for execution on the device|operation not supported|all CUDA-capable devices are busy or unavailable))|(?:  current device: \\\\d+, in function [A-Za-z_][A-Za-z0-9_]{0,63} at [A-Za-z0-9_./+-]{1,200}:\\\\d+)|(?:  cuda[A-Za-z]{1,40}\\\\([a-z_>.-]{0,60}\\\\)))\\\\z\""
-          stage.static_labels {
-            values = {llm_line = "other"}
-          }
-        }
-
-      // Everything above that did not match is replaced below, first where the
-      // heading names a call known to quote text (so the fact keeps its kind),
-      // then by the heading the server prints, then wholesale. The heading is
-      // the source and function the server prints before its message; it is
-      // kept, and the message is not.
-
-        stage.match {
-          selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^srv +send_error: task id = \\\\d+, error:(?:[ \\\\n]|\\\\z)\""
-
-          stage.regex {
-            expression = "(?s)^(?P<heading>srv +send_error: task id = (?P<task>\\d+), error:)(?:[ \\n].*)?\\z"
-          }
-
-          stage.template {
-            source   = "error"
-            template = "text removed"
-          }
-
-          stage.template {
-            source   = "text"
-            template = "{{ .heading }} text removed"
-          }
-
-          stage.output {
-            source = "text"
-          }
-
-          stage.labels {
-            values = {llm_task = "task", llm_error = "error"}
-          }
-
-          stage.static_labels {
-            values = {llm_line = "request_error"}
-          }
-        }
-
-        stage.match {
-          selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^common_chat_peg_parse: unparsed [A-Za-z-]{1,30} output:(?:[ \\\\n]|\\\\z)\""
-
-          stage.regex {
-            expression = "(?s)^(?P<heading>common_chat_peg_parse: unparsed (?P<format>[A-Za-z-]{1,30}) output:)(?:[ \\n].*)?\\z"
-          }
-
-          stage.template {
-            source   = "text"
-            template = "{{ .heading }} text removed"
-          }
-
-          stage.output {
-            source = "text"
-          }
-
-          stage.labels {
-            values = {llm_format = "format"}
-          }
-
-          stage.static_labels {
-            values = {llm_line = "output_unparsed"}
-          }
-        }
-
-        stage.match {
-          selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^slot +\\\\w{1,12}: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| got exception:(?:[ \\\\n]|\\\\z)\""
-
-          stage.regex {
-            expression = "(?s)^(?P<heading>slot +\\w{1,12}: id +(?P<slot>\\d+) \\| task (?P<task>-?\\d+) \\| got exception:)(?:[ \\n].*)?\\z"
-          }
-
-          stage.template {
-            source   = "text"
-            template = "{{ .heading }} text removed"
-          }
-
-          stage.output {
-            source = "text"
-          }
-
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task"}
-          }
-
-          stage.static_labels {
-            values = {llm_line = "request_exception"}
-          }
-        }
-
-        stage.match {
-          selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^srv +operator\\\\(\\\\): got (?:another )?exception:(?:[ \\\\n]|\\\\z)\""
-
-          stage.regex {
-            expression = "(?s)^(?P<heading>srv +operator\\(\\): got (?:another )?exception:)(?:[ \\n].*)?\\z"
-          }
-
-          stage.template {
-            source   = "text"
-            template = "{{ .heading }} text removed"
-          }
-
-          stage.output {
-            source = "text"
-          }
-
-          stage.static_labels {
-            values = {llm_line = "server_exception"}
-          }
-        }
-
-        stage.match {
-          selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^srv +update_slots: (?:pre_|post_)?decode\\\\(\\\\) failed:(?:[ \\\\n]|\\\\z)\""
-
-          stage.regex {
-            expression = "(?s)^(?P<heading>srv +update_slots: (?:pre_|post_)?decode\\(\\) failed:)(?:[ \\n].*)?\\z"
-          }
-
-          stage.template {
-            source   = "text"
-            template = "{{ .heading }} text removed"
-          }
-
-          stage.output {
-            source = "text"
-          }
-
-          stage.static_labels {
-            values = {llm_line = "decode_failed"}
-          }
-        }
-
-        stage.match {
-          selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^(?:anthropic string not as expected:|Tool call mismatch:|Ignoring (?:non-text )?content part(?: type)?:|common_chat_verify_template: failed to apply template:|common_sampler_init: error initializing grammar sampler for grammar:|common_sampler_types_from_(?:names|chars): unable to match sampler by (?:name|char))(?:[ \\\\n]|\\\\z)\""
-
-          stage.regex {
-            expression = "(?s)^(?P<heading>(?:anthropic string not as expected:|Tool call mismatch:|Ignoring (?:non-text )?content part(?: type)?:|common_chat_verify_template: failed to apply template:|common_sampler_init: error initializing grammar sampler for grammar:|common_sampler_types_from_(?:names|chars): unable to match sampler by (?:name|char)))(?:[ \\n].*)?\\z"
-          }
-
-          stage.template {
-            source   = "text"
-            template = "{{ .heading }} text removed"
-          }
-
-          stage.output {
-            source = "text"
-          }
-
-          stage.static_labels {
-            values = {llm_line = "text_removed"}
-          }
-        }
-
-        stage.match {
-          selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^slot +[A-Za-z_()]{1,12}: id +\\\\d+ \\\\| task -?\\\\d+ \\\\|(?:[ \\\\n]|\\\\z)\""
-
-          stage.regex {
-            expression = "(?s)^(?P<heading>slot +[A-Za-z_()]{1,12}: id +(?P<slot>\\d+) \\| task (?P<task>-?\\d+) \\|)(?:[ \\n].*)?\\z"
-          }
-
-          stage.template {
-            source   = "text"
-            template = "{{ .heading }} text removed"
-          }
-
-          stage.output {
-            source = "text"
-          }
-
-          stage.labels {
-            values = {llm_slot = "slot", llm_task = "task"}
-          }
-
-          stage.static_labels {
-            values = {llm_line = "text_removed"}
-          }
-        }
-
-      // The headings below are the source and function names the server prints,
-      // a bounded run of letters after srv, spec or cmn, or a name from the
-      // model loader's fixed set.
-        stage.match {
-          selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^(?:(?:srv|spec|cmn) +[A-Za-z_()]{1,12}:|CUDA error:|(?:print_info|llama_model_loader|llama_context|sched_reserve|load|llama_kv_cache|resolve_fused_ops|common_memory_breakdown_print|load_tensors|common_params_fit_impl|common_fit_params|llama_memory_recurrent|common_speculative_init_result|llama_prepare_model_devices|ggml_cuda_init|llama_model_load_from_file_impl):)(?:[ \\\\n]|\\\\z)\""
-
-          stage.regex {
-            expression = "(?s)^(?P<heading>(?:(?:srv|spec|cmn) +[A-Za-z_()]{1,12}:|CUDA error:|(?:print_info|llama_model_loader|llama_context|sched_reserve|load|llama_kv_cache|resolve_fused_ops|common_memory_breakdown_print|load_tensors|common_params_fit_impl|common_fit_params|llama_memory_recurrent|common_speculative_init_result|llama_prepare_model_devices|ggml_cuda_init|llama_model_load_from_file_impl):))(?:[ \\n].*)?\\z"
-          }
-
-          stage.template {
-            source   = "text"
-            template = "{{ .heading }} text removed"
-          }
-
-          stage.output {
-            source = "text"
-          }
-
-          stage.static_labels {
-            values = {llm_line = "text_removed"}
-          }
-        }
-
-        stage.match {
-          selector = "{service=\"llm-server\", llm_line=\"\"}"
-
-          stage.template {
-            source   = "text"
-            template = "text removed"
-          }
-
-          stage.output {
-            source = "text"
-          }
-
-          stage.static_labels {
-            values = {llm_line = "text_removed"}
-          }
-        }
-    }
-  }
-
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	argument "forward_to" { }
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector = "{service=\"llm-server\"}"
+
+			// The join applies to this container's lines only. The limit on lines
+			// is generous so that a long reply is never cut into an entry that
+			// starts without a prefix. A message's trailing blank lines (the router
+			// forwards the model's blank lines as a bare tag) are not part of it.
+			stage.multiline {
+				firstline     = "^(?:\\[ *\\d+\\] )?(?:\\d+\\.\\d{2}\\.\\d{3}\\.\\d{3} [IWED] |WARNING: JSON schema conversion|\\w+: error parsing grammar: )"
+				max_wait_time = "3s"
+				max_lines     = 100000
+			}
+
+			stage.replace {
+				expression = "((?:\\n(?:\\[ *\\d+\\] ?)?)+\\z)"
+				replace    = ""
+			}
+
+			// Selectors that start at the beginning of an entry match with or
+			// without the router's `[ port] ` tag.
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^(?:\\\\[ *\\\\d+\\\\] )?(?:WARNING: JSON schema conversion|\\\\w+: error parsing grammar: )\""
+				action   = "drop"
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^\\\\d+\\\\.\\\\d{2}\\\\.\\\\d{3}\\\\.\\\\d{3} I srv +proxy_reques: proxying request to model \""
+				action   = "drop"
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^(?:\\\\[ *\\\\d+\\\\] )?\\\\d+\\\\.\\\\d{2}\\\\.\\\\d{3}\\\\.\\\\d{3} [IWED] srv +\\\\S+: (?:conv_id=|request for conv_id=)\""
+				action   = "drop"
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^(?:\\\\[ *\\\\d+\\\\] ?)?\\\\z\""
+				action   = "drop"
+			}
+
+			// An entry that starts with a level prefix gets its level and loses
+			// the prefix; one that does not is judged as it came, with no level.
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^(?:\\\\[ *\\\\d+\\\\] )?\\\\d+\\\\.\\\\d{2}\\\\.\\\\d{3}\\\\.\\\\d{3} [IWED] \""
+
+				stage.regex {
+					expression = "(?s)^(?:\\[ *\\d+\\] )?\\d+\\.\\d{2}\\.\\d{3}\\.\\d{3} (?P<lvl>[IWED]) (?P<text>.*)$"
+				}
+
+				stage.template {
+					source   = "lvl"
+					template = "{{ if eq .Value \"W\" }}WARN{{ else if eq .Value \"E\" }}ERROR{{ else if eq .Value \"D\" }}DEBUG{{ else }}INFO{{ end }}"
+				}
+
+				stage.labels {
+					values = {detected_level = "lvl"}
+				}
+
+				stage.output {
+					source = "text"
+				}
+			}
+
+			// The allow-list. Each block below matches one whole entry, from its
+			// first character to its last, and sets `llm_line` on it. Nothing else
+			// is stored as the server printed it. A selector must pass only lines
+			// its expression matches: loki.process keeps values extracted by an
+			// earlier stage and applies a block's labels even when its expression
+			// found nothing.
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +get_availabl: id +(?P<slot>\\\\d+) \\\\| task -?\\\\d+ \\\\| selected slot by (?P<by>LCP) similarity, f_sim_best = (?P<fsim>[0-9.]+) \\\\(> [0-9.]+ thold\\\\), f_keep = (?P<fkeep>[0-9.]+)\\\\z\""
+
+				stage.regex {
+					expression = "^slot +get_availabl: id +(?P<slot>\\d+) \\| task -?\\d+ \\| selected slot by (?P<by>LCP) similarity, f_sim_best = (?P<fsim>[0-9.]+) \\(> [0-9.]+ thold\\), f_keep = (?P<fkeep>[0-9.]+)\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_select_by = "by", llm_f_sim = "fsim", llm_f_keep = "fkeep"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "slot_selected"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +get_availabl: id +(?P<slot>\\\\d+) \\\\| task -?\\\\d+ \\\\| selected slot by (?P<by>LRU), t_last = -?\\\\d+\\\\z\""
+
+				stage.regex {
+					expression = "^slot +get_availabl: id +(?P<slot>\\d+) \\| task -?\\d+ \\| selected slot by (?P<by>LRU), t_last = -?\\d+\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_select_by = "by"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "slot_selected"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +operator\\\\(\\\\): id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| new prompt, n_ctx_slot = \\\\d+, n_keep = \\\\d+, task\\\\.n_tokens = (?P<n>\\\\d+)\\\\z\""
+
+				stage.regex {
+					expression = "^slot +operator\\(\\): id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| new prompt, n_ctx_slot = \\d+, n_keep = \\d+, task\\.n_tokens = (?P<n>\\d+)\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task", llm_prompt_tokens = "n"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "prompt"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +launch_slot_: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| processing task, is_child = \\\\d+\\\\z\""
+
+				stage.regex {
+					expression = "^slot +launch_slot_: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| processing task, is_child = \\d+\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "task_started"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +operator\\\\(\\\\): id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| cached n_tokens = (?P<n>\\\\d+), memory_seq_rm \\\\[\\\\d+, end\\\\)\\\\z\""
+
+				stage.regex {
+					expression = "^slot +operator\\(\\): id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| cached n_tokens = (?P<n>\\d+), memory_seq_rm \\[\\d+, end\\)\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task", llm_cached_tokens = "n"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "reuse"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +operator\\\\(\\\\): id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| forcing full prompt re-processing due to lack of cache data \\\\(likely due to SWA or hybrid/recurrent memory, see https://github\\\\.com/ggml-org/llama\\\\.cpp/pull/13194#issuecomment-\\\\d+\\\\)\\\\z\""
+
+				stage.regex {
+					expression = "^slot +operator\\(\\): id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| forcing full prompt re-processing due to lack of cache data \\(likely due to SWA or hybrid/recurrent memory, see https://github\\.com/ggml-org/llama\\.cpp/pull/13194#issuecomment-\\d+\\)\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "full_reread"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| prompt eval time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\\\d+) tokens \\\\( *(?:[0-9.]+|-?nan|inf) ms per token, +(?P<tps>(?:[0-9.]+|-?nan|inf)) tokens per second\\\\)\\\\z\""
+
+				stage.regex {
+					expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| prompt eval time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\d+) tokens \\( *(?:[0-9.]+|-?nan|inf) ms per token, +(?P<tps>(?:[0-9.]+|-?nan|inf)) tokens per second\\)\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task", llm_read_ms = "ms", llm_read_tokens = "n", llm_read_tps = "tps"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "read_timing"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| +eval time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\\\d+) tokens \\\\( *(?:[0-9.]+|-?nan|inf) ms per token, +(?P<tps>(?:[0-9.]+|-?nan|inf)) tokens per second\\\\)\\\\z\""
+
+				stage.regex {
+					expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| +eval time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\d+) tokens \\( *(?:[0-9.]+|-?nan|inf) ms per token, +(?P<tps>(?:[0-9.]+|-?nan|inf)) tokens per second\\)\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task", llm_output_ms = "ms", llm_output_tokens = "n", llm_output_tps = "tps"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "output_timing"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| +total time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\\\d+) tokens\\\\z\""
+
+				stage.regex {
+					expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| +total time = +(?P<ms>[0-9.]+) ms / +(?P<n>\\d+) tokens\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task", llm_total_ms = "ms", llm_total_tokens = "n"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "total_timing"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| draft acceptance = (?:[0-9.]+|-?nan|inf) \\\\( *(?P<acc>\\\\d+) accepted / +(?P<gen>\\\\d+) generated\\\\), mean len = +(?:[0-9.]+|-?nan|inf)\\\\z\""
+
+				stage.regex {
+					expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| draft acceptance = (?:[0-9.]+|-?nan|inf) \\( *(?P<acc>\\d+) accepted / +(?P<gen>\\d+) generated\\), mean len = +(?:[0-9.]+|-?nan|inf)\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task", llm_draft_accepted = "acc", llm_draft_generated = "gen"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "draft"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +release: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| stop processing: n_tokens = (?P<n>\\\\d+), truncated = (?P<trunc>\\\\d+)\\\\z\""
+
+				stage.regex {
+					expression = "^slot +release: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| stop processing: n_tokens = (?P<n>\\d+), truncated = (?P<trunc>\\d+)\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task", llm_final_tokens = "n", llm_truncated = "trunc"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "finished"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^slot +print_timing: id +(?P<slot>\\\\d+) \\\\| task (?P<task>\\\\d+) \\\\| prompt processing, n_tokens = +(?P<n>\\\\d+), progress = (?P<progress>[0-9.]+), t = +(?P<seconds>[0-9.]+) s / +[0-9.]+ tokens per second\\\\z\""
+
+				stage.regex {
+					expression = "^slot +print_timing: id +(?P<slot>\\d+) \\| task (?P<task>\\d+) \\| prompt processing, n_tokens = +(?P<n>\\d+), progress = (?P<progress>[0-9.]+), t = +(?P<seconds>[0-9.]+) s / +[0-9.]+ tokens per second\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task", llm_read_tokens = "n", llm_progress = "progress", llm_read_seconds = "seconds"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "read_progress"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^srv +prompt_save: +- saving prompt with length (?P<n>\\\\d+), total state size = (?P<mib>[0-9.]+) MiB(?: \\\\(draft: [0-9.]+ MiB\\\\))?\\\\z\""
+
+				stage.regex {
+					expression = "^srv +prompt_save: +- saving prompt with length (?P<n>\\d+), total state size = (?P<mib>[0-9.]+) MiB(?: \\(draft: [0-9.]+ MiB\\))?\\z"
+				}
+
+				stage.labels {
+					values = {llm_saved_tokens = "n", llm_saved_mib = "mib"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "conversation_saved"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^srv +load: +- found better prompt with f_keep = (?P<fkeep>[0-9.]+), f_sim = (?P<fsim>[0-9.]+)\\\\z\""
+
+				stage.regex {
+					expression = "^srv +load: +- found better prompt with f_keep = (?P<fkeep>[0-9.]+), f_sim = (?P<fsim>[0-9.]+)\\z"
+				}
+
+				stage.labels {
+					values = {llm_restored_f_keep = "fkeep", llm_restored_f_sim = "fsim"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "conversation_restored"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^srv +alloc: +- making room for prompt cache entry, removing oldest entry \\\\(size = (?P<mib>[0-9.]+) MiB\\\\)\\\\z\""
+
+				stage.regex {
+					expression = "^srv +alloc: +- making room for prompt cache entry, removing oldest entry \\(size = (?P<mib>[0-9.]+) MiB\\)\\z"
+				}
+
+				stage.labels {
+					values = {llm_discarded_mib = "mib"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "conversation_discarded"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^srv +alloc: +- prompt state size (?P<mib>[0-9.]+) MiB exceeds cache size limit (?P<limit>[0-9.]+) MiB, skipping\\\\z\""
+
+				stage.regex {
+					expression = "^srv +alloc: +- prompt state size (?P<mib>[0-9.]+) MiB exceeds cache size limit (?P<limit>[0-9.]+) MiB, skipping\\z"
+				}
+
+				stage.labels {
+					values = {llm_unsaved_mib = "mib", llm_unsaved_limit_mib = "limit"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "conversation_unsaved"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^srv +try_clear_id: purging slot (?P<slot>\\\\d+) with (?P<n>\\\\d+) tokens\\\\z\""
+
+				stage.regex {
+					expression = "^srv +try_clear_id: purging slot (?P<slot>\\d+) with (?P<n>\\d+) tokens\\z"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_purged_tokens = "n"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "slot_purged"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^srv +decode: (?:failed to find free space in the KV cache, retrying with smaller batch size,|Context size has been exceeded\\\\.) off = \\\\d+, n_batch = (?P<batch>\\\\d+), ret = -?\\\\d+\\\\z\""
+
+				stage.regex {
+					expression = "^srv +decode: (?:failed to find free space in the KV cache, retrying with smaller batch size,|Context size has been exceeded\\.) off = \\d+, n_batch = (?P<batch>\\d+), ret = -?\\d+\\z"
+				}
+
+				stage.labels {
+					values = {llm_batch_size = "batch"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "pool_full"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^srv +send_error: task id = (?P<task>\\\\d+), error: (?P<error>Cannot run multiple aLoRAs in a single request|Prompt contains invalid tokens|Invalid slot ID|Unable to save slot|context shift is disabled|context shift cannot be used for shared prompt|the current context does not support logits computation\\\\. skipping|failed to process mtmd chunk|Context size has been exceeded\\\\.|Invalid input batch\\\\.|Compute error\\\\.|input \\\\(\\\\d+ tokens\\\\) is too large to process\\\\. increase the physical batch size \\\\(current batch size: \\\\d+\\\\)|input \\\\(\\\\d+ tokens\\\\) is larger than the max context size \\\\(\\\\d+ tokens\\\\)\\\\. skipping|request \\\\(\\\\d+ tokens\\\\) exceeds the available context size \\\\(\\\\d+ tokens\\\\), try increasing it)\\\\z\""
+
+				stage.regex {
+					expression = "^srv +send_error: task id = (?P<task>\\d+), error: (?P<error>Cannot run multiple aLoRAs in a single request|Prompt contains invalid tokens|Invalid slot ID|Unable to save slot|context shift is disabled|context shift cannot be used for shared prompt|the current context does not support logits computation\\. skipping|failed to process mtmd chunk|Context size has been exceeded\\.|Invalid input batch\\.|Compute error\\.|input \\(\\d+ tokens\\) is too large to process\\. increase the physical batch size \\(current batch size: \\d+\\)|input \\(\\d+ tokens\\) is larger than the max context size \\(\\d+ tokens\\)\\. skipping|request \\(\\d+ tokens\\) exceeds the available context size \\(\\d+ tokens\\), try increasing it)\\z"
+				}
+
+				stage.labels {
+					values = {llm_task = "task", llm_error = "error"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "request_error"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\"} |~ \"^(?:(?:srv +load_model: initializing, n_slots = \\\\d+, n_ctx_slot = \\\\d+, kv_unified = '(?:true|false)')|(?:srv +llama_server: model loaded)|(?:srv +llama_server: listening on http://[0-9.]+:\\\\d+)|(?:srv +llama_server: security: router mode enabled - do not expose to untrusted environments)|(?:srv +llama_server: starting server in router mode\\\\. models will be automatically loaded on-demand)|(?:slot +get_availabl: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| +- (?:skipping, slot is empty|skipping, is_processing = \\\\d|checking sim = [0-9.]+ \\\\(\\\\d+/\\\\d+\\\\) > [0-9.]+))|(?:srv +get_availabl: (?:updating prompt cache|prompt cache update took [0-9.]+ ms))|(?:srv +load: +- looking for better prompt, base f_keep = -?[0-9.]+, f_sim = [0-9.]+)|(?:srv +load: +- prompt with length +\\\\d+, lcp = +\\\\d+, f_keep = [0-9.]+, f_sim = [0-9.]+)|(?:srv +update: +- cache state: \\\\d+ prompts, [0-9.]+ MiB \\\\(limits: [0-9.]+ MiB, \\\\d+ tokens, \\\\d+ est\\\\))|(?:srv +update: +- prompt 0x[0-9a-f]{1,16}: +\\\\d+ tokens, checkpoints: +\\\\d+, +[0-9.]+ MiB)|(?:slot +launch_slot_: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| sampler chain: logits(?: -> \\\\??(?:penalties|dry|top-n-sigma|top-k|typical|top-p|min-p|xtc|temp-ext|temp|dist|infill|mirostat|mirostat-v2|adaptive-p|logit-bias))+)|(?:slot +launch_slot_: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| sampler params: ?(?:\\\\n(?:\\\\[ *\\\\d+\\\\] )?\\\\t(?:repeat_last_n|repeat_penalty|frequency_penalty|presence_penalty|dry_multiplier|dry_base|dry_allowed_length|dry_penalty_last_n|top_k|top_p|min_p|xtc_probability|xtc_threshold|typical_p|top_n_sigma|temp|mirostat|mirostat_lr|mirostat_ent|adaptive_target|adaptive_decay) = -?[0-9.]+(?:, (?:repeat_last_n|repeat_penalty|frequency_penalty|presence_penalty|dry_multiplier|dry_base|dry_allowed_length|dry_penalty_last_n|top_k|top_p|min_p|xtc_probability|xtc_threshold|typical_p|top_n_sigma|temp|mirostat|mirostat_lr|mirostat_ent|adaptive_target|adaptive_decay) = -?[0-9.]+)*)*)|(?:slot +process_sing: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| saving idle slot to prompt cache)|(?:slot +prompt_clear: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| clearing prompt with \\\\d+ tokens)|(?:slot +operator\\\\(\\\\): id +\\\\d+ \\\\| task \\\\d+ \\\\| checking checkpoint with \\\\[\\\\d+, \\\\d+\\\\] against \\\\d+\\\\.\\\\.\\\\.)|(?:slot +operator\\\\(\\\\): id +\\\\d+ \\\\| task \\\\d+ \\\\| restored context checkpoint \\\\(pos_min = \\\\d+, pos_max = \\\\d+, n_tokens = \\\\d+, n_past = \\\\d+, size = [0-9.]+ MiB\\\\))|(?:slot +operator\\\\(\\\\): id +\\\\d+ \\\\| task \\\\d+ \\\\| erased invalidated context checkpoint \\\\(pos_min = \\\\d+, pos_max = \\\\d+, n_tokens = \\\\d+, n_swa = \\\\d+, pos_next = \\\\d+, size = [0-9.]+ MiB\\\\))|(?:slot +create_check: id +\\\\d+ \\\\| task \\\\d+ \\\\| created context checkpoint \\\\d+ of \\\\d+ \\\\(pos_min = \\\\d+, pos_max = \\\\d+, n_tokens = \\\\d+, size = [0-9.]+ MiB\\\\))|(?:slot +create_check: id +\\\\d+ \\\\| task \\\\d+ \\\\| superseding context checkpoint at n_tokens = \\\\d+)|(?:slot +create_check: id +\\\\d+ \\\\| task \\\\d+ \\\\| erasing (?:old context checkpoint|context checkpoint too close to an earlier one) \\\\(pos_min = \\\\d+, pos_max = \\\\d+, n_tokens = \\\\d+, size = [0-9.]+ MiB\\\\))|(?:slot +init_sampler: id +\\\\d+ \\\\| task \\\\d+ \\\\| init sampler, took [0-9.]+ ms, tokens: text = \\\\d+, total = \\\\d+)|(?:slot +print_timing: id +\\\\d+ \\\\| task \\\\d+ \\\\| +(?:n_gen = +\\\\d+, tg = [0-9.]+ t/s, tg_3s = [0-9.]+ t/s|graphs reused = +\\\\d+|acc per pos = \\\\([0-9., ]+\\\\)))|(?:spec +common_specu: statistics +draft-mtp: #calls\\\\(b,g,a\\\\) = +\\\\d+ +\\\\d+ +\\\\d+, #gen drafts = +\\\\d+, #acc drafts = +\\\\d+, #gen tokens = +\\\\d+, #acc tokens = +\\\\d+, #mean acc len = [0-9.]+, #acc rate/pos = \\\\([0-9., ]+\\\\), dur\\\\(b,g,a\\\\) = [0-9.]+, [0-9.]+, [0-9.]+ ms)|(?:cmn +common_reaso: (?:activated, budget=\\\\d+ tokens|deactivated \\\\(natural end\\\\)))|(?:init_batch: failed to prepare attention ubatches)|(?:decode: failed to find a memory slot for batch of size \\\\d+)|(?:srv +stop: cancel task, id_task = \\\\d+)|(?:srv +update_slots: all slots are idle)|(?:srv +operator\\\\(\\\\): chat format: (?:Content-only|peg-simple|peg-native|peg-gemma4|peg-minimax-m3))|(?:srv +operator\\\\(\\\\): (?:Available models \\\\(\\\\d+\\\\):|  \\\\[ +preset\\\\] [A-Za-z0-9._-]{1,64}|operator\\\\(\\\\): cleaning up before exit\\\\.\\\\.\\\\.|exit command received, exiting\\\\.\\\\.\\\\.|http client error: Failed to read connection))|(?:srv +load: spawning server instance with name=[A-Za-z0-9._-]{1,64} on port \\\\d+)|(?:srv +unload: stopping model instance name=[A-Za-z0-9._-]{1,64})|(?:srv +run: (?:instance name=[A-Za-z0-9._-]{1,64} exited with status \\\\d+|force-killing model instance name=[A-Za-z0-9._-]{1,64} after timeout))|(?:CUDA error: (?:unknown error|out of memory|an illegal memory access was encountered|the launch timed out and was terminated|misaligned address|device-side assert triggered|invalid argument|unspecified launch failure|no kernel image is available for execution on the device|operation not supported|all CUDA-capable devices are busy or unavailable))|(?:  current device: \\\\d+, in function [A-Za-z_][A-Za-z0-9_]{0,63} at [A-Za-z0-9_./+-]{1,200}:\\\\d+)|(?:  cuda[A-Za-z]{1,40}\\\\([a-z_>.-]{0,60}\\\\)))\\\\z\""
+
+				stage.static_labels {
+					values = {llm_line = "other"}
+				}
+			}
+
+			// Everything above that did not match is replaced below, first where the
+			// heading names a call known to quote text (so the fact keeps its kind),
+			// then by the heading the server prints, then wholesale. The heading is
+			// the source and function the server prints before its message; it is
+			// kept, and the message is not.
+
+			stage.match {
+				selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^srv +send_error: task id = \\\\d+, error:(?:[ \\\\n]|\\\\z)\""
+
+				stage.regex {
+					expression = "(?s)^(?P<heading>srv +send_error: task id = (?P<task>\\d+), error:)(?:[ \\n].*)?\\z"
+				}
+
+				stage.template {
+					source   = "error"
+					template = "text removed"
+				}
+
+				stage.template {
+					source   = "text"
+					template = "{{ .heading }} text removed"
+				}
+
+				stage.output {
+					source = "text"
+				}
+
+				stage.labels {
+					values = {llm_task = "task", llm_error = "error"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "request_error"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^common_chat_peg_parse: unparsed [A-Za-z-]{1,30} output:(?:[ \\\\n]|\\\\z)\""
+
+				stage.regex {
+					expression = "(?s)^(?P<heading>common_chat_peg_parse: unparsed (?P<format>[A-Za-z-]{1,30}) output:)(?:[ \\n].*)?\\z"
+				}
+
+				stage.template {
+					source   = "text"
+					template = "{{ .heading }} text removed"
+				}
+
+				stage.output {
+					source = "text"
+				}
+
+				stage.labels {
+					values = {llm_format = "format"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "output_unparsed"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^slot +\\\\w{1,12}: id +\\\\d+ \\\\| task -?\\\\d+ \\\\| got exception:(?:[ \\\\n]|\\\\z)\""
+
+				stage.regex {
+					expression = "(?s)^(?P<heading>slot +\\w{1,12}: id +(?P<slot>\\d+) \\| task (?P<task>-?\\d+) \\| got exception:)(?:[ \\n].*)?\\z"
+				}
+
+				stage.template {
+					source   = "text"
+					template = "{{ .heading }} text removed"
+				}
+
+				stage.output {
+					source = "text"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "request_exception"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^srv +operator\\\\(\\\\): got (?:another )?exception:(?:[ \\\\n]|\\\\z)\""
+
+				stage.regex {
+					expression = "(?s)^(?P<heading>srv +operator\\(\\): got (?:another )?exception:)(?:[ \\n].*)?\\z"
+				}
+
+				stage.template {
+					source   = "text"
+					template = "{{ .heading }} text removed"
+				}
+
+				stage.output {
+					source = "text"
+				}
+
+				stage.static_labels {
+					values = {llm_line = "server_exception"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^srv +update_slots: (?:pre_|post_)?decode\\\\(\\\\) failed:(?:[ \\\\n]|\\\\z)\""
+
+				stage.regex {
+					expression = "(?s)^(?P<heading>srv +update_slots: (?:pre_|post_)?decode\\(\\) failed:)(?:[ \\n].*)?\\z"
+				}
+
+				stage.template {
+					source   = "text"
+					template = "{{ .heading }} text removed"
+				}
+
+				stage.output {
+					source = "text"
+				}
+
+				stage.static_labels {
+					values = {llm_line = "decode_failed"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^(?:anthropic string not as expected:|Tool call mismatch:|Ignoring (?:non-text )?content part(?: type)?:|common_chat_verify_template: failed to apply template:|common_sampler_init: error initializing grammar sampler for grammar:|common_sampler_types_from_(?:names|chars): unable to match sampler by (?:name|char))(?:[ \\\\n]|\\\\z)\""
+
+				stage.regex {
+					expression = "(?s)^(?P<heading>(?:anthropic string not as expected:|Tool call mismatch:|Ignoring (?:non-text )?content part(?: type)?:|common_chat_verify_template: failed to apply template:|common_sampler_init: error initializing grammar sampler for grammar:|common_sampler_types_from_(?:names|chars): unable to match sampler by (?:name|char)))(?:[ \\n].*)?\\z"
+				}
+
+				stage.template {
+					source   = "text"
+					template = "{{ .heading }} text removed"
+				}
+
+				stage.output {
+					source = "text"
+				}
+
+				stage.static_labels {
+					values = {llm_line = "text_removed"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^slot +[A-Za-z_()]{1,12}: id +\\\\d+ \\\\| task -?\\\\d+ \\\\|(?:[ \\\\n]|\\\\z)\""
+
+				stage.regex {
+					expression = "(?s)^(?P<heading>slot +[A-Za-z_()]{1,12}: id +(?P<slot>\\d+) \\| task (?P<task>-?\\d+) \\|)(?:[ \\n].*)?\\z"
+				}
+
+				stage.template {
+					source   = "text"
+					template = "{{ .heading }} text removed"
+				}
+
+				stage.output {
+					source = "text"
+				}
+
+				stage.labels {
+					values = {llm_slot = "slot", llm_task = "task"}
+				}
+
+				stage.static_labels {
+					values = {llm_line = "text_removed"}
+				}
+			}
+
+			// The headings below are the source and function names the server prints,
+			// a bounded run of letters after srv, spec or cmn, or a name from the
+			// model loader's fixed set.
+			stage.match {
+				selector = "{service=\"llm-server\", llm_line=\"\"} |~ \"^(?:(?:srv|spec|cmn) +[A-Za-z_()]{1,12}:|CUDA error:|(?:print_info|llama_model_loader|llama_context|sched_reserve|load|llama_kv_cache|resolve_fused_ops|common_memory_breakdown_print|load_tensors|common_params_fit_impl|common_fit_params|llama_memory_recurrent|common_speculative_init_result|llama_prepare_model_devices|ggml_cuda_init|llama_model_load_from_file_impl):)(?:[ \\\\n]|\\\\z)\""
+
+				stage.regex {
+					expression = "(?s)^(?P<heading>(?:(?:srv|spec|cmn) +[A-Za-z_()]{1,12}:|CUDA error:|(?:print_info|llama_model_loader|llama_context|sched_reserve|load|llama_kv_cache|resolve_fused_ops|common_memory_breakdown_print|load_tensors|common_params_fit_impl|common_fit_params|llama_memory_recurrent|common_speculative_init_result|llama_prepare_model_devices|ggml_cuda_init|llama_model_load_from_file_impl):))(?:[ \\n].*)?\\z"
+				}
+
+				stage.template {
+					source   = "text"
+					template = "{{ .heading }} text removed"
+				}
+
+				stage.output {
+					source = "text"
+				}
+
+				stage.static_labels {
+					values = {llm_line = "text_removed"}
+				}
+			}
+
+			stage.match {
+				selector = "{service=\"llm-server\", llm_line=\"\"}"
+
+				stage.template {
+					source   = "text"
+					template = "text removed"
+				}
+
+				stage.output {
+					source = "text"
+				}
+
+				stage.static_labels {
+					values = {llm_line = "text_removed"}
+				}
+			}
+		}
+	}
+
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

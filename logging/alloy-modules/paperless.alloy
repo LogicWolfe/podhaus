@@ -14,30 +14,30 @@
 // stage.match untouched.
 
 declare "paperless" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"paperless\"} |~ \"^\\\\[\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2},\\\\d{3}\\\\] \\\\[[A-Z]+\\\\] \\\\[[^\\\\]]+\\\\]\""
+		stage.match {
+			selector = "{service=\"paperless\"} |~ \"^\\\\[\\\\d{4}-\\\\d{2}-\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2},\\\\d{3}\\\\] \\\\[[A-Z]+\\\\] \\\\[[^\\\\]]+\\\\]\""
 
-      stage.regex {
-        expression = "^\\[[^\\]]+\\] \\[(?P<lvl>[A-Z]+)\\] \\[(?P<logger>[^\\]]+)\\]"
-      }
+			stage.regex {
+				expression = "^\\[[^\\]]+\\] \\[(?P<lvl>[A-Z]+)\\] \\[(?P<logger>[^\\]]+)\\]"
+			}
 
-      stage.template {
-        source   = "lvl"
-        template = "{{ if eq .Value \"CRITICAL\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
-      }
+			stage.template {
+				source   = "lvl"
+				template = "{{ if eq .Value \"CRITICAL\" }}FATAL{{ else }}{{ .Value }}{{ end }}"
+			}
 
-      stage.labels {
-        values = { detected_level = "lvl", logger = "logger" }
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl", logger = "logger"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

@@ -40,22 +40,28 @@
 // change there is made deliberately, with its pins.
 //
 // Not collected: Lumen's throwaway `docker run --rm` search containers
-// (label podhaus.lumen=true without podhaus.lumen.worktree); their stdout
-// is the code-search request stream, source snippets included.
-//
-// The log schema test's Alloy containers (label podhaus.harness=true, see
-// logging/tests) are collected like any other. They log with Docker's
-// `none` driver, which has nothing to read, so while one runs this host's
-// Alloy ships about two minutes of "could not fetch logs" error rows for
-// it, until a rule here drops containers with that label.
+// (label podhaus.lumen=true without podhaus.lumen.worktree), whose stdout
+// is the code-search request stream, source snippets included; and the
+// containers podhaus's own tests and lints start (label
+// podhaus.harness=true), which log with Docker's `none` driver, so a tailer
+// would only report, for as long as one runs, that it cannot read its logs.
 
 declare "docker_logs" {
 	argument "host" { }
+
 	argument "forward_to" { }
 
 	discovery.docker "containers" {
-		host             = "unix:///var/run/docker.sock"
-		refresh_interval = "30s"
+		host = "unix:///var/run/docker.sock"
+
+		// A container's log can be read only once a refresh has listed it
+		// and only while the container exists, so one removed before a
+		// refresh sees it, such as a `docker run --rm` job, is never read.
+		// A shorter interval narrows the window in which a container
+		// removed soon after it starts goes unread; it does not close it. A
+		// container that has exited stays listed (the filter below), so an
+		// init container is read after it finishes.
+		refresh_interval = "5s"
 
 		// List stopped containers too. Docker lists only running, paused
 		// and restarting containers by default, so a container that stays
@@ -108,6 +114,7 @@ declare "docker_logs" {
 // targets without a Docker socket.
 declare "docker_targets" {
 	argument "host" { }
+
 	argument "targets" { }
 
 	discovery.relabel "this" {
@@ -141,6 +148,15 @@ declare "docker_targets" {
 			]
 			regex  = "true;"
 			action = "drop"
+		}
+
+		// The containers podhaus's tests and lints start log with Docker's
+		// `none` driver: there is nothing to read, and a tailer would report
+		// that as an error for as long as one runs.
+		rule {
+			source_labels = ["__meta_docker_container_label_podhaus_harness"]
+			regex         = "true"
+			action        = "drop"
 		}
 
 		// Drop the leading slash that Docker prepends to container names.

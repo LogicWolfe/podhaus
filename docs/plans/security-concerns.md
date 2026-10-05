@@ -170,6 +170,35 @@ WHERE ServiceName = 'pomerium'
 **Verify:** requests to `https://watch.pod.haus/api/mcp` with the old key or
 the old gateway token are refused; a count over the same filter returns 0.
 
+## Alloy's API shows the ingestion key to its dockernet neighbours
+
+- [ ] Decide whether Alloy's HTTP API stays reachable from `dockernet`.
+
+Every host's Alloy listens on `0.0.0.0:12345` (`--server.http.listen-addr` in
+`logging/compose.shared.yaml`) and joins that host's `dockernet`. Its API needs
+no credentials, and `/api/v0/web/components/<component>` returns a
+component's arguments as evaluated. For the shipping exporter,
+`podhaus.ship.run/otelcol.exporter.otlphttp.clickstack`, those include the
+`authorization` header: the ClickStack ingestion key, in plain text. A local
+probe of all seven host configs with stand-in keys (2026-10-05) read each key
+back this way. Every host uses the same key, the Homelab item behind the
+Komodo variable `OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL`. Port 12345
+is published nowhere and no Caddy or Pomerium route reaches it, so the
+exposure is to containers on the same host's `dockernet`.
+
+This predates the shipping module: the key sat in each host config's exporter
+before. The key grants ingestion only. Whoever holds it can write rows into
+ClickStack under any host and service name, including rows that would keep a
+dead host's telemetry heartbeat green, but cannot read anything. On the home
+LAN the key alone is enough, because bilby and kangaroo ship to bandicoot's
+port 4318 over plain HTTP; through `logs-ingest.pod.haus` a host's client
+certificate is needed as well.
+
+**Option:** listen on `127.0.0.1:12345` instead. The healthcheck connects from
+inside the container to `127.0.0.1`, and nothing else reads port 12345 today.
+Trade-off: Alloy's UI and API are then reachable only from inside its own
+container (`docker exec`), never from a neighbouring debugging container.
+
 ## Configuration that describes a system that no longer exists
 
 Not exploitable, but every item below will mislead the next reader about

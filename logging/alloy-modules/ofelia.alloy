@@ -24,30 +24,30 @@
 // would go unflagged.
 
 declare "ofelia" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"ofelia\"} |~ \"^[A-Za-z]{3}\\\\s+\\\\d{1,2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d{3} [A-Z]{3} \""
+		stage.match {
+			selector = "{service=\"ofelia\"} |~ \"^[A-Za-z]{3}\\\\s+\\\\d{1,2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d{3} [A-Z]{3} \""
 
-      stage.regex {
-        expression = "^[A-Za-z]{3}\\s+\\d{1,2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} (?P<lvl>[A-Z]{3}) "
-      }
+			stage.regex {
+				expression = "^[A-Za-z]{3}\\s+\\d{1,2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} (?P<lvl>[A-Z]{3}) "
+			}
 
-      stage.template {
-        source   = "lvl"
-        template = "{{ if eq .Value \"TRC\" }}TRACE{{ else if eq .Value \"DBG\" }}DEBUG{{ else if eq .Value \"INF\" }}INFO{{ else if eq .Value \"WRN\" }}WARN{{ else if eq .Value \"ERR\" }}ERROR{{ else if or (eq .Value \"FTL\") (eq .Value \"PNC\") }}FATAL{{ else }}{{ .Value }}{{ end }}"
-      }
+			stage.template {
+				source   = "lvl"
+				template = "{{ if eq .Value \"TRC\" }}TRACE{{ else if eq .Value \"DBG\" }}DEBUG{{ else if eq .Value \"INF\" }}INFO{{ else if eq .Value \"WRN\" }}WARN{{ else if eq .Value \"ERR\" }}ERROR{{ else if or (eq .Value \"FTL\") (eq .Value \"PNC\") }}FATAL{{ else }}{{ .Value }}{{ end }}"
+			}
 
-      stage.labels {
-        values = { detected_level = "lvl" }
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

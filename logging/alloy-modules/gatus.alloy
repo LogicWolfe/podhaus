@@ -48,61 +48,61 @@
 //  - INFO: everything else, including the stack-trace lines after a panic.
 
 declare "gatus" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"gatus\"}"
+		stage.match {
+			selector = "{service=\"gatus\"}"
 
-      stage.static_labels {
-        values = {detected_level = "INFO"}
-      }
+			stage.static_labels {
+				values = {detected_level = "INFO"}
+			}
 
-      stage.match {
-        selector = "{service=\"gatus\"} |= \"success=false\""
+			stage.match {
+				selector = "{service=\"gatus\"} |= \"success=false\""
 
-        stage.static_labels {
-          values = {detected_level = "WARN"}
-        }
-      }
+				stage.static_labels {
+					values = {detected_level = "WARN"}
+				}
+			}
 
-      stage.match {
-        selector = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} \\\\[watchdog\\\\.handleAlertsTo(Trigger|Resolve)\\\\] Not sending alert \""
+			stage.match {
+				selector = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} \\\\[watchdog\\\\.handleAlertsTo(Trigger|Resolve)\\\\] Not sending alert \""
 
-        stage.static_labels {
-          values = {detected_level = "WARN"}
-        }
-      }
+				stage.static_labels {
+					values = {detected_level = "WARN"}
+				}
+			}
 
-      stage.match {
-        selector = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} (\\\\[[^\\\\]]+\\\\] )?(Failed to (check|create|decode|delete|execute|get|initialize|insert|load|merge|parse|persist|render|retrieve|save|scan|send|update) |The configuration file was updated, but it is not valid|Save failed|Query failed|Silently |Error closing |Invalid (token|duration) |(External e|E)ndpoint with key=\\\\S+ not found)\""
+			stage.match {
+				selector = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} (\\\\[[^\\\\]]+\\\\] )?(Failed to (check|create|decode|delete|execute|get|initialize|insert|load|merge|parse|persist|render|retrieve|save|scan|send|update) |The configuration file was updated, but it is not valid|Save failed|Query failed|Silently |Error closing |Invalid (token|duration) |(External e|E)ndpoint with key=\\\\S+ not found)\""
 
-        stage.static_labels {
-          values = {detected_level = "ERROR"}
-        }
-      }
+				stage.static_labels {
+					values = {detected_level = "ERROR"}
+				}
+			}
 
-      stage.match {
-        selector = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} \\\\[controller\\\\.Handle\\\\] \" !~ \"\\\\] (Listening on |Server has shut down successfully)\""
+			stage.match {
+				selector = "{service=\"gatus\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} \\\\[controller\\\\.Handle\\\\] \" !~ \"\\\\] (Listening on |Server has shut down successfully)\""
 
-        stage.static_labels {
-          values = {detected_level = "ERROR"}
-        }
-      }
+				stage.static_labels {
+					values = {detected_level = "ERROR"}
+				}
+			}
 
-      stage.match {
-        selector = "{service=\"gatus\"} |~ \"^(panic|fatal error): \""
+			stage.match {
+				selector = "{service=\"gatus\"} |~ \"^(panic|fatal error): \""
 
-        stage.static_labels {
-          values = {detected_level = "ERROR"}
-        }
-      }
-    }
-  }
+				stage.static_labels {
+					values = {detected_level = "ERROR"}
+				}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

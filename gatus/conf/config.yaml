@@ -890,7 +890,8 @@ endpoints:
     # chatter (60→150 min, still false-firing: organic gaps hit 152 and
     # 170 min in the days before this change). The `host.name` resource
     # attribute that makes kangaroo's metrics selectable is stamped by
-    # the `svc_alloy` transform in logging/kangaroo/alloy-conf/config.alloy.
+    # the `svc_alloy` transform in logging/alloy-modules/ship.alloy, from
+    # the host name logging/kangaroo/alloy-conf/config.alloy gives it.
     #
     # `count() > 0` over a TimeUnix-windowed scan (not `max(TimeUnix) >
     # now() - X` unbounded): the Map predicate (`ResourceAttributes

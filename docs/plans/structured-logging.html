@@ -79,6 +79,10 @@
 <li>✅ Severity fallback, Docker receive time and the timestamp lint, the rathole selector, JSON gates, Gatus levels, the journal audit sources, and heartbeats for bandicoot and voltaire.</li>
 <li>✅ A wedged exporter heals itself, and an outage keeps its queue. Every Alloy's healthcheck reads how many HTTP requests the exporter has completed, failed ones included, and fails when that count has not risen since the previous check; five failures a minute apart make the container unhealthy and autoheal, on every host, restarts it, so a wedge (requests that never return, the shape of both recorded wedges) heals within about 8 minutes. A collector or path outage keeps the count rising, so Alloy is not restarted and the 30-minute retry delivers its queue once the path is back. The five Gatus heartbeats keep their 15-minute window and alert on the second failure, so a healed wedge fails no check, and an outage longer than the window or a wedge the restart does not cure alerts 20–25 minutes after the last metric. Bilby's exporter retries for 30 minutes like the other six. Closes the 2026-08-08 item.</li>
 <li>✅ Live module reload is disabled. Each host's Alloy reads the shared modules once, when its container starts (<code>import.file</code> polling every 87,600 hours), so a module change reaches it only through the recreate its content hash triggers. The tailer freeze has narrowed to labels: relabel rules, discovery settings and tailer arguments may change when every source keeps its labels (<code>AGENTS.md</code>, <code>docs/logging.md</code>).</li>
+<li>✅ Docker discovery lists containers every 5 seconds instead of 30, so a container removed soon after it starts has a shorter window in which it is never read. An init container that exits and stays was already read through the stopped-container listing (<code>backrest-init</code> and <code>flood-init</code> rows predate this change). The harness pins the discovery settings.</li>
+<li>✅ The containers podhaus's own tests and lints start (label <code>podhaus.harness=true</code>, logging with Docker's <code>none</code> driver) are dropped by a rule in <code>docker-logs.alloy</code>, so a test run no longer makes the host's Alloy ship "could not fetch logs" rows. No other container's labels changed; the harness's rule-list pin carries the new rule.</li>
+<li>✅ <code>tools/lint-alloy-config.py</code>, run by <code>tools/pre-commit</code>, requires every host config and module to be exactly what <code>alloy fmt</code> prints, the module directory to pass <code>alloy validate</code>, and each host config, unmodified, to start in Alloy against the modules with no network, since <code>alloy validate</code> does not look inside an imported module. It prints the Alloy version it ran. Every file was reformatted to <code>alloy fmt</code>'s output first, a whitespace-only change.</li>
+<li>✅ One shipping module. <code>logging/alloy-modules/ship.alloy</code> holds the Loki→OTLP bridge, enrich, the batch, the exporter with its retry, queue and keep-alive settings, and Alloy's own metrics. Each host config keeps its sources, its parser chain, its tracing block (Alloy allows one only in the root config) and its own scrapes, and gives the module its name, its endpoint and, on the five hosts that ship through <code>logs-ingest.pod.haus</code>, its client certificate. No host's endpoint or transport changed, and the comments describe the real path to the collector on bandicoot. Numbat's and fractal's logging overlays bind the fixed checkout path instead of an unset variable's default. The log schema harness in <code>logging/tests</code> ships through the real module to a stand-in collector.</li>
 </ul>
 
 <h2>Remaining work</h2>
@@ -123,29 +127,9 @@
 </tbody>
 </table>
 
-<h3>Short-lived containers</h3>
-<table>
-<thead><tr><th>Today</th><th>After</th><th></th></tr></thead>
-<tbody>
-<tr><td>Docker discovery refreshes every 30 s, so an init container that starts and exits between two refreshes, including <code>plex-preferences-init</code>, is never read.</td><td><code>refresh_interval = "5s"</code>, in a push after the one that disabled live module reload has deployed to every host, so no running Alloy reloads it. Confirmed by <code>plex-preferences-init</code> rows after the next Plex deploy.</td><td><span class="doc-badge">mechanical</span></td></tr>
-<tr><td>The log schema harness's own containers (label <code>podhaus.harness=true</code>) log with Docker's <code>none</code> driver, so the host's Alloy ships about two minutes of "could not fetch logs" error rows per run.</td><td>A rule in <code>docker-logs.alloy</code> dropping containers with that label, in the same later push. It changes no other container's labels.</td><td><span class="doc-badge">mechanical</span></td></tr>
-</tbody>
-</table>
-
-<h3>One shipping module</h3>
-<table>
-<thead><tr><th>Today</th><th>After</th><th></th></tr></thead>
-<tbody>
-<tr><td>Seven <code>logging/&lt;host&gt;/alloy-conf/config.alloy</code> files, ~100 identical lines each. Drift so far: pinelake has no tracing block, numbat mixes a variable and a fixed path.</td><td>A <code>ship</code> module in <code>alloy-modules/</code> taking host, endpoint and optional mTLS files. Each host file names its host and endpoint and little else.</td><td><span class="doc-badge">mechanical</span></td></tr>
-<tr><td>Four exporter comments describe bilby's published port and NAT; kangaroo's says bandicoot ships by container name; <code>pocket-id.alloy</code> says numbat.</td><td>Comments describe the bandicoot collector and each host's real path.</td><td><span class="doc-badge">mechanical</span></td></tr>
-</tbody>
-</table>
-
 <h2>Order of work</h2>
 <ol>
-<li>5-second Docker discovery and the harness skip rule, once every host runs with live module reload disabled.</li>
 <li>Decisions once taken: LAN shipping path, access logs, Pomerium debug, the two OAuth values, naming, volume, the disk queue, the restart-loop alert.</li>
-<li>Shipping module.</li>
 <li><code>OTEL_RESOURCE_ATTRIBUTES</code> in the services that ship their own telemetry, in their repositories.</li>
 </ol>
 
@@ -156,9 +140,10 @@
 <tr><td>Lumen gone</td><td>✅ Zero randomly named services since the deploy; <code>lumen-sweep</code> rows fell to about a twelfth and are flat per 10-minute window.</td></tr>
 <tr><td>Pinelake time</td><td>✅ Checked 2026-10-05: a Syncthing row stamped 11:06:37Z carries 05:06:37 Edmonton time in its body, the same instant.</td></tr>
 <tr><td>SSH trail</td><td>✅ Logins to bilby and bandicoot arrive as <code>Accepted publickey</code> rows under identifier <code>sshd-session</code>, with session ends and sudo command lines beside them.</td></tr>
-<tr><td>An outage keeps Alloy running; a wedge heals</td><td>The wedge path, requests that never return making Alloy unhealthy, is proven by <code>logging/tests/test_alloy_health.py</code>. Live, on voltaire: <code>docker network disconnect dockernet alloy</code> leaves Alloy healthy with no restart, its check still reading a rising count; the voltaire heartbeat fails 15–20 minutes after its last metric and alerts at 20–25, and no other heartbeat moves. Then <code>docker network connect dockernet alloy</code>: the queued metrics arrive and the heartbeat goes green after two passing checks.</td></tr>
-<tr><td>Init containers tailed</td><td><code>plex-preferences-init</code> rows after the next Plex deploy.</td></tr>
-<tr><td>Config lint</td><td><code>alloy fmt</code> and <code>alloy validate</code> on every host config in <code>tools/pre-commit</code>.</td></tr>
+<tr><td>An outage keeps Alloy running; a wedge heals</td><td>✅ Checked 2026-10-05 on voltaire: with Alloy disconnected from dockernet for seven minutes (04:36–04:43 UTC) it stayed healthy with a failing streak of 0, its completed-request count rose every minute on failed attempts (71 to 453), its start time did not change and autoheal logged no restart; Alloy logged 406 'Exporting failed' retry lines; after the reconnect the queue delivered them, and ClickHouse holds 50–65 voltaire rows for every minute of the outage. The voltaire heartbeat never failed (the gap was inside its 15-minute window). The wedge path (requests that never return making Alloy unhealthy) is proven by <code>logging/tests/test_alloy_health.py</code>.</td></tr>
+<tr><td>Init containers tailed</td><td>After the next Plex deploy on bilby, ClickHouse holds the init container's <code>merged Preferences.xml</code> line within a minute of the deploy: <code>ServiceName = 'plex-preferences-init' AND ResourceAttributes['host.name'] = 'bilby'</code>.</td></tr>
+<tr><td>Config lint</td><td>✅ <code>tools/lint-alloy-config.py</code> checks every host config and module in <code>tools/pre-commit</code>; a mis-formatted file, a misspelled argument to the ship module, a reference to an export the ship module does not have, an unknown attribute inside a module and a missing module each fail it with Alloy's message.</td></tr>
+<tr><td>Shipping module live</td><td>After the push, on every host: Alloy healthy with its exporter's completed-request count rising; the five heartbeats green; each host's self-metrics in <code>otel_metrics_gauge</code> under the same <code>host.name</code> and <code>service.name = alloy</code> as before, now with <code>component_path = '/podhaus.ship.run'</code> on the exporter's own series; log rows still arriving from every host.</td></tr>
 </tbody>
 </table>
 

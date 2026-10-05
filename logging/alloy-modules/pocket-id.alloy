@@ -18,29 +18,29 @@
 // enrich.alloy makes every field an attribute and the body `msg`.
 
 declare "pocket_id" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    // The gate keeps non-JSON lines (a startup banner, a panic dump) out of
-    // the JSON stage.
-    stage.match {
-      selector = "{service=\"pocket-id\"} |~ \"^\\\\{\""
+		// The gate keeps non-JSON lines (a startup banner, a panic dump) out of
+		// the JSON stage.
+		stage.match {
+			selector = "{service=\"pocket-id\"} |~ \"^\\\\{\""
 
-      stage.json {
-        expressions = {
-          lvl = "level",
-        }
-      }
+			stage.json {
+				expressions = {
+					lvl = "level",
+				}
+			}
 
-      stage.labels {
-        values = { detected_level = "lvl" }
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

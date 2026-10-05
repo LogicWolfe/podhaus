@@ -39,34 +39,34 @@
 // JSON stages by the line filter.
 
 declare "llm_watcher" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"llm-watcher\"}"
+		stage.match {
+			selector = "{service=\"llm-watcher\"}"
 
-      stage.match {
-        selector = "{service=\"llm-watcher\"} |~ \"^\\\\{\""
+			stage.match {
+				selector = "{service=\"llm-watcher\"} |~ \"^\\\\{\""
 
-        stage.json {
-          expressions = {lvl = "level", evt = "event"}
-        }
+				stage.json {
+					expressions = {lvl = "level", evt = "event"}
+				}
 
-        stage.template {
-          source   = "lvl"
-          template = "{{ if eq .Value \"warning\" }}WARN{{ else }}{{ ToUpper .Value }}{{ end }}"
-        }
+				stage.template {
+					source   = "lvl"
+					template = "{{ if eq .Value \"warning\" }}WARN{{ else }}{{ ToUpper .Value }}{{ end }}"
+				}
 
-        stage.labels {
-          values = {detected_level = "lvl", llm_event = "evt"}
-        }
-      }
-    }
-  }
+				stage.labels {
+					values = {detected_level = "lvl", llm_event = "evt"}
+				}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

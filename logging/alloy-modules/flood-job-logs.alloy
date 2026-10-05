@@ -37,10 +37,15 @@
 
 declare "flood_job_logs" {
 	argument "host" { }
+
 	argument "container" { }
+
 	argument "compose_project" { }
+
 	argument "compose_service" { }
+
 	argument "flood_db" { }
+
 	argument "forward_to" { }
 
 	local.file_match "this" {

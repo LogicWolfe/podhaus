@@ -16,25 +16,25 @@
 // Docker's receive time; `ts` is not parsed.
 
 declare "komodo_ferretdb" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"komodo-ferretdb\"}"
+		stage.match {
+			selector = "{service=\"komodo-ferretdb\"}"
 
-      stage.regex {
-        expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\t(?P<lvl>[A-Z]+)\\t"
-      }
+			stage.regex {
+				expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\t(?P<lvl>[A-Z]+)\\t"
+			}
 
-      stage.labels {
-        values = { detected_level = "lvl" }
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

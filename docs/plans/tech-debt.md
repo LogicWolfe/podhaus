@@ -74,3 +74,40 @@ Make a failed child deployment fail the action and enclosing procedure, with
 the affected stack named in the error. Verify both a returned unsuccessful
 update and a thrown execution error, plus the batch deployment path. A failed
 image build must never produce an overall successful deployment result.
+
+## Numbat compose files default a variable that is set nowhere
+
+**Status:** Open. Ship it as a push of its own.
+
+`relay/numbat/compose.yaml` and `pomerium/compose.yaml` mount their checkout
+through `${NUMBAT_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-numbat}`.
+No `stack.toml`, Komodo variable file or Ansible role sets `NUMBAT_REPO_PATH`,
+so the default is always the path used, and the variable only suggests a knob
+that does not exist. `logging/numbat/compose.yaml` and
+`logging/fractal/compose.yaml` had the same pattern and now name the fixed
+path.
+
+Replace each with the fixed path. Both edits change the compose text, so the
+push recreates Numbat's rathole server, which carries every host's tunnels, and
+Pomerium, which every protected name goes through. Push it on its own, when a
+short drop of both is acceptable, and confirm afterwards that the tunnels and a
+protected route are back.
+
+## Gatus's metrics carry no host name
+
+**Status:** Open.
+
+Bilby's Alloy scrapes Gatus's Prometheus metrics and sets only their
+`service.name` to `gatus` (the `svc_gatus` transform in
+`logging/bilby/alloy-conf/config.alloy`). Every other series Alloy ships has a
+`host.name`: its own metrics through the shipping module, bilby's ESPHome
+scrape and fractal's two model-service scrapes through their own transforms.
+A query that selects Gatus's series by `host.name`, as the telemetry heartbeats
+do for Alloy's, finds nothing. Alloy's own spans have no `host.name` either:
+they reach the shipping module's input with only the resource Alloy's tracer
+gives them (`service.name = alloy`, version and SDK), as the log schema harness
+in `logging/tests/test_log_schema.py` shows.
+
+Add `host.name = bilby` to `svc_gatus`, as `svc_esphome` does. For the spans,
+add the host in the shipping module's path for them, so every host gets it.
+Either change recreates the Alloys it touches, which is harmless.

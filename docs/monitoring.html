@@ -40,9 +40,9 @@
       <pre><code>Docker logs (every host) ─┐
 Plex + Flood log files    ─┤  Alloy (per-host config, shared modules)
 journald (Linux hosts)    ─┤   discover/tail → ANSI-strip → per-service parser
-                          │   chain → Loki→OTLP bridge → OTTL enrich (the
-                          │   logging.md schema, severity, JSON fields)
-                          │   → batch → OTLP/HTTP exporter
+                          │   chain → ship module: Loki→OTLP bridge → OTTL
+                          │   enrich (the logging.md schema, severity, JSON
+                          │   fields) → batch → OTLP/HTTP exporter
                           │
 bilby, kangaroo ──────────► 10.0.0.90:4318        (cross-LAN, plaintext)
 every other host ─────────► logs-ingest.pod.haus  (mTLS via bilby's Caddy → 10.0.0.90:4318)
@@ -291,8 +291,9 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
           the logs, so the query asserts a fresh
           per-host Alloy metric in a 15-minute window (<code>otel_metrics_gauge</code> where
           <code>ResourceAttributes['host.name']='&lt;host&gt;'</code>; the
-          <code>host.name</code> attribute is stamped by the <code>svc_alloy</code> transform in each host's
-          <code>config.alloy</code>). A wedged exporter, whose requests never return, is
+          <code>host.name</code> attribute is stamped by the <code>svc_alloy</code> transform in the
+          ship module, <code>logging/alloy-modules/ship.alloy</code>, from the host name each
+          host's <code>config.alloy</code> gives it). A wedged exporter, whose requests never return, is
           healed before the window empties: Alloy's healthcheck makes the container unhealthy
           5–6 minutes after the exporter's last request completed, autoheal restarts it within
           30 seconds, and the restarted Alloy delivers its first self-metric within about 90
@@ -363,16 +364,18 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         <code>logging/compose.shared.yaml</code> and the module directory
         <code>logging/alloy-modules/</code>; each host's
         <code>logging/&lt;host&gt;/alloy-conf/config.alloy</code> is a short list of which
-        shared modules to run, plus that host's scrapes and exporter. Alloy tails each
-        host's Docker socket (and the files and journal listed in
-        <a href="logging.md#what-is-collected">Logging</a>), bridges Loki-format
-        input to OTLP (<code>otelcol.receiver.loki</code> → enrich → batch →
-        <code>otelcol.exporter.otlphttp</code>) and ships to the ClickStack collector:
+        source modules to run, that host's own scrapes, and its values for the ship module.
+        Alloy tails each host's Docker socket (and the files and journal listed in
+        <a href="logging.md#what-is-collected">Logging</a>), and the parser chain hands
+        every line to the ship module, <code>logging/alloy-modules/ship.alloy</code>, which
+        is the same on every host: it bridges Loki-format input to OTLP
+        (<code>otelcol.receiver.loki</code> → enrich → batch →
+        <code>otelcol.exporter.otlphttp</code>), scrapes Alloy's own metrics, and ships
+        to the ClickStack collector at the address each host gives it:
       </p>
       <ul>
         <li><strong>bilby</strong> and <strong>kangaroo</strong> — cross-LAN to
-          <code>http://10.0.0.90:4318</code> (plaintext, LAN-only), each with
-          <code>disable_keep_alives</code> for the published-port reason below.</li>
+          <code>http://10.0.0.90:4318</code> (plaintext, LAN-only).</li>
         <li><strong>bandicoot</strong> — HTTPS to <code>logs-ingest.pod.haus</code> like the
           remote hosts. That name resolves only to Numbat's relay address, so the path goes
           out to Numbat, back through rathole to bilby's Caddy, and across the LAN to the
@@ -384,22 +387,36 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         <li><strong>pinelake</strong>: the same HTTPS ingress with its own client certificate.</li>
       </ul>
       <p>
+        Every host opens a new connection for each request
+        (<code>disable_keep_alives</code>). Bilby and kangaroo need it: they reach the
+        collector at bandicoot's published port, where Docker's NAT keeps a kept-alive
+        connection mapped to the old collector container after a recreate, and the next
+        request hangs with no error (the 2026-06-19 exporter wedge under <a href="#known-issues">Known issues</a>).
+        The hosts that ship through <code>logs-ingest.pod.haus</code> reach bilby's Caddy,
+        which opens its own connections to the collector; they share the setting because a
+        new connection per request costs little at their volume.
+      </p>
+      <p>
         Every request carries a HyperDX <strong>ingestion API key</strong> in the
         <code>authorization</code> header. The key lives in 1Password as
         <code>clickstack-ingestion-key</code>, is synced by <code>komodo-op</code> to a Komodo
-        Variable, injected via each host's <code>logging</code> <code>stack.toml</code>, and
-        read by <code>config.alloy</code> as <code>sys.env("CLICKSTACK_INGESTION_KEY")</code>.
+        Variable, injected via each host's <code>logging</code> <code>stack.toml</code> and
+        the shared compose file, and read by the ship module as
+        <code>sys.env("CLICKSTACK_INGESTION_KEY")</code>.
         An empty/wrong key means a hard 401 and no data in HyperDX — a loud, visible failure
         with no silent fallback to the old sink.
       </p>
       <p>
         Which containers, files and journal entries are collected, how each service is
         named, the parser rules and the schema every row follows are in
-        <a href="logging.md">Logging</a>.
+        <a href="logging.md">Logging</a>. <code>tools/lint-alloy-config.py</code>, run by
+        <code>tools/pre-commit</code>, checks that every host config and module is formatted
+        as <code>alloy fmt</code> prints it, that the modules pass <code>alloy validate</code>,
+        and that each host config starts in Alloy against the modules it imports.
       </p>
       <p>
         Every host's exporter retries a failed batch for at most 30 minutes
-        (<code>retry_on_failure</code> in each <code>config.alloy</code>), then drops that
+        (<code>retry_on_failure</code> in the ship module), then drops that
         batch and its queue worker takes the next. The budget is checked only when an
         attempt returns, so a request that never returns holds its worker whatever the
         budget; once every worker is held the exporter sends nothing, and the healthcheck
@@ -421,7 +438,9 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         <code>:12345/metrics</code>, how many HTTP requests the clickstack exporter has
         completed: <code>http_client_request_duration_seconds_count</code> for
         <code>component_id="otelcol.exporter.otlphttp.clickstack"</code>, summed over every
-        status code, error type and HTTP version. It fails when that count has not risen
+        status code, error type and HTTP version. The exporter sits in the ship module, so
+        its metrics also carry <code>component_path="/podhaus.ship.run"</code>; the check
+        matches the <code>component_id</code> alone. It fails when that count has not risen
         since the previous check, a minute earlier. Every host scrapes Alloy's own metrics
         every 60 seconds through the same exporter, so a working exporter completes a
         request every minute however quiet the host's logs are.
@@ -532,8 +551,8 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
               connection stays mapped through conntrack to the dead container, so the next send
               blackholes and hangs silently — and <code>retry_on_failure
               max_elapsed_time = "0s"</code> (retry forever) made it permanent. <strong>Fixed</strong>
-              by <code>disable_keep_alives = true</code> + a bounded 30m retry on both
-              cross-network exporters' <code>config.alloy</code>: a fresh connection per batch
+              by <code>disable_keep_alives = true</code> + a bounded 30m retry, which every
+              host's exporter takes from the ship module: a fresh connection per batch
               always reaches the current collector. (A host that ships in-network by container
               name — DNS re-resolves — never hits this; since the move to bandicoot, bilby's
               exporter is cross-network too and carries <code>disable_keep_alives</code> and the

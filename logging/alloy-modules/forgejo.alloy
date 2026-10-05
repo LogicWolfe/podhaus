@@ -21,30 +21,30 @@
 // without the gate the level template's fallthrough would stamp it.
 
 declare "forgejo" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"forgejo\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} .*\\\\[[TDIWEFC]\\\\] \""
+		stage.match {
+			selector = "{service=\"forgejo\"} |~ \"^\\\\d{4}/\\\\d{2}/\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2} .*\\\\[[TDIWEFC]\\\\] \""
 
-      stage.regex {
-        expression = "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} .*?\\[(?P<lvl>[TDIWEFC])\\]\\s"
-      }
+			stage.regex {
+				expression = "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} .*?\\[(?P<lvl>[TDIWEFC])\\]\\s"
+			}
 
-      stage.template {
-        source   = "lvl"
-        template = "{{ if eq .Value \"T\" }}TRACE{{ else if eq .Value \"D\" }}DEBUG{{ else if eq .Value \"I\" }}INFO{{ else if eq .Value \"W\" }}WARN{{ else if eq .Value \"E\" }}ERROR{{ else }}FATAL{{ end }}"
-      }
+			stage.template {
+				source   = "lvl"
+				template = "{{ if eq .Value \"T\" }}TRACE{{ else if eq .Value \"D\" }}DEBUG{{ else if eq .Value \"I\" }}INFO{{ else if eq .Value \"W\" }}WARN{{ else if eq .Value \"E\" }}ERROR{{ else }}FATAL{{ end }}"
+			}
 
-      stage.labels {
-        values = { detected_level = "lvl" }
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

@@ -16,21 +16,21 @@
 // Anything else is left UNSET; the generic OTTL fallback handles it.
 
 declare "autoheal" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"autoheal\"} |~ \"unhealthy|Restarting\""
+		stage.match {
+			selector = "{service=\"autoheal\"} |~ \"unhealthy|Restarting\""
 
-      stage.static_labels {
-        values = { detected_level = "WARN" }
-      }
-    }
-  }
+			stage.static_labels {
+				values = {detected_level = "WARN"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

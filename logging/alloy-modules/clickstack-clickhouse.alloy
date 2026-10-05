@@ -24,30 +24,30 @@
 // through this component unchanged.
 
 declare "clickstack_clickhouse" {
-  argument "forward_to" { }
+	argument "forward_to" { }
 
-  loki.process "this" {
-    forward_to = argument.forward_to.value
+	loki.process "this" {
+		forward_to = argument.forward_to.value
 
-    stage.match {
-      selector = "{service=\"clickstack-clickhouse\"} |~ \"^\\\\d{4}\\\\.\\\\d{2}\\\\.\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d+ \\\\[ \\\\d+ \\\\] \\\\{[^}]*\\\\} <[A-Za-z]+> \""
+		stage.match {
+			selector = "{service=\"clickstack-clickhouse\"} |~ \"^\\\\d{4}\\\\.\\\\d{2}\\\\.\\\\d{2} \\\\d{2}:\\\\d{2}:\\\\d{2}\\\\.\\\\d+ \\\\[ \\\\d+ \\\\] \\\\{[^}]*\\\\} <[A-Za-z]+> \""
 
-      stage.regex {
-        expression = "^\\S+ \\S+ \\[ \\d+ \\] \\{[^}]*\\} <(?P<lvl>[A-Za-z]+)> "
-      }
+			stage.regex {
+				expression = "^\\S+ \\S+ \\[ \\d+ \\] \\{[^}]*\\} <(?P<lvl>[A-Za-z]+)> "
+			}
 
-      stage.template {
-        source   = "lvl"
-        template = "{{ if or (eq .Value \"Information\") (eq .Value \"Notice\") }}INFO{{ else }}{{ .Value }}{{ end }}"
-      }
+			stage.template {
+				source   = "lvl"
+				template = "{{ if or (eq .Value \"Information\") (eq .Value \"Notice\") }}INFO{{ else }}{{ .Value }}{{ end }}"
+			}
 
-      stage.labels {
-        values = { detected_level = "lvl" }
-      }
-    }
-  }
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
 
-  export "receiver" {
-    value = loki.process.this.receiver
-  }
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
 }

@@ -1,25 +1,22 @@
-// bilby's Alloy. Pipeline (all shared modules in ../alloy-modules):
-//   docker_logs → chain (per-service parsers) → Loki→OTLP bridge → enrich
-//   (the docs/logging.md schema, severity, JSON structuring) → batch → the
-//   ClickStack collector on bandicoot, cross-LAN. Plex's server log, the
-//   Flood job logs and the systemd journal ride the same path. Gatus,
-//   ESPHome and Alloy's own metrics are scraped here and bridged to OTLP.
-//   Alloy self-telemetry (own pipeline spans + self metrics) rides the
-//   same exporter; its logs do NOT (already captured via the Docker
-//   discovery path + alloy.alloy — write_to here would double-ingest,
-//   see the fenwick double-ingest note in fenwick/compose.yaml).
+// bilby's Alloy. Shared modules in ../alloy-modules do the work: the sources
+// below (containers, Plex's server log, the Flood job logs and the systemd
+// journal) → chain (per-service parsers) → ship (Loki→OTLP bridge, enrich,
+// batch, Alloy's own metrics, and the exporter to the ClickStack collector
+// on bandicoot). Gatus and ESPHome metrics are scraped here and handed to the
+// same exporter.
 //
 // Per-service parsing is config-as-code in ../alloy-modules (one module per
 // service, one chain for every host), so a service moving between hosts
 // keeps its parsing with no change here. See docs/logging.md.
 
-// Alloy's own internal-pipeline tracing. A per-host `alloy` service in
-// HyperDX Traces showing component-eval spans — the pipeline diagnosing
-// itself. Low sampling on purpose: span volume scales with component
-// count, and the value here is health not request flow.
+// Alloy's own pipeline spans under service `alloy`, sampled at 10%: span
+// volume grows with the number of components, and they are kept for the
+// pipeline's health, not request flow. Alloy allows a tracing block only in
+// the root config. Its own log lines are not sent this way; the Docker source
+// already reads them, and they would arrive twice.
 tracing {
 	sampling_fraction = 0.1
-	write_to          = [otelcol.processor.batch.clickstack.input]
+	write_to          = [podhaus.ship.run.input]
 }
 
 // The shared modules are read once, when the container starts. A push that
@@ -63,36 +60,32 @@ podhaus.journal "run" {
 }
 
 podhaus.chain "run" {
-	forward_to = [otelcol.receiver.loki.clickstack.receiver]
+	forward_to = [podhaus.ship.run.receiver]
 }
 
-otelcol.receiver.loki "clickstack" {
-	output {
-		logs = [podhaus.enrich.run.input]
-	}
-}
-
-podhaus.enrich "run" {
-	host   = "bilby"
-	output = [otelcol.processor.batch.clickstack.input]
+// Plaintext across the LAN to the collector's published port on bandicoot,
+// whose address the shared catalog supplies through logging/bilby/stack.toml.
+podhaus.ship "run" {
+	host     = "bilby"
+	endpoint = "http://" + sys.env("BANDICOOT_LAN_IPV4") + ":4318"
 }
 
 // Gatus exposes Prometheus metrics at :8080/metrics (metrics: true in
 // gatus/conf/config.yaml). Scrape at Gatus's own ~60s cadence — faster
-// just resamples stale values — bridge Prometheus → OTLP, same sink.
+// just resamples stale values — bridge Prometheus → OTLP, same exporter.
 prometheus.scrape "gatus" {
-  targets = [{
-    __address__      = "gatus:8080",
-    __metrics_path__ = "/metrics",
-  }]
-  scrape_interval = "60s"
-  forward_to      = [otelcol.receiver.prometheus.gatus.receiver]
+	targets = [{
+		__address__      = "gatus:8080",
+		__metrics_path__ = "/metrics",
+	}]
+	scrape_interval = "60s"
+	forward_to      = [otelcol.receiver.prometheus.gatus.receiver]
 }
 
 otelcol.receiver.prometheus "gatus" {
-  output {
-    metrics = [otelcol.processor.transform.svc_gatus.input]
-  }
+	output {
+		metrics = [otelcol.processor.transform.svc_gatus.input]
+	}
 }
 
 // The Prometheus→OTLP bridge carries no service.name resource
@@ -103,60 +96,18 @@ otelcol.receiver.prometheus "gatus" {
 // path. "gatus" matches the service its own container logs already
 // resolve to via enrich, so logs+metrics unify under one service.
 otelcol.processor.transform "svc_gatus" {
-  error_mode = "ignore"
+	error_mode = "ignore"
 
-  metric_statements {
-    context = "metric"
-    statements = [
-      `set(resource.attributes["service.name"], "gatus")`,
-    ]
-  }
+	metric_statements {
+		context    = "metric"
+		statements = [
+			`set(resource.attributes["service.name"], "gatus")`,
+		]
+	}
 
-  output {
-    metrics = [otelcol.processor.batch.clickstack.input]
-  }
-}
-
-// Alloy self metrics — same Prometheus→OTLP bridge pattern as Gatus
-// above. prometheus.exporter.self surfaces Alloy's internal counters
-// (pipeline throughput, queue depth, exporter retries) so the log
-// pipeline's own health is queryable in HyperDX alongside everything
-// it ships.
-prometheus.exporter.self "alloy" { }
-
-prometheus.scrape "alloy_self" {
-  targets         = prometheus.exporter.self.alloy.targets
-  scrape_interval = "60s"
-  forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
-}
-
-otelcol.receiver.prometheus "alloy_self" {
-  output {
-    metrics = [otelcol.processor.transform.svc_alloy.input]
-  }
-}
-
-// Same service.name stamping as svc_gatus. "alloy" matches both this
-// host's Alloy container logs (via enrich) and the tracing block's
-// service name, so all three signals unify under one `alloy` service.
-// `host.name` is the same resource attribute the logs carry, so each
-// host's Alloy self-metrics are distinguishable (the unified `alloy`
-// service is set by service.name, not host.name, so adding the dimension
-// costs nothing).
-otelcol.processor.transform "svc_alloy" {
-  error_mode = "ignore"
-
-  metric_statements {
-    context = "metric"
-    statements = [
-      `set(resource.attributes["service.name"], "alloy")`,
-      `set(resource.attributes["host.name"], "bilby")`,
-    ]
-  }
-
-  output {
-    metrics = [otelcol.processor.batch.clickstack.input]
-  }
+	output {
+		metrics = [podhaus.ship.run.input]
+	}
 }
 
 // ESPHome IoT devices expose every entity as OpenMetrics via their own
@@ -174,28 +125,28 @@ otelcol.processor.transform "svc_alloy" {
 // (config/lan-addresses.json); without the pin a DHCP drift would silently
 // end the scrape.
 //
-// Deliberately narrow: one target per device, ~10 series each. bilby's
-// ClickHouse runs under a 4g cap, so the tempting alternative — scraping Home
+// Deliberately narrow: one target per device, ~10 series each. ClickHouse
+// runs under a 4g cap, so the tempting alternative — scraping Home
 // Assistant's /api/prometheus for every entity in the house — is not a
 // like-for-like swap.
 prometheus.scrape "esphome" {
-  targets = [{
-    __address__      = sys.env("TURN_TOUCH_BURROW_IPV4"),
-    __metrics_path__ = "/metrics",
-    instance         = "turn-touch-burrow",
-  }, {
-    __address__      = sys.env("LED_STRIP_GRASSHOPPER_IPV4"),
-    __metrics_path__ = "/metrics",
-    instance         = "led-strip-grasshopper",
-  }]
-  scrape_interval = "60s"
-  forward_to      = [otelcol.receiver.prometheus.esphome.receiver]
+	targets = [{
+		__address__      = sys.env("TURN_TOUCH_BURROW_IPV4"),
+		__metrics_path__ = "/metrics",
+		instance         = "turn-touch-burrow",
+	}, {
+		__address__      = sys.env("LED_STRIP_GRASSHOPPER_IPV4"),
+		__metrics_path__ = "/metrics",
+		instance         = "led-strip-grasshopper",
+	}]
+	scrape_interval = "60s"
+	forward_to      = [otelcol.receiver.prometheus.esphome.receiver]
 }
 
 otelcol.receiver.prometheus "esphome" {
-  output {
-    metrics = [otelcol.processor.transform.svc_esphome.input]
-  }
+	output {
+		metrics = [otelcol.processor.transform.svc_esphome.input]
+	}
 }
 
 // Same service.name stamping as svc_gatus — the Prometheus→OTLP bridge
@@ -203,56 +154,17 @@ otelcol.receiver.prometheus "esphome" {
 // metric-by-service views. "esphome" groups every device under one service,
 // with `instance` from the scrape target separating them.
 otelcol.processor.transform "svc_esphome" {
-  error_mode = "ignore"
+	error_mode = "ignore"
 
-  metric_statements {
-    context = "metric"
-    statements = [
-      `set(resource.attributes["service.name"], "esphome")`,
-      `set(resource.attributes["host.name"], "bilby")`,
-    ]
-  }
+	metric_statements {
+		context    = "metric"
+		statements = [
+			`set(resource.attributes["service.name"], "esphome")`,
+			`set(resource.attributes["host.name"], "bilby")`,
+		]
+	}
 
-  output {
-    metrics = [otelcol.processor.batch.clickstack.input]
-  }
-}
-
-otelcol.processor.batch "clickstack" {
-  output {
-    logs    = [otelcol.exporter.otlphttp.clickstack.input]
-    metrics = [otelcol.exporter.otlphttp.clickstack.input]
-    traces  = [otelcol.exporter.otlphttp.clickstack.input]
-  }
-}
-
-otelcol.exporter.otlphttp "clickstack" {
-  client {
-    // ClickStack lives on bandicoot: cross-LAN to its published :4318.
-    // The shared catalog supplies the address through logging/bilby/stack.toml.
-    endpoint = "http://" + sys.env("BANDICOOT_LAN_IPV4") + ":4318"
-    // Same reasoning as kangaroo's exporter: a fixed IP behind a published
-    // port + NAT keeps a kept-alive connection mapped to a dead collector
-    // after a recreate, so every batch opens a fresh connection.
-    disable_keep_alives = true
-    headers  = {
-      // ClickStack ingestion API key. Empty ⇒ 401 ⇒ no data in
-      // HyperDX — a loud, visible failure. No silent fallback to the
-      // old VL sink: this is a hard swap (no fallback masks failure).
-      "authorization" = sys.env("CLICKSTACK_INGESTION_KEY"),
-    }
-  }
-
-  // Bounded retry, like every host: a failed batch is retried for at most
-  // 30 minutes, then dropped, and its queue worker takes the next. The
-  // budget is checked only when an attempt returns, so a request that never
-  // returns holds its worker whatever the budget; once every worker is held
-  // the exporter sends nothing, and the container's healthcheck has autoheal
-  // restart it (logging/compose.shared.yaml).
-  retry_on_failure {
-    max_elapsed_time = "30m"
-  }
-  sending_queue {
-    queue_size = 100000
-  }
+	output {
+		metrics = [podhaus.ship.run.input]
+	}
 }

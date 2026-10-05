@@ -29,11 +29,17 @@
 
 declare "clickhouse_error_log" {
 	argument "host" { }
+
 	argument "container" { }
+
 	argument "compose_project" { }
+
 	argument "compose_service" { }
+
 	argument "path" { }
+
 	argument "timezone" { }
+
 	argument "forward_to" { }
 
 	local.file_match "this" {
