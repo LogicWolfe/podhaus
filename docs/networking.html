@@ -83,7 +83,13 @@ networks:
         with Pocket ID, then reaches Caddy's private <code>:4443</code> listener through a
         loopback-only rathole service. That listener also requires Pomerium's client
         certificate. The public rathole service reaches Caddy <code>:4444</code>, which has
-        no protected virtual hosts.
+        no protected virtual hosts. Caddy writes one access line per request on all three
+        listeners. Behind the relay it sees only the rathole client as its peer, so a
+        <code>:4443</code> line names the client from Pomerium's
+        <code>X-Forwarded-For</code> and the signed-in person by the email Pomerium passes
+        or by its request ID, and a <code>:4444</code> line for a site Cloudflare does not
+        front has no client address at all
+        (<a href="logging.md#bilbys-front-door">Logging</a>).
       </p>
       <p>
         The public listener serves RustFS S3, Pocket ID, UniFi, static sites, scoped Umami

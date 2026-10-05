@@ -57,10 +57,14 @@ replaced by a 500, since no failed request was logged in the 14 days
 measured; gatus_passed_with_errors, which is gatus_passed reporting one error;
 and lumen_sweep_traceback and lumen_sweep_killed, written as the unforeseen
 failures the sweep's rule must keep. llm_server_prompt is
-from llm/tests/fixtures, as is caddy_remote_access. Every other line is the example in its module's
-header, completed where the header elides it, or written for the case it
-names (caddy_admin's credential header, the json_* credential and shape
-lines, the severity fallback lines, the journal and file-source lines).
+from llm/tests/fixtures, as is caddy_remote_access. The caddy_front_door_*
+and caddy_proxy_error lines are what bilby's caddy/Caddyfile printed when run
+under a Caddy built from caddy/Dockerfile, with stand-in upstreams,
+certificates and clients, so their addresses are that run's loopback. Every
+other line is the example in its module's header, completed where the header
+elides it, or written for the case it names (caddy_admin's credential header,
+the json_* credential and shape lines, the severity fallback lines, the
+journal and file-source lines).
 
 Needs Docker. Without it the whole class is skipped with the reason printed.
 """
@@ -208,6 +212,19 @@ CADDY_ACCESS = r'''{"level":"info","ts":1791110320.177741,"logger":"http.log.acc
 CADDY_ADMIN = r'''{"level":"info","ts":1788960526.0307655,"logger":"admin.api","msg":"received request","method":"GET","host":"127.0.0.1:2019","uri":"/config/","remote_ip":"127.0.0.1","remote_port":"41234","headers":{"Accept-Encoding":["gzip"],"Authorization":["Bearer stand-in"],"User-Agent":["Go-http-client/1.1"]}}'''
 # The model ingress worker's signed-in access line, whose `caller` llm/tests checks the Caddyfile writes.
 CADDY_REMOTE_ACCESS = (ROOT / "llm" / "tests" / "fixtures" / "caddy_llm_access_sample.jsonl").read_text().splitlines()[0]
+# bilby's front door (caddy/Caddyfile's access_log snippet): a Pomerium request
+# on :4443 for a route that passes the email, a Cloudflare-fronted public site
+# and storage through Numbat's raw relay on :4444, a 5xx, which Caddy writes at
+# error level, and a proxied response Caddy aborted because its upstream cut it
+# short, which keeps every field but has status 200 and duration 0.
+CADDY_FRONT_DOOR_POMERIUM = r'''{"level":"info","ts":1791208711.2895172,"logger":"http.log.access.front_door","msg":"handled request","duration":0.000473986,"status":200,"listener":4443,"remote_ip":"127.0.0.1","host":"books.pod.haus","method":"GET","path":"/books/42","user_agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36","forwarded_for":"203.0.113.7","caller":"someone@example.com","request_id":"6f1d0c2e-9b7a-4e55-8a31-2d4c9e0b7f16"}'''
+CADDY_FRONT_DOOR_PUBLIC_SITE = r'''{"level":"info","ts":1791208711.2951639,"logger":"http.log.access.front_door","msg":"handled request","duration":0.000547615,"status":200,"listener":4444,"remote_ip":"127.0.0.1","host":"nathanbaxter.com","method":"GET","path":"/blog/hello-world/","user_agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36","forwarded_for":"198.51.100.23"}'''
+CADDY_FRONT_DOOR_STORAGE = r'''{"level":"info","ts":1791208711.3010035,"logger":"http.log.access.front_door","msg":"handled request","duration":0.000488096,"status":200,"listener":4444,"remote_ip":"127.0.0.1","host":"storage.pod.haus","method":"GET","path":"/terraform-state/podhaus.tfstate","user_agent":"aws-sdk-go-v2/1.39.2"}'''
+CADDY_FRONT_DOOR_5XX = r'''{"level":"error","ts":1791208711.306335,"logger":"http.log.access.front_door","msg":"handled request","duration":0.000251514,"status":502,"listener":4444,"remote_ip":"127.0.0.1","host":"logs-ingest.pod.haus","method":"POST","path":"/v1/logs","user_agent":"Alloy/v1.11.3 (linux; docker)","client_cert":"CN=numbat"}'''
+CADDY_FRONT_DOOR_ABORTED = r'''{"level":"info","ts":1791208711.2542212,"logger":"http.log.access.front_door","msg":"handled request","duration":0,"status":200,"listener":4443,"remote_ip":"127.0.0.1","host":"watch.pod.haus","method":"GET","path":"/api/mcp","user_agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36","forwarded_for":"203.0.113.7","caller":"someone@example.com","request_id":"1a2b3c4d-0000-4000-8000-00000000abcd"}'''
+# Caddy's own error line for a 5xx on :443, written to stderr by its default
+# logger: the whole request, less its query and every credential header.
+CADDY_PROXY_ERROR = r'''{"level":"error","ts":1791208711.2789755,"logger":"http.log.error.front_door","msg":"dial tcp 127.0.0.2:9000: connect: connection refused","request":{"remote_ip":"127.0.0.1","remote_port":"60274","client_ip":"127.0.0.1","proto":"HTTP/2.0","method":"GET","host":"pouch.pod.haus","uri":"/sky-backups/config","headers":{"Accept":["*/*"],"X-Probe-Kept":["kept-value"],"User-Agent":["restic/0.18.1"]},"tls":{"resumed":false,"version":772,"cipher_suite":4865,"proto":"h2","server_name":"pouch.pod.haus","ech":false}},"duration":0.00025018,"status":502,"err_id":"uqq3wi5iv","err_trace":"reverseproxy.statusError (reverseproxy.go:1652)"}'''
 POMERIUM_AUTHORIZE = r'''{"level":"info","server-name":"all","service":"authorize","request-id":"096a6dcf-7fe1-4b1c-9a06-570b94e18b6a","check-request-id":"096a6dcf-7fe1-4b1c-9a06-570b94e18b6a","method":"GET","path":"/api/healthz","host":"git.pod.haus","ip":"144.6.147.203","session-id":"e92e2d46-3192-4efc-b57c-1b529f75417a","user":"2723e667-4325-4bcb-b91b-ed7442641558","email":"someone@example.com","envoy-route-checksum":451964231414847312,"envoy-route-id":"6510f2df38fa60b5","route-checksum":451964231414847312,"route-id":"","allow":true,"allow-why-true":["email-ok"],"deny":false,"deny-why-false":[],"time":"2026-10-04T18:41:02+08:00","message":"authorize check"}'''
 POMERIUM_CALLBACK = r'''{"level":"debug","ip":"127.0.0.1","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36","referer":"https://id.pod.haus/","request-id":"43864759-7445-4c8c-8bc1-76342ca6ab60","duration":276.483145,"size":402,"status":302,"method":"GET","host":"authenticate.pod.haus","path":"/oauth2/callback?code=StandInCode0123456789abcdefABCDEF&state=U3RhbmQtaW4gc3RhdGUgYmxvYg-_fOr9zZ1x%3D&iss=https%3A%2F%2Fid.pod.haus","time":"2026-09-09T21:12:14+08:00","message":"http-request"}'''
 POCKET_ID_AUTHORIZE = r'''{"time":"2026-10-04T18:24:32.295529839+08:00","level":"INFO","msg":"HTTP request completed","app":"pocket-id","version":"2.17.0","request_id":"e169418e-3099-4ed7-b80b-8922a51649ee","status":302,"method":"GET","path":"/authorize","query":"client_id=pomerium&code_challenge=XwZSwFsHBbJrUZ8ggB1IyeDvYibCRSpZ73nImc7Ms8w&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fauthenticate.pod.haus%2Foauth2%2Fcallback&response_type=code&scope=openid+email+profile+groups+offline_access&state=U3RhbmQtaW4gc3RhdGU%3D","route":"/authorize","ip":"172.18.0.4","latency":13512444,"referer":"","user_agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36","body_size":84}'''
@@ -317,6 +334,19 @@ FIXTURES: tuple[Fixture, ...] = (
             Row("caddy", "handled request", "INFO", json_fields(CADDY_ACCESS))),
     Fixture("caddy_remote_access", compose("testhost-caddy", "caddy"), CADDY_REMOTE_ACCESS,
             Row("caddy", "handled request", "INFO", json_fields(CADDY_REMOTE_ACCESS))),
+    Fixture("caddy_front_door_pomerium", compose("caddy", "caddy"), CADDY_FRONT_DOOR_POMERIUM,
+            Row("caddy", "handled request", "INFO", json_fields(CADDY_FRONT_DOOR_POMERIUM))),
+    Fixture("caddy_front_door_public_site", compose("caddy", "caddy"), CADDY_FRONT_DOOR_PUBLIC_SITE,
+            Row("caddy", "handled request", "INFO", json_fields(CADDY_FRONT_DOOR_PUBLIC_SITE))),
+    Fixture("caddy_front_door_storage", compose("caddy", "caddy"), CADDY_FRONT_DOOR_STORAGE,
+            Row("caddy", "handled request", "INFO", json_fields(CADDY_FRONT_DOOR_STORAGE))),
+    Fixture("caddy_front_door_5xx", compose("caddy", "caddy"), CADDY_FRONT_DOOR_5XX,
+            Row("caddy", "handled request", "ERROR", json_fields(CADDY_FRONT_DOOR_5XX))),
+    Fixture("caddy_front_door_aborted", compose("caddy", "caddy"), CADDY_FRONT_DOOR_ABORTED,
+            Row("caddy", "handled request", "INFO", json_fields(CADDY_FRONT_DOOR_ABORTED))),
+    Fixture("caddy_proxy_error", compose("caddy", "caddy", stream="stderr"), CADDY_PROXY_ERROR,
+            Row("caddy", "dial tcp 127.0.0.2:9000: connect: connection refused", "ERROR",
+                json_fields(CADDY_PROXY_ERROR))),
     Fixture("caddy_admin", compose("caddy", "caddy"), CADDY_ADMIN,
             Row("caddy", "received request", "INFO", {
                 "level": "info", "ts": 1788960526.0307655, "logger": "admin.api", "msg": "received request",

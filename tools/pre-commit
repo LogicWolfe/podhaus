@@ -76,6 +76,13 @@
 #   - fractal Caddy listener tests: the real Caddyfile's loopback and LAN
 #                                   listeners run under the mise-installed
 #                                   caddy, with stand-in upstreams.
+#   - bilby Caddy access-log tests  (in tools/tests): bilby's Caddyfile
+#                                   compiled by the mise-installed caddy;
+#                                   every site's requests are written by one
+#                                   logger that deletes the request object,
+#                                   with only the chosen fields appended, and
+#                                   Caddy's own lines lose the query and every
+#                                   credential header.
 #   - log schema tests:             one captured line per Alloy parser
 #                                   module run through the real modules
 #                                   and enrich step in a short-lived

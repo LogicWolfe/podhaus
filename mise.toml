@@ -3,7 +3,9 @@ python = "latest"
 pipenv = "latest"
 # The hook's tests of the setup page's script and the pi extension.
 node = "lts"
-# The hook's tests of fractal's Caddy listeners, which run the real Caddyfile.
+# The hook's tests of fractal's Caddy listeners, which run the real Caddyfile
+# (caddy/fractal/tests), and of bilby's access logging, which compile its
+# Caddyfile (tools/tests/test_bilby_caddy_access_log.py).
 caddy = "latest"
 
 [settings]

@@ -156,12 +156,59 @@ HyperDX at <https://watch.pod.haus> searches with Lucene or SQL. In Lucene,
 | Everything one host read | `ResourceAttributes['host.name'] = 'pinelake'` |
 | One running copy | `ResourceAttributes['service.instance.id'] = 'pinelake/pinelake-flood'` |
 | One user's sign-ins and requests | `ServiceName IN ('pomerium', 'pocket-id') AND LogAttributes['email'] = 'someone@example.com'` |
+| Who reached one of bilby's sites | `ServiceName = 'caddy' AND LogAttributes['logger'] = 'http.log.access.front_door' AND LogAttributes['host'] = 'storage.pod.haus'` |
 | Who ran what with sudo | `ServiceName = 'journald' AND LogAttributes['journal.identifier'] = 'sudo'` |
 
 To compare instances, group a chart or table by
 `ResourceAttributes['service.instance.id']`. A log attribute named `host` is
 always the service's own field (Caddy's and Pomerium's request Host header),
 never the machine; the machine is `host.name`.
+
+### Bilby's front door
+
+Bilby's Caddy writes one access line per request for every site on its three
+listeners: `:443` for the LAN, `:4443` for Pomerium and `:4444` for Numbat's
+public relay, plus the plain-HTTP site names on `:80` that only dockernet
+reaches. Each is a `caddy` row on `bilby` with logger
+`http.log.access.front_door` and body `handled request`. Caddy's request object
+is deleted from the line whole, so no header, cookie, query string or body is
+in it; these fields are added one by one instead
+(`caddy/Caddyfile`, the `access_log` snippet):
+
+| Field | Where | Meaning |
+|---|---|---|
+| `host`, `method`, `path` | every site | The Host, method and path the client sent, before any rewrite, without the query: Plex's token and S3's presigned signatures travel in the query. |
+| `status`, `duration` | every site | The response status and seconds taken. Caddy writes a 5xx at error level and everything else at info, which becomes the row's severity. |
+| `user_agent` | every site | The client's User-Agent. |
+| `listener` | every site | The port that took the request: 443, 4443, 4444 or 80. |
+| `remote_ip` | every site | The connection's own peer: the LAN client on 443, and on 4443 and 4444 the rathole client carrying Numbat's traffic, which says nothing about the client. |
+| `forwarded_for` | 4443, and the sites that demand Cloudflare's origin-pull certificate | X-Forwarded-For as Pomerium or Cloudflare wrote it. Its last address is the client that proxy saw. Elsewhere the header is whatever the client sent, so it is not recorded. |
+| `caller` | 4443 | The signed-in person's email, on the routes that pass identity headers (`books`, `fenwick`); empty on the rest. |
+| `request_id` | 4443 | Pomerium's request ID. Pomerium's `authorize check` row for the same request has it as `request-id`, beside the email, on every signed-in route. |
+| `client_cert` | `logs-ingest.pod.haus` | The subject of the shipping host's client certificate. |
+
+The public sites on `:4444` that Cloudflare does not front, `storage.pod.haus`
+among them, have no client address: Numbat's relay carries raw TCP, so Caddy
+sees only the rathole client.
+
+Three kinds of request leave less than that:
+
+- **A proxied response Caddy aborts** because its upstream cut the response
+  short is written with the status the upstream sent (usually 200, 206 for a
+  range request) and duration 0, whatever the client received, but with every
+  field above. Its companion is the proxy's warning
+  `aborting with incomplete response` in Caddy's own log, at the same second,
+  which names the upstream and the error.
+- **A request whose Host names a different site on the same listener** from
+  the one its TLS connection named is refused with 421 on `:443` and `:4444`
+  before any route runs, so its line carries `status` and `duration` only.
+  (`:4443` accepts any of its sites' Hosts on Pomerium's one TLS name.)
+- **A request whose Host names no site at all**, and a plain-HTTP request Caddy
+  only redirects to HTTPS, is not written: Caddy's own access logger would
+  write it whole, headers and query included, so it is excluded.
+
+Most rows are Alloy deliveries to `logs-ingest.pod.haus` from the three hosts
+that ship through it (Numbat, voltaire and Pinelake), one per batch.
 
 ## Adding a service
 
@@ -292,6 +339,10 @@ change applies on that recreate and never inside a running Alloy.
   authorisation `code`, and Pocket ID's request `query` field still carries the
   OAuth `state` blob. Both stay on purpose: telemetry is for debugging, the code
   is spent within seconds of being logged, and HyperDX is inside the house.
+- **Pocket ID's one-time sign-in token travels in the path**, as `/lc/<token>`
+  and `/api/one-time-access-token/<token>`, so it is stored in Pocket ID's own
+  request rows and in the `path` of bilby's front-door line for `id.pod.haus`.
+  Like the callback code it is single-use.
 - **Text lines are stored as printed.** Nothing scrubs a secret out of plain
   text, so a service that prints one puts it in ClickStack for 180 days. The fix
   belongs in the service.
@@ -300,6 +351,28 @@ change applies on that recreate and never inside a running Alloy.
   carries no prompt or reply text ([local model
   runbook](runbooks/local-llm.md#what-is-deliberately-not-recorded)). Fractal's
   Caddy deletes the request object from its access lines for the same reason.
+- **Caddy's access lines carry no request headers or query** on either host
+  that logs them: the request object is deleted and only chosen fields are
+  added ([Bilby's front door](#bilbys-front-door)).
+- **Two of Caddy's own lines carry the whole request.** The proxy's warning
+  `aborting with incomplete response` is written on any listener when an
+  upstream cuts a response short. The error line for a request that failed with
+  a 5xx (logger `http.log.error`, with the access logger's name appended where
+  one is set) is written only on a listener with no error routes: on bilby that
+  is `:443` and `:4443`, and a 5xx on `:4444` or `:80` produces no error line,
+  because the public sites' error routes there take it. On bilby both lines lose
+  the query from `request.uri` and from the `Referer` header, and these request
+  headers: `Authorization`, `Proxy-Authorization`, `Cookie`,
+  `X-Pomerium-Jwt-Assertion`, `X-Podhaus-Gateway-Token`, `X-Plex-Token`,
+  `X-Api-Key`, `X-Api-Secret`, `X-Amz-Security-Token`, `X-Runner-Token`, `X-Csrf-Token-Hdf5hft` (the
+  header kangaroo's Syncthing names after its device ID), `X-Hub-Signature`
+  and `X-Hub-Signature-256` (`caddy/Caddyfile`, the `log default` block).
+  Every other header stays. `tools/tests/test_bilby_caddy_access_log.py`
+  fails when a route compares a header the list lacks with a secret, but a
+  header that carries a credential through to an upstream is stored until it
+  is added by hand. Every other host's Caddy writes `Cookie`,
+  `Set-Cookie`, `Authorization` and `Proxy-Authorization` as `REDACTED` and
+  keeps every other header and the query.
 
 ## Services that ship their own telemetry
 

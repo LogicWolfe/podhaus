@@ -11,6 +11,41 @@
 	servers :4443 {
 		strict_sni_host insecure_off
 	}
+	# Caddy's own lines. A request whose Host names no site on its listener,
+	# and a plain-HTTP request Caddy only redirects to HTTPS, reached nothing,
+	# and Caddy's base access logger would write it whole, so it is not kept.
+	# (On :443 and :4444 a Host naming a different site on the listener from
+	# the one its TLS connection named is refused with 421 before any route
+	# runs, and front_door writes it with its status and duration only.) Every
+	# site's requests are written by the access_log snippet below.
+	#
+	# Two of Caddy's own lines still carry the whole request: the proxy's
+	# warning when it aborts a response the upstream cut short, and the error
+	# line for a 5xx on a listener with no error routes (:443 and :4443). They
+	# keep every header but the ones that carry a credential to a route here,
+	# and the URI and the Referer lose their query. X-Csrf-Token-Hdf5hft is the header
+	# kangaroo's Syncthing names after its device ID.
+	log default {
+		exclude http.log.access
+		format filter {
+			wrap json
+			request>uri regexp \?.*$ ""
+			request>headers>Referer regexp \?.*$ ""
+			request>headers>Authorization delete
+			request>headers>Proxy-Authorization delete
+			request>headers>Cookie delete
+			request>headers>X-Pomerium-Jwt-Assertion delete
+			request>headers>X-Podhaus-Gateway-Token delete
+			request>headers>X-Plex-Token delete
+			request>headers>X-Api-Key delete
+			request>headers>X-Api-Secret delete
+			request>headers>X-Amz-Security-Token delete
+			request>headers>X-Runner-Token delete
+			request>headers>X-Csrf-Token-Hdf5hft delete
+			request>headers>X-Hub-Signature delete
+			request>headers>X-Hub-Signature-256 delete
+		}
+	}
 }
 
 # Cross-host upstreams name a host by variable, never by address:
@@ -20,6 +55,51 @@
 # Parse-time {$VAR} rather than runtime {env.VAR} because an upstream
 # address is not one of the fields that expand runtime placeholders — the
 # {env.…} form above is for header and TLS values, which do.
+
+# Every site's access record: one JSON line per request on stdout, read by the
+# caddy Alloy module (docs/logging.md). Caddy's request object is deleted
+# whole, so no header, cookie or query string can reach it; the fields that
+# say who reached what are appended one by one instead. The path is the one
+# the client asked for, before any rewrite, and without its query, where
+# Plex's token and S3's presigned signatures travel. Caddy writes a 5xx at
+# error level and everything else at info. Every field is recorded before the
+# request is handled (the `<`), because a field recorded afterwards is lost
+# when the proxy aborts a response its upstream cut short: that line has
+# the status the upstream sent (usually 200, 206 for a range) and duration 0,
+# beside the proxy's warning about it in Caddy's own log. remote_ip is the connection's own peer: a LAN client on :443, and
+# on :4443 and :4444 the rathole client that carries Numbat's traffic, so
+# those listeners know the client only from a proxy's X-Forwarded-For
+# (proxied_access_log below). Every site block imports one of the two;
+# tools/tests/test_bilby_caddy_access_log.py fails on a site that does not,
+# or on a changed field.
+(access_log) {
+	log front_door {
+		output stdout
+		format filter {
+			wrap json
+			request delete
+			resp_headers delete
+			bytes_read delete
+			size delete
+			user_id delete
+		}
+	}
+	log_append <listener {http.request.local.port}
+	log_append <remote_ip {http.request.remote.host}
+	log_append <host {http.request.host}
+	log_append <method {http.request.method}
+	log_append <path {http.request.orig_uri.path}
+	log_append <user_agent {http.request.header.User-Agent}
+}
+
+# For a site only a proxy that writes X-Forwarded-For can reach: Pomerium on
+# :4443, and Cloudflare on the sites that demand its origin-pull certificate.
+# The header's last address is the client that proxy saw. Anywhere else the
+# header is whatever the client sent, so it is not recorded.
+(proxied_access_log) {
+	import access_log
+	log_append <forwarded_for {http.request.header.X-Forwarded-For}
+}
 
 # Public TLS front for RustFS's S3 API. Owns its own Let's Encrypt
 # wildcard so the S3 data path never touches Cloudflare's proxy (which
@@ -46,6 +126,14 @@
 # service. Caddy also requires Pomerium's client certificate on port 4443.
 :4443 {
 	import pomerium_origin_tls
+	import proxied_access_log
+	# Pomerium sets both: the signed-in person's email, on routes that pass
+	# identity headers (overwriting any value a caller sent), and on every
+	# route its request ID, which its own `authorize check` line carries beside
+	# the email. The signed assertion it also sends is not recorded: bookshelf
+	# accepts it as proof of who is asking.
+	log_append <caller {http.request.header.X-Pomerium-Claim-Email}
+	log_append <request_id {http.request.header.X-Request-Id}
 	@missing_mcp_token {
 		host watch.pod.haus
 		path /api/mcp /api/mcp/*
@@ -112,6 +200,7 @@
 # bilby, which forwards to Core on bandicoot. Komodo's v2 Noise handshake
 # remains the application-level boundary.
 core-connect.pod.haus, core-connect.pod.haus:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -125,6 +214,10 @@ core-connect.pod.haus, core-connect.pod.haus:4444 {
 }
 
 logs-ingest.pod.haus, logs-ingest.pod.haus:4444 {
+	import access_log
+	# Each host ships with a certificate of its own, so its subject is the
+	# sender; the address is only the relay's.
+	log_append <client_cert {http.request.tls.client.subject}
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 		client_auth {
@@ -137,6 +230,7 @@ logs-ingest.pod.haus, logs-ingest.pod.haus:4444 {
 }
 
 storage.pod.haus, *.storage.pod.haus, storage.pod.haus:4444, *.storage.pod.haus:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -155,6 +249,7 @@ storage.pod.haus, *.storage.pod.haus, storage.pod.haus:4444, *.storage.pod.haus:
 # on kangaroo. This :443 site remains for LAN access and Kookaburra rollback;
 # Numbat uses the matching :4444 site above.
 pouch.pod.haus, pouch.pod.haus:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -166,6 +261,7 @@ pouch.pod.haus, pouch.pod.haus:4444 {
 # Active HTTPS reaches Forgejo through Pomerium's private :4443 origin;
 # active SSH uses Numbat's separate raw service.
 git.pod.haus {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -188,6 +284,7 @@ git.pod.haus {
 # https://music.pod.haus so every client is told to use this name. MA is
 # host-network, so Caddy reaches it over the dockernet bridge gateway.
 music.pod.haus {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -278,10 +375,12 @@ music.pod.haus {
 }
 
 http://nathanbaxter.com, http://www.nathanbaxter.com {
+	import access_log
 	import nathan_site
 }
 
 nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
+	import proxied_access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 		client_auth {
@@ -403,10 +502,12 @@ nathanbaxter.com:4444, www.nathanbaxter.com:4444 {
 }
 
 http://skycroeser.net {
+	import access_log
 	import sky_site
 }
 
 skycroeser.net:4444 {
+	import proxied_access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 		client_auth {
@@ -420,10 +521,12 @@ skycroeser.net:4444 {
 # dedicated block rather than joining the site line above so www never
 # serves duplicate content.
 http://www.skycroeser.net {
+	import access_log
 	redir https://skycroeser.net{uri} 301
 }
 
 www.skycroeser.net:4444 {
+	import proxied_access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 		client_auth {
@@ -436,6 +539,7 @@ www.skycroeser.net:4444 {
 # Public application and machine endpoints on Numbat's relay-only listener.
 # The Cloudflare Tunnel paths remain configured separately for rollback.
 id.pod.haus:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -485,6 +589,7 @@ id.pod.haus:4444 {
 }
 
 doggos.indigopod.au:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -493,6 +598,7 @@ doggos.indigopod.au:4444 {
 
 # The site's old name from its Railway days; old links still land.
 doggos.indigo.pod.haus:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -504,6 +610,7 @@ doggos.indigo.pod.haus:4444 {
 # The Umami tracker rides the same host (the stats.<site> pattern below),
 # so the family's browsers never touch a Pomerium-gated name.
 yiayia.pod.haus:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -517,6 +624,7 @@ yiayia.pod.haus:4444 {
 }
 
 unifi.pod.haus, unifi.pod.haus:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -528,6 +636,7 @@ unifi.pod.haus, unifi.pod.haus:4444 {
 }
 
 paperless-api.pod.haus:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -546,6 +655,7 @@ paperless-api.pod.haus:4444 {
 }
 
 fenwick-events.pod.haus:4444 {
+	import access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
@@ -563,6 +673,7 @@ fenwick-events.pod.haus:4444 {
 }
 
 pets.indigopod.au:4444 {
+	import proxied_access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 		client_auth {
@@ -573,6 +684,7 @@ pets.indigopod.au:4444 {
 }
 
 stats.nathanbaxter.com:4444, stats.skycroeser.net:4444, stats.indigopod.au:4444 {
+	import proxied_access_log
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 		client_auth {
