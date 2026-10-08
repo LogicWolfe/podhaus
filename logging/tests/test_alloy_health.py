@@ -212,7 +212,9 @@ class AlloyHealthTest(unittest.TestCase):
         cls.shipper("never-returning", "hold:4318", NO_TIMEOUT)
         cls.shipper("stateless", "sink:4318")
         cls.workdir.chmod(0o755)
-        docker("network", "create", "--label", LABEL, cls.prefix)
+        # Internal, so a stopped container's name fails to resolve at once
+        # instead of being forwarded to the host's resolver for seconds.
+        docker("network", "create", "--internal", "--label", LABEL, cls.prefix)
         cls.addClassCleanup(docker, "network", "rm", cls.prefix)
         for sink in ("sink", "stopping-sink"):
             cls.alloy(sink, "sink.alloy", "--stability.level=experimental")
@@ -232,10 +234,12 @@ class AlloyHealthTest(unittest.TestCase):
     def run_container(cls, name: str, *args: str) -> None:
         # No log driver, as for the log schema test: nothing here is for a
         # host's Alloy to ship. Removal goes through the checked wrapper, so a
-        # container left behind fails the run.
+        # container left behind fails the run. SELinux labelling is off for
+        # these containers alone, as in the Alloy config lint.
         container = f"{cls.prefix}-{name}"
         cls.addClassCleanup(docker, "rm", "-f", container)
-        docker("run", "-d", "--log-driver", "none", "--label", LABEL, "--name", container,
+        docker("run", "-d", "--log-driver", "none", "--security-opt", "label=disable",
+               "--label", LABEL, "--name", container,
                "--network", cls.prefix, *args)
 
     @classmethod
