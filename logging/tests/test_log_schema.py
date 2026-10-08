@@ -1037,9 +1037,11 @@ class AlloyRun:
         # No log driver: the host's own Alloy would otherwise ship this
         # container's output. Its output still reaches this process. The
         # podhaus.harness label makes docker-logs.alloy's rules drop the
-        # container, so that Alloy never tries to read it.
+        # container, so that Alloy never tries to read it. SELinux labelling
+        # is off for this container alone, as in the Alloy config lint.
         self.process = subprocess.Popen([
             "docker", "run", "--rm", "--log-driver", "none", "--name", self.name,
+            "--security-opt", "label=disable",
             "--label", "podhaus.harness=true", "-p", f"127.0.0.1::{API_PORT}",
             "--user", f"{os.getuid()}:{os.getgid()}", "--tmpfs", self.check_state,
             "-e", "CLICKSTACK_INGESTION_KEY=stand-in-ingestion-key",

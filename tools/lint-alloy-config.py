@@ -91,8 +91,12 @@ class AlloyContainer:
         # reach anything, and nothing is for a host's Alloy to read
         # (docker-logs.alloy drops the label). It sleeps rather than runs,
         # so a lint that dies leaves it behind for ten minutes at most.
+        # SELinux labelling is off for this container alone: an enforcing host
+        # otherwise denies it the checkout, and relabelling with :z would
+        # rewrite the checkout's own labels.
         subprocess.run([
             "docker", "run", "-d", "--rm", "--network", "none", "--log-driver", "none",
+            "--security-opt", "label=disable",
             "--label", "podhaus.harness=true", "--name", self.name, "--entrypoint", "sleep",
             "-v", f"{LOGGING}:/logging:ro", "-v", f"{MODULES}:/etc/alloy-modules:ro",
             IMAGE, "600",
