@@ -45,7 +45,7 @@ journald (Linux hosts)    ─┤   discover/tail → ANSI-strip → per-service 
                           │   fields) → batch → OTLP/HTTP exporter
                           │
 bandicoot ────────────────► clickstack-otel:4318  (same host, dockernet)
-bilby, kangaroo, fractal ─► bandicoot:4318        (cross-LAN, plaintext)
+bilby, kangaroo, fractal, quokka ─► bandicoot:4318        (cross-LAN, plaintext)
 numbat, voltaire, pinelake► logs-ingest.pod.haus  (mTLS via bilby's Caddy → bandicoot:4318)
                           │  (HyperDX ingestion API key on every request)
                           ▼
@@ -104,7 +104,7 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           API and asserts a downstream state. Periphery checks cover every Komodo
           host through <code>GetServerState</code>. Remote-container checks use
           <code>InspectDockerContainer</code> and require both running state and healthy
-          Docker health; this covers kangaroo services, the Fractal/Voltaire docs
+          Docker health; this covers kangaroo services, the Fractal, Voltaire, Bandicoot and Quokka docs
           instances, the two local model containers, and bandicoot's Backrest, Radarr,
           bookcard and bookbinder. Bilby's docs health is probed directly over dockernet. The
           <code>Komodo Alerts</code> check asserts no unresolved CRITICAL alert, which
@@ -344,7 +344,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         <li><strong>OTel collector</strong> (<code>clickstack-otel</code>) — the bundled
           OpenTelemetry collector. Bandicoot's Alloy reaches it by container name on
           dockernet. Its OTLP/HTTP port <code>4318</code> is published on the LAN:
-          bilby's, kangaroo's and fractal's Alloy ship to it directly, and bilby's Caddy
+          bilby's, kangaroo's, fractal's and quokka's Alloy ship to it directly, and bilby's Caddy
           forwards <code>logs-ingest.pod.haus</code> to it for Numbat, voltaire and pinelake
           after checking the client certificate. HyperDX's <code>8080</code> (for <code>watch.pod.haus</code>,
           which still terminates on bilby) and ClickHouse's <code>8123</code> (for Gatus's
@@ -357,11 +357,12 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
 
       <h3 id="alloy">Alloy log collection</h3>
       <p>
-        Alloy runs on all seven active hosts as the multi-host
+        Alloy runs on all eight active hosts as the multi-host
         <code>logging</code> service: <code>logging</code> on bilby,
         <code>bandicoot-logging</code> on bandicoot, <code>kangaroo-logging</code> on
         kangaroo, <code>numbat-logging</code> on Numbat, <code>fractal-logging</code> on
-        fractal, <code>voltaire-logging</code> on voltaire, and
+        fractal, <code>quokka-logging</code> on quokka,
+        <code>voltaire-logging</code> on voltaire, and
         <code>pinelake-logging</code> on pinelake. They share
         <code>logging/compose.shared.yaml</code> and the module directory
         <code>logging/alloy-modules/</code>; each host's
@@ -378,7 +379,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
       <ul>
         <li><strong>bandicoot</strong> — the collector's own host: plaintext to
           <code>http://clickstack-otel:4318</code> by container name on dockernet.</li>
-        <li><strong>bilby</strong>, <strong>kangaroo</strong> and <strong>fractal</strong> — cross-LAN to
+        <li><strong>bilby</strong>, <strong>kangaroo</strong>, <strong>fractal</strong> and <strong>quokka</strong> — cross-LAN to
           port 4318 at bandicoot's address from <code>config/lan-addresses.json</code>
           (plaintext, home LAN only), which reaches each stack as
           <code>BANDICOOT_LAN_IPV4</code>.</li>
@@ -389,7 +390,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
       </ul>
       <p>
         Every host opens a new connection for each request
-        (<code>disable_keep_alives</code>). Bilby, kangaroo and fractal need it: they reach
+        (<code>disable_keep_alives</code>). Bilby, kangaroo, fractal and quokka need it: they reach
         the collector at bandicoot's published port, where Docker's NAT keeps a kept-alive
         connection mapped to the old collector container after a recreate, and the next
         request hangs with no error (the 2026-06-19 exporter wedge under <a href="#known-issues">Known issues</a>).

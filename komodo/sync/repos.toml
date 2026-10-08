@@ -289,3 +289,27 @@ git_provider = "github.com"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/docs-server"
 branch = "main"
+
+[[repo]]
+name = "podhaus-quokka"
+description = "Komodo-managed podhaus clone on quokka"
+tags = ["podhaus", "quokka"]
+
+[repo.config]
+server = "quokka"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/podhaus"
+branch = "main"
+
+[[repo]]
+name = "docs-server-quokka"
+description = "Komodo-managed docs-server clone on quokka"
+tags = ["podhaus", "quokka"]
+
+[repo.config]
+server = "quokka"
+git_provider = "github.com"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/docs-server"
+branch = "main"

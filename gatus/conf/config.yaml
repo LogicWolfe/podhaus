@@ -524,6 +524,38 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
 
+  - name: Bandicoot Periphery (via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Komodo
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"GetServerState","params":{"server":"bandicoot"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == Ok"
+
+
+  - name: Quokka Periphery (via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Komodo
+    interval: 60s
+    alerts: *alerts
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"GetServerState","params":{"server":"quokka"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == Ok"
+
+
   - name: Voltaire Periphery (via Komodo)
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
@@ -600,6 +632,44 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].State.Status == running"
       - "[BODY].State.Health.Status == healthy"
+
+  - name: Docs (quokka, via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Docs
+    interval: 60s
+    alerts:
+      - type: custom
+        description: "Quokka docs is down or source-degraded. If the container is running/unhealthy, inspect its `/health` response and `podhaus-docs-source-reconcile.service`; if it is `created`, inspect `State.Error` for an OCI mount failure. Restore the source adapter or redeploy the corrected stack, not Caddy."
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"quokka","container":"docs"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
+
+  - name: Docs (bandicoot, via Komodo)
+    url: http://${BANDICOOT_LAN_IPV4}:9120/read
+    method: POST
+    group: Docs
+    interval: 60s
+    alerts:
+      - type: custom
+        description: "Bandicoot docs is down or source-degraded. If the container is running/unhealthy, inspect its `/health` response and `podhaus-docs-source-reconcile.service`; if it is `created`, inspect `State.Error` for an OCI mount failure. Restore the source adapter or redeploy the corrected stack, not Caddy."
+    headers:
+      X-Api-Key: ${KOMODO_API_KEY}
+      X-Api-Secret: ${KOMODO_API_SECRET}
+      Content-Type: application/json
+    body: '{"type":"InspectDockerContainer","params":{"server":"bandicoot","container":"docs"}}'
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].State.Status == running"
+      - "[BODY].State.Health.Status == healthy"
+
 
   - name: Docs (voltaire, via Komodo)
     url: http://${BANDICOOT_LAN_IPV4}:9120/read

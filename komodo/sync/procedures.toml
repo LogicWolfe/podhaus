@@ -357,7 +357,7 @@ executions = [
 
 [[procedure]]
 name = "docs-push-deploy"
-description = "Push-to-deploy for the docs service stacks: docs on bilby, fractal-docs on fractal, voltaire-docs on voltaire, bandicoot-docs on bandicoot."
+description = "Push-to-deploy for the docs service stacks: docs on bilby, fractal-docs on fractal, voltaire-docs on voltaire, bandicoot-docs on bandicoot, quokka-docs on quokka."
 tags = ["docs", "podhaus"]
 config.webhook_enabled = true
 config.schedule_enabled = false
@@ -373,7 +373,7 @@ executions = [
 name = "Deploy docs (build + up; layer cache makes an unchanged push a no-op)"
 enabled = true
 executions = [
-  { execution.type = "BatchDeployStack", execution.params = { pattern = "docs, fractal-docs, voltaire-docs, bandicoot-docs" }, enabled = true },
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "docs, fractal-docs, voltaire-docs, bandicoot-docs, quokka-docs" }, enabled = true },
 ]
 
 

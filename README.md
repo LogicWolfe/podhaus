@@ -1,6 +1,6 @@
 # podhaus
 
-Docker infrastructure for six managed hosts. Compose stacks live in this
+Docker infrastructure for eight managed hosts. Compose stacks live in this
 repo, Komodo deploys them, 1Password supplies secrets, and Terraform owns the
 external infrastructure.
 
@@ -12,6 +12,8 @@ external infrastructure.
   rathole gateway.
 - **fractal:** Fedora under WSL2. It is an outbound-only remote development and
   podhaus service host.
+- **quokka:** ThinkPad X1 Carbon running native Fedora Workstation on the home LAN.
+  It is a headless development host with docs, semantic search and logging.
 - **voltaire:** Fedora Workstation. It is an outbound-only remote development
   and podhaus service host.
 - **bandicoot:** Apple Silicon MacBook Pro on Fedora Asahi Remix. It hosts
@@ -105,13 +107,13 @@ DNSControl has been retired.
 | `tailscale-recovery-bootstrap` | SSH-only host recovery plane |
 | `backup/`, `autoheal/`, `logging/` | Multi-host shared services |
 | `clickstack/`, `gatus/` | Observability, health checks, and alerting |
-| `bilby/`, `kangaroo/`, `numbat/`, `fractal/`, `voltaire/`, `bandicoot/`, `pinelake/` | Host bootstrap and host-level configuration |
+| `bilby/`, `kangaroo/`, `numbat/`, `fractal/`, `voltaire/`, `bandicoot/`, `pinelake/`, `quokka/` | Host bootstrap and host-level configuration |
 | `docs/` | Current-state documentation and live plans |
 | `<service>/compose.yaml` | A single-host service stack |
 
 ## Code search on Linux
 
-Lumen runs locally on Voltaire, Fractal and Bilby. The `lumen/`
+Lumen runs locally on Voltaire, Fractal, Bilby, Bandicoot and Quokka. The `lumen/`
 stack deploys Ollama, the code embedding model and the Lumen tools image. A
 stopped `lumen-sweep` container scans registered repositories and Git worktrees;
 Ofelia starts it every ten minutes and prevents overlapping scheduled runs.

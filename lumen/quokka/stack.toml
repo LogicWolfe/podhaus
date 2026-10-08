@@ -1,0 +1,14 @@
+[[stack]]
+name = "quokka-lumen"
+description = "Local semantic search and code embeddings on Quokka"
+tags = ["quokka", "podhaus"]
+
+[stack.config]
+project_name = "lumen"
+server = "quokka"
+linked_repo = "podhaus-quokka"
+run_directory = "lumen"
+file_paths = ["compose.shared.yaml", "quokka/compose.yaml"]
+run_build = true
+auto_pull = false
+ignore_services = ["lumen-tools", "lumen-model", "lumen-sweep"]

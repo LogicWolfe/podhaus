@@ -28,6 +28,9 @@
     - role: docs_sources
       when: inventory_hostname in groups['docs_hosts']
       tags: [docs-sources]
+    - role: gnome_on_demand
+      when: inventory_hostname in groups['gnome_on_demand_hosts']
+      tags: [gnome-on-demand]
     - role: docker
       when: inventory_hostname in groups['docker_hosts']
       tags: [docker]

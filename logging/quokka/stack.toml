@@ -1,0 +1,15 @@
+[[stack]]
+name = "quokka-logging"
+description = "Alloy on quokka, shipping across the home LAN to the ClickStack collector on bandicoot"
+tags = ["quokka", "podhaus"]
+
+[stack.config]
+server = "quokka"
+linked_repo = "podhaus-quokka"
+run_directory = "logging/quokka"
+file_paths = ["../compose.shared.yaml", "compose.yaml"]
+
+environment = """
+CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
+BANDICOOT_LAN_IPV4=[[LAN_BANDICOOT_IPV4]]
+"""

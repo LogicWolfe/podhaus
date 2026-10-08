@@ -228,6 +228,9 @@ routes:
   # bandicoot's and voltaire's docs servers. Same shape as fractal's, each
   # with its own loopback rathole service and its own Caddy mTLS origin.
   - <<: *friends_route
+    from: https://quokka.docs.pod.haus
+    to: https://127.0.0.1:8448
+  - <<: *friends_route
     from: https://bandicoot.docs.pod.haus
     to: https://127.0.0.1:8447
   - <<: *friends_route
@@ -282,6 +285,7 @@ routes:
                 - 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM= bilby machine key'
                 - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGc4palJ9QLWwFABcbyHKXNUvrTRpKdAkqATs8Bmr5xW fractal machine key'
                 - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC5zEJO7pWBiUNL3Sx7VvTUCpIIaZoKVvNeqMKymgDl3 nb-macbook-air machine key'
+                - 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBOlMzOliGBC+plAujmuE7ZQCHNlMRxgJTo6YrKYc6HXnjlFTo925OEmabyE0b2rHABcbTVSOTJuNWSjXV/2TyQI= quokka machine key'
                 - 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBOzuSyhdhW8qk35HF8k7ftbnXPJrGEKGpf0QSdD2VCddcAX3NGMIa21nalGFpBOFK3QDBgd+nOogSOC8H/vzEjY= voltaire machine key'
       - allow:
           and:
@@ -291,6 +295,9 @@ routes:
                 is: nathan
   - from: ssh://bilby
     to: ssh://127.0.0.1:2201
+    policy: *nathan_ssh_policy
+  - from: ssh://quokka
+    to: ssh://127.0.0.1:2207
     policy: *nathan_ssh_policy
   - from: ssh://bandicoot
     to: ssh://127.0.0.1:2206

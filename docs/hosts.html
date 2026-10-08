@@ -2,8 +2,31 @@
 
       <h1>Hosts</h1>
       <p class="lead text-lg text-text-muted">
-        Seven active hosts. Bandicoot's Komodo Core manages bilby, kangaroo, Numbat,
-        fractal, voltaire, bandicoot, and pinelake.
+        Eight active hosts. Bandicoot's Komodo Core manages bilby, kangaroo, Numbat,
+        fractal, voltaire, bandicoot, pinelake, and quokka.
+      </p>
+
+      <h2 id="quokka">quokka</h2>
+      <p>
+        ThinkPad X1 Carbon with an Intel i7-7500U, 16 GB memory and a 512 GB
+        encrypted solid-state drive, running native Fedora Workstation.
+        It is a headless development host on the home LAN: USB Ethernet
+        address <code>10.0.0.199</code>, reserved for
+        <code>58:ef:68:7c:9b:73</code>. SSH uses <code>quokka.pod.haus</code>;
+        its protected docs site is <code>quokka.docs.pod.haus</code>.
+      </p>
+      <p>
+        Ansible <code>playbooks/quokka.yml</code> owns machine state; chezmoi
+        owns fish, developer tools and agent configuration. The TPM holds its
+        machine SSH identity. Provision the two development service-account tokens
+        separately with <code>op-vault mint dev</code> and
+        <code>op-vault mint switch</code>; each is stored in its own TPM slot.
+        Sleep is disabled. Closing the lid arms a one-hour GNOME shutdown;
+        opening it or attaching an external display keeps the desktop running.
+        Docs, Lumen code embeddings, Ofelia, Autoheal, Periphery and Alloy are
+        its container services. It hosts no generative model or household service.
+        Docs and code search discover <code>~/repos</code> and the canonical
+        chezmoi checkout through the shared repository source configuration.
       </p>
 
       <h2 id="bilby">bilby</h2>

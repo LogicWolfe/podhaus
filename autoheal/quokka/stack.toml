@@ -1,0 +1,10 @@
+[[stack]]
+name = "quokka-autoheal"
+description = "Restart unhealthy autoheal-labelled containers on quokka"
+tags = ["quokka", "podhaus"]
+
+[stack.config]
+server = "quokka"
+linked_repo = "podhaus-quokka"
+run_directory = "autoheal/quokka"
+file_paths = ["compose.yaml", "../compose.shared.yaml"]

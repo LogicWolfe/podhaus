@@ -1,5 +1,5 @@
 [Unit]
-Description=Decide whether bandicoot's GNOME desktop should be running right now
+Description=Decide whether the GNOME desktop should be running right now
 After=systemd-logind.service
 
 [Service]

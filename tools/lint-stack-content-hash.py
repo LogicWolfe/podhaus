@@ -65,6 +65,7 @@ SKIP_PATH_FRAGMENTS = (
     "fractal/periphery",
     "kangaroo/periphery",
     "numbat/periphery",
+    "quokka/periphery",
     "voltaire/periphery",
 )
 

@@ -2,7 +2,7 @@
 
       <h1>Architecture</h1>
       <p class="lead text-lg text-text-muted">
-        Seven active hosts, one Komodo Core, one git repo. Services run as Docker Compose stacks
+        Eight active hosts, one Komodo Core, one git repo. Services run as Docker Compose stacks
         whose configs are committed; secrets are templated in at deploy time from 1Password.
       </p>
 
@@ -76,7 +76,7 @@
         <a href="/komodo.html#operating-models">Komodo → operating models</a>.
       </p>
       <p>
-        Docs-server runs on Bilby, Fractal, Voltaire and Bandicoot. The Ansible
+        Docs-server runs on Bilby, Fractal, Voltaire, Bandicoot and Quokka. The Ansible
         <code>docs_sources</code> role exposes each host's aggregate repository directory
         and canonical chezmoi checkout through stable read-only slots under
         <code>/opt/podhaus/docs-sources</code>. The shared repository manifest at
@@ -90,7 +90,7 @@
 
       <p>
         Komodo manages Lumen's embedding service and tooling image on Bilby,
-        Fractal and Voltaire. Each host's Ofelia refreshes its indexes;
+        Bandicoot, Fractal, Voltaire and Quokka. Each host's Ofelia refreshes its indexes;
         chezmoi exposes local search to Claude and Codex. See
         <a href="/host-provisioning.md#repository-search">Repository search</a>.
         Radarr runs on Bandicoot alongside Fenwick, providing movie metadata and

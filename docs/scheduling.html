@@ -11,7 +11,8 @@
       <p>
         Each host with scheduled container jobs runs its own Ofelia: Bilby
         (<code>ofelia/</code>), Bandicoot (<code>ofelia/bandicoot/</code>),
-        Fractal (<code>ofelia/fractal/</code>), Voltaire
+        Fractal (<code>ofelia/fractal/</code>), Quokka
+        (<code>ofelia/quokka/</code>), Voltaire
         (<code>ofelia/voltaire/</code>) and Pinelake
         (<code>pinelake/ofelia/</code>). Each scheduler connects to its
         host's Docker socket and discovers jobs on that host. A job on another
@@ -38,7 +39,7 @@
       </p>
 
       <p>
-        Bilby, Fractal and Voltaire share the Lumen schedule in
+        Bilby, Bandicoot, Fractal, Voltaire and Quokka share the Lumen schedule in
         <code>ofelia/jobs/compose.yaml</code>. Every ten minutes their scheduler
         starts the local <code>lumen-sweep</code> container to refresh repository
         indexes. The Lumen stack owns that container's mounts and command;
@@ -64,7 +65,7 @@
           <tr><td><code>sky-backups-monitor</code></td><td>sky-backups-monitor</td><td>hourly at :15</td><td>Lists committed Restic snapshot objects in Pouch RustFS and alerts through Gatus when none was written within seven days.</td></tr>
           <tr><td><code>clickstack-mongo-dump</code></td><td>clickstack-mongo</td><td>03:50 daily</td><td>Dumps ClickStack's MongoDB metadata into the backed-up host path.</td></tr>
           <tr><td><code>forgejo-backup-recover</code></td><td>backrest</td><td>every 5 min (:03, :08, &hellip;)</td><td>Restarts Forgejo when a Backrest quiesce died between its stop and end hooks. Acts only on a quiesce lock older than 15 minutes with no <code>restic</code> running, so a healthy snapshot's own stop phase is never read as an interruption; the offset keeps the tick clear of the 03:45 snapshot entirely. See <a href="/runbooks/forgejo">Forgejo runbook</a>.</td></tr>
-          <tr><td><code>lumen-sweep</code></td><td>lumen-sweep on Bilby, Fractal and Voltaire</td><td>every 10 min</td><td>Discovers repositories and linked worktrees from the shared repository sources and refreshes their semantic indexes. Overlapping scheduled runs are skipped.</td></tr>
+          <tr><td><code>lumen-sweep</code></td><td>lumen-sweep on Bilby, Bandicoot, Fractal, Voltaire and Quokka</td><td>every 10 min</td><td>Discovers repositories and linked worktrees from the shared repository sources and refreshes their semantic indexes. Overlapping scheduled runs are skipped.</td></tr>
           <tr><td><code>search-index</code></td><td>search-indexer</td><td>every minute</td><td>Refreshes the cross-repository documentation search index.</td></tr>
           <tr><td><code>streamfab-publish</code></td><td>streamfab-publish</td><td>every minute</td><td>Publishes completed StreamFab output into the media library.</td></tr>
           <tr><td><code>bookshelf-library-check</code></td><td>bookshelf on Bandicoot</td><td>02:00 daily</td><td>Starts bookshelf's nightly library check, well before Bandicoot's 04:30 <code>bookshelf</code> backup. Defined in the bookshelf repository's <code>compose.yaml</code>; Bandicoot's Ofelia runs it.</td></tr>

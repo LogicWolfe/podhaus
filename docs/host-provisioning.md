@@ -75,11 +75,12 @@ The resulting ledger:
 
 ## Which hosts Ansible manages
 
-**fractal**, **bilby**, **numbat**, **voltaire**, **bandicoot**, and **pinelake** — the `provisioned`
+**fractal**, **bilby**, **numbat**, **voltaire**, **bandicoot**, **quokka**, and **pinelake** — the `provisioned`
 group, which is what `site.yml` targets. How each is reached is a
 per-host fact in `host_vars/`: bandicoot is the control node and runs
 against itself (`ansible_connection: local`); bilby is direct on the
-home LAN via `bilby.pod.haus`; fractal is direct on the home LAN too
+home LAN via `bilby.pod.haus`; Quokka is direct via `quokka.pod.haus`
+at its USB Ethernet reservation `10.0.0.199`; fractal is direct on the home LAN too
 (`10.0.0.70`, the address its WSL guest shares with the Windows host
 under mirrored networking); numbat and
 voltaire have no inbound path of their own and route through Pomerium,
@@ -127,7 +128,7 @@ ansible/
     devbox/                the root-requiring half of a developer machine
     forgejo_runner/        Bandicoot's container-isolated Forgejo Actions runner
     docs_sources/          Read-only repository source slots for docs-server
-    gnome_on_demand/       GDM only while a display is attached (bandicoot)
+    gnome_on_demand/       GDM follows the shared lid/display policy (bandicoot, quokka)
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
     sshd_liveness/         drop SSH clients that stopped answering (dev hosts)
@@ -161,11 +162,12 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
   have not also joined a runtime group.
 - `linux_hosts` and `macos_appliance_hosts` separate operating-system role
   families. Linux-only base, account, and sshd roles never run on Darwin.
-- `docs_hosts` — Bilby, Fractal, Voltaire, and Bandicoot. Each declares the aggregate
+- `docs_hosts` — Bilby, Fractal, Voltaire, Bandicoot, and Quokka. Each declares the aggregate
   repository directory and canonical chezmoi checkout that `docs_sources`
   exposes through stable root-owned slots.
 - `docker_hosts`, `komodo_periphery_hosts`, `devboxes`, `edge_hosts`,
-  `komodo_core_hosts`, `storage_binds_hosts`, `firewalld_hosts`, `disk_tmp_hosts` — role
+  `komodo_core_hosts`, `storage_binds_hosts`, `firewalld_hosts`, `disk_tmp_hosts`,
+  `gnome_on_demand_hosts` — role
   groups. `site.yml` gates each role on membership.
 
 ## Running it
@@ -218,12 +220,12 @@ which still shows the repository file and the daemon configuration, then apply.
 
 ## Roles worth knowing about
 
-**`disk_tmp`** configures Bilby, Bandicoot, Voltaire, and Fractal to keep `/tmp`
-on their root filesystem by masking `tmp.mount`. Bilby, Bandicoot, and Voltaire
+**`disk_tmp`** configures Bilby, Bandicoot, Voltaire, Fractal, and Quokka to keep `/tmp`
+on their root filesystem by masking `tmp.mount`. Bilby, Bandicoot, Voltaire, and Quokka
 use their local root disk; Fractal uses its WSL root virtual disk. Temporary files share the root
 filesystem's free space and retain the distribution's temporary-file cleanup
 policy. Apply with `op-vault dev -- ansible-playbook playbooks/site.yml
---tags disk-tmp --limit bilby,bandicoot,voltaire,fractal` from `ansible/` on Bandicoot,
+--tags disk-tmp --limit bilby,bandicoot,voltaire,fractal,quokka` from `ansible/` on Bandicoot,
 after reviewing the same command with `--check --diff`.
 
 The role leaves an active RAM mount in place because live processes hold files
@@ -236,7 +238,7 @@ as after a full WSL shutdown. `systemctl show tmp.mount -p LoadState` verifies t
 `tmpfs` still mounted means the cutover needs a restart.
 
 **`earlyoom`** runs Fedora's earlyoom on the development hosts Bilby,
-Bandicoot, Fractal, and Voltaire. When available memory and free swap both fall to 10%,
+Bandicoot, Fractal, Voltaire, and Quokka. When available memory and free swap both fall to 10%,
 it signals the process with the highest out-of-memory score, before the host
 stalls in swap. Chezmoi sets those scores for dev work, so the order is bash
 commands (+900), then shells and agents (+600), then the tmux server (+300),
@@ -253,7 +255,7 @@ because the WSL image lacks the `systemd-oomd-defaults` package; earlyoom is the
 only early killer, and the kernel's own killer is what acts after it.
 
 **`sshd_liveness`** makes sshd on the development hosts Bilby, Bandicoot,
-Fractal, and Voltaire probe each client every 15 seconds and drop one that
+Fractal, Voltaire, and Quokka probe each client every 15 seconds and drop one that
 misses three probes in a row. Without it, a laptop that sleeps mid-session
 leaves a dead connection that keeps its tmux client attached and its forwarded
 ports bound for about fifteen minutes. That includes cc-clip's port 18339, so
@@ -461,7 +463,7 @@ end-to-end sequence including the Komodo-side resources.
 
 ## Repository search
 
-Lumen supplies local semantic code search on Fractal, Voltaire and
+Lumen supplies local semantic code search on Fractal, Voltaire, Bandicoot, Quokka and
 Bilby. Komodo manages each host's Ollama embedding service, code model and
 `lumen:local` image through `lumen/<host>/stack.toml`. The `lumen-models` and
 `lumen-data` volumes retain models and indexes. Ofelia starts the local

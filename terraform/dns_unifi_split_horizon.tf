@@ -132,3 +132,11 @@ resource "unifi_dns_record" "music_pod_haus" {
   ttl         = "5m0s"
   enabled     = true
 }
+
+resource "unifi_dns_record" "quokka_pod_haus" {
+  name        = "quokka.pod.haus"
+  record_type = "A"
+  value       = local.quokka_ip
+  ttl         = "5m0s"
+  enabled     = true
+}

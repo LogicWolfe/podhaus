@@ -21,6 +21,8 @@ resource "random_password" "pomerium_gateway_tokens" {
 
 resource "random_password" "numbat_rathole_tokens" {
   for_each = toset([
+    "quokka_http",
+    "quokka_ssh",
     "bandicoot_http",
     "bandicoot_ssh",
     "bilby_ssh",
@@ -626,4 +628,13 @@ resource "cloudflare_dns_record" "numbat_fenwick_events" {
 output "pomerium_ssh_user_ca_public_key" {
   description = "Pomerium User CA public key to trust on SSH target hosts."
   value       = tls_private_key.pomerium_ssh_user_ca.public_key_openssh
+}
+
+resource "cloudflare_dns_record" "quokka_docs" {
+  zone_id = local.zones["pod.haus"]
+  name    = "quokka.docs.pod.haus"
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
 }

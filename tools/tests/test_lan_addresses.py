@@ -101,7 +101,8 @@ class LanAddressDistributionTests(unittest.TestCase):
                 "turn_touch_burrow_ipv4=local.turn_touch_burrow_ip,"
                 "led_strip_grasshopper_ipv4=local.led_strip_grasshopper_ip,"
                 "pizero_ipv4=local.pizero_ip,"
-                "nb_macbook_air_ipv4=local.nb_macbook_air_ip})\n"
+                "nb_macbook_air_ipv4=local.nb_macbook_air_ip,"
+                "quokka_ipv4=local.quokka_ip})\n"
             ),
             capture_output=True,
             text=True,

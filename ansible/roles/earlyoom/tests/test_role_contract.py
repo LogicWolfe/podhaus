@@ -9,7 +9,7 @@ import yaml
 
 ROLE = Path(__file__).resolve().parents[1]
 ANSIBLE = ROLE.parents[1]
-DEV_HOSTS = ["bandicoot", "bilby", "fractal", "voltaire"]
+DEV_HOSTS = ["bandicoot", "bilby", "fractal", "quokka", "voltaire"]
 
 
 def earlyoom_arguments() -> list[str]:

@@ -33,6 +33,13 @@
   check_mode: false
   when: ansible_facts['pkg_mgr'] == 'dnf5'
 
+- name: Set a declared native hostname
+  ansible.builtin.hostname:
+    name: "{{ podhaus_hostname }}"
+  when:
+    - podhaus_hostname is defined
+    - not (podhaus_is_wsl | default(false))
+
 - name: Set the system timezone
   community.general.timezone:
     name: "{{ podhaus_timezone }}"

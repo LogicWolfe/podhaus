@@ -167,3 +167,9 @@ resource "unifi_client" "led_strip_grasshopper" {
   fixed_ip = local.led_strip_grasshopper_ip
   # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
+
+resource "unifi_client" "quokka" {
+  mac      = "58:ef:68:7c:9b:73"
+  name     = "Quokka"
+  fixed_ip = local.quokka_ip
+}

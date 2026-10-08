@@ -136,8 +136,8 @@ def healthcheck() -> tuple[list[str], str]:
 
 def host_configs() -> list[tuple[str, Path]]:
     configs = sorted((ROOT / "logging").glob("*/alloy-conf/config.alloy"))
-    if len(configs) != 7:
-        raise AssertionError(f"expected seven host configs, found {len(configs)}")
+    if len(configs) != 8:
+        raise AssertionError(f"expected eight host configs, found {len(configs)}")
     return [(config.parent.parent.name, config) for config in configs]
 
 

@@ -1,0 +1,42 @@
+// Alloy's own pipeline spans under service `alloy`, sampled at 10%: span
+// volume grows with the number of components, and they are kept for the
+// pipeline's health, not request flow. Alloy allows a tracing block only in
+// the root config. Its own log lines are not sent this way; the Docker source
+// already reads them, and they would arrive twice.
+tracing {
+	sampling_fraction = 0.1
+	write_to          = [podhaus.ship.run.input]
+}
+
+// The shared modules are read once, when the container starts. A push that
+// changes one reaches this Alloy through the container recreate its content
+// hash triggers, never as a reload inside the running process (see the tailer
+// rule in docs/logging.md). Alloy has no read-once setting; a poll every ten
+// years is one.
+import.file "podhaus" {
+	filename       = "/etc/alloy-modules"
+	detector       = "poll"
+	poll_frequency = "87600h"
+}
+
+podhaus.docker_logs "run" {
+	host       = "quokka"
+	forward_to = [podhaus.chain.run.receiver]
+}
+
+podhaus.journal "run" {
+	host       = "quokka"
+	forward_to = [podhaus.chain.run.receiver]
+}
+
+podhaus.chain "run" {
+	forward_to = [podhaus.ship.run.receiver]
+}
+
+// Plaintext across the home LAN to the collector's published port on
+// bandicoot, whose address the shared catalog supplies through
+// logging/quokka/stack.toml.
+podhaus.ship "run" {
+	host     = "quokka"
+	endpoint = "http://" + sys.env("BANDICOOT_LAN_IPV4") + ":4318"
+}

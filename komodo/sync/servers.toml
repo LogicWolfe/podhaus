@@ -115,3 +115,15 @@ enabled = true
 send_cpu_alerts = false
 disk_warning = 85.0
 disk_critical = 95.0
+
+[[server]]
+name = "quokka"
+description = "ThinkPad X1 Carbon, Fedora 44. Headless development host on the home LAN."
+tags = ["quokka", "podhaus"]
+
+[server.config]
+address = ""
+enabled = true
+send_cpu_alerts = false
+disk_warning = 85.0
+disk_critical = 95.0

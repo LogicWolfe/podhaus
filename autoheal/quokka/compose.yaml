@@ -1,0 +1,4 @@
+services:
+  autoheal:
+    security_opt:
+      - label=disable

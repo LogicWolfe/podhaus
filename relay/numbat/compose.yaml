@@ -28,6 +28,8 @@ services:
       RATHOLE_BANDICOOT_HTTP_TOKEN: ${RATHOLE_BANDICOOT_HTTP_TOKEN}
       RATHOLE_PINELAKE_SSH_TOKEN: ${RATHOLE_PINELAKE_SSH_TOKEN}
       RATHOLE_PINELAKE_HTTP_TOKEN: ${RATHOLE_PINELAKE_HTTP_TOKEN}
+      RATHOLE_QUOKKA_SSH_TOKEN: ${RATHOLE_QUOKKA_SSH_TOKEN}
+      RATHOLE_QUOKKA_HTTP_TOKEN: ${RATHOLE_QUOKKA_HTTP_TOKEN}
     volumes:
       - /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat/relay/numbat:/etc/rathole:ro
     labels:

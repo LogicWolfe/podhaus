@@ -1,0 +1,18 @@
+[[stack]]
+name = "quokka-relay"
+description = "Outbound quokka SSH + mTLS HTTP origins for Numbat Pomerium"
+tags = ["quokka", "podhaus"]
+
+[stack.config]
+server = "quokka"
+linked_repo = "podhaus-quokka"
+run_directory = "relay/quokka"
+file_paths = ["compose.yaml"]
+run_build = true
+auto_pull = false
+
+environment = """
+RATHOLE_NOISE_REMOTE_PUBLIC_KEY=[[OP__KOMODO__RATHOLE_RELAY__NOISE_PUBLIC_KEY]]
+RATHOLE_QUOKKA_SSH_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__QUOKKA_SSH]]
+RATHOLE_QUOKKA_HTTP_TOKEN=[[OP__KOMODO__NUMBAT_RATHOLE__QUOKKA_HTTP]]
+"""

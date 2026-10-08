@@ -1,0 +1,21 @@
+# Quokka — ThinkPad X1 Carbon 5th, Fedora 44, used as a headless dev box.
+---
+ansible_host: quokka.pod.haus
+ansible_user: nathan
+podhaus_hostname: quokka
+podhaus_is_laptop: true
+podhaus_repos_dir: /home/nathan/repos
+ansible_python_interpreter: /usr/bin/python3
+podhaus_docker_engine_managed: true
+podhaus_docker_live_restore: true
+podhaus_docs_sources:
+  - name: home
+    type: directory
+    source: /home/nathan/repos
+    required_path: .
+  - name: chezmoi
+    type: repository
+    source: /home/nathan/.local/share/chezmoi
+    required_path: .git
+podhaus_machine_key: >-
+  ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBOlMzOliGBC+plAujmuE7ZQCHNlMRxgJTo6YrKYc6HXnjlFTo925OEmabyE0b2rHABcbTVSOTJuNWSjXV/2TyQI= quokka machine key

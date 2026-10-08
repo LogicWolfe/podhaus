@@ -96,7 +96,7 @@ networks:
         ingestion, <code>paperless-api.pod.haus</code>, Komodo's outbound connection, and
         mTLS log ingestion. Forgejo uses Pomerium for HTTPS and the application address on
         port 22 for ordinary <code>git@git.pod.haus</code> SSH. Managed devices use the
-        canonical <code>&lt;host&gt;.pod.haus</code> name for host SSH. Chezmoi sends Bilby
+        canonical <code>&lt;host&gt;.pod.haus</code> name for host SSH. Chezmoi sends Bilby, Bandicoot, Quokka
         and Fractal directly through split DNS and Kangaroo directly to its active LAN
         address while preserving the canonical host-key identity. Fractal's split-horizon
         record resolves to the LAN address its WSL guest shares with the Windows host under
@@ -107,7 +107,8 @@ networks:
         Pomerium at <code>ssh.pod.haus:22</code>. On an unmanaged device, connect as
         <code>nathan@ssh.pod.haus</code> and choose a route from Pomerium's portal. Routes are
         named <code>bilby</code>, <code>fractal</code>, <code>numbat</code>,
-        <code>voltaire</code>, and <code>kangaroo</code>.
+        <code>voltaire</code>, <code>kangaroo</code>, <code>bandicoot</code>,
+        <code>pinelake</code>, and <code>quokka</code>.
         CA trust on Ansible-managed hosts comes from the
         <code>sshd_pomerium_ca</code> role; on kangaroo (which Ansible cannot
         reach — QTS has no Python) <code>kangaroo_bootstrap</code> installs a
@@ -206,6 +207,15 @@ networks:
         refreshed then. A candidate upstream PR — putting the route hostname
         in the record's <code>Details</code> — would drop both the log join
         and the debug log level.
+      </p>
+
+      <p>
+        Quokka's USB Ethernet reservation and split-horizon SSH name use
+        <code>10.0.0.199</code>. Its docs name stays on Pomerium, which reaches
+        Quokka's Caddy through the <code>quokka_http</code> rathole service at
+        <code>127.0.0.1:8448</code> on Numbat. Its off-LAN SSH route uses
+        <code>quokka_ssh</code> at <code>127.0.0.1:2207</code>. Docs use the friends
+        policy; SSH uses Nathan's existing policy.
       </p>
 
       <h2 id="identity">Identity and machine exceptions</h2>
@@ -334,6 +344,7 @@ networks:
           <tr><td><code>fractal.docs.pod.haus</code></td><td>docs-server over Fractal's configured repository sources (friends route)</td></tr>
           <tr><td><code>llm.pod.haus</code></td><td>Local model service on fractal (friends route, Pocket ID access token as bearer key; <code>/control</code> nathan-only; <code>/setup</code> public, the setup page that signs in through Pocket ID itself)</td></tr>
           <tr><td><code>voltaire.docs.pod.haus</code></td><td>docs-server over Voltaire's configured repository sources (friends route)</td></tr>
+          <tr><td><code>quokka.docs.pod.haus</code></td><td>docs-server over Quokka's configured repository sources (friends route)</td></tr>
           <tr><td><code>bandicoot.docs.pod.haus</code></td><td>docs-server over Bandicoot's configured repository sources (friends route)</td></tr>
           <tr><td><code>rustfs.pod.haus</code></td><td>RustFS console (Terraform state backend)</td></tr>
           <tr><td><code>id.pod.haus</code></td><td>Pocket ID</td></tr>

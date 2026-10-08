@@ -1,4 +1,4 @@
-# Run GNOME on bandicoot only while a display is attached, and tear it down
+# Run GNOME on laptop hosts only while a display is attached, and tear it down
 # an hour after the last one goes away. See docs/plans/gnome-on-demand.md.
 ---
 - name: Install the desktop policy script

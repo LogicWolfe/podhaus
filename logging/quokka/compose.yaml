@@ -1,0 +1,22 @@
+x-podhaus-content-paths:
+  - ../../config
+
+# quokka's logging overlay: the alloy-conf and shared module binds from the
+# linked podhaus clone and the journal Alloy tails here. Alloy ships across
+# the home LAN in plaintext, so it needs no client certificate.
+services:
+  alloy:
+    security_opt:
+      - label=disable
+    environment:
+      # The ClickStack collector's host, read by alloy-conf/config.alloy
+      # through sys.env(), supplied by config/lan-addresses.json through Komodo.
+      BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
+    volumes:
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-quokka/logging/quokka/alloy-conf:/etc/alloy:ro
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-quokka/logging/alloy-modules:/etc/alloy-modules:ro
+      # The systemd journal, tailed by config.alloy.
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

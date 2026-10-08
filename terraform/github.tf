@@ -134,3 +134,11 @@ resource "github_repository_webhook" "docs_deploy" {
     secret       = var.komodo_webhook_secret
   }
 }
+
+resource "github_user_ssh_key" "quokka_machine" {
+  title = "quokka machine key"
+  key = join(" ", slice(
+    split(" ", trimspace(file("${path.module}/../forgejo/keys/nathan/quokka-machine.pub"))),
+    0, 2,
+  ))
+}

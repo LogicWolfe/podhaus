@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start or stop bandicoot's GNOME desktop based on whether a display is attached.
+"""Start or stop the GNOME desktop based on whether a display is attached.
 
 A display is present when the lid is open or any non-panel DRM connector
 reads "connected". Every trigger (boot, a lid change, a DRM hotplug event, or
