@@ -5,8 +5,16 @@
 #
 # Memory is bounded on every container because fractal's guest is shared with
 # a dev session and has no early out-of-memory protection of its own.
+#
+# Switched off on 2026-10-08. Every service sits behind the `off` profile, which
+# nothing activates, so a Komodo deploy of this stack creates no containers and
+# the push pipeline leaves it alone on later pushes. The stack, the llm-models
+# volume and the model file stay, so bringing it back is: delete the three
+# `profiles` lines below, re-enable the two Gatus checks in the `Local model`
+# group, and push.
 services:
   llm-model:
+    profiles: ["off"]
     # The shared init image carries curl and a busybox sha256sum, which is all
     # a plain-stream download and a checksum need.
     build:
@@ -69,6 +77,7 @@ services:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
   llm-server:
+    profiles: ["off"]
     container_name: llm-server
     # The project's stock CUDA 13 server image, which is the CUDA generation
     # the trial install was built against. Not pinned: each deploy takes the
@@ -131,6 +140,7 @@ services:
       start_period: 30s
 
   llm-watcher:
+    profiles: ["off"]
     container_name: llm-watcher
     build:
       context: ./watcher

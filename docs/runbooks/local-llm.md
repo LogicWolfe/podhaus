@@ -1,5 +1,11 @@
 # Local model service
 
+> **Switched off since 2026-10-08.** The three services sit behind the `off`
+> profile in `llm/compose.yaml`, so Komodo deploys the stack with no
+> containers, and the two Gatus checks in the `Local model` group are
+> disabled. The rest of this page describes the service as it runs once
+> that is reverted.
+
 A language model that runs on fractal's graphics card (GPU) and answers
 coding clients such as Claude Code and pi at `llm.pod.haus`. The GPU belongs to
 Nathan's Windows desktop, so the service's main job is to get out of the way: a

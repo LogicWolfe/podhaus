@@ -624,7 +624,10 @@ endpoints:
   # router's /health, which answers whether or not a model is loaded, so a
   # model yielded to a game is healthy here by design; the watcher's own
   # healthcheck is where the service's real failure states surface.
+  # Both checks are off while the stack is switched off (llm/compose.yaml);
+  # with no containers to read they would alert forever.
   - name: Local model server (fractal, via Komodo)
+    enabled: false
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Local model
@@ -643,6 +646,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Local model watcher (fractal, via Komodo)
+    enabled: false
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Local model
