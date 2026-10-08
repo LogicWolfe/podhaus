@@ -51,6 +51,12 @@
     atomic, insert-only write. Removing a tag does not remove media or its
     allow-list entry.
   </p>
+  <p>
+    Kangaroo never hashes an ignored file, so a newly selected file waits for a
+    full hash before Pinelake sees it. Kangaroo's processor hashes one file on
+    one core at roughly 60 to 100 megabytes per second, so a 27 gigabyte race
+    takes about five minutes to appear.
+  </p>
 
   <h2 id="containers">Containers and networking</h2>
   <p>
@@ -70,12 +76,73 @@
     that setting changes the warning, not access control.
   </p>
 
+  <h2 id="link">Pinelake link</h2>
+  <p>
+    Pinelake is on Starlink behind carrier network address translation, so it
+    cannot accept connections and always dials Kangaroo. The round trip is about
+    250 milliseconds and each connection carries roughly one megabyte per
+    second, so transfer speed comes from many parallel connections. These
+    settings live in each instance's own configuration, not in the stacks; set
+    them through the interface or the configuration application programming
+    interface.
+  </p>
+  <table>
+    <thead><tr><th>Instance</th><th>Setting</th><th>Value</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>Kangaroo</td><td>Listen addresses (<code>listenAddresses</code>)</td><td><code>tcp://10.0.0.25:22000</code>, <code>dynamic+https://relays.syncthing.net/endpoint</code></td><td>Transmission Control Protocol only, on the <code>br0</code> address</td></tr>
+      <tr><td>Kangaroo</td><td>Pinelake device, connections (<code>numConnections</code>)</td><td>16</td><td>Parallel connections; match Pinelake's value</td></tr>
+      <tr><td>Pinelake</td><td>Kangaroo device, connections (<code>numConnections</code>)</td><td>16</td><td>Parallel connections; match Kangaroo's value</td></tr>
+      <tr><td>Pinelake</td><td>Kangaroo device, addresses</td><td><code>dynamic</code></td><td>Found through global discovery</td></tr>
+      <tr><td>Pinelake</td><td>All four folders, pending pull data (<code>pullerMaxPendingKiB</code>)</td><td>262144</td><td>Sixteen 16 mebibyte blocks in flight, one per connection</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Kangaroo opens its own router port mapping with the router's port-mapping
+    protocols (Universal Plug and Play and the network address translation
+    port mapping protocol); there is no manual forward in UniFi. The router
+    should hold only Transmission Control Protocol mappings of port 22000 to
+    <code>10.0.0.25</code>, each renewed every 30 minutes with a one-hour lease.
+  </p>
+  <p>
+    QUIC stays off because Syncthing's mapping renewal, <code>updateMapping</code>
+    in <code>lib/nat/service.go</code>, resets every mapping's renewal time when
+    any one is renewed, so with both a QUIC and a Transmission Control Protocol
+    mapping one is never renewed, expires on the router, and is still
+    advertised. QUIC was also slower on this route, peaking at about
+    3.5 megabytes per second against about 14 over Transmission Control
+    Protocol with the same connections.
+  </p>
+  <p>
+    The listener is bound to <code>10.0.0.25</code> because Kangaroo has two
+    cabled ports on the same subnet: <code>eth1</code>, bridged into
+    <code>br0</code> at <code>10.0.0.25</code> (reserved in UniFi), and a
+    standalone <code>eth0</code> at <code>10.0.0.232</code>. An unbound listener
+    maps through the router as seen from both, so mappings alternate between
+    the two addresses and external ports; a bound listener renews only through
+    the matching one. If <code>br0</code>'s address ever changes, the listener
+    fails to bind and logs the error.
+  </p>
+  <p>
+    Starlink reassigns Pinelake's public address about once a day. Every
+    connection then fails with <code>no recent network activity</code> and
+    returns within one or two minutes; this is expected.
+  </p>
+  <p>
+    To check the link, Kangaroo's connection list for Pinelake should show
+    <code>tcp-server</code> connections, one per configured connection plus the
+    primary, and the router's port-mapping table should list port 22000 for
+    <code>10.0.0.25</code> over Transmission Control Protocol only. Relay
+    connections mean the mapping is missing.
+  </p>
+
   <h2 id="verification">Safe changes</h2>
   <ul>
     <li>Keep Kangaroo send-only and Pinelake receive-only for all four folders.</li>
     <li>Never reuse Pinelake's retired identity or database in the managed container.</li>
     <li>Before enabling a new selection, confirm only its exact negated path was added and the other three files are unchanged.</li>
     <li>Verify permanent junk remains absent while media, artwork, and subtitles arrive.</li>
+    <li>Keep QUIC out of Kangaroo's listen addresses while Syncthing's mapping renewal resets every mapping's timer.</li>
+    <li>Keep Kangaroo's listener bound to <code>br0</code>'s reserved address rather than all addresses.</li>
     <li>Treat an unexpected Pinelake local addition as receive-only override state; do not use it to update Pouch.</li>
   </ul>
 
