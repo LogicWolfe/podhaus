@@ -1,0 +1,114 @@
+# Forgejo Actions runner for every repository the LogicWolfe account owns.
+# See docs/runbooks/forgejo.md for the CI contract it serves.
+#
+#   - The daemon waits cheaply; each job runs in a disposable Docker
+#     container it creates through bandicoot's Docker socket. Jobs never
+#     receive that socket (`docker_host: "-"`, empty `valid_volumes`).
+#   - It runs as root inside the container: the image's own uid 1000 could
+#     neither write the cache volume Docker creates root-owned nor use the
+#     socket without hard-coding the host's docker group. Holding the
+#     socket is already root on the host, so this grants nothing new.
+#   - The configuration is inline below so Compose can substitute the
+#     registration and bilby's LAN address into it; the runner reads no
+#     environment variables of its own. Compose substitutes every `$`, so a
+#     literal one would have to be written `$$`. Compose does not recreate a
+#     container when only a config's text changes, which is why stack.toml
+#     deploys with --force-recreate: a rotated token must reach the runner.
+#   - A stop waits for running jobs: the grace period outlasts the runner's
+#     own `shutdown_timeout`, so Docker never kills it mid-drain.
+#   - The runner expires its own Actions cache (entries unused for 7 days,
+#     any entry after 30), so the cache volume needs no scheduled cleanup.
+
+# A change to the LAN address catalog redeploys this stack (BILBY_LAN_IPV4).
+x-podhaus-content-paths:
+  - ../config
+
+services:
+  runner:
+    image: code.forgejo.org/forgejo/runner@sha256:7fb853bfe73c229be6349398359c0a7bd01fadfd17c106607b2221150b799ed2
+    command: ["forgejo-runner", "daemon", "--config", "/etc/forgejo-runner/config.yml"]
+    restart: unless-stopped
+    user: "0:0"
+    # Actions uses a long-lived protocol that must bypass Pomerium's browser
+    # login route. Keep the public hostname for TLS while resolving it
+    # directly to bilby's internal Caddy from this one container.
+    extra_hosts:
+      - "git.pod.haus:${BILBY_LAN_IPV4}"
+    configs:
+      - source: runner-config
+        target: /etc/forgejo-runner/config.yml
+    volumes:
+      - cache:/data/cache
+      - /var/run/docker.sock:/var/run/docker.sock
+    stop_grace_period: 5m30s
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+volumes:
+  cache:
+
+configs:
+  runner-config:
+    content: |
+      log:
+        level: info
+        job_level: info
+
+      runner:
+        # Bandicoot's 15 GiB is shared with ClickStack, Komodo Core and the
+        # Fenwick family, and a Rust build job takes several GiB. Four jobs fit
+        # beside them; the rest queue rather than exhaust memory and lose
+        # builds to earlyoom.
+        capacity: 4
+        timeout: 1h
+        shutdown_timeout: 5m
+        insecure: false
+        fetch_timeout: 30s
+        fetch_interval: 2s
+        report_interval: 1s
+        # Both images are multi-arch and run natively on bandicoot's aarch64,
+        # matching bilby, where Komodo builds the same images.
+        labels:
+          - podhaus-ci-x64:docker://docker.io/library/node:22-bookworm
+          - podhaus-browser-x64:docker://mcr.microsoft.com/playwright:v1.61.1-noble
+
+      server:
+        connections:
+          forgejo:
+            url: https://git.pod.haus/
+            uuid: ${FORGEJO_RUNNER_UUID}
+            token: ${FORGEJO_RUNNER_TOKEN}
+
+      cache:
+        enabled: true
+        dir: /data/cache
+
+      container:
+        network: ""
+        # CI builds a repository's Docker image so a broken Dockerfile fails
+        # the pull request rather than the Komodo deploy. Jobs build through a
+        # `docker:dind` service on their per-job network, and the in-container
+        # daemon needs privilege. Privilege applies to the job container and
+        # its services alike, so a hostile action can take over bandicoot;
+        # workflows must therefore pin every action by commit SHA, never by a
+        # movable tag. Bandicoot's own Docker socket stays withheld
+        # (`docker_host`, `valid_volumes`).
+        privileged: true
+        # Checkout runs inside job containers, so it needs the same
+        # direct-origin resolution as the daemon's Actions protocol. When
+        # memory runs out, a CI job is the cheapest thing to lose: the OOM
+        # score makes earlyoom and the kernel pick job containers before host
+        # services or dev sessions.
+        options: >-
+          --add-host git.pod.haus:${BILBY_LAN_IPV4}
+          --oom-score-adj=900
+        valid_volumes: []
+        # The daemon uses the mounted socket to create job containers; jobs
+        # never receive the socket themselves, and build images through their
+        # own DinD service instead.
+        docker_host: "-"
+        force_pull: false
+        force_rebuild: false
+
+      host:
+        workdir_parent: ""

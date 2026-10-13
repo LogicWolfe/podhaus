@@ -83,8 +83,8 @@ runner is fixed without disabling Actions.
 Forgejo Actions is the CI control plane. Runners are outbound clients on
 separate hosts; Forgejo and Bilby's production Docker daemon never execute CI
 jobs. The fleet has one runner, on Bandicoot, registered as `bandicoot` for
-every repository owned by LogicWolfe. It is provisioned by
-`ansible/roles/forgejo_runner` through `ansible/playbooks/bandicoot.yml`:
+every repository owned by LogicWolfe. It is the Komodo stack
+`forgejo-runner`, deployed from `forgejo-runner/` like any other stack:
 
 - `podhaus-ci-x64` runs ordinary Node/Deno container jobs;
 - `podhaus-browser-x64` uses the pinned Playwright image;
@@ -92,8 +92,8 @@ every repository owned by LogicWolfe. It is provisioned by
   which matches the architecture Komodo builds on Bilby;
 - the daemon waits persistently while each job container and network is
   disposable;
-- jobs have a one-hour timeout and at most four run at once, set by
-  `podhaus_forgejo_runner_capacity`, and the rest queue; Bandicoot's 15 GiB
+- jobs have a one-hour timeout and at most four run at once, set by the
+  runner's `capacity`, and the rest queue; Bandicoot's 15 GiB
   is shared with ClickStack, Komodo Core and Fenwick, and a Rust build job
   takes several GiB;
 - job containers start with an OOM score adjustment of 900, so when memory
@@ -108,14 +108,27 @@ If Bandicoot is unavailable, work queues until it returns; there is no
 fallback runner. The daemon reaches Forgejo by pinning `git.pod.haus` to
 Bilby's LAN address inside the runner container and its job containers, which
 keeps the public hostname for TLS while bypassing Pomerium's browser login
-route; Ansible reads the shared address from `config/lan-addresses.json`.
-The runner's user registration is durable under `/opt/forgejo-runner/data`,
-while Ansible fetches a short-lived registration token from the LogicWolfe
-account only for first registration. Repository workflows select the existing
-labels, so adding a repository needs no new runner; all repositories share the
-job limit and the runner cache. The runner removes disposable job resources,
-including each container's anonymous volumes, on completion and its cache
-lives under `/opt/forgejo-runner/data/cache`.
+route; the stack reads the shared address as the `LAN_BILBY_IPV4` Komodo
+variable, generated from `config/lan-addresses.json`. Repository workflows
+select the existing labels, so adding a repository needs no new runner; all
+repositories share the job limit and the runner cache. The runner removes
+disposable job resources, including each container's anonymous volumes, on
+completion. Its cache lives in the stack's `cache` volume, and the runner
+expires entries itself: unused for 7 days, or any entry after 30. A deploy
+of the stack stops the runner gracefully: running jobs get the runner's
+five-minute `shutdown_timeout` to finish before Docker may kill it, and the
+runner cancels any job still running at that point, which then shows as
+failed. Every deploy restarts the runner, including one caused only by an
+edit under `forgejo-runner/` or to `config/lan-addresses.json`, so push such
+edits while no long job is running.
+
+The runner's registration with Forgejo is a UUID and token pair, kept in the
+Homelab item `forgejo-runner-bandicoot` and delivered as Komodo variables into
+the runner's configuration, so the stack holds no state that a redeploy or a
+rebuilt Bandicoot would lose. To replace the registration, create a runner
+under the LogicWolfe account's Settings → Actions → Runners, put its UUID and
+token in that item, wait for komodo-op to sync them, and redeploy the stack.
+Delete the old runner in the same settings page once the new one reports idle.
 
 CI builds images so that a Dockerfile which cannot build fails the pull
 request instead of the Komodo deploy on `main`. A job that builds declares a

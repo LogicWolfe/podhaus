@@ -126,7 +126,6 @@ ansible/
     wsl/                   /etc/wsl.conf, hostname, no guest NTP daemon (Windows owns the clock)
     docker/                engine (where managed), daemon.json, host networks
     devbox/                the root-requiring half of a developer machine
-    forgejo_runner/        Bandicoot's container-isolated Forgejo Actions runner
     docs_sources/          Read-only repository source slots for docs-server
     gnome_on_demand/       GDM follows the shared lid/display policy (bandicoot, quokka)
     komodo_periphery/      keys, compose, and a wait-for-Ok gate

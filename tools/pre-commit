@@ -61,6 +61,9 @@
 #                                   confidence rule (containment, difflib
 #                                   ratio+margin, the 59-title Skillsville
 #                                   fixture) runs with no network.
+#   - forgejo-runner tests:         Docker's stop grace period outlasts the
+#                                   runner's job drain, and a changed
+#                                   registration recreates the runner.
 #   - llm tests:                    the watcher's handoff rules replayed
 #                                   against a recorded game session, the
 #                                   model-server log parsing against real
@@ -144,6 +147,8 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/wsl/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/metube/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/forgejo-runner/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/lumen/tests"
 mise exec -- pipenv run python -m unittest discover \

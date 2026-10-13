@@ -1,0 +1,29 @@
+[[stack]]
+name = "forgejo-runner"
+description = "The fleet's Forgejo Actions runner: a persistent daemon that runs each CI job in a disposable container"
+tags = ["bandicoot", "podhaus"]
+
+[stack.config]
+# Bandicoot has the cores and memory for CI beside its other services; no
+# runner runs on bilby, where Forgejo and production containers live
+# (docs/runbooks/forgejo.md). Linked repo, like every stack not on bilby.
+server = "bandicoot"
+linked_repo = "podhaus-bandicoot"
+run_directory = "forgejo-runner"
+# Pinned rather than derived from the stack name: renaming the stack must
+# replace this runner's containers, never start a second daemon beside them
+# holding the same registration.
+project_name = "forgejo-runner"
+# The runner's configuration is a Compose config whose text carries the
+# registration, and Compose recreates nothing when only that text changes.
+extra_args = ["--force-recreate"]
+
+# The runner's registration with Forgejo (runner "bandicoot", owned by the
+# LogicWolfe account) lives in the 1Password item forgejo-runner-bandicoot.
+# Replacing the registration means creating a runner under LogicWolfe's
+# Settings → Actions → Runners and putting its UUID and token in that item.
+environment = """
+BILBY_LAN_IPV4=[[LAN_BILBY_IPV4]]
+FORGEJO_RUNNER_UUID=[[OP__KOMODO__FORGEJO_RUNNER_BANDICOOT__UUID]]
+FORGEJO_RUNNER_TOKEN=[[OP__KOMODO__FORGEJO_RUNNER_BANDICOOT__TOKEN]]
+"""
