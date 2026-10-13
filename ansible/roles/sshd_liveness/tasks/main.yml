@@ -10,6 +10,11 @@
 # Probing every 15 s and dropping after three misses frees all of that
 # within about 45 s. A live client answers every probe, so an idle but
 # working session is never dropped.
+#
+# A forwarded Unix socket outlives even a cleanly closed session: sshd leaves
+# the socket file behind, and the next session cannot bind the same path.
+# The MacBook forwards CodeIsland's agent-status socket that way (chezmoi's
+# devbox SSH block), so the role also lets a new session replace the file.
 ---
 - name: Probe SSH clients and drop the ones that stopped answering
   ansible.builtin.copy:
@@ -21,6 +26,18 @@
       # Managed by ansible/roles/sshd_liveness. Do not edit on the host.
       ClientAliveInterval 15
       ClientAliveCountMax 3
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd for client liveness
+
+- name: Let a new session replace a forwarded socket the last one left behind
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/21-podhaus-streamlocal-unlink.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by ansible/roles/sshd_liveness. Do not edit on the host.
+      StreamLocalBindUnlink yes
     validate: /usr/sbin/sshd -t -f %s
   notify: Reload sshd for client liveness
 

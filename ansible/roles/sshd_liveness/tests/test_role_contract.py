@@ -24,6 +24,14 @@ class RoleContractTest(unittest.TestCase):
         self.assertGreater(interval, 0)
         self.assertLessEqual(interval * misses, 60)
 
+    def test_a_reconnect_replaces_a_stale_forwarded_socket(self) -> None:
+        tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+        copies = [t["ansible.builtin.copy"] for t in tasks if "ansible.builtin.copy" in t]
+        unlink = next(c for c in copies if "StreamLocalBindUnlink" in c["content"])
+        self.assertTrue(unlink["dest"].startswith("/etc/ssh/sshd_config.d/"))
+        self.assertIn("StreamLocalBindUnlink yes", unlink["content"].splitlines())
+        self.assertEqual(unlink["validate"], "/usr/sbin/sshd -t -f %s")
+
     def test_every_dev_host_applies_the_role(self) -> None:
         for host in DEV_HOSTS:
             with self.subTest(host=host):
