@@ -638,3 +638,14 @@ resource "cloudflare_dns_record" "quokka_docs" {
   proxied = false
   ttl     = 300
 }
+
+# Nathan's MacBook's docs server, through its wstunnel client. Answers only
+# while the laptop is awake and online.
+resource "cloudflare_dns_record" "mac_docs" {
+  zone_id = local.zones["pod.haus"]
+  name    = "mac.docs.pod.haus"
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
+}

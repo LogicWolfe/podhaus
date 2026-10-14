@@ -1,161 +1,192 @@
 # Replacing rathole with wstunnel
 
-**Status:** Intended, not started. No code written. This plan exists to
-record the evaluation so the decision does not have to be re-derived, and
-to name the conditions that should trigger the work.
+**Goal:** every outbound tunnel into Numbat runs on current wstunnel, each
+client authenticated by its own certificate and limited by Numbat to the
+listeners it owns, with rathole, its tokens and its Noise keypair gone.
+Nathan's MacBook joins first, as the pilot, and gains `mac.docs.pod.haus`.
 
-Every outbound tunnel in the fleet is rathole today: five clients
-(`relay/{bilby,kangaroo,fractal,voltaire,pinelake}`) dialing one server
-(`relay/numbat`). The transport works and nothing is broken. The problem
-is that upstream has stopped moving, and the way we consume it means we
-are pinned to a 2023 binary without having chosen to be.
+## Why now
 
-## Why replace it
+rathole has not had a stable release since v0.5.0 (October 2023), and the
+relay image's download of GitHub's `latest` release resolves to that build on
+every host. Nathan's standing preference is current releases, with upgrade
+breakage dealt with as it appears; rathole cannot honour it. The MacBook's docs
+route needs a new tunnel client anyway, and starting it on wstunnel avoids
+adding an eighth rathole client to migrate later.
 
-rathole is not abandoned — the repository moved from `rapiz1/rathole` to
-`rathole-org/rathole` and still takes the occasional commit — but it has
-been drifting for two years:
+wstunnel v11.0.0 (2026-09-19) is current. Its upstream image
+`ghcr.io/erebe/wstunnel:latest` is multi-arch (amd64, arm64) on Debian with a
+shell, and Homebrew carries the binary for the Mac.
 
-- Last **stable** release is v0.5.0, 2023-10-01.
-- Four commits landed on the default branch in the following 24 months,
-  all packaging or CI.
-- Dependencies have not been touched since February 2024.
-- 95 open issues and pull requests; the oldest open PR dates from
-  June 2024.
+Of the alternatives evaluated in September, frp cannot bind services to
+different addresses and chisel multiplexes every tunnel over one connection;
+those findings stand.
 
-Everything since v0.5.0 ships under a rolling `dev-latest` prerelease tag.
+## What exists today
 
-**Consequence we did not intend:** `relay/Dockerfile` fetches
-`https://github.com/rathole-org/rathole/releases/latest/download/${asset}`.
-GitHub's `/latest/` redirect excludes prereleases, so it resolves to
-v0.5.0 on every rebuild. All five hosts run the October 2023 binary, on a
-February 2024 dependency tree, while the Dockerfile reads as though it
-tracks upstream. This contradicts the "use the current stable release by
-default" rule in `AGENTS.md`, silently.
+Seven rathole clients dial one server on Numbat (`relay/numbat`,
+`relay.numbat.pod.haus:2333`, Noise transport, host networking). Fifteen TCP
+services, each with its own token from Terraform:
 
-We are deliberately **not** patching the Dockerfile to pin a newer
-`dev-latest` asset. Cutting over to wstunnel is the upgrade path; a pin
-would be work thrown away and would put untested prerelease builds under
-the whole fleet's ingress in the meantime.
+| Service | Numbat listener | Client | Origin on the client |
+|---|---|---|---|
+| `public_tls` | `relay.numbat.pod.haus:443` | bilby | `caddy:4444` |
+| `forgejo_ssh` | `app.numbat.pod.haus:22` | bilby | `forgejo:2222` |
+| `protected_http` | `127.0.0.1:8443` | bilby | `caddy:4443` |
+| `bilby_ssh` | `127.0.0.1:2201` | bilby | `172.18.0.1:22` |
+| `voltaire_ssh` / `voltaire_http` | `127.0.0.1:2202` / `8445` | voltaire | sshd / `voltaire-caddy:4443` |
+| `kangaroo_ssh` | `127.0.0.1:2203` | kangaroo | `127.0.0.1:22` (host network) |
+| `fractal_ssh` / `fractal_http` | `127.0.0.1:2204` / `8444` | fractal | sshd / `fractal-caddy:4443` |
+| `pinelake_ssh` / `pinelake_http` | `127.0.0.1:2205` / `8446` | pinelake | `host.docker.internal:22` / `pinelake-caddy:4443` |
+| `bandicoot_ssh` / `bandicoot_http` | `127.0.0.1:2206` / `8447` | bandicoot | sshd / `bandicoot-caddy:4443` |
+| `quokka_ssh` / `quokka_http` | `127.0.0.1:2207` / `8448` | quokka | sshd / `quokka-caddy:4443` |
 
-## What a replacement has to do
+Pomerium reaches the loopback listeners for its HTTP and SSH routes; public
+HTTPS and Forgejo SSH are served straight from the public listeners. Nothing
+on Numbat names a tunnel except those addresses, so a tunnel that binds the
+same listener is a drop-in replacement for the consumers.
 
-These are structural requirements, derived from
-`relay/numbat/server.toml.tmpl` as it stands. A candidate that misses any
-of them is not a candidate.
+## Design
 
-- **Outbound-only from origin hosts.** voltaire and pinelake have no
-  inbound path at all; fractal's Windows firewall admits only SSH and
-  the local model's LAN port.
-- **Per-service bind addresses.** Numbat has two public IPs precisely
-  because two different services need `:443` and `:22`:
-  `public_tls` binds `relay.numbat.pod.haus:443` while `forgejo_ssh`
-  binds `app.numbat.pod.haus:22`, and nine further services bind
-  `127.0.0.1` ports (`8443`, `2201`–`2205`, `8444`–`8446`) so only
-  Pomerium and the SSH dispatcher can reach them. A tunnel with one
-  global bind address cannot express this without pushing the
-  distinction into nftables.
-- **Raw TCP passthrough.** Numbat must never hold plaintext. Public TLS
-  terminates at bilby's Caddy `:4444`; protected routes carry Pomerium's
-  client certificate to a `:4443` mTLS origin on bilby, fractal,
-  voltaire, or pinelake.
-- **Server-side declaration of what may be exposed.** A compromised
-  client must not be able to publish a new listener on numbat.
-- **Small footprint.** Numbat is 1 vCPU / 1536 MB and has OOMed twice.
-- **arm64 and x86_64**, since bilby and pinelake are Apple Silicon.
+### Certificates: a relay CA in Terraform
 
-## Candidates
+Terraform mints a new **relay CA** beside the origin and log-ingest CAs in
+`terraform/pomerium.tf`, with the same shapes:
 
-| | rathole (current) | **wstunnel** | chisel | frp |
-|---|---|---|---|---|
-| Language | Rust | Rust | Go | Go |
-| Last stable | v0.5.0, 2023-10-01 | v10.7.0, 2026-08-28 | v1.12.0, 2026-08-29 | v0.71.0, 2026-08-14 |
-| Open issues | 95 | 32 | 244 | 50 |
-| Per-service bind address | yes | yes | yes | **no — global** |
-| Server-side authorization | per-service tokens | default-deny rules, hot reload | per-user regex, hot reload | port ranges only |
-| Auth | Noise static keys | mTLS or bearer token | fingerprint + credentials | token or mTLS |
-| Multiplexing | per-service connections | per-service connections | **all over one SSH connection** | per-proxy |
+- a server certificate for `relay.numbat.pod.haus` (`server_auth`);
+- one client certificate per tunnel client, common name = the inventory host
+  name (`bilby`, `bandicoot`, `fractal`, `quokka`, `voltaire`, `pinelake`,
+  `kangaroo`, `nb-macbook-air`), `client_auth`.
 
-**frp is disqualified.** `ProxyBindAddr` in `pkg/config/v1/server.go` is
-server-global and TCP proxies carry only `RemotePort`, so it cannot put
-`public_tls` on the relay IP and `forgejo_ssh` on the application IP. It
-would force `0.0.0.0` binding plus an nftables dispatch layer — a
-regression on a host whose known failure mode is a ruleset that fails to
-load.
+They are published base64-encoded to a new Homelab item, `Numbat Tunnel`
+(`ca_cert_b64`, `server_cert_b64`, `server_key_b64`, and
+`<host>_cert_b64` / `<host>_key_b64`). Komodo stacks read them as
+`OP__KOMODO__NUMBAT_TUNNEL__*` variables; the Mac reads them through
+`op-vault dev` at apply, now that it is a Podhaus operator.
 
-**chisel clears the structural bar but ranks below wstunnel.** Its
-`R:<local-interface>:<local-port>:<remote-host>:<remote-port>` form
-supports bind addresses and its authfile maps each user to a list of
-permitted reverse forwards with hot reload. Against it: 244 open issues,
-and every tunnel rides a single SSH-over-websocket connection, so all
-public HTTPS shares a congestion window with Forgejo SSH and five host
-SSH sessions. rathole gives each service its own connection today and
-that property is worth keeping.
+**Server identity is pinned to the relay CA.** wstunnel's client verifies the
+server only against system roots, but its TLS library honours
+`SSL_CERT_FILE`. Every client sets `SSL_CERT_FILE` to a file holding only the
+relay CA and runs with `--tls-verify-certificate`, so it accepts Numbat's
+certificate and nothing else. This replaces the Noise transport's pinned
+public key; neither side needs a public certificate or a root-store change.
 
-**gost v3 was deprioritised rather than finished.** It is actively
-maintained but is a general-purpose proxy toolkit; the surface area is
-the wrong direction for numbat.
+### Server: what each client may open
 
-**wstunnel is the pick.** Rust, actively released, 32 open issues. Its
-`-R {tcp,udp}://[BIND:]PORT:HOST:PORT` form carries a bind address per
-tunnel. Its `--restrict-config` YAML is **default-deny** — the server
-declares `!ReverseTunnel` allow rules matched on path prefix or
-authorization header, and reloads them without a restart, which is a
-stronger version of what per-service tokens give us now. It supports
-mTLS with certificate auto-reload, and it can carry UDP reverse tunnels,
-which rathole cannot.
+wstunnel's server, started with `--tls-client-ca-certs`, accepts only clients
+holding a relay-CA certificate, and requires each connection's upgrade path to
+equal its certificate's common name (verified in v11's
+`tunnel/server/server.rs`). Its restrictions file is default-deny; one rule per
+client matches `!PathPrefix "^<host>$"` and allows exactly that client's
+reverse tunnels by port and bind address. A stolen client certificate can
+open only its own host's listeners, and a new listener needs a commit to the
+restrictions file, which the server reloads without restarting. This is
+stronger than today, where any holder of the Noise public key and a token
+can claim that token's service.
 
-## What wstunnel does not solve
+The server is a new Komodo stack, `tunnel/numbat` (`numbat-tunnel`), on
+host networking as rathole is, listening on `relay.numbat.pod.haus:2334`. It
+runs as root with every capability dropped except `NET_BIND_SERVICE`, which
+the `:443` and `:22` listeners need. Port 2334 opens in the `numbat_edge`
+nftables template beside 2333.
 
-**Client IP addresses.** wstunnel supports PROXY protocol only on
-*forward* tunnels. In `wstunnel/src/tunnel/mod.rs` the enum is:
+### Clients
 
-```rust
-pub enum LocalProtocol {
-    Tcp { proxy_protocol: bool },
-    Stdio { proxy_protocol: bool },
-    HttpProxy { ..., proxy_protocol: bool },
-    ReverseTcp,                    // no such field
-    ReverseUdp { timeout: ... },
+Each Linux and pinelake client is a stack `tunnel/<host>` replacing
+`relay/<host>`, on the same networks so the same origin names resolve. It runs
+the upstream image with a short shell prelude that writes the certificate,
+key and CA from the stack's variables to files, then execs:
+
+```
+wstunnel client --tls-verify-certificate \
+  --tls-certificate <cert> --tls-private-key <key> \
+  -R tcp://127.0.0.1:2207:172.18.0.1:22 -R tcp://127.0.0.1:8448:quokka-caddy:4443 \
+  wss://relay.numbat.pod.haus:2334
 ```
 
-`ReverseTcp` is the `-R` path and the only direction podhaus uses. Of the
-four candidates only frp emits PROXY protocol on a reverse tunnel, and
-frp is disqualified on bind addresses.
+The image tag is `latest`, matching the preference for current releases;
+there is no image to build and no download to track. kangaroo keeps host
+networking for its QTS sshd.
 
-So the fleet's blindness to public client IPs — Caddy sees the tunnel's
-local socket for every request arriving on `:4444` — is **independent of
-this migration** and must be solved separately, by terminating in front
-of the tunnel on numbat with something that injects a PROXY header, and
-adding a matching `trusted_proxies` to Caddy. `caddy/` contains no
-`trusted_proxies` or `proxy_protocol` directive today.
+### The MacBook pilot
 
-## Shape of the migration, when it happens
+Chezmoi owns the Mac's side, with no root:
 
-- Nine services move from `[server.services.<name>]` TOML blocks to
-  wstunnel `-R` arguments plus a `restrictions.yaml` on numbat.
-- Auth changes from nine Noise-transport tokens to mTLS client
-  certificates, which the fleet's existing edge PKI in `terraform/` can
-  issue. The per-service token variables in 1Password retire with it.
-- `relay/Dockerfile` stops scraping a GitHub release asset; wstunnel
-  publishes multi-arch images.
-- `relay/entrypoint.sh` and `relay/tests/test_entrypoint_env.py` are
-  built around `envsubst` rendering tokens into a TOML template; both are
-  rewritten or removed.
+- Homebrew installs `wstunnel` and `caddy`.
+- A **docs origin**: Caddy as a LaunchAgent on `127.0.0.1:4443`, presenting
+  the Pomerium origin server certificate and requiring Pomerium's client
+  certificate, proxying `mac.docs.pod.haus` to the local docs server
+  (`127.0.0.1:8765`). Same contract as every other docs origin.
+- A **tunnel client** LaunchAgent: `-R tcp://127.0.0.1:8449:127.0.0.1:4443`
+  with the `nb-macbook-air` certificate.
+- Certificates rendered from 1Password into `~/.config/podhaus-tunnel/`,
+  mode 0600, inside FileVault.
 
-**Cut over one client at a time, bilby first.** Bilby is the only host
-with an independent inbound path (LAN SSH), so a failed cutover there is
-recoverable without break-glass. voltaire and pinelake go last: rathole
-is their only inbound path, and the fallback is Tailscale recovery.
+Numbat gains the Pomerium route `mac.docs.pod.haus → https://127.0.0.1:8449`
+on the docs routes' policy, and Terraform the matching Cloudflare record. When
+the laptop sleeps or leaves the network the route answers with Pomerium's
+upstream error; nothing monitors it.
 
-## When to do it
+## Order of work
 
-Not on its own merits. wstunnel is a moderate improvement over rathole,
-not a large one, and the migration touches six stacks on five hosts with
-two of them reachable by nothing else. Take it when something else forces
-the relay layer open:
+Each step ends verified before the next starts. Steps 1–3 change nothing that
+serves traffic today.
 
-- a CVE lands in rathole's 2024 dependency tree;
-- a service needs a UDP tunnel;
-- the public client-IP work opens numbat's ingress path anyway;
-- rathole breaks on a future host architecture or base image.
+1. **Terraform:** the relay CA and certificates, the `Numbat Tunnel` item,
+   and the `mac.docs.pod.haus` record. Verify with `terraform plan` showing
+   only additions, then the Komodo variables appearing.
+2. **Numbat server:** the `numbat_edge` firewall rule for 2334 (applied from
+   bandicoot with `--tags edge`, check-diff first), then the `numbat-tunnel`
+   stack. Verify the server is listening and rejects a client without a
+   certificate.
+3. **Mac pilot:** the chezmoi pieces and the Pomerium route. Verify
+   `https://mac.docs.pod.haus` serves this repository's docs through Pomerium,
+   and that the Mac's certificate cannot open any other listener.
+4. **Clients, one at a time:** for each, remove its services from rathole's
+   `server.toml.tmpl` and its relay stack, add its wstunnel rules and stack,
+   deploy, and verify its SSH route through Pomerium and its HTTP routes. The
+   order puts hosts with a second way in first:
+   quokka, bandicoot, fractal (each reachable on the home LAN), kangaroo
+   (LAN), bilby (LAN; carries public HTTPS, Forgejo SSH and every protected
+   route, so it goes when the pattern is proven), then voltaire and pinelake,
+   whose tunnel is their only way in. Their fallback is the Tailscale recovery
+   path, checked to work before each starts.
+5. **Removal:** the rathole server stack, `relay/` (Dockerfile, entrypoint,
+   tests), the token resources and `Numbat Rathole` item, the `Rathole Relay`
+   Noise item, port 2333 in the firewall and the bootstrap play, and every doc
+   that describes rathole. The bootstrap play brings up `numbat-tunnel` in its
+   place.
+
+A client's rollback until step 5 is to restore its rathole services and stack
+from git and redeploy both server and client.
+
+## Verification
+
+- **Certificate binding:** a client presenting host A's certificate with
+  `-R` for one of host B's ports is refused (server log names the rule that
+  failed to match). Tested in step 3 with the Mac's certificate.
+- **Server pinning:** a client whose `SSL_CERT_FILE` holds a different CA
+  fails to connect.
+- **Each cutover:** `ssh <host>.pod.haus` from off-LAN through Pomerium, and
+  each of the host's HTTP routes, before and after; for bilby additionally a
+  public site over `public_tls`, `git@git.pod.haus` over `forgejo_ssh`, and
+  Komodo reporting every outbound Periphery `Ok` (they dial in through
+  `public_tls`).
+- **Contract tests** in `tunnel/tests/`: every listener a client stack
+  requests appears in that client's restriction rule and nowhere else, every
+  listener Pomerium names has exactly one client, and no restriction rule
+  allows a bind address outside `127.0.0.1` except `public_tls` and
+  `forgejo_ssh`.
+
+## Known issues this retires
+
+`relay/tests/test_entrypoint_env.py` fails today: the entrypoint's render list
+omits the bandicoot and quokka token variables, so those two clients' tokens
+may be the literal `${…}` placeholder on both ends. The migration deletes the
+renderer; until bandicoot and quokka cut over, the defect stands.
+
+## Not in scope
+
+Public client IPs: wstunnel carries no PROXY protocol on reverse tunnels, so
+bilby's Caddy still sees the tunnel's address for public requests. That is a
+separate change in front of the tunnel on Numbat, unchanged by this work.
