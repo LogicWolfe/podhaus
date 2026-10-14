@@ -19,3 +19,107 @@ restrictions:
           - 8449
         cidr:
           - 127.0.0.1/32
+  - name: quokka
+    description: Quokka's SSH (ssh://quokka) and its mTLS origin (quokka.docs.pod.haus)
+    match:
+      - !PathPrefix "^quokka$"
+    allow:
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 2307
+          - 8548
+        cidr:
+          - "127.0.0.1/32"
+  - name: bandicoot
+    description: Bandicoot's SSH (ssh://bandicoot) and its mTLS origin (bandicoot.docs.pod.haus)
+    match:
+      - !PathPrefix "^bandicoot$"
+    allow:
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 2306
+          - 8547
+        cidr:
+          - "127.0.0.1/32"
+  - name: fractal
+    description: Fractal's SSH (ssh://fractal) and its mTLS origin (fractal.docs.pod.haus, llm.pod.haus)
+    match:
+      - !PathPrefix "^fractal$"
+    allow:
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 2304
+          - 8544
+        cidr:
+          - "127.0.0.1/32"
+  - name: kangaroo
+    description: Kangaroo's SSH (ssh://kangaroo); host networking, so 127.0.0.1:22 is the QTS sshd
+    match:
+      - !PathPrefix "^kangaroo$"
+    allow:
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 2303
+        cidr:
+          - "127.0.0.1/32"
+  - name: bilby
+    description: Public HTTPS (relay address :443 to Caddy's :4444), Forgejo SSH (application address :22), bilby's protected mTLS origin and its SSH (ssh://bilby)
+    match:
+      - !PathPrefix "^bilby$"
+    allow:
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 443
+        cidr:
+          - "@RELAY_IPV4@/32"
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 22
+        cidr:
+          - "@APPLICATION_IPV4@/32"
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 8543
+          - 2301
+        cidr:
+          - "127.0.0.1/32"
+  - name: voltaire
+    description: Voltaire's SSH (ssh://voltaire) and its mTLS origin (voltaire.docs.pod.haus); its only way in
+    match:
+      - !PathPrefix "^voltaire$"
+    allow:
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 2302
+          - 8545
+        cidr:
+          - "127.0.0.1/32"
+  - name: pinelake
+    description: Pinelake's SSH (ssh://pinelake) and its mTLS origin (torrent, sync and plex.pinelake.haus); its only way in
+    match:
+      - !PathPrefix "^pinelake$"
+    allow:
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 2305
+          - 8546
+        cidr:
+          - "127.0.0.1/32"

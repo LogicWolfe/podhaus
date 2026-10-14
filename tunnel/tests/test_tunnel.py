@@ -110,6 +110,7 @@ class TunnelContractTests(unittest.TestCase):
         cls.rogue = Authority(certs, "rogue")
         server_cert, server_key = cls.relay.issue("server", SERVER_NAME)
         cls.mac = cls.relay.issue("nb-macbook-air")
+        cls.bilby = cls.relay.issue("bilby")
         docker("network", "create", cls.network)
         cls.start(
             "origin", BUSYBOX, ["--network-alias", "origin"],
@@ -142,7 +143,8 @@ class TunnelContractTests(unittest.TestCase):
         cls.containers.append(name)
         return name
 
-    def client(self, role: str, trusted_ca: Path, cert: tuple[Path, Path], listener: str) -> str:
+    def client(self, role: str, trusted_ca: Path, cert: tuple[Path, Path], *listeners: str) -> str:
+        tunnels = [arg for listener in listeners for arg in ("-R", f"tcp://{listener}:origin:9000")]
         return self.start(
             role, IMAGE,
             ["-v", f"{TUNNEL}:/etc/tunnel:ro",
@@ -153,24 +155,30 @@ class TunnelContractTests(unittest.TestCase):
             "client", "--tls-verify-certificate",
             "--tls-certificate=/tmp/tunnel/cert.pem",
             "--tls-private-key=/tmp/tunnel/key.pem",
-            "-R", f"tcp://{listener}:origin:9000",
+            *tunnels,
             f"wss://{SERVER_NAME}:2334",
         )
 
-    def read_listener(self, port: int) -> str:
-        """What a connection to the port on the server's loopback receives."""
+    def read_listener(self, port: int, address: str = "127.0.0.1") -> str:
+        """What a connection to the port on the server's address receives."""
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             result = docker(
                 "run", "--rm", "--network", f"container:{self.server}", BUSYBOX,
                 # Input held open briefly: nc hangs up on end of input,
                 # before the reply has come back through the tunnel.
-                "sh", "-c", f"sleep 2 | nc -w 3 127.0.0.1 {port}", check=False,
+                "sh", "-c", f"sleep 2 | nc -w 3 {address} {port}", check=False,
             )
             if "tunnel-ok" in result.stdout:
                 return result.stdout.strip()
             time.sleep(1)
         return ""
+
+    def server_address(self) -> str:
+        return docker(
+            "inspect", self.server, "--format",
+            "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+        ).stdout.strip()
 
     def server_log(self) -> str:
         result = docker("logs", self.server, check=False)
@@ -179,6 +187,17 @@ class TunnelContractTests(unittest.TestCase):
     def test_a_client_opens_the_listener_its_rule_grants(self):
         self.client("mac-granted", self.relay.cert, self.mac, "127.0.0.1:8449")
         self.assertEqual(self.read_listener(8449), "tunnel-ok")
+
+    def test_bilby_holds_numbats_public_listeners_by_resolved_address(self):
+        # The launcher turns the placeholders into Numbat's addresses on both
+        # ends, and the server binds below 1024 with its one added capability.
+        self.client(
+            "bilby-public", self.relay.cert, self.bilby,
+            "@RELAY_IPV4@:443", "@APPLICATION_IPV4@:22",
+        )
+        address = self.server_address()
+        self.assertEqual(self.read_listener(443, address), "tunnel-ok")
+        self.assertEqual(self.read_listener(22, address), "tunnel-ok")
 
     def test_a_client_is_refused_a_listener_its_rule_does_not_grant(self):
         self.client("mac-other-port", self.relay.cert, self.mac, "127.0.0.1:8450")
