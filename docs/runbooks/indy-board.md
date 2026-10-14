@@ -43,9 +43,9 @@ included. Its caches (Docker cache mounts `indy-*`) make later builds
 incremental. The compile steps share one locked cache so they run one at a
 time, which keeps the build within bilby's memory.
 
-`tools/ship.sh service|controller|panel`, run from any indy-board checkout
-(with `DOCKER_HOST=ssh://bilby.pod.haus` when not on bilby), builds that
-target with bilby's Docker and copies it into the running container. The
+`tools/ship.sh service|controller|panel`, run from any indy-board checkout,
+builds that target with bilby's Docker and copies it into the running
+container; off bilby it forwards bilby's Docker socket over `ssh-machine`. The
 next deploy replaces it.
 
 ## Secrets and settings
