@@ -36,9 +36,11 @@ services:
       TUNNEL_CERT_B64: ${TUNNEL_CERT_B64}
       TUNNEL_KEY_B64: ${TUNNEL_KEY_B64}
     volumes:
-      # The tunnel/ directory of this linked-repo checkout: the launcher and
-      # the restrictions. A directory bind, so a pull that renames a file in
-      # place reaches the container.
-      - ..:/etc/tunnel:ro
+      # The tunnel/ directory of Numbat's linked-repo checkout: the launcher
+      # and the restrictions. A host path, because Komodo runs Compose inside
+      # Periphery, where a relative bind would resolve against the wrong
+      # filesystem; a directory bind, so a pull that renames a file in place
+      # reaches the container.
+      - /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat/tunnel:/etc/tunnel:ro
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
