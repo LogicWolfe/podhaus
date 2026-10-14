@@ -113,7 +113,7 @@ variable, generated from `config/lan-addresses.json`. Repository workflows
 select the existing labels, so adding a repository needs no new runner; all
 repositories share the job limit and the runner cache. The runner removes
 disposable job resources, including each container's anonymous volumes, on
-completion. Its cache lives in the stack's `cache` volume, and the runner
+completion. Its cache lives in the stack's `data` volume, and the runner
 expires entries itself: unused for 7 days, or any entry after 30. A deploy
 of the stack stops the runner gracefully: running jobs get the runner's
 five-minute `shutdown_timeout` to finish before Docker may kill it, and the

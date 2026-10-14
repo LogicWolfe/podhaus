@@ -5,9 +5,9 @@
 #     container it creates through bandicoot's Docker socket. Jobs never
 #     receive that socket (`docker_host: "-"`, empty `valid_volumes`).
 #   - It runs as root inside the container: the image's own uid 1000 could
-#     neither write the cache volume Docker creates root-owned nor use the
-#     socket without hard-coding the host's docker group. Holding the
-#     socket is already root on the host, so this grants nothing new.
+#     not use the socket without hard-coding the host's docker group.
+#     Holding the socket is already root on the host, so this grants
+#     nothing new.
 #   - The configuration is inline below so Compose can substitute the
 #     registration and bilby's LAN address into it; the runner reads no
 #     environment variables of its own. Compose substitutes every `$`, so a
@@ -17,7 +17,7 @@
 #   - A stop waits for running jobs: the grace period outlasts the runner's
 #     own `shutdown_timeout`, so Docker never kills it mid-drain.
 #   - The runner expires its own Actions cache (entries unused for 7 days,
-#     any entry after 30), so the cache volume needs no scheduled cleanup.
+#     any entry after 30), so the data volume needs no scheduled cleanup.
 
 # A change to the LAN address catalog redeploys this stack (BILBY_LAN_IPV4).
 x-podhaus-content-paths:
@@ -38,14 +38,19 @@ services:
       - source: runner-config
         target: /etc/forgejo-runner/config.yml
     volumes:
-      - cache:/data/cache
+      # The image declares /data a volume, and on recreate Compose carries
+      # the previous container's mount of an undeclared image volume into
+      # the new one. Declaring /data here keeps a stale registration file
+      # from an earlier deployment out of the runner, which refuses to
+      # start when both that file and its config name a server.
+      - data:/data
       - /var/run/docker.sock:/var/run/docker.sock
     stop_grace_period: 5m30s
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
 volumes:
-  cache:
+  data:
 
 configs:
   runner-config:

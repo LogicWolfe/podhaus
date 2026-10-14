@@ -37,6 +37,13 @@ class RunnerStackTests(unittest.TestCase):
         grace = self.compose["services"]["runner"]["stop_grace_period"]
         self.assertGreater(seconds(grace), seconds(runner["shutdown_timeout"]))
 
+    def test_the_runner_never_inherits_an_earlier_registration_file(self):
+        # The image declares /data a volume; left undeclared here, a recreate
+        # carries the previous container's /data, and its .runner, across.
+        volumes = self.compose["services"]["runner"]["volumes"]
+        self.assertIn("data:/data", volumes)
+        self.assertIn("data", self.compose["volumes"])
+
     def test_a_changed_registration_recreates_the_runner(self):
         self.assertIn("${FORGEJO_RUNNER_TOKEN}", self.config_text)
         self.assertIn("--force-recreate", self.stack_config["extra_args"])
