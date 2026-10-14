@@ -4,3 +4,7 @@
 [[item]]
 path  = "local-llm.md"
 title = "Local model service"
+
+[[item]]
+path  = "pinelake.md"
+title = "Pinelake"

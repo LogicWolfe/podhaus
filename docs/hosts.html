@@ -573,7 +573,9 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
         Periphery, wstunnel, and Alloy connect outbound through Numbat. Pomerium protects the
         Flood, Syncthing and Plex browser routes; Plex's native clients stream directly,
         never through Numbat. <code>home.pinelake.haus</code> is the canonical native-SSH name through
-        Numbat and Pomerium. Hosted JetKVM is the independent console path.
+        Numbat and Pomerium. Hosted JetKVM is the independent console path. The
+        <a href="/runbooks/pinelake.md">Pinelake runbook</a> covers how Komodo and Gatus treat
+        the host, including while it is offline.
       </p>
 
       <h2 id="adding-host">Adding another host</h2>

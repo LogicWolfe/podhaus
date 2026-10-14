@@ -572,6 +572,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Pinelake Periphery (via Komodo)
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Komodo
@@ -587,6 +588,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Pinelake Plex (via Komodo)
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Plex
@@ -743,6 +745,7 @@ endpoints:
   # The subnet is the coupling here — if that household re-addresses its LAN,
   # update the pattern.
   - name: Pinelake Plex LAN advertisement
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     url: https://plex.tv/api/v2/resources?includeHttps=1
     group: Plex
     interval: 300s
@@ -756,6 +759,7 @@ endpoints:
       - "[BODY] == pat(*192.168.1.*)"
 
   - name: Pinelake Syncthing (via Komodo)
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Syncthing
@@ -772,6 +776,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Pinelake Flood (via Komodo)
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Torrents
@@ -788,6 +793,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Pinelake rTorrent (via Komodo)
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Torrents
@@ -1011,6 +1017,7 @@ endpoints:
         send-on-resolved: true
 
   - name: Pinelake Telemetry Pipeline (heartbeat)
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     url: http://${BANDICOOT_LAN_IPV4}:8123/
     method: POST
     group: Observability
@@ -1146,6 +1153,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Backrest (pinelake, via Komodo)
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Backup
@@ -1384,6 +1392,7 @@ external-endpoints:
         send-on-resolved: true
 
   - name: Pinelake RAR Extraction
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     group: Torrents
     token: ${GATUS_OFELIA_PUSH_TOKEN}
     heartbeat:
@@ -1412,6 +1421,7 @@ external-endpoints:
         send-on-resolved: true
 
   - name: Backrest Pinelake Nightly
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     group: Backup
     token: ${GATUS_OFELIA_PUSH_TOKEN}
     heartbeat:
@@ -1466,6 +1476,7 @@ external-endpoints:
   # pinelake-tagged finished torrents; ofelia ticks every 5 min (plus the
   # rtorrent event hook). 30m tolerates a few missed ticks.
   - name: Pinelake Stignore
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     group: Torrents
     token: ${GATUS_OFELIA_PUSH_TOKEN}
     heartbeat:
@@ -1493,6 +1504,7 @@ external-endpoints:
         send-on-resolved: true
 
   - name: Pinelake Plex Label Sync
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
     group: Torrents
     token: ${GATUS_OFELIA_PUSH_TOKEN}
     heartbeat:
