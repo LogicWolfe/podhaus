@@ -5,8 +5,12 @@
 #   - Host networking, so each tunnel's listener binds Numbat's own
 #     addresses: loopback ports for Pomerium's routes, and the public ones
 #     the tunnels that bypass Pomerium hold.
-#   - Root with every capability dropped but NET_BIND_SERVICE, which the
-#     public :443 and :22 listeners need.
+#   - Root with every capability dropped but two: NET_BIND_SERVICE, which
+#     the public :443 and :22 listeners need, and DAC_READ_SEARCH, because
+#     the image keeps its binary in the app user's home directory (mode
+#     0700) where root without it cannot reach. The container's filesystem
+#     is the image and a read-only bind, so reading past permissions in it
+#     grants nothing.
 #   - mTLS against the relay CA: a client without a relay certificate never
 #     reaches the restrictions.
 services:
@@ -20,6 +24,7 @@ services:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+      - DAC_READ_SEARCH
     security_opt:
       - label=disable
       - no-new-privileges=true

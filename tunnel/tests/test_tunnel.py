@@ -15,10 +15,25 @@ import unittest
 import uuid
 from pathlib import Path
 
+import yaml
+
 TUNNEL = Path(__file__).resolve().parents[1]
 IMAGE = "ghcr.io/erebe/wstunnel:latest"
 BUSYBOX = "busybox:stable"
 SERVER_NAME = "relay.numbat.pod.haus"
+
+
+def server_options() -> list[str]:
+    """The server container's user, capabilities and security options, read
+    from the stack's compose file so the test runs it as Numbat does."""
+    service = yaml.safe_load((TUNNEL / "numbat/compose.yaml").read_text())[
+        "services"
+    ]["tunnel-server"]
+    options = ["--user", service["user"]]
+    options += [f"--cap-drop={cap}" for cap in service["cap_drop"]]
+    options += [f"--cap-add={cap}" for cap in service["cap_add"]]
+    options += [f"--security-opt={opt}" for opt in service["security_opt"]]
+    return options
 
 
 def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -96,7 +111,7 @@ class TunnelContractTests(unittest.TestCase):
         )
         cls.server = cls.start(
             "server", IMAGE,
-            ["--network-alias", SERVER_NAME,
+            ["--network-alias", SERVER_NAME, *server_options(),
              "-v", f"{TUNNEL}:/etc/tunnel:ro",
              "-e", f"TUNNEL_CA_CERT_B64={b64(cls.relay.cert)}",
              "-e", f"TUNNEL_CERT_B64={b64(server_cert)}",
