@@ -157,13 +157,15 @@ class TerraMasterMountTests(unittest.TestCase):
         self.assertIn("32400:32400/tcp", service["ports"])
         self.assertIn("dockernet", service["networks"])
 
-    def test_no_rathole_service_carries_plex(self) -> None:
+    def test_no_tunnel_carries_plex(self) -> None:
         """Plex streams never traverse Numbat; the browser route is separate."""
-        for template in (
-            ROOT / "relay/pinelake/client.toml.tmpl",
-            ROOT / "relay/numbat/server.toml.tmpl",
+        for path in (
+            ROOT / "tunnel/pinelake/compose.yaml",
+            ROOT / "tunnel/numbat/restrictions.yaml",
         ):
-            self.assertNotIn("pinelake_plex", template.read_text())
+            with self.subTest(path=path):
+                self.assertNotIn("32400", path.read_text())
+                self.assertNotIn("pinelake-plex", path.read_text())
 
     def test_plex_health_rejects_the_native_server_on_the_shared_port(self) -> None:
         document = yaml.safe_load(
@@ -185,13 +187,11 @@ class TerraMasterMountTests(unittest.TestCase):
         the LAN entry was stale. Plex's own remote access replaces it.
         """
         files = (
-            ROOT / "relay/numbat/server.toml.tmpl",
-            ROOT / "relay/pinelake/client.toml.tmpl",
-            ROOT / "relay/numbat/compose.yaml",
-            ROOT / "relay/pinelake/compose.yaml",
-            ROOT / "relay/numbat/stack.toml",
-            ROOT / "relay/pinelake/stack.toml",
+            ROOT / "tunnel/numbat/restrictions.yaml",
+            ROOT / "tunnel/pinelake/compose.yaml",
+            ROOT / "tunnel/pinelake/stack.toml",
             ROOT / "terraform/pomerium.tf",
+            ROOT / "terraform/tunnel.tf",
         )
         for path in files:
             with self.subTest(path=path):
