@@ -113,22 +113,3 @@ They were left because any edit in `clickstack/` changes the stack's content
 hash, and the push then recreates ClickHouse, HyperDX and the collector. Correct
 them in the same commit as the next ClickStack change, which recreates the
 stack anyway.
-
-## Two log-ingest client certificates nothing uses
-
-**Status:** Open. Removal needs a `terraform apply`.
-
-`terraform/pomerium.tf` still issues log-ingest client certificates for
-bandicoot and fractal (`bandicoot_log_client` and `fractal_log_client`, each a
-private key and a certificate signed by the log-ingest CA, valid for five
-years), and publishes them as the `bandicoot_cert_b64`, `bandicoot_key_b64`,
-`fractal_cert_b64` and `fractal_key_b64` fields of the **Log Ingest PKI**
-1Password item. Neither host ships through `logs-ingest.pod.haus` any more, so
-nothing reads them. Bilby's Caddy trusts every certificate the CA signed, so
-until they expire either one still authenticates to `logs-ingest.pod.haus` for
-anyone who holds its key.
-
-Remove both resource sets and their four fields, run `terraform plan` to see
-only those deletions, and apply. No stack references the matching
-`OP__KOMODO__LOG_INGEST_PKI__BANDICOOT_*` or `…__FRACTAL_*` Komodo Variables
-any more; afterwards, delete any of them Komodo still lists.
