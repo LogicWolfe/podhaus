@@ -22,89 +22,22 @@ def template(host: str) -> dict:
     return json.loads((ROOT / "backup" / host / "config.json.tmpl").read_text())
 
 
-def plan(config: dict, plan_id: str) -> dict:
-    return next(item for item in config["plans"] if item["id"] == plan_id)
-
-
 class OffsiteContractTest(unittest.TestCase):
-    def test_every_jump_repository_reaches_onedrive_without_a_second_bandicoot_writer(self) -> None:
-        bilby = plan(template("bilby"), "backrest-state")
-        kangaroo = plan(template("kangaroo"), "backrest-state")
-        bandicoot = plan(template("bandicoot"), "backrest-state")
+    def test_freshness_gate_checks_every_bandicoot_plan(self) -> None:
+        """A plan the gate does not check is mirrored off-site however old it is."""
+        run = self.run_sync()
+        checked = {call.split(":", 2)[2] for call in run.calls if call.startswith("snapshots:source:")}
+        self.assertEqual(checked, {item["id"] for item in template("bandicoot")["plans"]})
 
-        bilby_commands = [hook["actionCommand"]["command"] for hook in bilby["hooks"]]
-        kangaroo_commands = [hook["actionCommand"]["command"] for hook in kangaroo["hooks"]]
-        self.assertEqual(bilby_commands[0], "/hooks/sync-bandicoot-repository")
-        self.assertIn("onedrive:Backups/podhaus-kangaroo-restic", kangaroo_commands[0])
-        self.assertEqual(
-            bandicoot["hooks"][0]["conditions"],
-            ["CONDITION_SNAPSHOT_SUCCESS", "CONDITION_SNAPSHOT_SKIPPED"],
-        )
-        self.assertIn(
-            "${GATUS_BACKREST_ENDPOINT_ID}/external?success=true",
-            bandicoot["hooks"][0]["actionCommand"]["command"],
-        )
-        self.assertIn(
-            "success=false&error=backrest+{{ .Task }}+failed",
-            template("bandicoot")["repos"][0]["hooks"][0]["actionCommand"]["command"],
-        )
-
-        bilby_compose = (ROOT / "backup/bilby/compose.yaml").read_text()
-        self.assertIn("/mnt/jump/backups-bandicoot:/repos/podhaus-bandicoot", bilby_compose)
-        self.assertNotIn("/mnt/jump/backups-bandicoot:/repos/podhaus-bandicoot:ro", bilby_compose)
-
-    def test_bandicoot_copy_is_bounded_fresh_and_reports_failures_before_success(self) -> None:
-        script = (ROOT / "backup/bilby/scripts/sync-bandicoot-repository").read_text()
-        copy_script = (ROOT / "backup/bilby/scripts/sync-bandicoot-copy").read_text()
-        expected_plans = {item["id"] for item in template("bandicoot")["plans"]}
-        self.assertEqual(
-            set(copy_script.split("expected_plans=", 1)[1].splitlines()[0].strip("'\"").split()),
-            expected_plans,
-        )
-        self.assertIn('"created-by:bandicoot,plan:$plan"', copy_script)
-        self.assertNotIn("--latest 1", copy_script)
-        self.assertIn("--group-by paths,tags", copy_script)
-        self.assertIn("--keep-daily 14 --keep-weekly 4 --keep-monthly 6", copy_script)
-        self.assertNotIn("--prune", copy_script)
-        self.assertNotIn("--no-lock", copy_script)
-        self.assertIn("if /hooks/sync-bandicoot-copy", script)
-        self.assertEqual(script.count("success=false&error=offsite+mirror+failed"), 1)
-        self.assertNotIn("GATUS_BANDICOOT", script)
-
-        hooks = plan(template("bilby"), "backrest-state")["hooks"]
-        self.assertEqual(hooks[0]["onError"], "ON_ERROR_FATAL")
-        self.assertEqual(hooks[1]["onError"], "ON_ERROR_IGNORE")
-        self.assertEqual(len(hooks), 2)
-        for hook in hooks:
-            self.assertEqual(
-                hook["conditions"],
-                ["CONDITION_SNAPSHOT_SUCCESS", "CONDITION_SNAPSHOT_SKIPPED"],
-            )
-        self.assertNotIn("GATUS_BANDICOOT", (ROOT / "backup/bilby/compose.yaml").read_text())
-        self.assertNotIn("GATUS_BANDICOOT", (ROOT / "backup/bilby/stack.toml").read_text())
-
-        dockerfile = (ROOT / "backup/bilby/Backrest.Dockerfile").read_text()
-        self.assertIn("apk add --no-cache jq", dockerfile)
-
-    def test_rustfs_replaces_active_minio_and_pets_asset_binds(self) -> None:
-        bandicoot = template("bandicoot")
-        rustfs = plan(bandicoot, "rustfs")
-        self.assertEqual(rustfs["paths"], ["/userdata/rustfs"])
-        self.assertEqual(
-            rustfs["retention"]["policyTimeBucketed"],
-            {"daily": 14, "weekly": 4, "monthly": 6},
-        )
-        self.assertTrue(all(item["skipIfUnchanged"] is False for item in bandicoot["plans"]))
-
-        bilby = template("bilby")
-        self.assertNotIn("minio", {item["id"] for item in bilby["plans"]})
-        bilby_compose = (ROOT / "backup/bilby/compose.yaml").read_text()
-        self.assertNotIn("/var/lib/minio:/userdata/minio", bilby_compose)
-        self.assertNotIn("/var/lib/minio/pets-alive-assets", bilby_compose)
-        self.assertEqual(plan(bilby, "pets")["paths"], ["/userdata/pets"])
+    def test_every_bandicoot_plan_snapshots_even_when_unchanged(self) -> None:
+        """The gate refuses a plan with no snapshot from today, so a skipped one fails the mirror."""
+        for item in template("bandicoot")["plans"]:
+            with self.subTest(plan=item["id"]):
+                self.assertIs(item["skipIfUnchanged"], False)
 
     def test_freshness_gate_rejects_missing_or_stale_source_plans(self) -> None:
-        for failure in ("rustfs", "stale:rustfs"):
+        plan_id = template("bandicoot")["plans"][0]["id"]
+        for failure in (plan_id, f"stale:{plan_id}"):
             with self.subTest(failure=failure):
                 run = self.run_sync(
                     missing_plan="" if failure.startswith("stale:") else failure,

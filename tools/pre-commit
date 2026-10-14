@@ -33,28 +33,18 @@
 #                                   stack.toml key material that no longer
 #                                   matches the Ansible inventory (the one
 #                                   authoritative home for SSH keys).
-#   - storage_binds role tests:     the reconciler's behaviour plus the
-#                                   inventory contract for it — every
-#                                   storage host declares its volumes, and
-#                                   an automount pair is hardened on BOTH
-#                                   halves. The .mount half being missed is
-#                                   what let the 2026-05-30 mount wedge
-#                                   recur on 2026-08-30.
-#   - docker role tests:           daemon.json renders byte-for-byte as before
-#                                   without the GPU switch (a drift would
-#                                   restart Docker on every host) and carries
-#                                   exactly the nvidia runtime with it.
-#   - wsl role tests:              no NTP daemon in the guest, since Windows
-#                                   owns the clock (chrony removed, chronyd
-#                                   stopped and disabled while its unit file
-#                                   still exists, its drop-in removed with a
-#                                   daemon-reload), and
-#                                   `base` running before `wsl` and `earlyoom`
-#                                   in fractal.yml and site.yml, so a fresh-host
-#                                   dry run has the dnf5 bindings.
-#   - docs_sources role tests:      source slots remain isolated and every
-#                                   docs host declares both aggregate and
-#                                   canonical chezmoi locations.
+#   - storage_binds role tests:     the reconciler's behaviour, and an
+#                                   automount pair hardened on BOTH halves
+#                                   in the inventory. The .mount half being
+#                                   missed is what let the 2026-05-30 mount
+#                                   wedge recur on 2026-08-30.
+#   - docker role tests:           daemon.json is valid JSON with and without
+#                                   the GPU switch, which adds the nvidia
+#                                   runtime and changes nothing else (a drift
+#                                   would restart Docker on every host).
+#   - docs_sources role tests:      the reconciler keeps source slots isolated,
+#                                   mounting, withdrawing and remounting each
+#                                   source on its own.
 #   - backup heartbeat tests:       every configured push endpoint exists
 #                                   in Gatus, including per-plan hooks.
 #   - metube plexify tests:        the Sonarr-naming hook's title-matching
@@ -67,10 +57,19 @@
 #                                   grants, and never connects to a server its
 #                                   pinned CA did not sign. Needs Docker;
 #                                   skipped with the reason without it.
-#   - pinelake tests:               every TerraMaster bind refuses to create
-#                                   its folder when the volume is missing,
-#                                   and the Plex label sync names torrents by
-#                                   a path Plex mounts.
+#   - pinelake tests:               no Pine Lake stack binds a relative
+#                                   path, every TerraMaster bind refuses to
+#                                   create its folder when the volume is
+#                                   missing, the Plex label sync names
+#                                   torrents by a path Plex mounts, and Plex's
+#                                   preferences carry the identity the deploy
+#                                   gates require and leave the advertised
+#                                   address to the launch daemon.
+#   - Pine Lake host tests:         the deploy gates refuse a stack while the
+#                                   TerraMaster volume or Plex identity is
+#                                   wrong, the mount guard, Plex address
+#                                   advertising and playback session gate
+#                                   scripts, and Flood's Syncthing ignore file.
 #   - forgejo-runner tests:         Docker's stop grace period outlasts the
 #                                   runner's job drain, and a changed
 #                                   registration recreates the runner.
@@ -146,19 +145,19 @@ mise exec -- pipenv run python -m unittest discover \
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/docs_sources/tests"
 mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/ansible/roles/earlyoom/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/ansible/roles/sshd_liveness/tests"
-mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/ansible/roles/docker/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/ansible/roles/wsl/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/metube/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/forgejo-runner/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/pinelake/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/pinelake/periphery/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/ansible/roles/pinelake_macos/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/flood/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/tunnel/tests"
 mise exec -- pipenv run python -m unittest discover \

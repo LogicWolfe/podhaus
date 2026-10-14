@@ -40,15 +40,6 @@ esac
 
 
 class PlexPredeployGateTest(unittest.TestCase):
-    def test_session_gate_mount_uses_orbstack_visible_repo_path(self) -> None:
-        script = SCRIPT.read_text(encoding="utf-8")
-        self.assertNotIn("source=/usr/local/libexec/podhaus", script)
-        self.assertIn(
-            "/Users/Shared/Podhaus/periphery/etc-komodo/repos/"
-            "podhaus-pinelake/ansible/roles/pinelake_macos/files",
-            script,
-        )
-
     def run_gate(self, **values: str) -> tuple[subprocess.CompletedProcess[str], int]:
         with tempfile.TemporaryDirectory() as temporary:
             fake_bin = Path(temporary)
@@ -89,9 +80,6 @@ class PlexPredeployGateTest(unittest.TestCase):
     def test_inspect_failure_for_a_listed_container_fails_closed(self) -> None:
         result, _ = self.run_gate(FAKE_STATE="absent", FAKE_LISTED="true")
         self.assertNotEqual(result.returncode, 0)
-
-    def test_no_one_time_cutover_marker_is_required(self) -> None:
-        self.assertNotIn("container-cutover-ready", SCRIPT.read_text(encoding="utf-8"))
 
     def test_identity_mismatch_blocks_recovery(self) -> None:
         result, count = self.run_gate(

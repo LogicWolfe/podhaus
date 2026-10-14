@@ -83,7 +83,7 @@ class ControlSurface(unittest.TestCase):
         self.assertEqual(values["llm_guest_memory_available_mib"], "12288")
         self.assertEqual(values["llm_guest_memory_total_mib"], "25600")
         self.assertEqual(values["llm_pool_tokens"], "0")
-        self.assertEqual(values["llm_pool_limit_tokens"], "204800")
+        self.assertEqual(values["llm_pool_limit_tokens"], environment()["LLM_POOL_TOKENS"])
 
     def test_health_answers_200_then_503_with_the_reason(self) -> None:
         self.assertEqual(self.request("GET", "/healthz")[0], 200)

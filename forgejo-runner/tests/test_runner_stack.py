@@ -40,12 +40,18 @@ class RunnerStackTests(unittest.TestCase):
     def test_the_runner_never_inherits_an_earlier_registration_file(self):
         # The image declares /data a volume; left undeclared here, a recreate
         # carries the previous container's /data, and its .runner, across.
-        volumes = self.compose["services"]["runner"]["volumes"]
-        self.assertIn("data:/data", volumes)
-        self.assertIn("data", self.compose["volumes"])
+        mounts = dict(
+            reversed(volume.split(":")[:2]) for volume in self.compose["services"]["runner"]["volumes"]
+        )
+        self.assertIn(mounts["/data"], self.compose["volumes"])
 
     def test_a_changed_registration_recreates_the_runner(self):
-        self.assertIn("${FORGEJO_RUNNER_TOKEN}", self.config_text)
+        # Compose recreates nothing when only a config's text changes, so a
+        # config that substitutes the stack's environment needs a forced
+        # recreate for a rotated value to reach the runner.
+        substituted = [line.split("=", 1)[0] for line in self.stack_config["environment"].split()
+                       if "${" + line.split("=", 1)[0] + "}" in self.config_text]
+        self.assertTrue(substituted)
         self.assertIn("--force-recreate", self.stack_config["extra_args"])
 
 

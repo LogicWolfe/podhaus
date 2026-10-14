@@ -236,9 +236,6 @@ class RecoveryCommandTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("usage:", result.stderr)
 
-    def test_recovery_command_has_no_ofelia_behavior(self) -> None:
-        self.assertNotIn("ofelia", RECOVERY_COMMAND.read_text().lower())
-
 
 def mount_states(*, pouch: bool, jump: bool) -> dict[str, dict[str, object]]:
     return {

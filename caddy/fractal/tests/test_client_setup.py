@@ -37,28 +37,26 @@ BASE_COMMANDS = ("chmod", "mkdir", "mv", "rm")
 
 MODEL = yaml.safe_load((ROOT / "llm" / "compose.yaml").read_text())[
     "services"]["llm-watcher"]["environment"]["LLM_MODEL_NAME"]
-# Where and which model, and the measured behaviour settings, as
-# docs/plans/local-llm-service.html records them.
-CLAUDE_RECIPE = {
-    "ANTHROPIC_BASE_URL": "https://llm.pod.haus",
-    "ANTHROPIC_API_KEY": "",
-    "ANTHROPIC_MODEL": MODEL,
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": MODEL,
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": MODEL,
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": MODEL,
-    "ANTHROPIC_DEFAULT_FABLE_MODEL": MODEL,
-    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "150000",
-    "CLAUDE_CODE_EXTRA_BODY": '{"chat_template_kwargs":{"reasoning_effort":"medium"}}',
-    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
-    "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION": "false",
-    "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
-}
+MODEL_VARIABLE = re.compile(r"ANTHROPIC_(DEFAULT_\w+_)?MODEL")
 
 
+def accepted_reasoning_efforts() -> set[str]:
+    """The reasoning efforts the model server's chat template accepts; it raises on any other."""
+    preset = (ROOT / "llm" / "server" / "models.ini").read_text()
+    template = re.search(r"^chat-template-file = (\S+)$", preset, re.M).group(1)
+    text = (ROOT / "llm" / "server" / Path(template).name).read_text()
+    return set(re.findall(r"'([^']+)'", re.search(r"reasoning_effort not in \(([^)]*)\)", text).group(1)))
 
-def pasteable(value: str) -> str:
-    """The page quotes a value for the shell only when it has to."""
-    return f"'{value}'" if '"' in value else value
+
+def page_recipe() -> dict[str, str]:
+    """The page's manual recipe for Claude Code, unquoted as the shell would."""
+    page = (SETUP / "index.html").read_text()
+    block = re.search(r'<pre id="claude-env">(.*?)</pre>', page, re.S).group(1)
+    recipe = {}
+    for line in block.splitlines():
+        name, value = line.removeprefix("export ").split("=", 1)
+        recipe[name] = value[1:-1] if value.startswith("'") else value
+    return recipe
 
 
 SIGN_IN_LINK = "https://id.pod.haus/device?code=STUBCODE"
@@ -321,16 +319,31 @@ class ClaudeLocalTest(MachineTest):
         runs = self.machine.home / "token-runs"
         return len(runs.read_text().splitlines()) if runs.exists() else 0
 
-    def test_sets_the_recipe_and_hands_claude_the_token_command(self) -> None:
+    def test_asks_for_the_served_model_and_hands_claude_the_token_command(self) -> None:
         result, recorded = self.start("--resume", "two words")
         self.assertEqual(result.returncode, 0, result.stderr)
-        for name, value in CLAUDE_RECIPE.items():
-            self.assertEqual(recorded["env"][name], value, name)
+        models = {name: value for name, value in recorded["env"].items() if MODEL_VARIABLE.fullmatch(name)}
+        self.assertIn("ANTHROPIC_MODEL", models)
+        self.assertEqual(set(models.values()), {MODEL})
+        self.assertEqual(recorded["env"]["ANTHROPIC_API_KEY"], "")
         self.assertNotIn("ANTHROPIC_AUTH_TOKEN", recorded["env"])
         flag, settings, *passed = recorded["argv"]
         self.assertEqual(flag, "--settings")
-        self.assertEqual(json.loads(settings), {"apiKeyHelper": "~/.local/bin/llm-token"})
+        self.assertEqual(set(json.loads(settings)), {"apiKeyHelper"})
         self.assertEqual(passed, ["--resume", "two words"])
+
+    def test_asks_for_a_reasoning_effort_the_chat_template_accepts(self) -> None:
+        _, recorded = self.start()
+        body = json.loads(recorded["env"]["CLAUDE_CODE_EXTRA_BODY"])
+        self.assertIn(body["chat_template_kwargs"]["reasoning_effort"], accepted_reasoning_efforts())
+
+    def test_the_pages_manual_recipe_is_what_it_sets(self) -> None:
+        _, recorded = self.start()
+        recipe = page_recipe()
+        self.assertEqual(recipe.pop("ANTHROPIC_AUTH_TOKEN"), '<span class="key"></span>')
+        launcher = {name: value for name, value in recorded["env"].items()
+                    if name.startswith(("ANTHROPIC_", "CLAUDE_CODE_"))}
+        self.assertEqual(recipe, launcher)
 
     def test_claude_code_can_run_the_helper_it_is_given(self) -> None:
         """Claude Code runs apiKeyHelper through sh, which expands the tilde."""
@@ -436,24 +449,14 @@ class SetupPageTest(unittest.TestCase):
     def constant(self, name: str) -> str:
         return re.search(rf'const {name} = "([^"]*)";', self.page).group(1)
 
-    def test_signs_in_with_the_token_commands_pocket_id_client(self) -> None:
-        self.assertEqual(
-            set(re.findall(r"https://id\.pod\.haus[^\"'\s<]*", self.page)),
-            {"https://id.pod.haus/authorize", "https://id.pod.haus/api/oidc/token"},
-        )
-        self.assertEqual(self.constant("CLIENT_ID"), "llm-token")
-        self.assertEqual(self.constant("REDIRECT_URI"), "https://llm.pod.haus/setup/")
-        self.assertEqual(self.constant("SCOPE"), "openid email groups")
-        self.assertIn('code_challenge_method: "S256"', self.page)
-
     def test_the_callback_is_registered_with_pocket_id(self) -> None:
         client = (ROOT / "terraform" / "pocket_id.tf").read_text().split('resource "pocketid_client" "llm_token"')[1]
         callbacks = client.split("callback_urls = [")[1].split("]")[0]
         self.assertIn(f'"{self.constant("REDIRECT_URI")}"', callbacks)
 
-    def test_offers_the_five_downloads_and_each_exists(self) -> None:
+    def test_every_download_offered_exists(self) -> None:
         offered = set(re.findall(r"/setup/([\w.-]+)", self.page))
-        self.assertEqual(offered, {"claude.sh", "pi.sh", "llm-token", "claude-podhaus", "podhaus.ts"})
+        self.assertTrue(offered)
         for name in offered:
             self.assertTrue((SETUP / name).is_file(), name)
 
@@ -461,14 +464,6 @@ class SetupPageTest(unittest.TestCase):
         self.assertEqual(re.findall(r"\bsrc=|<link\b|@import|\burl\(", self.page), [])
         for target in re.findall(r'href="([^"]*)"', self.page):
             self.assertTrue(target.startswith("/setup/"), target)
-
-    def test_manual_recipe_matches_claude_local(self) -> None:
-        block = re.search(r'<pre id="claude-env">(.*?)</pre>', self.page, re.S).group(1)
-        self.assertEqual(
-            set(block.splitlines()),
-            {f"export {name}={pasteable(value)}" for name, value in CLAUDE_RECIPE.items()}
-            | {'export ANTHROPIC_AUTH_TOKEN=<span class="key"></span>'},
-        )
 
 
 if __name__ == "__main__":

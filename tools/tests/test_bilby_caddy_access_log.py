@@ -1,18 +1,18 @@
 """bilby's front door writes every site's requests, and only the fields chosen.
 
 The mise-installed caddy compiles caddy/Caddyfile and the compiled config is
-checked: every host on every listener is written by the `front_door` access
-logger, no site skips or renames it, that logger deletes Caddy's request object
-whole, Caddy's own logger for a Host no site names writes nowhere, and each
-appended field is one of a fixed set read from the request before it is
-handled, the identity ones only where a proxy that sets them is the only way
-in. Caddy's default logger, which writes the whole request on a proxied
-response it had to abort and on a 5xx error line, drops the query and every
-credential header named below, including each header a route compares with a
-secret. The stock caddy has neither of the Caddyfile's
-two plugins, so it compiles a copy with their uses swapped out (the layer4
-proxy on :8022 removed, the Cloudflare DNS challenge replaced by Caddy's own
-issuer); neither bears on logging. What Caddy prints for these fields is in
+checked: every host on every listener is written by one access logger, no
+site skips or renames it, that logger deletes Caddy's request and response
+headers whole, Caddy's own logger for a Host no site names writes nowhere, and
+every site appends the same fields, read from the request before it is
+handled, with a field read from a header a proxy sets only where a client
+certificate is the only way in. Caddy's default logger, which writes the whole
+request on a proxied response it had to abort and on a 5xx error line, drops
+the query and every credential header, including each header a route compares
+with a secret. The stock caddy has neither of the Caddyfile's two plugins, so
+it compiles a copy with their uses swapped out (the layer4 proxy on :8022
+removed, the Cloudflare DNS challenge replaced by Caddy's own issuer); neither
+bears on logging. What Caddy prints for these fields is in
 logging/tests/test_log_schema.py's caddy_front_door_* lines.
 
 This lives here rather than under caddy/ because every file under caddy/ is in
@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -31,25 +32,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 CADDYFILE = ROOT / "caddy" / "Caddyfile"
-LOGGER = "front_door"
-CLOUDFLARE_CA = "/etc/caddy/pki/cloudflare-origin-pull-ca.pem"
 DNS_CHALLENGE = "dns cloudflare {env.CLOUDFLARE_API_TOKEN}"
-POMERIUM_LISTENER = ":4443"
-
-EVERY_SITE = {
-    "listener": "{http.request.local.port}",
-    "remote_ip": "{http.request.remote.host}",
-    "host": "{http.request.host}",
-    "method": "{http.request.method}",
-    "path": "{http.request.orig_uri.path}",
-    "user_agent": "{http.request.header.User-Agent}",
-}
-FORWARDED_FOR = {"forwarded_for": "{http.request.header.X-Forwarded-For}"}
-POMERIUM_ONLY = {
-    "caller": "{http.request.header.X-Pomerium-Claim-Email}",
-    "request_id": "{http.request.header.X-Request-Id}",
-}
-LOGS_INGEST_ONLY = {"client_cert": "{http.request.tls.client.subject}"}
+# A field read from one of these is only as true as the proxy that set it.
+PROXY_SET = "{http.request.header.X-"
+TLS_CLIENT = "{http.request.tls.client."
 # Request headers that carry a credential to one of bilby's routes.
 CREDENTIAL_HEADERS = (
     "Authorization", "Proxy-Authorization", "Cookie", "X-Pomerium-Jwt-Assertion",
@@ -117,14 +103,18 @@ def hosts(route: dict) -> list[str]:
     return [h for m in route.get("match", []) for h in m.get("host", [])]
 
 
-def cloudflare_only(server: dict) -> set[str]:
-    """The names this listener serves only to Cloudflare's origin-pull certificate."""
-    return {
-        host
-        for policy in server.get("tls_connection_policies", [])
-        if CLOUDFLARE_CA in policy.get("client_authentication", {}).get("ca", {}).get("pem_files", [])
-        for host in policy["match"]["sni"]
-    }
+def requires_client_certificate(server: dict, names: list[str]) -> bool:
+    """Whether every name, or the listener's default when the site names
+    none, is served only to a client presenting a certificate."""
+    policies = server.get("tls_connection_policies", [])
+    default = [policy for policy in policies if "match" not in policy]
+
+    def policy(name: str | None) -> dict | None:
+        named = [p for p in policies if name in p.get("match", {}).get("sni", [])]
+        return (named or default or [None])[0]
+
+    chosen = [policy(name) for name in names or [None]]
+    return all(p is not None and "client_authentication" in p for p in chosen)
 
 
 class FrontDoorAccessLog(unittest.TestCase):
@@ -138,28 +128,35 @@ class FrontDoorAccessLog(unittest.TestCase):
         """Each listener's top-level routes, one per site block."""
         return [(server, route) for server in self.servers for route in server["routes"]]
 
-    def test_every_host_on_every_listener_is_written_by_front_door(self) -> None:
+    def access_logger(self) -> str:
+        """The one logger every listener writes its requests to."""
+        names = set()
+        for server in self.servers:
+            logs = server["logs"]
+            names |= {logs["default_logger_name"]} if "default_logger_name" in logs else set()
+            names |= {name for named in logs.get("logger_names", {}).values() for name in named}
+        (name,) = names
+        return name
+
+    def test_every_host_on_every_listener_is_written_by_the_access_logger(self) -> None:
+        logger = self.access_logger()
         for server in self.servers:
             with self.subTest(listener=server["listen"]):
                 logs = server["logs"]
                 self.assertNotIn("skip_hosts", logs)
                 named = [h for route in server["routes"] for h in hosts(route)]
                 if not named:
-                    self.assertEqual(logs, {"default_logger_name": LOGGER})
+                    self.assertEqual(logs, {"default_logger_name": logger})
                     continue
-                self.assertEqual(logs["logger_names"], {h: [LOGGER] for h in named})
+                self.assertEqual(logs["logger_names"], {h: [logger] for h in named})
 
-    def test_the_logger_deletes_the_request_object_whole(self) -> None:
-        self.assertEqual(self.loggers[LOGGER], {
-            "writer": {"output": "stdout"},
-            "encoder": {
-                "format": "filter",
-                "wrap": {"format": "json"},
-                "fields": {name: {"filter": "delete"}
-                           for name in ("request", "resp_headers", "bytes_read", "size", "user_id")},
-            },
-            "include": [f"http.log.access.{LOGGER}"],
-        })
+    def test_the_logger_deletes_the_request_and_response_headers_whole(self) -> None:
+        logger = self.access_logger()
+        self.assertEqual(self.loggers[logger]["include"], [f"http.log.access.{logger}"])
+        fields = self.loggers[logger]["encoder"]["fields"]
+        for name in ("request", "resp_headers"):
+            with self.subTest(field=name):
+                self.assertEqual(fields[name], {"filter": "delete"})
 
     def test_a_request_for_a_host_no_site_names_is_not_written(self) -> None:
         # Caddy's base access logger would write such a request whole,
@@ -169,23 +166,20 @@ class FrontDoorAccessLog(unittest.TestCase):
     def test_caddys_own_lines_lose_the_query_and_every_credential_header(self) -> None:
         # The default logger writes the whole request on a proxied response
         # Caddy had to abort and on a 5xx error line.
-        self.assertEqual(self.loggers["default"].get("encoder"), {
-            "format": "filter",
-            "wrap": {"format": "json"},
-            "fields": {
-                "request>uri": {"filter": "regexp", "regexp": r"\?.*$"},
-                "request>headers>Referer": {"filter": "regexp", "regexp": r"\?.*$"},
-                **{f"request>headers>{name}": {"filter": "delete"} for name in CREDENTIAL_HEADERS},
-            },
-        })
-
-    def test_every_header_a_route_checks_against_a_secret_is_a_credential_header(self) -> None:
-        checked = secret_headers(self.config["apps"]["http"])
-        self.assertTrue(checked)
-        self.assertEqual(checked - set(CREDENTIAL_HEADERS), set())
+        fields = self.loggers["default"]["encoder"]["fields"]
+        for name in ("request>uri", "request>headers>Referer"):
+            with self.subTest(field=name):
+                rule = fields[name]
+                self.assertEqual(rule["filter"], "regexp")
+                self.assertEqual(re.sub(rule["regexp"], rule.get("value", ""), "/path?token=secret"), "/path")
+        secret_checked = secret_headers(self.config["apps"]["http"])
+        self.assertTrue(secret_checked)
+        for header in set(CREDENTIAL_HEADERS) | secret_checked:
+            with self.subTest(header=header):
+                self.assertEqual(fields[f"request>headers>{header}"], {"filter": "delete"})
 
     def test_no_site_skips_or_renames_its_access_log(self) -> None:
-        # A site that did would silently stop being written by front_door.
+        # A site that did would silently stop being written by the access logger.
         for server, route in self.sites():
             with self.subTest(listener=server["listen"], hosts=hosts(route)):
                 found = [h for h in handlers(route, "vars") if {"log_skip", "access_logger_names"} & set(h)]
@@ -199,26 +193,29 @@ class FrontDoorAccessLog(unittest.TestCase):
                 late = [h["key"] for h in handlers(route, "log_append") if h.get("early") is not True]
                 self.assertEqual(late, [])
 
-    def test_every_site_appends_who_reached_what(self) -> None:
-        for server, route in self.sites():
-            with self.subTest(listener=server["listen"], hosts=hosts(route)):
-                self.assertEqual(appended(route) | EVERY_SITE, appended(route))
+    def test_every_site_appends_the_same_request_fields(self) -> None:
+        # Apart from what a proxy or a client certificate adds, a site whose
+        # lines lack a field the others carry cannot be read beside them.
+        def own(route: dict) -> dict[str, str]:
+            return {k: v for k, v in appended(route).items() if not v.startswith((PROXY_SET, TLS_CLIENT))}
 
-    def test_identity_fields_appear_only_where_a_proxy_sets_them(self) -> None:
-        cloudflare_sites = 0
+        (first_server, first), *rest = self.sites()
+        self.assertTrue(own(first))
+        for server, route in rest:
+            with self.subTest(listener=server["listen"], hosts=hosts(route)):
+                self.assertEqual(own(route), own(first))
+
+    def test_a_field_a_proxy_sets_is_recorded_only_behind_a_client_certificate(self) -> None:
+        # Anyone reaching a site directly could write those headers themselves.
+        behind_proxy = 0
         for server, route in self.sites():
-            names = set(hosts(route))
-            expected = dict(EVERY_SITE)
-            if server["listen"] == [POMERIUM_LISTENER]:
-                expected |= FORWARDED_FOR | POMERIUM_ONLY
-            elif names and names <= cloudflare_only(server):
-                cloudflare_sites += 1
-                expected |= FORWARDED_FOR
-            elif names == {"logs-ingest.pod.haus"}:
-                expected |= LOGS_INGEST_ONLY
-            with self.subTest(listener=server["listen"], hosts=sorted(names)):
-                self.assertEqual(appended(route), expected)
-        self.assertTrue(cloudflare_sites)
+            proxy_set = [k for k, v in appended(route).items() if v.startswith(PROXY_SET)]
+            if not proxy_set:
+                continue
+            behind_proxy += 1
+            with self.subTest(listener=server["listen"], hosts=hosts(route), fields=proxy_set):
+                self.assertTrue(requires_client_certificate(server, hosts(route)))
+        self.assertTrue(behind_proxy)
 
 
 if __name__ == "__main__":

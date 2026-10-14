@@ -272,27 +272,34 @@ function composeModelName(): string {
 	return match[1];
 }
 
+/** The reasoning efforts the model server's chat template accepts; it raises on any other. */
+function acceptedReasoningEfforts(): Set<string> {
+	const preset = readFileSync(new URL("../../../llm/server/models.ini", import.meta.url), "utf8");
+	const template = preset.match(/^chat-template-file = (\S+)$/m);
+	assert.ok(template, "llm/server/models.ini names a chat template file");
+	const name = template[1].split("/").pop();
+	const text = readFileSync(new URL(`../../../llm/server/${name}`, import.meta.url), "utf8");
+	const accepted = text.match(/reasoning_effort not in \(([^)]*)\)/);
+	assert.ok(accepted, `${name} lists the reasoning efforts it accepts`);
+	return new Set([...accepted[1].matchAll(/'([^']+)'/g)].map((match) => match[1]));
+}
+
 test("the registered model is the one the service serves", () => {
-	const { id, config } = registeredProvider(undefined);
-	assert.equal(id, "podhaus");
-	assert.equal(config.api, "openai-completions");
+	const { config } = registeredProvider(undefined);
 	assert.equal(config.models.length, 1);
 	assert.equal(config.models[0].id, composeModelName());
 });
 
-test("pi's reasoning levels map onto the three the chat template accepts", () => {
+test("every reasoning level pi can send maps onto one the chat template accepts", () => {
 	const [model] = registeredProvider(undefined).config.models;
-	assert.deepEqual(model.thinkingLevelMap, {
-		minimal: "low",
-		low: "low",
-		medium: "medium",
-		high: "xhigh",
-		xhigh: "xhigh",
-	});
+	const accepted = acceptedReasoningEfforts();
+	// pi's own level names; the template answers HTTP 500 to anything it does not accept.
+	for (const level of ["minimal", "low", "medium", "high", "xhigh"]) {
+		assert.ok(accepted.has(model.thinkingLevelMap[level]), level);
+	}
 });
 
-test("the base URL is the service's /v1, or the override's", () => {
-	assert.equal(registeredProvider(undefined).config.baseUrl, "https://llm.pod.haus/v1");
+test("the base URL is the service's /v1", () => {
 	assert.equal(registeredProvider("http://127.0.0.1:9").config.baseUrl, "http://127.0.0.1:9/v1");
 });
 

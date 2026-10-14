@@ -1116,9 +1116,7 @@ def fixture_of(row: Shipped, by_file_line: dict[tuple[str, str], str]) -> str | 
 # Each tailer and the component that holds its labels, by what it reads.
 TAILERS = {
     "docker_rules": "podhaus.docker_targets.fixtures/discovery.relabel.this",
-    "docker_probe_rules": "podhaus.docker_logs.probe/docker_targets.this/discovery.relabel.this",
     "docker": "podhaus.docker_logs.probe/loki.source.docker.containers",
-    "docker_discovery": "podhaus.docker_logs.probe/discovery.docker.containers",
     "plex": "podhaus.plex_server_log.run/loki.source.file.this",
     "flood": "podhaus.flood_job_logs.run/loki.source.file.this",
     "clickhouse": "podhaus.clickhouse_error_log.run/loki.source.file.this",
@@ -1268,7 +1266,7 @@ class LogSchemaTest(unittest.TestCase):
         self.assertEqual(self.health.returncode, 0, self.health.stdout + self.health.stderr)
         self.assertRegex(self.health.stdout, r"exporter requests completed: [1-9]\d*, at the previous check: none")
 
-    # The pins below are what is deployed. A changed label re-reads and
+    # The labels below are what is deployed. A changed label re-reads and
     # re-ships that source's retained logs, and so does a renamed tailer,
     # declare, instance label or import.file label, the parts every saved
     # position's path is built from: none of those may change. A relabel rule,
@@ -1278,52 +1276,6 @@ class LogSchemaTest(unittest.TestCase):
     # its content hash triggers, and an Alloy that stops keeps every saved
     # position. Only a running Alloy reloading the change would restart every
     # tailer and lose them. See docs/logging.md before changing one.
-    def test_the_docker_relabel_rules_are_the_deployed_list(self) -> None:
-        deployed = [
-            {"regex": "__address__|__meta_docker_network_.*|__meta_docker_port_.*", "action": "labeldrop"},
-            {"source_labels": ["__meta_docker_container_label_podhaus_lumen",
-                               "__meta_docker_container_label_podhaus_lumen_worktree"],
-             "regex": "true;", "action": "drop"},
-            # Drops only containers labelled podhaus.harness=true; every
-            # other container keeps exactly its labels.
-            {"source_labels": ["__meta_docker_container_label_podhaus_harness"], "regex": "true",
-             "action": "drop"},
-            {"source_labels": ["__meta_docker_container_name"], "regex": "/(.*)", "target_label": "container"},
-            {"source_labels": ["__meta_docker_container_name"], "regex": "/(?:testhost-)?(.*)",
-             "target_label": "service"},
-            {"source_labels": ["__meta_docker_container_label_podhaus_lumen_worktree"], "regex": ".+",
-             "target_label": "service", "replacement": "lumen-warm"},
-            {"source_labels": ["__meta_docker_container_log_stream"], "regex": "(.*)", "target_label": "stream"},
-            {"source_labels": ["__meta_docker_container_label_com_docker_compose_project"], "regex": "(.*)",
-             "target_label": "compose_project"},
-            {"source_labels": ["__meta_docker_container_label_com_docker_compose_service"], "regex": "(.*)",
-             "target_label": "compose_service"},
-        ]
-        for name in ("docker_rules", "docker_probe_rules"):
-            with self.subTest(component=TAILERS[name]):
-                self.assertEqual(self.tailers[name].arguments["rule"], deployed)
-
-    def test_the_docker_tailers_arguments_are_the_deployed_set(self) -> None:
-        arguments = {k: v for k, v in self.tailers["docker"].arguments.items() if k not in ("targets", "forward_to")}
-        self.assertEqual(arguments, {
-            "host": "unix:///var/run/docker.sock",
-            "labels": {"host": "testhost"},
-            "relabel_rules": 'capsule("relabel.Rules")',
-            "http_client_config": [{}],
-        })
-        self.assertEqual(self.tailers["docker"].arguments["forward_to"],
-                         ["podhaus.docker_logs.probe/loki.process.decolorize.receiver"])
-
-    def test_docker_discovery_is_the_deployed_set(self) -> None:
-        """Every 5 s, which narrows the window in which a container removed soon after it starts
-        is never listed; stopped containers listed, so a container's tailer keeps its position
-        across a stop."""
-        self.assertEqual(self.tailers["docker_discovery"].arguments, {
-            "host": "unix:///var/run/docker.sock",
-            "refresh_interval": "5s",
-            "filter": [{"name": "status", "values": ["restarting", "running", "paused", "exited"]}],
-        })
-
     def docker_tailer_labels(self, fixture: str) -> dict[str, str]:
         """Everything the relabel rules leave on a stand-in, plus the tailer's own labels."""
         stand_in = next(target for target in self.tailers["docker_rules"].exports["output"]

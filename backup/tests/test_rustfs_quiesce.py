@@ -11,6 +11,23 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+class BackrestWiringTest(unittest.TestCase):
+    """Backrest runs the control script around the snapshot of the plan that uses it."""
+
+    def hook(self, command: str) -> dict:
+        config = json.loads((ROOT / "backup/bandicoot/config.json.tmpl").read_text())
+        (hook,) = [hook for plan in config["plans"] for hook in plan["hooks"]
+                   if hook["actionCommand"]["command"].endswith(f"rustfs-backup-control {command}")]
+        return hook
+
+    def test_a_failed_stop_aborts_the_snapshot(self) -> None:
+        stop = self.hook("stop")
+        self.assertEqual((stop["conditions"], stop["onError"]), (["CONDITION_SNAPSHOT_START"], "ON_ERROR_FATAL"))
+
+    def test_finish_runs_after_the_snapshot_whatever_its_outcome(self) -> None:
+        self.assertEqual(self.hook("finish")["conditions"], ["CONDITION_SNAPSHOT_END"])
+
+
 # The control script runs in bandicoot's Linux backup container: it takes its
 # lock with util-linux flock, reads lock age with GNU stat -c and looks for
 # restic under /proc, none of which a Mac has.
@@ -21,10 +38,6 @@ class RustfsQuiesceTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.calls, ["stop"])
         self.assertFalse(result.lock_exists)
-
-        rustfs = self.rustfs_plan()
-        self.assertEqual(rustfs["hooks"][0]["conditions"], ["CONDITION_SNAPSHOT_START"])
-        self.assertEqual(rustfs["hooks"][0]["onError"], "ON_ERROR_FATAL")
 
     def test_inspection_failure_is_fatal_before_snapshot(self) -> None:
         result = self.run_control("stop", fail_inspect=True)
@@ -44,8 +57,6 @@ class RustfsQuiesceTest(unittest.TestCase):
             self.assertTrue(finished.running)
             self.assertFalse(finished.lock_exists)
             self.assertEqual(finished.calls, ["stop", "start"])
-
-        self.assertEqual(self.rustfs_plan()["hooks"][1]["conditions"], ["CONDITION_SNAPSHOT_END"])
 
     def test_recovery_restarts_rustfs_after_an_interrupted_backup(self) -> None:
         with self.control_environment() as environment:
@@ -78,11 +89,6 @@ class RustfsQuiesceTest(unittest.TestCase):
             self.assertFalse(finished.running)
             self.assertFalse(finished.lock_exists)
             self.assertEqual(finished.calls, [])
-
-    @staticmethod
-    def rustfs_plan() -> dict:
-        config = json.loads((ROOT / "backup/bandicoot/config.json.tmpl").read_text())
-        return next(plan for plan in config["plans"] if plan["id"] == "rustfs")
 
     def run_control(
         self, command: str, *, fail_stop: bool = False, fail_inspect: bool = False

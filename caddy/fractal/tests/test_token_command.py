@@ -348,21 +348,21 @@ class LinkOpenerTest(TokenCommandTest):
 
 
 class SharedConstantsTest(unittest.TestCase):
-    """The command, the page and the installer agree on the client and addresses."""
+    """The command and the page sign in as the same Pocket ID client, so a
+    key from either works wherever the other's does."""
 
-    command = COMMAND.read_text()
-    page = (SETUP / "index.html").read_text()
+    def command_setting(self, name: str) -> str:
+        command = COMMAND.read_text()
+        value = re.search(rf"^{name}=(\S+)$", command, re.M).group(1)
+        return value.replace("$ISSUER", self.command_setting("ISSUER")) if "$ISSUER" in value else value
+
+    def page_constant(self, name: str) -> str:
+        return re.search(rf'const {name} = "([^"]*)";', (SETUP / "index.html").read_text()).group(1)
 
     def test_signs_in_with_the_pages_client_at_the_pages_token_endpoint(self) -> None:
-        self.assertEqual(re.search(r"^CLIENT_ID=(\S+)$", self.command, re.M).group(1), "llm-token")
-        self.assertIn('const CLIENT_ID = "llm-token";', self.page)
-        self.assertIn(f'const TOKEN_URL = "{TOKEN_URL}";', self.page)
-        self.assertEqual(re.search(r"^ISSUER=(\S+)$", self.command, re.M).group(1), ISSUER)
-        self.assertEqual(re.search(r"^TOKEN_URL=(\S+)$", self.command, re.M).group(1), "$ISSUER/api/oidc/token")
-
-    def test_is_installed_by_name_from_the_setup_page(self) -> None:
-        self.assertIn('fetch "$setup/llm-token" "$bin/llm-token" 755', (SETUP / "claude.sh").read_text())
-        self.assertTrue(COMMAND.stat().st_mode & stat.S_IXUSR)
+        for name in ("CLIENT_ID", "TOKEN_URL"):
+            with self.subTest(name=name):
+                self.assertEqual(self.command_setting(name), self.page_constant(name))
 
 
 if __name__ == "__main__":

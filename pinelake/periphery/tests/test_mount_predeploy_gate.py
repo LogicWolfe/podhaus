@@ -6,9 +6,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 SCRIPT = Path(__file__).parents[1] / "predeploy-mount-gate"
-EXPECTED_UUID = "EAED18A9-74C7-4163-ACB4-406B2226FDC6"
+ROLE_DEFAULTS = Path(__file__).parents[3] / "ansible/roles/pinelake_macos/defaults/main.yml"
+# The volume the Mac's mount guard checks and writes into the sentinel; the
+# gate must accept that sentinel or every Pine Lake deploy is refused.
+EXPECTED_UUID = yaml.safe_load(ROLE_DEFAULTS.read_text())["podhaus_terramaster_uuid"]
 
 FAKE_DOCKER = r'''#!/bin/sh
 set -eu

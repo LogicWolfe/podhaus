@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROLE_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = ROLE_DIR / "files" / "pinelake-mount-guard"
-EXPECTED_UUID = "EAED18A9-74C7-4163-ACB4-406B2226FDC6"
+EXPECTED_UUID = "00000000-0000-4000-8000-000000000001"
 
 
 class MountGuardTest(unittest.TestCase):

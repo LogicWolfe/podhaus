@@ -69,6 +69,28 @@ def requested(client: str) -> set[tuple[str, int]]:
     return listeners
 
 
+def checkout_file(service: dict, container_path: str) -> Path:
+    """The file in this repository a container path reaches through the
+    service's bind of a checkout directory."""
+    for volume in service["volumes"]:
+        source, target = volume.split(":")[:2]
+        if container_path.startswith(target + "/"):
+            parts = Path(source).parts
+            # The bind's source is a host's checkout of a directory of this
+            # repository; the longest tail of it that exists here is that directory.
+            for start in range(1, len(parts)):
+                if (ROOT.joinpath(*parts[start:])).is_dir():
+                    return ROOT.joinpath(*parts[start:], container_path.removeprefix(target + "/"))
+    raise AssertionError(f"no bind of a checkout reaches {container_path}")
+
+
+def terraform_clients() -> set[str]:
+    """The common names terraform/tunnel.tf issues client certificates to."""
+    text = (ROOT / "terraform/tunnel.tf").read_text()
+    listed = re.search(r"tunnel_clients\s*=\s*toset\(\[(.*?)\]\)", text, re.S).group(1)
+    return set(re.findall(r'"([^"]+)"', listed))
+
+
 class ContractTests(unittest.TestCase):
     def test_each_client_asks_for_exactly_what_its_rule_grants(self):
         granted = rules()
@@ -94,10 +116,13 @@ class ContractTests(unittest.TestCase):
         # declared content path puts it in the hash Komodo deploys on.
         for stack in ["numbat", *CLIENTS]:
             with self.subTest(stack=stack):
-                document = yaml.safe_load((TUNNEL / stack / "compose.yaml").read_text())
-                self.assertIn("../launcher", document["x-podhaus-content-paths"])
+                directory = TUNNEL / stack
+                document = yaml.safe_load((directory / "compose.yaml").read_text())
                 (service,) = document["services"].values()
-                self.assertEqual(service["entrypoint"][-1], "/etc/tunnel/launcher/run-wstunnel")
+                launcher = checkout_file(service, service["entrypoint"][-1])
+                self.assertTrue(launcher.is_file(), launcher)
+                hashed = [(directory / path).resolve() for path in document["x-podhaus-content-paths"]]
+                self.assertTrue(any(launcher.is_relative_to(path) for path in hashed + [directory]), launcher)
 
     def test_each_client_uses_its_own_certificate(self):
         for client in CLIENTS:
@@ -107,9 +132,9 @@ class ContractTests(unittest.TestCase):
                 field = client.upper().replace("-", "_")
                 self.assertIn(f"TUNNEL_CERT_B64=[[OP__KOMODO__NUMBAT_TUNNEL__{field}_CERT_B64]]", environment)
                 self.assertIn(f"TUNNEL_KEY_B64=[[OP__KOMODO__NUMBAT_TUNNEL__{field}_KEY_B64]]", environment)
-        terraform = (ROOT / "terraform/tunnel.tf").read_text()
-        for client in set(CLIENTS) | set(OUTSIDE_THIS_REPOSITORY):
-            self.assertIn(f'"{client}"', terraform)
+
+    def test_terraform_issues_a_certificate_to_every_client(self):
+        self.assertEqual(terraform_clients(), set(CLIENTS) | set(OUTSIDE_THIS_REPOSITORY))
 
 
 if __name__ == "__main__":

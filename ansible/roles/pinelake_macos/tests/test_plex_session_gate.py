@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import http.server
+import json
 import plistlib
 import subprocess
 import sys
@@ -12,10 +13,10 @@ from pathlib import Path
 ROLE_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = ROLE_DIR / "files" / "plex-session-gate"
 IDENTITY = {
-    "MachineIdentifier": "c9d75740-0fd3-4bba-9874-be61f5dc8d38",
-    "ProcessedMachineIdentifier": "92311858cdd55fb33583fda2e6fc037e3655da85",
-    "AnonymousMachineIdentifier": "166ee17f-2122-4dcf-9d5e-38961c51ff25",
-    "CertificateUUID": "5801df40ceea4deaaefd8bd027fc22ff",
+    "MachineIdentifier": "machine-identifier",
+    "ProcessedMachineIdentifier": "processed-machine-identifier",
+    "AnonymousMachineIdentifier": "anonymous-machine-identifier",
+    "CertificateUUID": "certificate-uuid",
 }
 
 
@@ -39,6 +40,8 @@ class PlexSessionGateTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
         self.plist = Path(self.tempdir.name) / "plex.plist"
+        self.manifest = Path(self.tempdir.name) / "plex-identity.json"
+        self.manifest.write_text(json.dumps(IDENTITY), encoding="utf-8")
         with self.plist.open("wb") as stream:
             plistlib.dump({**IDENTITY, "PlexOnlineToken": "test-secret"}, stream)
 
@@ -63,6 +66,8 @@ class PlexSessionGateTest(unittest.TestCase):
             [
                 sys.executable,
                 str(SCRIPT),
+                "--expected-identity",
+                str(self.manifest),
                 "--url",
                 endpoint,
                 "--preferences-plist",
@@ -96,6 +101,8 @@ class PlexSessionGateTest(unittest.TestCase):
             [
                 sys.executable,
                 str(SCRIPT),
+                "--expected-identity",
+                str(self.manifest),
                 "--url",
                 endpoint,
                 "--preferences-xml",
@@ -155,6 +162,8 @@ class PlexSessionGateTest(unittest.TestCase):
             [
                 sys.executable,
                 str(SCRIPT),
+                "--expected-identity",
+                str(self.manifest),
                 "--url",
                 "http://127.0.0.1:1/status/sessions",
                 "--preferences-plist",

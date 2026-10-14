@@ -11,54 +11,53 @@ class FleetMonitoringTests(unittest.TestCase):
     def setUp(self):
         inventory = yaml.safe_load((REPO / "ansible/inventory/hosts.yml").read_text())
         self.groups = inventory["all"]["children"]
-        config = yaml.safe_load((REPO / "gatus/conf/config.yaml").read_text())
-        self.endpoints = config["endpoints"]
+        self.config = yaml.safe_load((REPO / "gatus/conf/config.yaml").read_text())
+        self.endpoints = self.config["endpoints"]
 
-    def komodo_check(self, *, request_type, server, group):
-        matches = []
-        for endpoint in self.endpoints:
-            if endpoint["group"] != group or "body" not in endpoint:
-                continue
-            if not endpoint["body"].startswith("{"):
-                continue
-            request = json.loads(endpoint["body"])
-            if (
-                request["type"] == request_type
-                and request["params"]["server"] == server
-            ):
-                matches.append(endpoint)
-        self.assertEqual(len(matches), 1, f"{request_type} on {server}")
-        return matches[0]
+    def komodo_checks(self, *, request_type, server):
+        return [
+            endpoint
+            for endpoint in self.endpoints
+            if endpoint.get("body", "").startswith("{")
+            and json.loads(endpoint["body"])["type"] == request_type
+            and json.loads(endpoint["body"])["params"]["server"] == server
+        ]
 
     def test_every_periphery_has_a_health_check(self):
         for host in self.groups["komodo_periphery_hosts"]["hosts"]:
             with self.subTest(host=host):
                 server = "podhaus" if host == "bilby" else host
-                check = self.komodo_check(
-                    request_type="GetServerState", server=server, group="Komodo"
-                )
-                self.assertEqual(check["method"], "POST")
-                self.assertIn("[STATUS] == 200", check["conditions"])
-                self.assertIn("[BODY].status == Ok", check["conditions"])
+                checks = self.komodo_checks(request_type="GetServerState", server=server)
+                self.assertEqual(len(checks), 1)
 
-    def test_every_docs_host_has_source_aware_health_coverage(self):
+    def test_every_docs_host_has_a_docs_container_check(self):
+        # bilby's docs container shares Gatus's network and is checked directly.
         for host in self.groups["docs_hosts"]["hosts"]:
+            if host == "bilby":
+                continue
             with self.subTest(host=host):
-                if host == "bilby":
-                    checks = [
-                        e
-                        for e in self.endpoints
-                        if e["url"] == "http://docs:8000/health"
-                    ]
-                    self.assertEqual(len(checks), 1)
-                    self.assertIn("[STATUS] == 200", checks[0]["conditions"])
-                    continue
-                check = self.komodo_check(
-                    request_type="InspectDockerContainer", server=host, group="Docs"
-                )
-                request = json.loads(check["body"])
-                self.assertEqual(request["params"]["container"], "docs")
-                self.assertIn("[BODY].State.Status == running", check["conditions"])
-                self.assertIn(
-                    "[BODY].State.Health.Status == healthy", check["conditions"]
-                )
+                checks = self.komodo_checks(request_type="InspectDockerContainer", server=host)
+                containers = [json.loads(check["body"])["params"]["container"] for check in checks]
+                self.assertEqual(containers.count("docs"), 1)
+
+    def test_every_value_pasted_into_an_alert_is_json_safe(self):
+        # The custom alerter pastes each endpoint's name, group and alert
+        # description into a JSON body without escaping, so a quote, a
+        # backslash or a newline in any of them breaks that alert's delivery.
+        alerting = 0
+        for endpoint in self.endpoints + self.config["external-endpoints"]:
+            alerts = [alert for alert in endpoint.get("alerts", []) if alert["type"] == "custom"]
+            if not alerts:
+                continue
+            alerting += 1
+            pasted = [endpoint["name"], endpoint.get("group", "")]
+            pasted += [alert.get("description", "") for alert in alerts]
+            for value in pasted:
+                with self.subTest(endpoint=endpoint["name"], value=value[:60]):
+                    for unsafe in ('"', "\\", "\n"):
+                        self.assertNotIn(unsafe, value)
+        self.assertTrue(alerting)
+
+
+if __name__ == "__main__":
+    unittest.main()

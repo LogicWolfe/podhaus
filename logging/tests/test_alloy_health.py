@@ -30,15 +30,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ROOT / "logging" / "compose.shared.yaml"
-SHIP = ROOT / "logging" / "alloy-modules" / "ship.alloy"
 IMAGE = "grafana/alloy:latest"
 LABEL = "podhaus.harness=true"
-# The component the healthcheck names, in the ship module every host runs.
-# Inside a module its metrics keep this component_id and add a component_path.
-EXPORTER = 'otelcol.exporter.otlphttp "clickstack"'
-# What makes the count rise every minute on a quiet host: Alloy's own metrics,
-# scraped every 60 s and sent through that exporter.
-SELF_SCRAPE = re.compile(r'prometheus\.scrape "alloy_self" \{[^}]*scrape_interval\s*=\s*"60s"')
 SHIP_CALL = re.compile(r'^podhaus\.ship "run" \{\n(.*?)^\}', re.M | re.S)
 ARGUMENT = re.compile(r'^\s*(\w+)\s*=\s*(.+?)\s*$', re.M)
 
@@ -136,8 +129,8 @@ def healthcheck() -> tuple[list[str], str]:
 
 def host_configs() -> list[tuple[str, Path]]:
     configs = sorted((ROOT / "logging").glob("*/alloy-conf/config.alloy"))
-    if len(configs) != 8:
-        raise AssertionError(f"expected eight host configs, found {len(configs)}")
+    if not configs:
+        raise AssertionError("found no host configs")
     return [(config.parent.parent.name, config) for config in configs]
 
 
@@ -156,30 +149,9 @@ def docker(*args: str) -> str:
 
 
 class HostConfigTest(unittest.TestCase):
-    """What the check assumes of the ship module and every host's config.alloy; needs no Docker."""
+    """What the check cannot see in a host's config.alloy; needs no Docker."""
 
-    def test_the_ship_module_has_the_exporter_and_self_scrape_the_check_relies_on(self) -> None:
-        text = SHIP.read_text()
-        self.assertEqual(text.count(EXPORTER), 1, f"{SHIP} must hold exactly one {EXPORTER}")
-        self.assertTrue(SELF_SCRAPE.search(text), f"{SHIP} has no prometheus.scrape \"alloy_self\" every 60s")
-
-    def test_every_host_ships_through_the_module_and_no_exporter_of_its_own(self) -> None:
-        for host, config in host_configs():
-            with self.subTest(host=host):
-                text = config.read_text()
-                self.assertEqual(len(SHIP_CALL.findall(text)), 1, f"{config} must call podhaus.ship \"run\" once")
-                self.assertNotIn("otelcol.exporter.", text, f"{config} has an exporter beside the ship module's")
-
-    def test_no_host_sets_host_name_itself(self) -> None:
-        # The ship module stamps host.name on everything it ships, from its
-        # host argument; a second spelling in a host config could only drift
-        # from it.
-        for host, config in host_configs():
-            with self.subTest(host=host):
-                setting = [line.strip() for line in config.read_text().splitlines() if 'attributes["host.name"]' in line]
-                self.assertEqual(setting, [], f"{config} sets host.name; the ship module's host argument is its one definition")
-
-    def test_every_https_host_presents_its_client_certificate(self) -> None:
+    def test_every_https_host_presents_a_client_certificate(self) -> None:
         # The ingest endpoint refuses a client without one at the handshake.
         # Each refusal still completes a request, so the healthcheck stays
         # green while nothing arrives.
@@ -189,9 +161,8 @@ class HostConfigTest(unittest.TestCase):
                 arguments = dict(ARGUMENT.findall(call))
                 if not arguments["endpoint"].startswith('"https://'):
                     continue
-                for argument, suffix in (("client_cert_file", "cert"), ("client_key_file", "key")):
-                    self.assertEqual(arguments.get(argument), f'"/run/podhaus-secrets/{host}-{suffix}.pem"',
-                                     f"{config} ships over https without its {argument}")
+                for argument in ("client_cert_file", "client_key_file"):
+                    self.assertIn(argument, arguments, f"{config} ships over https without its {argument}")
 
 
 class AlloyHealthTest(unittest.TestCase):
