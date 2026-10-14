@@ -229,7 +229,7 @@ routes:
   # with its own loopback rathole service and its own Caddy mTLS origin.
   - <<: *friends_route
     from: https://quokka.docs.pod.haus
-    to: https://127.0.0.1:8448
+    to: https://127.0.0.1:8548
   - <<: *friends_route
     from: https://bandicoot.docs.pod.haus
     to: https://127.0.0.1:8447
@@ -303,7 +303,7 @@ routes:
     to: ssh://127.0.0.1:2201
     policy: *nathan_ssh_policy
   - from: ssh://quokka
-    to: ssh://127.0.0.1:2207
+    to: ssh://127.0.0.1:2307
     policy: *nathan_ssh_policy
   - from: ssh://bandicoot
     to: ssh://127.0.0.1:2206
