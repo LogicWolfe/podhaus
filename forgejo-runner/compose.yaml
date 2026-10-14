@@ -94,10 +94,9 @@ configs:
         # the pull request rather than the Komodo deploy. Jobs build through a
         # `docker:dind` service on their per-job network, and the in-container
         # daemon needs privilege. Privilege applies to the job container and
-        # its services alike, so a hostile action can take over bandicoot;
-        # workflows must therefore pin every action by commit SHA, never by a
-        # movable tag. Bandicoot's own Docker socket stays withheld
-        # (`docker_host`, `valid_volumes`).
+        # its services alike, so a hostile action can take over bandicoot
+        # (docs/runbooks/forgejo.md). Bandicoot's own Docker socket stays
+        # withheld (`docker_host`, `valid_volumes`).
         privileged: true
         # Checkout runs inside job containers, so it needs the same
         # direct-origin resolution as the daemon's Actions protocol. When

@@ -139,20 +139,13 @@ exist only for the job, so every build starts without layer cache.
 
 Privilege is what DinD needs, and it is also root on Bandicoot for any code a
 job runs. Bandicoot hosts Komodo Core and 1Password Connect, so a hostile
-action reaches the fleet's secrets. Two controls bound that. Job containers
-never receive Bandicoot's own Docker socket (`container.docker_host: "-"` and
-an empty `valid_volumes`). And every workflow on these labels must pin each
-action, `checkout` included, by full commit SHA rather than a tag that can be
-moved; an unqualified `actions/checkout@v4` resolves to a movable tag on
-`data.forgejo.org`. The pinned form already in use is
-`https://data.forgejo.org/actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803`.
-
-These workflows still pin `checkout` by a movable tag and need the SHA form:
-
-- bookcard `.forgejo/workflows/ci.yml`: `actions/checkout@v4` (fix in flight
-  in its own pull request);
-- dotfiles `.forgejo/workflows/ci.yaml`: `actions/checkout@v6`;
-- flood `.forgejo/workflows/check.yml`: `actions/checkout@v4`.
+action reaches the fleet's secrets. Job containers never receive Bandicoot's
+own Docker socket (`container.docker_host: "-"` and an empty
+`valid_volumes`). Workflows deliberately reference actions by version tag,
+such as `actions/checkout@v6`, never by commit SHA, so CI always runs the
+current release and upgrade breakage is dealt with when it appears. The cost
+is accepted: whoever can move a tag on `data.forgejo.org` runs code as root
+on Bandicoot.
 
 A push to a repository's `main` deploys it: a Forgejo push webhook filtered to
 `main` invokes the repository's Komodo procedure, which pulls its managed clone,
