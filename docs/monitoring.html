@@ -384,7 +384,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
           (plaintext, home LAN only), which reaches each stack as
           <code>BANDICOOT_LAN_IPV4</code>.</li>
         <li><strong>Numbat</strong>: HTTPS to <code>logs-ingest.pod.haus</code> through
-          rathole and Caddy, with a dedicated client certificate.</li>
+          the tunnel and Caddy, with a dedicated client certificate.</li>
         <li><strong>voltaire</strong>: the same HTTPS ingress with its own client certificate.</li>
         <li><strong>pinelake</strong>: the same HTTPS ingress with its own client certificate.</li>
       </ul>

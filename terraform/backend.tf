@@ -44,7 +44,7 @@ terraform {
       version = "~> 0.13"
     }
     random = {
-      # Generates long-lived Pomerium and rathole secrets. Values are
+      # Generates long-lived Pomerium secrets. Values are
       # persisted in 1Password by resources in pomerium.tf.
       source  = "hashicorp/random"
       version = "~> 3.7"
@@ -117,7 +117,7 @@ terraform {
   backend "s3" {
     endpoints = {
       # Public endpoint so Terraform runs from any machine. Path goes
-      # storage.pod.haus → (split-horizon on LAN / numbat rathole
+      # storage.pod.haus → (split-horizon on LAN / numbat wstunnel
       # off-LAN) → bilby Caddy → RustFS. SigV4 is the boundary; nothing
       # is host- or LAN-pinned.
       s3 = "https://storage.pod.haus"

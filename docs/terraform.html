@@ -51,7 +51,7 @@
         </tbody>
       </table>
       <p>
-        Terraform also owns Numbat's rathole/Pomerium secrets, PKI, Pocket ID client, and
+        Terraform also owns Numbat's Pomerium secrets, PKI (including the wstunnel relay CA and every tunnel client certificate), Pocket ID client, and
         1Password handoffs. Docker containers remain Komodo-managed. See
         <a href="/komodo.html">Komodo</a> and
         <a href="/secrets.html">Secrets</a>.
@@ -63,7 +63,7 @@
         <code>terraform destroy</code> leaves the previous state version recoverable from the
         RustFS web console at <a href="https://rustfs.pod.haus">rustfs.pod.haus</a>. Terraform
         reaches the backend over the public <code>https://storage.pod.haus</code>
-        (Numbat rathole → Caddy → RustFS; see the runner section for why it is DNS-only).
+        (Numbat wstunnel → Caddy → RustFS; see the runner section for why it is DNS-only).
       </p>
       <p>
         RustFS runs as a Komodo-managed single-node stack on bandicoot
@@ -161,10 +161,10 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
         directly via the UniFi split-horizon DNS. For genuine
         external clients (Publii on a laptop, remote
         <code>terraform</code>), traffic arrives via the
-        <strong>Numbat BinaryLane rathole relay</strong>:
+        <strong>Numbat BinaryLane wstunnel relay</strong>:
         <code>storage.pod.haus</code> A → Numbat's Terraform-derived relay address
-        → rathole reverse tunnel (bilby
-        dials out, noise+token) → bilby Caddy → RustFS on bandicoot. The UDM Pro SE
+        → wstunnel reverse tunnel (bilby
+        dials out, authenticated by its relay certificate) → bilby Caddy → RustFS on bandicoot. The UDM Pro SE
         binds WAN:443 itself, so direct port-forward is a dead path —
         see <a href="/hosts.html#numbat">Numbat</a> and
         <a href="/networking.html">networking</a> for the relay

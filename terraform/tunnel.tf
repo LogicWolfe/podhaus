@@ -1,5 +1,5 @@
 # The relay PKI for wstunnel, the outbound tunnels that carry every service
-# into Numbat (docs/plans/wstunnel-migration.md).
+# into Numbat.
 #
 # Both directions are pinned to this CA. Numbat's server requires a client
 # certificate it signed, and takes the certificate's common name as the only

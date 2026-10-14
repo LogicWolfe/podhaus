@@ -117,8 +117,8 @@
 
 - name: Close sshd to loopback
   # The steady-state contract: the host's real sshd serves only
-  # 127.0.0.1:22, reached through Pomerium's native SSH via the rathole
-  # relay. sshd's reload re-execs the daemon, so the new ListenAddress is
+  # 127.0.0.1:22, reached through Pomerium's native SSH via the host's
+  # wstunnel tunnel. sshd's reload re-execs the daemon, so the new ListenAddress is
   # rebound without dropping established sessions.
   ansible.builtin.copy:
     src: 00-podhaus-final.conf

@@ -14,7 +14,7 @@ entities to Apple Home so Siri can drive them through HA.
   `music.pod.haus` to `10.0.0.119` so HA reaches Music Assistant via Caddy
   (real cert) instead of the public Numbat Pomerium route, which requires an
   interactive identity.
-- **Ingress** `home.pod.haus` → Numbat Pomerium → private rathole origin →
+- **Ingress** `home.pod.haus` → Numbat Pomerium → private tunnel origin →
   Caddy → `http://172.18.0.1:8123`, behind the Family policy.
 
 ## Config-as-code layout

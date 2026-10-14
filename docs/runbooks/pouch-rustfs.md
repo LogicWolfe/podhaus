@@ -9,15 +9,15 @@ repository. RustFS runs on kangaroo and writes directly to Pouch at
 ```text
 Sky's restic
   -> pouch.pod.haus:443
-  -> Numbat public TLS rathole :443
+  -> Numbat public TLS tunnel :443
   -> bilby Caddy
   -> kangaroo RustFS :9000
   -> /share/CACHEDEV1_DATA/Pouch/rustfs/sky-backups
 ```
 
 The public DNS record is grey-cloud. Cloudflare is authoritative DNS but never
-enters the data path. The existing rathole `storage` service carries all TLS on
-port 443 to Caddy, so this hostname doesn't need a second relay service. Caddy
+enters the data path. The public TLS tunnel carries all TLS on
+port 443 to Caddy, so this hostname needs no listener of its own. Caddy
 terminates TLS and preserves the request headers required by S3 SigV4.
 
 LAN clients resolve `pouch.pod.haus` to bilby and take the shorter Caddy to

@@ -3,7 +3,7 @@
 #
 # It sits on a foreign LAN (192.168.0.x) with no route from the home
 # network, so like numbat it is reached exclusively through Pomerium; its
-# own links out are the rathole SSH origin and outbound Periphery.
+# own links out are its wstunnel client (SSH) and outbound Periphery.
 ---
 ansible_host: voltaire.pod.haus
 # The Pomerium route selector rides the SSH username (user@route) and must

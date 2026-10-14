@@ -20,8 +20,8 @@
       </p>
       <p>
         <strong>numbat</strong> is a Rocky Linux BinaryLane VM in Perth. It is the active
-        public gateway: Pomerium authenticates browser and host-SSH traffic, rathole accepts
-        named outbound connections, Periphery dials Komodo Core, and Alloy ships logs back
+        public gateway: Pomerium authenticates browser and host-SSH traffic, wstunnel accepts
+        outbound tunnels limited per host, Periphery dials Komodo Core, and Alloy ships logs back
         to bilby. It has no routed access to the home network.
       </p>
       <p>
@@ -35,13 +35,13 @@
       <p>
         <strong>voltaire</strong> is a Fedora Workstation development machine on a foreign LAN.
         It has no inbound network path and reaches the fleet through outbound Periphery,
-        rathole, and Alloy connections to Numbat.
+        wstunnel, and Alloy connections to Numbat.
       </p>
       <p>
         <strong>pinelake</strong> is an Apple M1 Mac mini media appliance in the second
         household. OrbStack runs its Komodo-managed Plex, Flood, Syncthing, backup,
         ingress, logging, scheduling, and Autoheal stacks. It reaches the fleet through
-        outbound Periphery, rathole, and Alloy connections to Numbat.
+        outbound Periphery, wstunnel, and Alloy connections to Numbat.
       </p>
 
       <h2 id="repo-layout">Repo layout</h2>
@@ -199,9 +199,9 @@
       <h2 id="ingress">Ingress</h2>
       <p>
         Protected browser names resolve to Numbat's application address. Pomerium authenticates
-        with Pocket ID, then uses a loopback-bound rathole service and mTLS to reach bilby's
+        with Pocket ID, then uses a loopback-bound tunnel listener and mTLS to reach bilby's
         private Caddy listener. Raw and public endpoints use Numbat's second address and a
-        separate rathole service to Caddy's public-only listener. Forgejo HTTPS is protected;
+        separate tunnel listener to Caddy's public-only listener. Forgejo HTTPS is protected;
         <code>git.pod.haus:22</code> remains ordinary key-authenticated SSH. Cloudflare stays
         in front of public websites as a CDN and remains authoritative DNS. See
         <a href="/networking.html">Networking</a> for the exact address and exception map,

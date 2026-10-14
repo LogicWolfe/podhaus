@@ -62,14 +62,14 @@ the exited job as an unhealthy stack.
 ## How a request reaches the model
 
 ```text
-client ─ https://llm.pod.haus ─▶ Numbat Pomerium ─ rathole fractal_http ─▶ fractal-caddy :4443 ─▶ llm-server :8080
+client ─ https://llm.pod.haus ─▶ Numbat Pomerium ─ wstunnel :8544      ─▶ fractal-caddy :4443 ─▶ llm-server :8080
 client on fractal ─ http://127.0.0.1:8085 ───────────────────────────────▶ fractal-caddy :8085 ─▶ llm-server :8080
 Fenwick on bandicoot ─ http://fractal.pod.haus:8086 ─────────────────────▶ fractal-caddy :8086 ─▶ llm-server :8080
 ```
 
 - **Remote path.** `llm.pod.haus` is a DNS-only A record to Numbat's application
   address. Pomerium has two routes for the name (below), forwards to
-  `127.0.0.1:8444` on Numbat, and the `fractal_http` rathole service carries it
+  `127.0.0.1:8544` on Numbat, and the fractal tunnel carries it
   over mutual TLS to fractal's Caddy. The model route allows 10 minutes without
   traffic and 30 minutes in total, because a long prompt is read in silence for
   minutes before the first byte and an answer can stream for many minutes.

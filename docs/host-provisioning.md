@@ -76,7 +76,7 @@ The resulting ledger:
 | Pomerium SSH host key (public) | TF `tls_private_key.pomerium_ssh_host` | 1P `Pomerium Secrets` | chezmoi `00-ssh-hostkeys` upsert; README fingerprint for TOFU |
 | numbat application + relay IPv4 | TF (BinaryLane) | 1P numbat handoffs | numbat host_vars → nft/dispatcher templates |
 | numbat host SSH key | TF `tls_private_key.numbat_ssh_host` | 1P (public half) | numbat bootstrap play pins first contact |
-| Rathole tokens, noise keys | TF `random_password` | 1P `Numbat Rathole` | relay `.env` renders via lookup |
+| Relay CA, tunnel server and per-client certificates | TF `tls_*` in `terraform/tunnel.tf` | 1P `Numbat Tunnel` | tunnel stacks via Komodo variables; the numbat bootstrap play renders the server's `.env` via lookup |
 | Per-host log-shipping mTLS certs | TF `voltaire_log_client` etc. | 1P `Log Ingest PKI` | logging stacks via Komodo variables |
 | Periphery X25519 private keys | generated on bandicoot | `/opt/komodo/keys` on the control node only | `komodo_periphery` role |
 | Forgejo SSH host key | Forgejo container | committed literal in dotfiles (root of trust) | chezmoi `00-ssh-hostkeys` |
@@ -203,8 +203,8 @@ across every task. Treat a non-zero second run as a bug in the role.
 already carrying load**, and audit each reported delta — an unexplained
 change on a live host is the signal that a role has drifted from what
 the machine actually runs. Verify the result with a config-level signal
-per subsystem (Komodo reporting `state=Ok`, rathole control channels
-established, `sshd -T`), never "the container is healthy": a container
+per subsystem (Komodo reporting `state=Ok`, tunnel clients
+connected to the `numbat-tunnel` server, `sshd -T`), never "the container is healthy": a container
 being up proves it started, not that it is doing its job.
 
 A host gaining `earlyoom` or the Docker GPU switch for the first time cannot
@@ -431,9 +431,9 @@ localhost), connects to the application IP on first-boot port 2222 with
 the host key pinned from 1Password, stages the `numbat_edge` config
 *without* loading the final ruleset (it would close 2222, the play's own
 transport), punches only the relay ports into the live bootstrap table,
-starts the rathole relay **before** Periphery (Periphery dials
+starts the `numbat-tunnel` server **before** Periphery (Periphery dials
 `core-connect.pod.haus`, which resolves back through this host's own
-relay), enrolls the Tailscale recovery daemon, and closes 2222 last —
+relay address, where bilby's tunnel carries it to Core), enrolls the Tailscale recovery daemon, and closes 2222 last —
 scheduling the stop of the bootstrap sshd three seconds after the play
 disconnects.
 

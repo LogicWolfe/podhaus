@@ -15,7 +15,7 @@ otherwise private backend ports have no equivalent boundary. The same shared
 network also couples unrelated stacks to one Docker network's lifecycle and
 attach failures.
 
-The Pomerium migration narrows cross-host access to named rathole services and
+The Pomerium migration narrows cross-host access to per-host tunnel listeners and
 protects its private Caddy origin with mTLS. It does not solve this Bilby-local
 problem, and should not grow to include it.
 
@@ -75,23 +75,27 @@ the affected stack named in the error. Verify both a returned unsuccessful
 update and a thrown execution error, plus the batch deployment path. A failed
 image build must never produce an overall successful deployment result.
 
-## Numbat compose files default a variable that is set nowhere
+## Running stacks' comments still name rathole
 
-**Status:** Open. Ship it as a push of its own.
+**Status:** Open. Fold each into the next change to its stack.
 
-`relay/numbat/compose.yaml` and `pomerium/compose.yaml` mount their checkout
-through `${NUMBAT_REPO_PATH:-/opt/komodo-periphery/etc-komodo/repos/podhaus-numbat}`.
-No `stack.toml`, Komodo variable file or Ansible role sets `NUMBAT_REPO_PATH`,
-so the default is always the path used, and the variable only suggests a knob
-that does not exist. `logging/numbat/compose.yaml` and
-`logging/fractal/compose.yaml` had the same pattern and now name the fixed
-path.
+Comments and Komodo descriptions in these stacks still say rathole carries
+their traffic, where the wstunnel tunnels now do
+([Networking](../networking.html) is current): bilby's
+`caddy/Caddyfile`, the per-host `caddy/{bandicoot,fractal,quokka,voltaire}`
+Caddyfiles and `stack.toml` descriptions (which name each host's `_http`
+rathole service), `forgejo/compose.yaml` (the relay holding an idle SSH
+connection), `gatus/conf/config.yaml` (path comments on several public
+checks), `home-assistant/config/http.yaml`, and `pomerium/config.yaml` and
+`pomerium/stack.toml`. The fractal and voltaire Periphery compose files
+(`fractal/periphery/compose.yaml`, `voltaire/periphery/compose.yaml`) say the
+same, and those are Ansible's: an edit restarts Periphery at the next
+playbook run.
 
-Replace each with the fixed path. Both edits change the compose text, so the
-push recreates Numbat's rathole server, which carries every host's tunnels, and
-Pomerium, which every protected name goes through. Push it on its own, when a
-short drop of both is acceptable, and confirm afterwards that the tunnels and a
-protected route are back.
+They were left because an edit in a stack's directory changes its content
+hash, and the push then recreates the service, Pomerium and bilby's Caddy
+among them, for a comment. Correct each in the same commit as the next real
+change to that stack.
 
 ## ClickStack's comments name the old log shipping paths
 

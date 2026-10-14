@@ -9,7 +9,7 @@ Done and verified:
 - Ansible: `playbooks/bandicoot.yml` applied over the split-horizon name, second
   run `changed=0`. Base role laptop policy (lid/idle/sleep) and USB autosuspend
   exemption for the dock NIC. firewalld on bilby's public zone.
-- Terraform: log-ingest certificate, rathole tokens, Pomerium routes, docs DNS,
+- Terraform: log-ingest certificate, tunnel certificate, Pomerium routes, docs DNS,
   UniFi reservation for the USB adapter (10.0.0.90), split-horizon
   `bandicoot.pod.haus`, machine key to GitHub and the Pocket ID `ssh_keys` claim.
 - Komodo: server Ok; bandicoot-logging, -autoheal, -relay, -caddy and -docs

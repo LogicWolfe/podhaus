@@ -121,8 +121,8 @@ IP=/usr/bin/ip
 ) >> /var/log/komodo-periphery-boot.log 2>&1 &
 
 # The recovery daemon is outside Container Station. The CA launcher restores
-# QTS sshd trust after firmware regenerates sshd_config; the outbound rathole
-# client itself is the restart-managed kangaroo-relay container.
+# QTS sshd trust after firmware regenerates sshd_config; the outbound wstunnel
+# client itself is the restart-managed kangaroo-tunnel container.
 for start_script in \
     /share/CACHEDEV2_DATA/.podhaus/pomerium-ssh-origin/start.sh \
     /share/CACHEDEV2_DATA/.podhaus/tailscale-recovery/start.sh; do

@@ -51,7 +51,7 @@
 # including bind-mounted config paths) and one
 # `BUILD_HASH_<UPPER_SERVICE>=<hash>` per service with a `build:`
 # directive (hash of the resolved build context, which may live outside
-# the stack dir, such as shared init-tools/ or relay/). Injecting those
+# the stack dir, such as shared init-tools/). Injecting those
 # values is necessary but does not itself trigger Komodo's IfChanged:
 # that check compares stored compose text, not the rendered env. The
 # Action therefore also compares the hashes against running container

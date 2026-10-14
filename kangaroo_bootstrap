@@ -186,7 +186,7 @@ ok "autorun.sh boot hook installed"
 # TrustedUserCAKeys line if missing and HUPs sshd. The CA public half is
 # published to 1Password by Terraform (its producer); the repo carries no
 # copy to drift. The outbound tunnel itself is the restart-managed
-# kangaroo-relay container — only CA trust lives host-side.
+# kangaroo-tunnel container — only CA trust lives host-side.
 log "Installing Pomerium SSH CA trust (CA file + boot start.sh) on kangaroo"
 QTS_PODHAUS_DIR="/share/CACHEDEV2_DATA/.podhaus/pomerium-ssh-origin"
 QTS_CA_FILE="$QTS_PODHAUS_DIR/pomerium-ssh-user-ca.pub"

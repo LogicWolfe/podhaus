@@ -42,7 +42,7 @@ disk_critical = 95.0
 
 [[server]]
 name = "numbat"
-description = "BinaryLane Perth gateway. v2 outbound Periphery returns through rathole."
+description = "BinaryLane Perth gateway. v2 outbound Periphery returns through wstunnel."
 tags = ["numbat", "podhaus"]
 
 [server.config]

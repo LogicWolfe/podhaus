@@ -246,7 +246,7 @@ before the first login.
 
 ### Client IPs
 
-Caddy sees the rathole client (`172.18.0.16` on dockernet) as the source
+Caddy sees the tunnel client (`bilby-tunnel` on dockernet) as the source
 of every request on `:4444`; there is no `trusted_proxies` anywhere in
 `caddy/`. Immich will therefore attribute every share-link view to the
 tunnel.
@@ -257,10 +257,9 @@ enumeration of share links is explicitly not a threat we are defending
 against. The loss is forensic: "who viewed this album" is unanswerable.
 
 `IMMICH_TRUSTED_PROXIES` exists and is the knob to set later, but it is
-inert until something upstream injects a real client address. See
-[`wstunnel-migration.md`](wstunnel-migration.md) — the PROXY-protocol
-work is a good candidate to bundle with that cutover rather than do
-twice.
+inert until something upstream injects a real client address.
+wstunnel's reverse tunnels carry no PROXY protocol, so that needs a separate
+change in front of the tunnel on Numbat.
 
 **Open, and worth answering before go-live:** whether Pocket ID does
 per-IP login throttling. If it does, every login on the internet shares

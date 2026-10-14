@@ -26,7 +26,7 @@ Consult these pages before acting:
 | Multi-host shared services (backup, autoheal, logging) | [`docs/stack-conventions.html`](docs/stack-conventions.html) + [`docs/komodo.html`](docs/komodo.html) |
 | How Komodo, ResourceSync, and the two operating models work | [`docs/komodo.html`](docs/komodo.html) |
 | Secrets, Komodo Variables, the `[[VAR]]` flow | [`docs/secrets.html`](docs/secrets.html) |
-| dockernet, Numbat, Pomerium, rathole, DNS, and Cloudflare CDN | [`docs/networking.html`](docs/networking.html) |
+| dockernet, Numbat, Pomerium, wstunnel, DNS, and Cloudflare CDN | [`docs/networking.html`](docs/networking.html) |
 | Public website caching and invalidation | [`docs/caching.md`](docs/caching.md) |
 | Storage tier rule (local / Jump / Pouch) | [`docs/storage.html`](docs/storage.html) |
 | Backup / restore / off-site sync | [`docs/backup-and-recovery.html`](docs/backup-and-recovery.html) |
@@ -66,9 +66,10 @@ Docker container infrastructure for **eight** active hosts:
 - **kangaroo** (QNAP NAS, QTS + Container Station) — secondary LAN
   deploy target via linked-repo Periphery.
 - **numbat** (BinaryLane Perth, Rocky Linux 10, x86_64) is the active
-  public gateway. Pomerium authenticates through Pocket ID; named rathole
-  services carry public TLS, private mTLS origins, Forgejo/host SSH,
-  outbound Periphery, and mTLS log shipping. It has no route into the LAN.
+  public gateway. Pomerium authenticates through Pocket ID; wstunnel
+  tunnels, each client limited to its own listeners, carry public TLS,
+  private mTLS origins, Forgejo/host SSH, outbound Periphery, and mTLS log
+  shipping. It has no route into the LAN.
   Host state is Ansible's: `playbooks/numbat-bootstrap.yml` brings up a
   fresh VM, `playbooks/numbat.yml` is steady state.
 - **fractal** (Fedora 44 under WSL2 on a Windows desktop, x86_64) is
@@ -78,7 +79,7 @@ Docker container infrastructure for **eight** active hosts:
   model service's `:8086` from the home network, and
   split-horizon `fractal.pod.haus` resolves to it — so it reaches the fleet
   by dialing out: Periphery to
-  `core-connect.pod.haus`, rathole to Numbat for `fractal.docs.pod.haus`
+  `core-connect.pod.haus`, a wstunnel tunnel to Numbat for `fractal.docs.pod.haus`
   and `ssh://fractal`, and Alloy across the home LAN to the ClickStack
   collector's published port on bandicoot. **Provisioned by
   Ansible** rather than a bootstrap script, like numbat. It also runs the
@@ -90,20 +91,19 @@ Docker container infrastructure for **eight** active hosts:
   the shared one-hour GNOME lid policy; chezmoi owns the development
   environment. It runs docs, Lumen code embeddings, Ofelia, Autoheal and
   Alloy, with no generative model service. Periphery reaches Core directly
-  over the LAN; `relay/quokka` carries protected SSH and docs through Numbat.
+  over the LAN; `tunnel/quokka` carries protected SSH and docs through Numbat.
 - **voltaire** (Fedora Workstation desktop, x86_64, foreign LAN) is
   Nathan's other remote dev machine and an ordinary podhaus host on the
   fractal pattern: no inbound path at all, so it dials out — Periphery to
-  `core-connect.pod.haus`, a rathole client (`relay/voltaire`) carrying
-  `ssh://voltaire`, Alloy to `logs-ingest.pod.haus`. Provisioned by
-  Ansible (`playbooks/voltaire.yml`); its old Cloudflare tunnel and
-  systemd rathole origin are gone.
+  `core-connect.pod.haus`, a wstunnel client (`tunnel/voltaire`) carrying
+  `ssh://voltaire` and `voltaire.docs.pod.haus`, Alloy to `logs-ingest.pod.haus`. Provisioned by
+  Ansible (`playbooks/voltaire.yml`); it has no Cloudflare tunnel.
 - **bandicoot** (Apple Silicon MacBook Pro, Fedora Asahi Remix 44, aarch64,
   home LAN) is one of Nathan's development machines, **Komodo Core's
   host**, and the Ansible/Terraform control node: its own outbound
   Periphery dials Core directly (`ws://bandicoot.pod.haus:9120`, LAN,
-  since they share a host) rather than `core-connect.pod.haus`, a rathole
-  client (`relay/bandicoot`) carrying `ssh://bandicoot` and
+  since they share a host) rather than `core-connect.pod.haus`, a wstunnel
+  client (`tunnel/bandicoot`) carrying `ssh://bandicoot` and
   `bandicoot.docs.pod.haus`, Alloy to the ClickStack collector on the same
   host by container name; direct LAN
   SSH via split-horizon `bandicoot.pod.haus`. Provisioned by Ansible
@@ -119,7 +119,7 @@ Docker container infrastructure for **eight** active hosts:
 - **pinelake** (Apple M1 Mac mini, macOS, second household) is a dedicated
   media appliance. OrbStack is its sole container runtime; Plex, Flood,
   Syncthing, backup, ingress, logging, scheduling, and Autoheal follow the
-  ordinary Komodo patterns. Periphery, rathole, and Alloy dial out through
+  ordinary Komodo patterns. Periphery, wstunnel, and Alloy dial out through
   Numbat. Ansible owns the macOS appliance settings but leaves OrbStack's
   lifecycle and privileged integration to OrbStack itself.
 
@@ -224,7 +224,7 @@ hosted JetKVM is Pinelake's independent recovery path.
   bridge gateway at `172.18.0.1:<port>`.
 - Protected names are DNS-only A records to Numbat's application IP.
   Pomerium authenticates with Pocket ID and reaches Caddy's private
-  `:4443` listener through loopback rathole plus client mTLS.
+  `:4443` listener through a loopback tunnel listener plus client mTLS.
 - Managed devices use `<host>.pod.haus` for SSH. Chezmoi sends Bilby,
   Kangaroo, Bandicoot, Quokka, and Fractal directly on the home LAN and rewrites every other
   case through Pomerium at `ssh.pod.haus`; its route portal covers
@@ -272,25 +272,25 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `iot/` | **Devices bridged into Home Assistant** — BLE/RF remotes, plus purpose-built hardware such as the grasshopper LED strip switch. One subdirectory per bridging system: `iot/esphome/` (the ESPHome dashboard stack plus one config-as-code YAML per physical device in `iot/esphome/config/`) and `iot/pizero/` (two systemd units plus an install script for the Pi Zero, which bridges the Flic buttons — **not** a Komodo stack, because ARMv6 has no Docker; see [`docs/runbooks/pizero.md`](docs/runbooks/pizero.md)). The Pi **pushes** to Home Assistant: `flicd` owns the radio and `flic-pusher` dials it on *localhost* and POSTs each press to an HA webhook, which re-fires the `flic_click` event. Home Assistant deliberately does **not** dial the Pi — that direction died permanently on any reboot ordering and cost two days of dead buttons on 2026-08-22. There are no `binary_sensor.flic_*` entities; automations trigger on the event. Device YAMLs are flat in that directory because the ESPHome dashboard only lists configs at its config root. Firmware is built and OTA-pushed from the dashboard; `secrets.yaml` is rendered at deploy time by `esphome-init` from the 1Password Homelab item **ESPHome** and is never in the checkout. The matching Home Assistant automations live in `home-assistant/config/automations.yaml` alongside the other remotes, not in a package. Button *behaviour* is HA-side — firmware emits `event` entities and knows nothing about lights or scenes. Firmware does own link health: a connection-state BLE watchdog plus diagnostic entities exported as OpenMetrics for bilby's Alloy to scrape into HyperDX (`service.name = esphome`). A new device needs a UniFi DHCP reservation and a scrape target, or the scrape dies silently on the first DHCP drift. See [`docs/runbooks/ble-remotes.md`](docs/runbooks/ble-remotes.md) for the remotes and the shared dashboard/deploy flow, and [`docs/runbooks/led-strip-grasshopper.md`](docs/runbooks/led-strip-grasshopper.md) for the LED strip switch. |
 | `ansible/` | **Host provisioning — the machine half of a host.** Roles for base packages, WSL, Docker engine/daemon + host-provisioned networks, the developer toolchain, Komodo Periphery, Komodo Core's host directories (`komodo_core_host`), Pomerium SSH CA trust, late-arriving-volume hardening (`storage_binds`), dev-host out-of-memory ordering (`earlyoom`), firewalld, and numbat's edge (`numbat_edge`: dual-address nftables + relay-IP dispatcher as jinja templates fed from 1P-published addresses). Ansible owns root state; chezmoi owns `$HOME`; the boundary is "needs sudo" and it means chezmoi never prompts for a password. **fractal**, **bilby**, **numbat**, **voltaire**, **bandicoot**, **quokka**, and **pinelake** are the `provisioned` group that `site.yml` targets (numbat keeps `playbooks/numbat-bootstrap.yml` for a fresh VM and `playbooks/numbat.yml` as its single-host entry point, reached through Pomerium; voltaire's is `playbooks/voltaire.yml`); kangaroo is permanently `excluded` (QTS has no Python — `kangaroo_bootstrap` covers it, including Pomerium SSH CA trust). **Not wired into push-to-deploy:** host state changes when a human runs a playbook, never on a push. Read `--check --diff` and audit every delta before a real run against a loaded host; second run must report `changed=0`. See [`docs/host-provisioning.md`](docs/host-provisioning.md). |
 | `fractal/periphery/`, `voltaire/periphery/` | The remaining dev hosts' bootstrap-managed outbound Peripheries, dialing `wss://core-connect.pod.haus`. Installed by the `komodo_periphery` Ansible role, not by a script. |
-| `quokka/periphery/`, `relay/quokka/`, `caddy/quokka/`, `logging/quokka/` | Quokka's bootstrap-managed outbound Periphery and development ingress/logging stacks. Periphery reaches Core over the home LAN; rathole exposes SSH through Numbat port 2207 and the protected docs origin through port 8448. Alloy ships to Bandicoot over the LAN. |
+| `quokka/periphery/`, `tunnel/quokka/`, `caddy/quokka/`, `logging/quokka/` | Quokka's bootstrap-managed outbound Periphery and development ingress/logging stacks. Periphery reaches Core over the home LAN; wstunnel exposes SSH through Numbat port 2307 and the protected docs origin through port 8548. Alloy ships to Bandicoot over the LAN. |
 | `bandicoot/periphery/` | Bandicoot's own outbound Periphery, dialing Core directly (`ws://bandicoot.pod.haus:9120`) since they share a host. Installed by the `komodo_periphery` Ansible role. |
 | `bilby/periphery/` | Bilby's outbound Periphery (was the inbound service bundled in `komodo/ferretdb.compose.yaml` before Core moved to bandicoot), dialing `ws://bandicoot.pod.haus:9120`. Installed by the `komodo_periphery` Ansible role. |
 | `ansible/roles/docs_sources/` | Stable read-only repository source slots for docs-server on Bilby, Fractal, Voltaire, Bandicoot, and Quokka. The recurring reconciler exposes each available user-owned checkout beneath `/opt/podhaus/docs-sources`; unavailable sources reveal a marker, making docs health red while other sources continue serving. |
-| `relay/fractal/`, `caddy/fractal/`, `logging/fractal/` | fractal's outbound ingress + observability: rathole client → Numbat (`fractal_http` → `127.0.0.1:8444`, `fractal_ssh` → `127.0.0.1:2204`), Caddy mTLS origin on `:4443` (docs and `llm.pod.haus`) plus two no-sign-in listeners for the local model service: one published on fractal's loopback only (`127.0.0.1:8085`), and one on `:8086` serving the model paths alone to Fenwick, which Caddy limits to bandicoot's address. `caddy/fractal/llm-setup/` is the self-service page at `llm.pod.haus/setup/` (behind the friends policy at Pomerium, then signs in with Pocket ID in the browser for the key; only its installer files are public, so `curl | sh` works) with its two `curl | sh` installers, the `llm-token` sign-in command, the `claude-podhaus` launcher and the pi extension; `caddy/fractal/tests/` run in `tools/pre-commit`, one of them running the real Caddyfile's plain-HTTP listeners under the mise-installed `caddy`. Alloy across the home LAN to the ClickStack collector on bandicoot (also scraping the model service's metrics). The `fractal-docs` stack and its multi-location repository catalog are defined in the **docs repo**, while Ansible owns the host source slots. |
+| `tunnel/fractal/`, `caddy/fractal/`, `logging/fractal/` | fractal's outbound ingress + observability: wstunnel client → Numbat (`127.0.0.1:8544` for the origin, `127.0.0.1:2304` for SSH), Caddy mTLS origin on `:4443` (docs and `llm.pod.haus`) plus two no-sign-in listeners for the local model service: one published on fractal's loopback only (`127.0.0.1:8085`), and one on `:8086` serving the model paths alone to Fenwick, which Caddy limits to bandicoot's address. `caddy/fractal/llm-setup/` is the self-service page at `llm.pod.haus/setup/` (behind the friends policy at Pomerium, then signs in with Pocket ID in the browser for the key; only its installer files are public, so `curl | sh` works) with its two `curl | sh` installers, the `llm-token` sign-in command, the `claude-podhaus` launcher and the pi extension; `caddy/fractal/tests/` run in `tools/pre-commit`, one of them running the real Caddyfile's plain-HTTP listeners under the mise-installed `caddy`. Alloy across the home LAN to the ClickStack collector on bandicoot (also scraping the model service's metrics). The `fractal-docs` stack and its multi-location repository catalog are defined in the **docs repo**, while Ansible owns the host source slots. |
 | `llm/` | **Local model service on fractal** (`fractal-llm`). `compose.yaml` runs `llm-model` (a one-shot download-and-checksum job for the model file), `llm-server` (llama.cpp in router mode, given the GPU; settings in `server/models.ini`, chat templates beside it) and `llm-watcher` (`watcher/`, standard-library Python that unloads the model when a Windows game wants the GPU and loads it again once the GPU is quiet; its thresholds are environment settings in `compose.yaml`). `tests/` run in `tools/pre-commit`. Reached at `llm.pod.haus` (Pomerium → fractal's Caddy; `/control` is Nathan-only) and at `127.0.0.1:8085` on fractal. **Every file under `llm/` is in the stack content hash**, so any edit recreates all three containers and leaves the model unloaded until the GPU has been quiet. See [`docs/runbooks/local-llm.md`](docs/runbooks/local-llm.md). |
-| `relay/voltaire/`, `logging/voltaire/`, `autoheal/voltaire/` | voltaire's outbound ingress + observability on the fractal pattern: rathole client → Numbat (`voltaire_ssh` only — no HTTPS service), Alloy to `logs-ingest.pod.haus`, autoheal. All linked-repo (`podhaus-voltaire`); the Fedora Workstation host runs SELinux enforcing, so every bind-mounting service carries `security_opt: [label=disable]`. |
+| `tunnel/voltaire/`, `logging/voltaire/`, `autoheal/voltaire/` | voltaire's outbound ingress + observability on the fractal pattern: wstunnel client → Numbat (`127.0.0.1:2302` for SSH, `127.0.0.1:8545` for the origin), Alloy to `logs-ingest.pod.haus`, autoheal. All linked-repo (`podhaus-voltaire`); the Fedora Workstation host runs SELinux enforcing, so every bind-mounting service carries `security_opt: [label=disable]`. |
 | `kangaroo_bootstrap` | One-time kangaroo Periphery bring-up |
-| `ansible/playbooks/numbat-bootstrap.yml` + `ansible/playbooks/numbat.yml` | Numbat's two plays. The bootstrap play (fresh VM only, run from bandicoot) pins Terraform's 1P-published host key for first contact, connects on first-boot port 2222, stages the `numbat_edge` firewall without activating it, starts rathole before outbound Periphery, enrolls the userspace SSH recovery daemon, then loads the final ruleset and closes 2222 last. The steady-state play (base, docker, numbat_edge, sshd_pomerium_ca, komodo_periphery) reaches the host through Pomerium and is what check-mode equivalence proves. Numbat application stacks are Komodo-managed. |
+| `ansible/playbooks/numbat-bootstrap.yml` + `ansible/playbooks/numbat.yml` | Numbat's two plays. The bootstrap play (fresh VM only, run from bandicoot) pins Terraform's 1P-published host key for first contact, connects on first-boot port 2222, stages the `numbat_edge` firewall without activating it, starts the `numbat-tunnel` server before outbound Periphery, enrolls the userspace SSH recovery daemon, then loads the final ruleset and closes 2222 last. The steady-state play (base, docker, numbat_edge, sshd_pomerium_ca, komodo_periphery) reaches the host through Pomerium and is what check-mode equivalence proves. Numbat application stacks are Komodo-managed. |
 | `tailscale-recovery-bootstrap` | Host-native, userspace-mode Tailscale recovery bootstrap for bilby, numbat, and kangaroo. It publishes only loopback OpenSSH through Tailscale Serve on TCP 22; no host route, DNS override, TUN, or container socket/state exposure. |
 | `config/lan-addresses.json` | **The fleet's one definition of every pinned home-LAN address.** Terraform reads it through `terraform/lan_addresses.tf`; Ansible and bootstrap commands read the same file. `tools/render-lan-addresses.py` publishes the derived `LAN_*` declarations in `komodo/sync/lan-addresses.toml`, verified by the pre-commit gate. |
 | `terraform/` | The ONE consolidated Terraform root for the whole fleet. It owns BinaryLane/Numbat, Cloudflare DNS/CDN/AOP, UniFi DNS, GitHub deploy webhooks, the SSH-only Tailscale recovery plane, RustFS IAM, Pocket ID, edge PKI, and 1Password handoffs. State is in RustFS via public `https://storage.pod.haus`; run stock `terraform` directly. |
 | `rustfs/` | Single-node RustFS on Bandicoot — S3 backend for Terraform state and public S3, plus LAN-only SFTP publishing. `pouch-rustfs/` is the separate Pouch store on kangaroo. |
 | `caddy/` | Bilby's split origin: private mTLS `:4443` for Pomerium, public-only `:4444` for Numbat raw/CDN endpoints, and `:443` for LAN routes. |
-| `relay/` | Outbound rathole clients on internal hosts and the Numbat server. Services are individually tokened and use Noise transport. |
+| `tunnel/` | The wstunnel tunnels into Numbat: the server (`numbat-tunnel`, with `restrictions.yaml` granting each client its listeners), one client stack per origin host (`<host>-tunnel`), the shared launcher `launcher/run-wstunnel` (in every tunnel stack's content hash), and the contract tests. Each client authenticates with its own certificate from the relay CA (`terraform/tunnel.tf`). Nathan's MacBook runs its own client, managed by chezmoi in the dotfiles repo, publishing `mac.docs.pod.haus` through Numbat port 8449. |
 | `pomerium/` | Pomerium Core on Numbat: Pocket ID browser policy, scoped machine exceptions, native SSH, private-origin client mTLS, and persistent replaceable Autocert cache. Includes the `ssh-auth-notify` sidecar, which pushes parked SSH sign-in links to the key owner's Signal via fenwick (see `docs/networking.html#ssh-auth-notify`); fingerprint→owner routing lives as variables in `pomerium/stack.toml`. |
-| `forgejo/` | Local Git hosting on bilby. Pomerium protects HTTPS; a raw Numbat rathole owns ordinary `git@git.pod.haus` SSH. Forgejo retains native Pocket ID OIDC and key synchronization. |
+| `forgejo/` | Local Git hosting on bilby. Pomerium protects HTTPS; a raw Numbat tunnel owns ordinary `git@git.pod.haus` SSH. Forgejo retains native Pocket ID OIDC and key synchronization. |
 | `numbat/periphery/` | Numbat's outbound Periphery compose, dialing the exact public `wss://core-connect.pod.haus/ws/periphery` connector with Komodo Noise keys. Installed by the `komodo_periphery` Ansible role, not by Komodo. |
-| `logging/numbat/` | Alloy ships to `logs-ingest.pod.haus` through rathole and Caddy with per-host mTLS. |
+| `logging/numbat/` | Alloy ships to `logs-ingest.pod.haus` through the tunnel and Caddy with per-host mTLS. |
 | `docs/` | This repo's docs, served by the central docs-server at `docs.pod.haus`. Author as Markdown (HTML for layout); conventions in `~/repos/docs/docs/authoring.md`. |
 | `AGENTS.md` | This file |
 | `CLAUDE.md` | One-line `@AGENTS.md` re-export |
@@ -359,7 +359,7 @@ hosted JetKVM is Pinelake's independent recovery path.
    `STACK_CONTENT_HASH=<hash>` (hash of the stack's own directory),
    and one `BUILD_HASH_<UPPER_SERVICE>=<hash>` per service that has a
    `build:` directive (hash of the resolved build context — may live
-   outside the stack dir, e.g. shared `init-tools/` or `relay/`). The
+   outside the stack dir, e.g. shared `init-tools/`). The
    hashes are derived from the deploy tree's current state (so they
    work uniformly for files_on_host AND linked_repo stacks). **The injected
    env is necessary but is NOT a deploy trigger on its own.** Komodo's
@@ -402,7 +402,7 @@ hosted JetKVM is Pinelake's independent recovery path.
    next deploy — a deliberate non-goal.) Per-service `BUILD_HASH_<svc>`
    additionally covers the resolved build context for any service with
    `build:` — including contexts outside the stack dir (shared
-   `init-tools/`, `relay/`). The two hashes are consumed via different
+   `init-tools/`). The two hashes are consumed via different
    conventions:
 
    - **Every service** has a `podhaus.stack-content-hash` label that

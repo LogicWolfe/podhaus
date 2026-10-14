@@ -8,7 +8,7 @@ bandicoot; Indigo publishes new versions into that bucket herself from Blocs.
 
 ## How it is served
 
-Numbat relay → rathole → Caddy `:4444` (`caddy/Caddyfile`, the
+Numbat relay → wstunnel → Caddy `:4444` (`caddy/Caddyfile`, the
 `doggos_site` snippet) → RustFS on bandicoot port `9000`, bucket `doggos-indigo`. Pretty URLs
 map to bucket keys (`/` → `index.html`, `/x/` and `/x` → `x/index.html`,
 everything else verbatim); a missing key is a real 404 with the site's own

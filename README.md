@@ -9,7 +9,7 @@ external infrastructure.
 - **kangaroo:** QNAP NAS running QTS and Container Station. It hosts Syncthing,
   Backrest, Autoheal, Alloy, and Pouch RustFS.
 - **numbat:** BinaryLane Rocky Linux VM in Perth. It is the public Pomerium and
-  rathole gateway.
+  wstunnel gateway.
 - **fractal:** Fedora under WSL2. It is an outbound-only remote development and
   podhaus service host.
 - **quokka:** ThinkPad X1 Carbon running native Fedora Workstation on the home LAN.
@@ -103,7 +103,7 @@ DNSControl has been retired.
 | `komodo/` | Core infrastructure, ResourceSync definitions, procedures, and actions |
 | `terraform/` | Consolidated external infrastructure root |
 | `onepassword/` | 1Password Connect and `komodo-op` |
-| `pomerium/`, `caddy/`, `relay/` | Authenticated and raw ingress through Numbat |
+| `pomerium/`, `caddy/`, `tunnel/` | Authenticated and raw ingress through Numbat |
 | `tailscale-recovery-bootstrap` | SSH-only host recovery plane |
 | `backup/`, `autoheal/`, `logging/` | Multi-host shared services |
 | `clickstack/`, `gatus/` | Observability, health checks, and alerting |

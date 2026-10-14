@@ -194,17 +194,17 @@
         <li><strong><code>app.numbat.pod.haus</code>:</strong> Forgejo SSH on
           port 22, Pomerium redirect and ACME on 80, Pomerium HTTPS on 443.</li>
         <li><strong><code>relay.numbat.pod.haus</code>:</strong> Pomerium native SSH on
-          port 22, public TLS rathole on 443, and rathole control on 2333.</li>
+          port 22, the public TLS tunnel on 443, and the wstunnel server on 2334.</li>
         <li><strong>Ansible-managed:</strong> host nftables (including a per-source
           rate limit on new public SSH connections), loopback-only sshd,
           a first-boot-only key-pinned sshd on application port 2222, outbound Periphery,
           and the SSH-only Tailscale recovery daemon.
           <code>ansible-playbook playbooks/numbat-bootstrap.yml</code> (fresh VM, from
-          bilby) starts the relay before Periphery, installs the final firewall, then
+          bilby) starts the tunnel server before Periphery, installs the final firewall, then
           closes port 2222; <code>playbooks/numbat.yml</code> is the steady state, reached
           through Pomerium.</li>
         <li><strong>Komodo-managed:</strong> <code>numbat-pomerium</code>,
-          <code>numbat-relay</code>,
+          <code>numbat-tunnel</code>,
           <code>numbat-logging</code>, and <code>numbat-autoheal</code> through linked repo
           <code>podhaus-numbat</code>.</li>
       </ul>
@@ -279,7 +279,7 @@ New-NetFirewallHyperVRule -Name podhaus-llm-fenwick -DisplayName 'podhaus: model
         <li><strong>chezmoi-managed (user state):</strong> everything under
           <code>$HOME</code> — shell, dotfiles, the machine SSH key. Applied by Nathan as
           himself; Ansible never invokes it.</li>
-        <li><strong>Komodo-managed:</strong> <code>fractal-relay</code> (rathole client),
+        <li><strong>Komodo-managed:</strong> <code>fractal-tunnel</code> (wstunnel client),
           <code>fractal-caddy</code> (mTLS origin), <code>fractal-logging</code> (Alloy),
           <code>fractal-llm</code> (the local model service), and <code>fractal-docs</code> (the docs-server over its Ansible-exposed
           repository sources) through
@@ -336,12 +336,12 @@ t1 = time.time(); s.send(b"\x23" + 47 * b"\0"); reply = s.recv(48); t4 = time.ti
 t2, t3 = (sec - 2208988800 + frac / 2**32 for sec, frac in (struct.unpack("!II", reply[i:i + 8]) for i in (32, 40)))
 print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1f} ms")'</code></pre>
       <p>
-        Ingress is an outbound rathole client to numbat, following the same pattern as bilby:
+        Ingress is an outbound wstunnel client to numbat, following the same pattern as bilby:
         <code>fractal.docs.pod.haus</code> lands on Pomerium, which forwards to
-        <code>127.0.0.1:8444</code> on numbat, through the tunnel to fractal's Caddy on
+        <code>127.0.0.1:8544</code> on numbat, through the tunnel to fractal's Caddy on
         <code>:4443</code> (mTLS origin), and on to the docs container;
         <code>llm.pod.haus</code> takes the same tunnel to the model service. Off-LAN SSH takes
-        the same route via <code>127.0.0.1:2204</code> and the <code>ssh://fractal</code>
+        the same route via <code>127.0.0.1:2304</code> and the <code>ssh://fractal</code>
         Pomerium route through a chezmoi <code>Match originalhost</code> rewrite; on the
         home network a preceding <code>localnetwork</code> match connects direct via the
         split-horizon record instead. Alloy ships logs across the home LAN in plaintext to
@@ -390,7 +390,7 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
       <p>
         Everything in and out is a connection voltaire makes, on the fractal pattern:
         Komodo Periphery dials <code>core-connect.pod.haus</code>, the
-        <code>voltaire-relay</code> rathole client carries <code>ssh://voltaire</code> and
+        <code>voltaire-tunnel</code> wstunnel client carries <code>ssh://voltaire</code> and
         its own mTLS HTTP origin to numbat, and Alloy ships logs to
         <code>logs-ingest.pod.haus</code> with per-host mTLS. Off-LAN SSH rides
         <code>ssh.pod.haus</code> like every other managed host. The Cloudflare tunnel
@@ -399,7 +399,7 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
       </p>
       <p>
         <code>voltaire.docs.pod.haus</code> lands on Pomerium, which forwards to
-        <code>127.0.0.1:8445</code> on numbat, through the tunnel to voltaire's Caddy on
+        <code>127.0.0.1:8545</code> on numbat, through the tunnel to voltaire's Caddy on
         <code>:4443</code> (mTLS origin), and on to the docs container — same shape as
         fractal's ingress, a separate loopback port and Caddy instance per host.
       </p>
@@ -409,7 +409,7 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
           Pomerium SSH user-CA trust, and Komodo Periphery.</li>
         <li><strong>chezmoi-managed (user state):</strong> everything under
           <code>$HOME</code>, including the TPM-resident machine key.</li>
-        <li><strong>Komodo-managed:</strong> <code>voltaire-relay</code> (rathole client),
+        <li><strong>Komodo-managed:</strong> <code>voltaire-tunnel</code> (wstunnel client),
           <code>voltaire-caddy</code> (mTLS origin), <code>voltaire-logging</code>,
           <code>voltaire-autoheal</code>, and <code>voltaire-docs</code> (the docs-server
           over its Ansible-exposed repository sources) through linked repos
@@ -451,9 +451,9 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
       </p>
       <p>
         Everything else in and out is a connection bandicoot makes, on the fractal
-        pattern: the <code>bandicoot-relay</code> rathole client carries
-        <code>ssh://bandicoot</code> (<code>127.0.0.1:2206</code> on numbat) and its own
-        mTLS HTTP origin (<code>127.0.0.1:8447</code>). Alloy ships logs to the
+        pattern: the <code>bandicoot-tunnel</code> wstunnel client carries
+        <code>ssh://bandicoot</code> (<code>127.0.0.1:2306</code> on numbat) and its own
+        mTLS HTTP origin (<code>127.0.0.1:8547</code>). Alloy ships logs to the
         ClickStack collector on this host by container name over dockernet. Komodo
         Core runs on this host now, so its own Periphery dials the LAN name the published
         port answers on (<code>ws://bandicoot.pod.haus:9120</code>) instead of
@@ -476,7 +476,7 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
           (<code>ansible_connection: local</code>).</li>
         <li><strong>chezmoi-managed (user state):</strong> everything under
           <code>$HOME</code>, including the YubiKey PIV machine key.</li>
-        <li><strong>Komodo-managed:</strong> <code>bandicoot-relay</code> (rathole client),
+        <li><strong>Komodo-managed:</strong> <code>bandicoot-tunnel</code> (wstunnel client),
           <code>bandicoot-caddy</code> (mTLS origin), <code>bandicoot-logging</code>,
           <code>bandicoot-autoheal</code>, <code>bandicoot-docs</code>,
           <code>bandicoot-ofelia</code>, <code>bandicoot-backup</code>,
@@ -570,9 +570,9 @@ print(f"time.cloudflare.com minus guest: {((t2 - t1) + (t3 - t4)) / 2 * 1000:+.1
         The global <code>default</code> Docker context is the only installed context.
       </p>
       <p>
-        Periphery, rathole, and Alloy connect outbound through Numbat. Pomerium protects the
-        Flood and Syncthing browser routes; Plex has a dedicated raw rathole path for native
-        clients. <code>home.pinelake.haus</code> is the canonical native-SSH name through
+        Periphery, wstunnel, and Alloy connect outbound through Numbat. Pomerium protects the
+        Flood, Syncthing and Plex browser routes; Plex's native clients stream directly,
+        never through Numbat. <code>home.pinelake.haus</code> is the canonical native-SSH name through
         Numbat and Pomerium. Hosted JetKVM is the independent console path.
       </p>
 

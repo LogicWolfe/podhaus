@@ -98,7 +98,7 @@ op-vault dev -- ansible-playbook playbooks/bilby.yml</code></pre>
         <li>Deploy <code>caddy</code> next: Terraform's backend is the public
           <code>https://storage.pod.haus</code> (Caddy + LE wildcard). LAN clients reach
           Caddy direct via UniFi split-horizon; external clients arrive via the
-          Numbat BinaryLane rathole relay (see
+          Numbat BinaryLane wstunnel relay (see
           <a href="/hosts.html#numbat">hosts → Numbat</a>). Until
           <code>caddy</code> is up + has its cert, <code>terraform</code> cannot reach
           state. <code>RUSTFS_SERVER_DOMAINS</code> (in <code>rustfs/compose.yaml</code>) is part of
@@ -191,7 +191,7 @@ sudo rsync -a --chown=10001:10001 \
           provider config; the repo block is committed in the repo.</li>
         <li>Run <code>podhaus-push-deploy</code> from the Komodo UI to deploy kangaroo's stacks: <code>syncthing</code>,
           <code>kangaroo-backup</code>, <code>kangaroo-autoheal</code>, and
-          <code>kangaroo-logging</code>, <code>kangaroo-relay</code>, and
+          <code>kangaroo-logging</code>, <code>kangaroo-tunnel</code>, and
           <code>pouch-rustfs</code>.</li>
         <li>Restore kangaroo's state from
           <code>/share/CACHEDEV2_DATA/Jump/backups-kangaroo/</code> if state was lost.</li>
@@ -204,13 +204,19 @@ sudo rsync -a --chown=10001:10001 \
           necessary before <code>terraform apply -replace=binarylane_server.numbat</code> can
           create the replacement first. Terraform then provisions the VM, both addresses,
           DNS, PKI, Pocket ID client, and 1Password handoffs.</li>
+        <li>Once the new addresses are in DNS, restart the <code>bilby-tunnel</code> stack
+          from Komodo (bilby and Core are both on the home LAN). bilby's client resolves
+          Numbat's public addresses when it starts and asks for its <code>:443</code> and
+          <code>:22</code> listeners on them; until it restarts it keeps asking for the old
+          ones, the new server refuses them, and public HTTPS and core-connect stay down,
+          which fails the next step's wait for core-connect.</li>
         <li>From bandicoot (it streams the Periphery keys from <code>/opt/komodo/keys</code>
           and polls Core on localhost), with bandicoot's machine-key agent active, run
           <pre><code>cd ansible
 op-vault dev -- ansible-playbook playbooks/numbat-bootstrap.yml</code></pre>
           First contact is pinned against the Terraform-generated host key published to
           1Password; the play connects to the application IP on first-boot port 2222,
-          reconciles Rocky, Docker, nftables and dockernet, starts the public relay first,
+          reconciles Rocky, Docker, nftables and dockernet, starts the tunnel server first,
           then outbound Periphery (gated on Komodo reporting <code>state=Ok</code>) and the
           userspace SSH recovery plane, and only then loads the final firewall and closes
           port 2222. Steady-state reconciliation afterwards is
@@ -218,7 +224,7 @@ op-vault dev -- ansible-playbook playbooks/numbat-bootstrap.yml</code></pre>
         <li>Run the podhaus sync or push the repository. Komodo deploys
           <code>numbat-pomerium</code>, <code>numbat-logging</code>, and
           <code>numbat-autoheal</code> from <code>podhaus-numbat</code>; it adopts the
-          already-running relay project.</li>
+          already-running <code>numbat-tunnel</code> project.</li>
         <li>Verify Pocket ID login, native SSH, public TLS, Periphery, log ingestion,
           and Terraform access through <code>storage.pod.haus</code>.</li>
       </ol>
@@ -256,8 +262,8 @@ op-vault dev -- ansible-playbook playbooks/pinelake.yml \
           The play configures power policy and OrbStack, proves the exact TerraMaster volume,
           installs Pomerium Secure Shell trust, and brings outbound Periphery up with its
           existing keypair from bandicoot. Pinelake receives no 1Password service account.</li>
-        <li>From Komodo, deploy <code>pinelake-relay</code> and
-          <code>pinelake-backup</code>. The relay restores
+        <li>From Komodo, deploy <code>pinelake-tunnel</code> and
+          <code>pinelake-backup</code>. The tunnel restores
           <code>home.pinelake.haus</code>; Backrest exposes its user interface on port 9898 of
           the temporary Tailscale address.</li>
         <li>Before starting Plex, Flood, or Syncthing, restore each complete plan to a scratch

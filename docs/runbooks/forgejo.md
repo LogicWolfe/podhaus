@@ -14,13 +14,13 @@ git@git.pod.haus:owner/repository.git
 
 Neither path uses Cloudflare Access or Tailscale. `git.pod.haus` is a DNS-only
 A record to Numbat's application address. HTTPS terminates at Pomerium, then
-crosses the private mTLS rathole origin to Caddy and Forgejo. Forgejo still uses
+crosses the private mTLS tunnel origin to Caddy and Forgejo. Forgejo still uses
 Pocket ID natively, so browser login is Pomerium followed by Forgejo OIDC.
 Forgejo LFS has an exact public Pomerium route and relies on its short-lived LFS
 token. The REST API (`/api/v1`) has a matching public route: Forgejo's own token
 auth is the boundary (`REQUIRE_SIGNIN_VIEW` rejects anonymous API calls), which
 lets Terraform's forgejo provider manage deploy keys and webhooks from any
-machine (`terraform/forgejo.tf`). Port 22 is a separate raw rathole service to
+machine (`terraform/forgejo.tf`). Port 22 is a separate raw tunnel listener to
 Forgejo's embedded SSH server, so ordinary `git@git.pod.haus` URLs continue to
 work.
 
@@ -162,7 +162,7 @@ the `Forgejo OIDC` login item in 1Password from the Pocket client; komodo-op
 exports its standard login fields as
 `OP__KOMODO__FORGEJO_OIDC__USERNAME` and
 `OP__KOMODO__FORGEJO_OIDC__PASSWORD`, and feeds them to the init service.
-`Numbat Rathole` owns the SSH relay token.
+`Numbat Tunnel` owns bilby's tunnel certificate, which carries the SSH listener.
 
 To refresh Nathan's keys from GitHub:
 
@@ -196,7 +196,7 @@ trees together. Its start hook stops Forgejo first because SQLite and repository
 data span two filesystems. Its end hook always starts Forgejo again, waits for
 health, clears the lock, and reports the result to Gatus.
 
-Forgejo runs with a ten-second graceful hammer time. The rathole relay holds an
+Forgejo runs with a ten-second graceful hammer time. The tunnel holds an
 idle connection on the SSH listener that never drains on its own, so without
 that setting Forgejo sat in shutdown until the hook's sixty-second `docker stop`
 deadline killed it, and the snapshot read a hard-killed database. The stop now
@@ -249,6 +249,6 @@ config were present.
 
 Run Terraform to provision Numbat, then run
 `ansible-playbook playbooks/numbat-bootstrap.yml` (from `ansible/`, on bilby)
-to reconcile the host and outbound Periphery. Komodo deploys `numbat-relay` and
-`numbat-pomerium`; `bilby-relay` supplies Forgejo SSH and the private origin.
+to reconcile the host and outbound Periphery. Komodo deploys `numbat-tunnel` and
+`numbat-pomerium`; `bilby-tunnel` supplies Forgejo SSH, public TLS and the private origin.
 Verify browser OIDC, LFS, and `ssh -T git@git.pod.haus`.

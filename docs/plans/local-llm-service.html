@@ -256,7 +256,7 @@ writes the records that the model server does not write itself.</p>
 <div class="doc-diagram">
 <svg viewBox="0 0 1000 600" role="img" aria-labelledby="arch-title arch-desc">
 <title id="arch-title">Request path and components</title>
-<desc id="arch-desc">Remote clients reach Pomerium on Numbat, which forwards through the rathole tunnel to fractal's Caddy origin, which forwards to the new model server, which uses the GPU. Clients on fractal reach Caddy through a local listener. The new watcher sits beside that path: it reads GPU utilisation and the model server's slot state, and tells the model server to load or unload. A Windows game shares the same GPU.</desc>
+<desc id="arch-desc">Remote clients reach Pomerium on Numbat, which forwards through the wstunnel tunnel to fractal's Caddy origin, which forwards to the new model server, which uses the GPU. Clients on fractal reach Caddy through a local listener. The new watcher sits beside that path: it reads GPU utilisation and the model server's slot state, and tells the model server to load or unload. A Windows game shares the same GPU.</desc>
 <defs>
 <marker id="llm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="llm-head" d="M0,0 L10,5 L0,10 z"/></marker>
 </defs>
@@ -311,7 +311,7 @@ writes the records that the model server does not write itself.</p>
 <path class="llm-line" marker-end="url(#llm-arrow)" d="M185,90 L245,110"/>
 <path class="llm-line" marker-end="url(#llm-arrow)" d="M185,170 L245,150"/>
 <path class="llm-line" marker-end="url(#llm-arrow)" d="M405,130 L465,130"/>
-<text class="llm-muted" x="435" y="84" text-anchor="middle">rathole</text>
+<text class="llm-muted" x="435" y="84" text-anchor="middle">wstunnel</text>
 <text class="llm-muted" x="435" y="99" text-anchor="middle">tunnel</text>
 <path class="llm-line" marker-end="url(#llm-arrow)" d="M595,130 L660,130"/>
 <text class="llm-muted" x="627" y="122" text-anchor="middle">requests</text>

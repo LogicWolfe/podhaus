@@ -2,7 +2,7 @@
 
       <h1>Networking</h1>
       <p class="lead text-lg text-text-muted">
-        Docker bridge networking, Numbat's Pomerium and rathole edge, Caddy origin
+        Docker bridge networking, Numbat's Pomerium and wstunnel edge, Caddy origin
         separation, and Terraform-managed DNS.
       </p>
 
@@ -63,28 +63,29 @@ networks:
       <h2 id="edge">Numbat edge</h2>
       <p>
         Numbat is the active public gateway. Bilby and other internal targets make
-        named outbound rathole connections to it; Numbat has no routed path into the
-        home network.
+        outbound wstunnel connections to it, each limited to its own listeners; Numbat
+        has no routed path into the home network (<a href="#tunnels">Tunnels</a>).
       </p>
       <table>
-        <thead><tr><th>Address role</th><th>TCP 22</th><th>TCP 80</th><th>TCP 443</th><th>TCP 2333</th></tr></thead>
+        <thead><tr><th>Address role</th><th>TCP 22</th><th>TCP 80</th><th>TCP 443</th><th>TCP 2334</th></tr></thead>
         <tbody>
-          <tr><td><code>app.numbat.pod.haus</code></td><td>Forgejo SSH relay</td><td>Pomerium redirect and ACME</td><td>Pomerium</td><td>Closed</td></tr>
-          <tr><td><code>relay.numbat.pod.haus</code></td><td>Pomerium native SSH</td><td>Closed</td><td>Public TLS relay</td><td>rathole control</td></tr>
+          <tr><td><code>app.numbat.pod.haus</code></td><td>Forgejo SSH tunnel</td><td>Pomerium redirect and ACME</td><td>Pomerium</td><td>Closed</td></tr>
+          <tr><td><code>relay.numbat.pod.haus</code></td><td>Pomerium native SSH</td><td>Closed</td><td>Public TLS tunnel</td><td>Tunnel server</td></tr>
         </tbody>
       </table>
       <p>
         Port 22 on both addresses carries a per-source nftables rate limit on new
         connections (10/minute, burst 20); established sessions are never touched, and
-        over-limit sources are dropped before they reach Pomerium or the Forgejo relay.
+        over-limit sources are dropped before they reach Pomerium or the Forgejo tunnel.
       </p>
       <p>
         Protected browser names resolve to the application address. Pomerium authenticates
         with Pocket ID, then reaches Caddy's private <code>:4443</code> listener through a
-        loopback-only rathole service. That listener also requires Pomerium's client
-        certificate. The public rathole service reaches Caddy <code>:4444</code>, which has
+        loopback-only tunnel listener. That listener also requires Pomerium's client
+        certificate. The public TLS tunnel reaches Caddy <code>:4444</code>, which has
         no protected virtual hosts. Caddy writes one access line per request on all three
-        listeners. Behind the relay it sees only the rathole client as its peer, so a
+        listeners. Behind the relay it sees only the tunnel client as its peer (wstunnel's reverse
+        tunnels carry no PROXY protocol), so a
         <code>:4443</code> line names the client from Pomerium's
         <code>X-Forwarded-For</code> and the signed-in person by the email Pomerium passes
         or by its request ID, and a <code>:4444</code> line for a site Cloudflare does not
@@ -114,11 +115,83 @@ networks:
         reach — QTS has no Python) <code>kangaroo_bootstrap</code> installs a
         boot-persistent <code>start.sh</code> that re-applies the trust after QTS
         regenerates <code>sshd_config</code>. Every host's outbound tunnel is a
-        Komodo-managed rathole container (<code>relay/*</code>); kangaroo's runs on
-        host networking because QTS cannot run the current upstream x86_64
-        rathole binary in a systemd unit. Kangaroo's canonical route
+        Komodo-managed wstunnel container (<code>tunnel/&lt;host&gt;</code>); kangaroo's runs on
+        host networking so that it reaches the QTS sshd on its own loopback. Kangaroo's canonical route
         maps to QTS's real UID 0 account, <code>admin</code>. Tailscale recovery keeps separate
         <code>*-recovery</code> names so its break-glass role stays explicit.
+      </p>
+
+      <h2 id="tunnels">Tunnels</h2>
+      <p>
+        <a href="https://github.com/erebe/wstunnel">wstunnel</a> carries every outbound
+        connection into Numbat. A client on each origin host dials
+        <code>wss://relay.numbat.pod.haus:2334</code> and asks the server to open reverse
+        tunnels: Numbat listens, and each connection arriving there travels back to an
+        address on the client's own network. Numbat's side is the <code>numbat-tunnel</code>
+        Komodo stack (<code>tunnel/numbat</code>, container <code>numbat-tunnel-server</code>)
+        on host networking, so its listeners bind Numbat's own addresses. Each origin host
+        runs a <code>&lt;host&gt;-tunnel</code> stack (<code>tunnel/&lt;host&gt;</code>) from
+        the upstream <code>ghcr.io/erebe/wstunnel:latest</code> image, started through the
+        shared launcher <code>tunnel/launcher/run-wstunnel</code>. The launcher writes the
+        stack's certificates to files and resolves Numbat's two public addresses from DNS at
+        container start, so the repository never carries them. Every tunnel stack lists
+        <code>../launcher</code> under <code>x-podhaus-content-paths</code>, so a change to
+        the launcher redeploys them all.
+      </p>
+      <table>
+        <thead><tr><th>Numbat listener</th><th>Reaches</th><th>Client</th></tr></thead>
+        <tbody>
+          <tr><td>Relay address <code>:443</code></td><td>Caddy <code>:4444</code> (public TLS)</td><td>bilby</td></tr>
+          <tr><td>Application address <code>:22</code></td><td>Forgejo SSH <code>forgejo:2222</code></td><td>bilby</td></tr>
+          <tr><td><code>127.0.0.1:8543</code></td><td>Caddy <code>:4443</code> (protected origin)</td><td>bilby</td></tr>
+          <tr><td><code>127.0.0.1:2301</code> to <code>2307</code></td><td>Host sshd: bilby 2301, voltaire 2302, kangaroo 2303, fractal 2304, pinelake 2305, bandicoot 2306, quokka 2307</td><td>that host</td></tr>
+          <tr><td><code>127.0.0.1:8544</code> to <code>8548</code></td><td>The host's Caddy mTLS origin on <code>:4443</code>: fractal 8544, voltaire 8545, pinelake 8546, bandicoot 8547, quokka 8548</td><td>that host</td></tr>
+          <tr><td><code>127.0.0.1:8449</code></td><td>Nathan's MacBook docs origin, for <code>mac.docs.pod.haus</code></td><td>the MacBook</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Pomerium reaches the loopback listeners for its HTTP and SSH routes; public HTTPS
+        and Forgejo SSH are served from the public listeners without Pomerium.
+      </p>
+      <p>
+        Authentication is mutual TLS against a relay CA that Terraform owns
+        (<code>terraform/tunnel.tf</code>). Each client holds its own certificate, whose
+        common name is its host name (the MacBook is <code>nb-macbook-air</code>). Numbat
+        requires the certificate and accepts only the common name as the upgrade path the
+        client uses, and <code>tunnel/numbat/restrictions.yaml</code> maps that name, one
+        rule per host, to the exact listeners the host may open. Everything else is denied,
+        including forward tunnels, so a stolen client certificate opens only its own host's
+        listeners. Clients trust only the relay CA (the launcher points
+        <code>SSL_CERT_FILE</code> at a file holding it alone) and verify Numbat's
+        certificate against it, so they accept no other server. The certificates are
+        published to the 1Password Homelab item <code>Numbat Tunnel</code>; leaf
+        certificates last five years and any <code>terraform apply</code> in their last 90
+        days renews them, and the CA lasts ten years. A renewed certificate reaches a tunnel
+        only when its stack is redeployed, since a changed secret redeploys nothing: after
+        the renewing apply, redeploy <code>numbat-tunnel</code> and every
+        <code>&lt;host&gt;-tunnel</code> stack. The MacBook's client picks its certificate
+        up on its next chezmoi apply.
+      </p>
+      <p>
+        A new listener needs both the client's tunnel arguments and a line in
+        <code>restrictions.yaml</code>; the contract tests in <code>tunnel/tests</code> fail
+        when a client's requested listeners differ from its rule, a listener has two owners,
+        or a loopback listener Pomerium names has none. A second test runs the real launcher
+        and server in Docker to prove that a client gets the listener its rule grants, is
+        refused one it does not, and never connects when either side trusts a different CA. The server renders <code>restrictions.yaml</code> with Numbat's
+        addresses when it starts, so a change restarts it and every tunnel drops until the
+        clients reconnect. The firewall opens <code>443</code> and <code>2334</code> on the
+        relay address (<code>numbat_edge</code>); the bootstrap play starts the tunnel
+        server before Periphery. Alloy labels tunnel logs <code>tunnel</code> on clients and
+        <code>tunnel-server</code> on Numbat.
+      </p>
+      <p>
+        Nathan's MacBook runs its own client and docs origin as chezmoi-managed
+        LaunchAgents (<code>com.podhaus.docs-origin</code> and
+        <code>com.podhaus.docs-tunnel</code> in the dotfiles repo), publishing its docs at
+        <code>mac.docs.pod.haus</code> through Numbat's <code>127.0.0.1:8449</code>. While
+        the laptop sleeps or is off the network, that route answers with Pomerium's upstream
+        error. <a href="macbook-setup.md">MacBook setup</a> covers the laptop side.
       </p>
 
       <h2 id="ssh-auth-notify">SSH sign-in links over Signal</h2>
@@ -212,9 +285,9 @@ networks:
       <p>
         Quokka's USB Ethernet reservation and split-horizon SSH name use
         <code>10.0.0.199</code>. Its docs name stays on Pomerium, which reaches
-        Quokka's Caddy through the <code>quokka_http</code> rathole service at
-        <code>127.0.0.1:8448</code> on Numbat. Its off-LAN SSH route uses
-        <code>quokka_ssh</code> at <code>127.0.0.1:2207</code>. Docs use the friends
+        Quokka's Caddy through the tunnel listener at
+        <code>127.0.0.1:8548</code> on Numbat. Its off-LAN SSH route uses
+        <code>127.0.0.1:2307</code>. Docs use the friends
         policy; SSH uses Nathan's existing policy.
       </p>
 

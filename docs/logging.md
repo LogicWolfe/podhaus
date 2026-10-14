@@ -181,7 +181,7 @@ in it; these fields are added one by one instead
 | `status`, `duration` | every site | The response status and seconds taken. Caddy writes a 5xx at error level and everything else at info, which becomes the row's severity. |
 | `user_agent` | every site | The client's User-Agent. |
 | `listener` | every site | The port that took the request: 443, 4443, 4444 or 80. |
-| `remote_ip` | every site | The connection's own peer: the LAN client on 443, and on 4443 and 4444 the rathole client carrying Numbat's traffic, which says nothing about the client. |
+| `remote_ip` | every site | The connection's own peer: the LAN client on 443, and on 4443 and 4444 the tunnel client carrying Numbat's traffic, which says nothing about the client. |
 | `forwarded_for` | 4443, and the sites that demand Cloudflare's origin-pull certificate | X-Forwarded-For as Pomerium or Cloudflare wrote it. Its last address is the client that proxy saw. Elsewhere the header is whatever the client sent, so it is not recorded. |
 | `caller` | 4443 | The signed-in person's email, on the routes that pass identity headers (`books`, `fenwick`); empty on the rest. |
 | `request_id` | 4443 | Pomerium's request ID. Pomerium's `authorize check` row for the same request has it as `request-id`, beside the email, on every signed-in route. |
@@ -189,7 +189,7 @@ in it; these fields are added one by one instead
 
 The public sites on `:4444` that Cloudflare does not front, `storage.pod.haus`
 among them, have no client address: Numbat's relay carries raw TCP, so Caddy
-sees only the rathole client.
+sees only the tunnel client (wstunnel's reverse tunnels carry no PROXY protocol).
 
 Three kinds of request leave less than that:
 

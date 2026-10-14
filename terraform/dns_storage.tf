@@ -2,7 +2,7 @@
 # (grey-cloud): Cloudflare is authoritative DNS but NEVER in the data
 # path (its HTTP proxy mangles the SigV4-signed Accept-Encoding header
 # and its single-level Universal SSL cert can't cover Publii's
-# virtual-host buckets). Traffic goes through Numbat's raw rathole service to
+# virtual-host buckets). Traffic goes through Numbat's raw wstunnel tunnel to
 # Caddy on bilby, which owns the *.storage.pod.haus certificate. LAN clients hit
 # Caddy directly via the split-horizon record
 # (dns_unifi_split_horizon.tf). `settings` stays ignored because the API

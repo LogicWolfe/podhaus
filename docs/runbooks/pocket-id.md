@@ -15,7 +15,7 @@ SQLite, single local volume.
   + uploads under `/app/data` on the local `pocket-id-data` volume (never NFS).
   Internal port `1411`; healthcheck is the image's built-in `pocket-id healthcheck`
   CLI.
-- **Ingress** `id.pod.haus` → Numbat public TLS rathole → Caddy `:4444` →
+- **Ingress** `id.pod.haus` → Numbat public TLS tunnel → Caddy `:4444` →
   `pocket-id:1411`.
 - **Tailscale login** uses the client and `tailscale-users` group in
   `terraform/pocket_id.tf`. Caddy serves the required WebFinger response at
@@ -64,7 +64,7 @@ person fully, also disable their Forgejo user.
 - `ENCRYPTION_KEY` — mandatory; encrypts secrets and the signing keys at rest.
   Sourced from 1Password (below).
 - Caddy is the only reverse proxy. `TRUST_PROXY=172.18.0.0/16` trusts forwarding
-  headers only from dockernet. Rathole does not carry PROXY protocol, so audit
+  headers only from dockernet. The tunnel does not carry PROXY protocol, so audit
   entries show the relay-side proxy rather than the original internet address.
 - Quiet/hardening: `LOG_JSON=true` (Alloy pipeline), `ANALYTICS_DISABLED`,
   `VERSION_CHECK_DISABLED`. `DB_PROVIDER` does not exist in v2 — SQLite is

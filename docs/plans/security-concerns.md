@@ -62,50 +62,33 @@ is the in-repo precedent — do not reopen the unauthenticated path for it.
 `curl -sI https://unifi.pod.haus/` returns Pomerium's 302 to `id.pod.haus`
 rather than the UniFi UI.
 
-## One shared build context couples all four relay stacks
+## Redeploying the tunnel server cuts Numbat's own control path
 
-- [ ] Narrow each relay stack's build context.
-- [ ] Document that a `numbat-relay` redeploy severs Numbat's control path.
+- [ ] Document that a `numbat-tunnel` redeploy severs Numbat's control path.
 
-`relay/{bilby,fractal,kangaroo,numbat}/compose.yaml` all declare
-`context: ..`, so every context resolves to the whole `relay/` tree.
-`hashDir` in `komodo/sync/actions.toml` recurses that tree excluding only
-files named `.env` — **it does not read `.dockerignore`**. So an edit to
-`relay/bilby/numbat-client.toml.tmpl` changes `BUILD_HASH_RATHOLE_SERVER`,
-Stage 1 sees the running container's label is stale, and it force-deploys
-`numbat-relay`.
+`numbat-tunnel` carries Numbat's own control path. Periphery dials
+`wss://core-connect.pod.haus/ws/periphery`; `core-connect.pod.haus` is an A
+record to the relay address, which bilby's tunnel carries from Numbat's `:443`
+to `caddy:4444` on bilby. A Komodo deploy of `numbat-tunnel` tears down the
+transport that deploy arrived on, and so does any edit under `tunnel/numbat/`
+(including `restrictions.yaml`), which changes the stack's content hash.
 
-That is load-bearing because `numbat-relay` carries Numbat's own control
-path. Periphery dials `wss://core-connect.pod.haus/ws/periphery`;
-`core-connect.pod.haus` is an A record to the relay address, which the local
-rathole `public_tls` service carries to `caddy:4444` on bilby. A Komodo
-deploy of `numbat-relay` tears down the transport that deploy arrived on.
-
-The repo already applies the opposite rule one layer up — Periphery is
+The repo already applies the opposite rule one layer up: Periphery is
 deliberately kept out of Komodo's hands on every outbound host precisely
 because "a Komodo-driven redeploy of it would sever the path it runs on"
 ([hosts](../hosts.html#numbat),
-[host provisioning](../host-provisioning.md)). The relay one layer *below*
-Periphery is Komodo-managed and this property is recorded nowhere.
+[host provisioning](../host-provisioning.md)). The tunnel server one layer
+*below* Periphery is Komodo-managed and this property is recorded nowhere.
 
-Failure shape: an unrelated edit under `relay/kangaroo/` drops public TLS,
-protected HTTP, all four host-SSH services, Periphery, and log shipping for
-the restart window, and the deploy call itself reports failure because its
-own transport vanished. If the edit is also bad, the relay does not come
-back, Komodo has no path to Numbat at all, and recovery needs the Tailscale
-plane.
+Failure shape: an edit under `tunnel/numbat/` drops public TLS, protected
+HTTP, every host's SSH, Periphery, and log shipping until the clients
+reconnect, and the deploy call itself reports failure because its own
+transport vanished. If the edit is also bad, the server does not come back,
+Komodo has no path to Numbat at all, and recovery needs the Tailscale plane.
 
-**Fix**
-
-1. Move the shared build inputs to `relay/image/{Dockerfile,entrypoint.sh}`
-   and point all four `context:` at `../image`. A `.dockerignore` will not
-   work — `hashDir` does not read one.
-2. Add a sentence to [hosts → Numbat](../hosts.html#numbat) recording that
-   redeploying `numbat-relay` cuts Numbat's own control path, and that the
-   recovery plane is the fallback.
-
-**Verify:** edit a comment in `relay/bilby/numbat-client.toml.tmpl` and push
-it to `main` — Stage 1 should list `bilby-relay` and not `numbat-relay`.
+**Fix:** add a sentence to [hosts → Numbat](../hosts.html#numbat) recording
+that redeploying `numbat-tunnel` cuts Numbat's own control path, and that the
+recovery plane is the fallback.
 
 ## Fractal gets no telemetry heartbeat, by decision
 
@@ -223,8 +206,7 @@ where a boundary is.
       Docker-created stub from a bind whose source did not exist. This is
       the exact failure `AGENTS.md` warns about. The live config is
       `gatus/conf/config.yaml`.
-- [ ] Remove the leftover empty directories: `relay/kookaburra/`,
-      `kookaburra/*`, `logging/kookaburra/alloy-conf/`,
+- [ ] Remove the leftover empty directories: `kookaburra/*`, `logging/kookaburra/alloy-conf/`,
       `terraform/modules/pod_haus_service/`, and `docs/plans/pomerium-edge/`.
       The last one reads as an in-flight workstream.
 - [x] Fix the stale doc path in `ansible/inventory/hosts.yml`. Resolved

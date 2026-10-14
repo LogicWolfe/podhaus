@@ -64,7 +64,7 @@ file_contents = """
 //   BUILD_HASH_<SERVICE>=<hash>
 //     One entry per service that has `build:` in this stack's compose.
 //     The hash is computed over the resolved build context directory
-//     (which may live outside the stack — `init-tools/`, `relay/`, etc.).
+//     (which may live outside the stack — `init-tools/`, etc.).
 //     The owning build service uses this in its own `build.args` (busts
 //     docker's layer cache on context change); services that
 //     `depends_on` it use this in a `podhaus.depends-on-<svc>` label

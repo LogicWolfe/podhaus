@@ -21,7 +21,7 @@ podhaus_is_wsl: true
 # The image ships as `fedora-wsl`. Renamed so the machine's identity is
 # consistent everywhere it surfaces: the chezmoi machine-key filename
 # (id_fractal.pub), Alloy's `host` log label, the Komodo server name, and
-# the rathole service names. Persisted in /etc/wsl.conf; a running instance
+# the tunnel certificate common name. Persisted in /etc/wsl.conf; a running instance
 # also gets it applied immediately.
 podhaus_hostname: fractal
 

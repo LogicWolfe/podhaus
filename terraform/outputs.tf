@@ -4,7 +4,7 @@ output "numbat_application_ipv4" {
 }
 
 output "numbat_relay_ipv4" {
-  description = "Numbat address for rathole TLS/control and Pomerium SSH."
+  description = "Numbat address for the public TLS tunnel, the tunnel server, and Pomerium SSH."
   value       = local.numbat_relay_ipv4
 }
 

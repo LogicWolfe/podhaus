@@ -1,7 +1,7 @@
 # Provision numbat: the public gateway, in steady state.
 #
 # Reached through Pomerium (numbat's own sshd is loopback-only; the
-# ssh://numbat.pod.haus route carries the session in via the relay):
+# ssh://numbat.pod.haus route carries the session in via the host's tunnel):
 #   cd ansible
 #   ansible-playbook playbooks/numbat.yml --check --diff   # read first
 #   ansible-playbook playbooks/numbat.yml

@@ -117,7 +117,7 @@
 
       <h2 id="ingress">Web ingress</h2>
       <p>
-        <code>plex.pod.haus</code> routes through Numbat Pomerium and the private rathole
+        <code>plex.pod.haus</code> routes through Numbat Pomerium and the private tunnel
         origin to Caddy, which reaches <code>http://172.18.0.1:32400</code>. Plex runs
         <code>network_mode: host</code>, so dockernet's bridge gateway IP is Caddy's entry
         point.
@@ -129,7 +129,7 @@
       </p>
       <p>
         <code>plex.pinelake.haus</code> is the same arrangement for Pine Lake, reached
-        through the shared <code>pinelake_http</code> rathole service and Pinelake's own
+        through the pinelake tunnel's <code>127.0.0.1:8546</code> listener and Pinelake's own
         Caddy, which resolves <code>pinelake-plex</code> over dockernet. The same web-only
         rule applies, and matters more there: Pine Lake's advertised list carries LAN
         addresses only, so no client can be handed a path that leaves the house. Numbat
