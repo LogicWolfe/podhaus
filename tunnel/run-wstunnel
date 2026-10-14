@@ -1,0 +1,17 @@
+#!/bin/sh
+# Runs wstunnel with this end's relay certificate, given base64-encoded in
+# the environment as Komodo variables deliver it (Homelab item Numbat Tunnel).
+# The arguments are wstunnel's own; certificate paths in them are under
+# /tmp/tunnel.
+#
+# SSL_CERT_FILE holds the relay CA alone, so a client trusts Numbat's
+# certificate and no other; on the server it is unused.
+set -eu
+umask 077
+dir=/tmp/tunnel
+mkdir -p "$dir"
+printf '%s' "$TUNNEL_CA_CERT_B64" | base64 -d > "$dir/ca.pem"
+printf '%s' "$TUNNEL_CERT_B64" | base64 -d > "$dir/cert.pem"
+printf '%s' "$TUNNEL_KEY_B64" | base64 -d > "$dir/key.pem"
+export SSL_CERT_FILE="$dir/ca.pem"
+exec /home/app/wstunnel "$@"

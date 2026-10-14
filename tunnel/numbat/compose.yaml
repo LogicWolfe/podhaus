@@ -1,0 +1,44 @@
+# Numbat's wstunnel SERVER: every outbound tunnel client dials it on
+# relay.numbat.pod.haus:2334 and opens the reverse tunnels restrictions.yaml
+# grants its certificate. docs/plans/wstunnel-migration.md has the design.
+#
+#   - Host networking, so each tunnel's listener binds Numbat's own
+#     addresses: loopback ports for Pomerium's routes, and the public ones
+#     the tunnels that bypass Pomerium hold.
+#   - Root with every capability dropped but NET_BIND_SERVICE, which the
+#     public :443 and :22 listeners need.
+#   - mTLS against the relay CA: a client without a relay certificate never
+#     reaches the restrictions.
+services:
+  tunnel-server:
+    container_name: numbat-tunnel-server
+    image: ghcr.io/erebe/wstunnel:latest
+    restart: unless-stopped
+    network_mode: host
+    user: "0:0"
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - label=disable
+      - no-new-privileges=true
+    entrypoint: ["/usr/bin/dumb-init", "--", "/etc/tunnel/run-wstunnel"]
+    command:
+      - server
+      - --tls-certificate=/tmp/tunnel/cert.pem
+      - --tls-private-key=/tmp/tunnel/key.pem
+      - --tls-client-ca-certs=/tmp/tunnel/ca.pem
+      - --restrict-config=/etc/tunnel/numbat/restrictions.yaml
+      - wss://relay.numbat.pod.haus:2334
+    environment:
+      TUNNEL_CA_CERT_B64: ${TUNNEL_CA_CERT_B64}
+      TUNNEL_CERT_B64: ${TUNNEL_CERT_B64}
+      TUNNEL_KEY_B64: ${TUNNEL_KEY_B64}
+    volumes:
+      # The tunnel/ directory of this linked-repo checkout: the launcher and
+      # the restrictions. A directory bind, so a pull that renames a file in
+      # place reaches the container.
+      - ..:/etc/tunnel:ro
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}

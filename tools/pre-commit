@@ -61,6 +61,12 @@
 #                                   confidence rule (containment, difflib
 #                                   ratio+margin, the 59-title Skillsville
 #                                   fixture) runs with no network.
+#   - tunnel tests:                 the relay tunnel's security contract in
+#                                   the real wstunnel image: a client opens
+#                                   only the listeners its certificate's rule
+#                                   grants, and never connects to a server its
+#                                   pinned CA did not sign. Needs Docker;
+#                                   skipped with the reason without it.
 #   - forgejo-runner tests:         Docker's stop grace period outlasts the
 #                                   runner's job drain, and a changed
 #                                   registration recreates the runner.
@@ -147,6 +153,8 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/metube/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/forgejo-runner/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/tunnel/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/lumen/tests"
 mise exec -- pipenv run python -m unittest discover \

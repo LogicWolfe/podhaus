@@ -1,0 +1,21 @@
+# Which reverse tunnels each client may open on Numbat. wstunnel denies
+# anything no rule allows, forward tunnels included. A client's upgrade path
+# must equal its certificate's common name, so `!PathPrefix "^<host>$"` binds
+# a rule to the one client holding that host's relay certificate.
+#
+# Each listener appears in exactly one rule; Pomerium's routes name the
+# loopback ones (pomerium/config.yaml). The server reloads this file when it
+# changes, without dropping connected clients.
+restrictions:
+  - name: nb-macbook-air
+    description: Nathan's MacBook's docs origin, for mac.docs.pod.haus
+    match:
+      - !PathPrefix "^nb-macbook-air$"
+    allow:
+      - !ReverseTunnel
+        protocol:
+          - Tcp
+        port:
+          - 8449
+        cidr:
+          - 127.0.0.1/32

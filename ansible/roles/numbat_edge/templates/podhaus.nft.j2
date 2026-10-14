@@ -16,7 +16,9 @@ table inet podhaus {
     ip daddr { {{ podhaus_numbat_application_ipv4 }}, {{ podhaus_numbat_relay_ipv4 }} } tcp dport 22 counter drop
 
     ip daddr {{ podhaus_numbat_application_ipv4 }} tcp dport { 80, 443 } accept
-    ip daddr {{ podhaus_numbat_relay_ipv4 }} tcp dport { 443, 2333 } accept
+    # 2333 is rathole's control port, 2334 wstunnel's, while the tunnels
+    # move from one to the other (docs/plans/wstunnel-migration.md).
+    ip daddr {{ podhaus_numbat_relay_ipv4 }} tcp dport { 443, 2333, 2334 } accept
     ip daddr { {{ podhaus_numbat_application_ipv4 }}, {{ podhaus_numbat_relay_ipv4 }} } drop
   }
 }
