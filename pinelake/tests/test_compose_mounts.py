@@ -198,7 +198,9 @@ class TerraMasterMountTests(unittest.TestCase):
         files = (
             ROOT / "tunnel/numbat/restrictions.yaml",
             ROOT / "tunnel/pinelake/compose.yaml",
-            ROOT / "tunnel/pinelake/stack.toml",
+            # stack.toml, or stack.toml.offline while the host is held out of
+            # Komodo (docs/runbooks/pinelake.md).
+            *ROOT.glob("tunnel/pinelake/stack.toml*"),
             ROOT / "terraform/pomerium.tf",
             ROOT / "terraform/tunnel.tf",
         )
