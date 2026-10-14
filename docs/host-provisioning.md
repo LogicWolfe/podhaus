@@ -130,7 +130,7 @@ ansible/
     gnome_on_demand/       GDM follows the shared lid/display policy (bandicoot, quokka)
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
     sshd_pomerium_ca/      trust Pomerium's SSH user CA
-    sshd_liveness/         free what a vanished SSH client held (dev hosts)
+    sshd_liveness/         drop SSH clients that stopped answering (dev hosts)
     storage_binds/         Late-arriving-volume hardening (bilby, fractal)
     firewalld/             declarative zone + service XML (bilby, bandicoot)
     komodo_core_host/      Komodo Core's host directories (bandicoot)
@@ -259,13 +259,7 @@ misses three probes in a row. Without it, a laptop that sleeps mid-session
 leaves a dead connection that keeps its tmux client attached and its forwarded
 ports bound for about fifteen minutes. That includes cc-clip's port 18339, so
 the reconnected session cannot forward it and image paste stops working.
-It also sets `StreamLocalBindUnlink yes`: a forwarded Unix socket file
-outlives its session, even a cleanly closed one, and would otherwise block the
-next session from forwarding the same path. The MacBook forwards CodeIsland's
-agent-status socket that way (chezmoi's devbox SSH block), so status from a
-host resumes on the next login instead of going dark.
-`sudo sshd -T | grep -iE 'clientalive|streamlocalbindunlink'` shows the
-values. Apply with `--tags ssh`.
+`sudo sshd -T | grep -i clientalive` shows the values. Apply with `--tags ssh`.
 
 **`base`** opens with a `raw` task that installs `python3-libdnf5` if
 missing. This is the one deliberate `check_mode: false` in the layer:
