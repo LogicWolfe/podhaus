@@ -1,6 +1,6 @@
 # Numbat's wstunnel SERVER: every outbound tunnel client dials it on
 # relay.numbat.pod.haus:2334 and opens the reverse tunnels restrictions.yaml
-# grants its certificate. docs/plans/wstunnel-migration.md has the design.
+# grants its certificate. docs/networking.html describes the design.
 #
 #   - Host networking, so each tunnel's listener binds Numbat's own
 #     addresses: loopback ports for Pomerium's routes, and the public ones
@@ -13,6 +13,11 @@
 #     grants nothing.
 #   - mTLS against the relay CA: a client without a relay certificate never
 #     reaches the restrictions.
+# The shared launcher lives outside this stack's directory; listing it here
+# puts it in the content hash, so a change to it redeploys this stack.
+x-podhaus-content-paths:
+  - ../launcher
+
 services:
   tunnel-server:
     container_name: numbat-tunnel-server
@@ -28,7 +33,7 @@ services:
     security_opt:
       - label=disable
       - no-new-privileges=true
-    entrypoint: ["/usr/bin/dumb-init", "--", "/etc/tunnel/run-wstunnel"]
+    entrypoint: ["/usr/bin/dumb-init", "--", "/etc/tunnel/launcher/run-wstunnel"]
     command:
       - server
       - --tls-certificate=/tmp/tunnel/cert.pem

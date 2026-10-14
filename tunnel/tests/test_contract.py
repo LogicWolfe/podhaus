@@ -97,6 +97,16 @@ class ContractTests(unittest.TestCase):
         served = rathole_listeners() | {l for ls in rules().values() for l in ls}
         self.assertEqual(upstreams - served, set())
 
+    def test_a_launcher_change_redeploys_every_tunnel(self):
+        # The launcher sits outside each stack's directory, so only a
+        # declared content path puts it in the hash Komodo deploys on.
+        for stack in ["numbat", *CLIENTS]:
+            with self.subTest(stack=stack):
+                document = yaml.safe_load((TUNNEL / stack / "compose.yaml").read_text())
+                self.assertIn("../launcher", document["x-podhaus-content-paths"])
+                (service,) = document["services"].values()
+                self.assertEqual(service["entrypoint"][-1], "/etc/tunnel/launcher/run-wstunnel")
+
     def test_each_client_uses_its_own_certificate(self):
         for client in CLIENTS:
             with self.subTest(client=client):

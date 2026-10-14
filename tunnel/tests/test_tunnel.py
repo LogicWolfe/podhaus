@@ -123,7 +123,7 @@ class TunnelContractTests(unittest.TestCase):
              "-e", f"TUNNEL_CA_CERT_B64={b64(cls.relay.cert)}",
              "-e", f"TUNNEL_CERT_B64={b64(server_cert)}",
              "-e", f"TUNNEL_KEY_B64={b64(server_key)}",
-             "--entrypoint", "/etc/tunnel/run-wstunnel"],
+             "--entrypoint", "/etc/tunnel/launcher/run-wstunnel"],
             *server_service()["command"],
         )
         time.sleep(2)
@@ -149,7 +149,7 @@ class TunnelContractTests(unittest.TestCase):
              "-e", f"TUNNEL_CA_CERT_B64={b64(trusted_ca)}",
              "-e", f"TUNNEL_CERT_B64={b64(cert[0])}",
              "-e", f"TUNNEL_KEY_B64={b64(cert[1])}",
-             "--entrypoint", "/etc/tunnel/run-wstunnel"],
+             "--entrypoint", "/etc/tunnel/launcher/run-wstunnel"],
             "client", "--tls-verify-certificate",
             "--tls-certificate=/tmp/tunnel/cert.pem",
             "--tls-private-key=/tmp/tunnel/key.pem",
