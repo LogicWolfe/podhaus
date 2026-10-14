@@ -1,0 +1,15 @@
+[[stack]]
+name = "voltaire-tunnel"
+description = "Outbound wstunnel client: voltaire's services on Numbat"
+tags = ["voltaire", "podhaus"]
+
+[stack.config]
+server = "voltaire"
+linked_repo = "podhaus-voltaire"
+run_directory = "tunnel/voltaire"
+
+environment = """
+TUNNEL_CA_CERT_B64=[[OP__KOMODO__NUMBAT_TUNNEL__CA_CERT_B64]]
+TUNNEL_CERT_B64=[[OP__KOMODO__NUMBAT_TUNNEL__VOLTAIRE_CERT_B64]]
+TUNNEL_KEY_B64=[[OP__KOMODO__NUMBAT_TUNNEL__VOLTAIRE_KEY_B64]]
+"""

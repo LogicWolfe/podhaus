@@ -199,6 +199,17 @@ class TunnelContractTests(unittest.TestCase):
         self.assertEqual(self.read_listener(443, address), "tunnel-ok")
         self.assertEqual(self.read_listener(22, address), "tunnel-ok")
 
+    def test_a_client_takes_a_listener_once_its_holder_lets_go(self):
+        # bilby's public listeners wait this way for rathole's server to stop.
+        holder = f"tunnel-test-{self.run_id}-holder"
+        docker("run", "-d", "--name", holder, "--network", f"container:{self.server}",
+               BUSYBOX, "nc", "-lk", "-s", "127.0.0.1", "-p", "2301", "-e", "true")
+        self.containers.append(holder)
+        self.client("bilby-waiting", self.relay.cert, self.bilby, "127.0.0.1:2301")
+        self.assertEqual(self.read_listener(2301), "")
+        docker("rm", "-f", holder)
+        self.assertEqual(self.read_listener(2301), "tunnel-ok")
+
     def test_a_client_is_refused_a_listener_its_rule_does_not_grant(self):
         self.client("mac-other-port", self.relay.cert, self.mac, "127.0.0.1:8450")
         time.sleep(5)

@@ -1,0 +1,51 @@
+# bilby's wstunnel CLIENT: dials Numbat's tunnel server and publishes public
+# HTTPS (relay address :443 to Caddy's :4444), Forgejo SSH (application
+# address :22), bilby's protected mTLS origin and its SSH (ssh://bilby).
+# Numbat grants this certificate exactly these listeners
+# (tunnel/numbat/restrictions.yaml).
+
+# The shared launcher, outside this directory, in the content hash.
+x-podhaus-content-paths:
+  - ../launcher
+
+services:
+  bilby-tunnel:
+    container_name: bilby-tunnel
+    image: ghcr.io/erebe/wstunnel:latest
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - label=disable
+      - no-new-privileges=true
+    entrypoint: ["/usr/bin/dumb-init", "--", "/etc/tunnel/launcher/run-wstunnel"]
+    command:
+      - client
+      - --tls-verify-certificate
+      - --tls-certificate=/tmp/tunnel/cert.pem
+      - --tls-private-key=/tmp/tunnel/key.pem
+      - -R
+      - tcp://@RELAY_IPV4@:443:caddy:4444
+      - -R
+      - tcp://@APPLICATION_IPV4@:22:forgejo:2222
+      - -R
+      - tcp://127.0.0.1:8543:caddy:4443
+      - -R
+      - tcp://127.0.0.1:2301:172.18.0.1:22
+      - wss://relay.numbat.pod.haus:2334
+    environment:
+      TUNNEL_CA_CERT_B64: ${TUNNEL_CA_CERT_B64}
+      TUNNEL_CERT_B64: ${TUNNEL_CERT_B64}
+      TUNNEL_KEY_B64: ${TUNNEL_KEY_B64}
+    volumes:
+      # The launcher, from this host's checkout by host path: Komodo runs
+      # Compose inside Periphery, where a relative bind resolves elsewhere.
+      - ${PODHAUS_REPO}/tunnel:/etc/tunnel:ro
+    networks:
+      - dockernet
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+networks:
+  dockernet:
+    external: true
