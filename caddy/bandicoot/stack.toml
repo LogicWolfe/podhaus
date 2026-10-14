@@ -1,6 +1,6 @@
 [[stack]]
 name = "bandicoot-caddy"
-description = "Pomerium mTLS origin on bandicoot — terminates the bandicoot_http rathole service and dispatches by Host"
+description = "Pomerium mTLS origin on bandicoot — dispatches each protected route by Host"
 tags = ["bandicoot", "podhaus"]
 
 [stack.config]

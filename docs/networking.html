@@ -353,8 +353,11 @@ networks:
         authenticate it. Numbat Alloy sends OTLP to
         <code>https://logs-ingest.pod.haus</code>; Caddy requires Numbat's client
         certificate and ClickStack requires its ingestion key. Neither path uses Tailscale
-        or exposes an internal management listener. Separately, Bilby, Numbat, and Kangaroo
-        run host-native Tailscale in userspace mode as an SSH-only recovery plane. The
+        or exposes an internal management listener. Separately, a host enrolled with
+        <code>tailscale-recovery-bootstrap</code> runs host-native Tailscale in userspace
+        mode as an SSH-only recovery plane, joining the tailnet as
+        <code>&lt;host&gt;-recovery</code> with <code>tag:recovery</code>; the tailnet's
+        devices carrying that tag are the current members. The
         <code>tag:recovery</code> ACL permits member devices to TCP 22 and no reverse reach;
         containers receive no socket, route, state, or network capability. Pine Lake uses
         hosted JetKVM for recovery and is not part of the Tailscale recovery plane.

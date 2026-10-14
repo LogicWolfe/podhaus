@@ -183,7 +183,7 @@ endpoints:
     conditions:
       - "[STATUS] == 302"
 
-  # DNS-only public path: Numbat application IP :22 → rathole →
+  # DNS-only public path: Numbat application IP :22 → wstunnel →
   # Forgejo's embedded SSH server on bilby.
   - name: Forgejo SSH (public relay)
     url: tcp://git.pod.haus:22
@@ -317,7 +317,7 @@ endpoints:
       insecure: true
 
   # Yiayia's stories (yiayia.pod.haus): the container on dockernet, then the
-  # full public path (relay -> rathole -> Caddy :4444 -> app). /health is the
+  # full public path (relay -> wstunnel -> Caddy :4444 -> app). /health is the
   # one route outside the family gate; it answers ok only when the database
   # under the data bind is readable, which catches a container up with its
   # bind missing.
@@ -402,14 +402,14 @@ endpoints:
     <<: *defaults
     group: Storage
 
-  # nathanbaxter.com: Cloudflare CDN → Numbat relay → rathole → Caddy →
+  # nathanbaxter.com: Cloudflare CDN → Numbat relay → wstunnel → Caddy →
   # nathanbaxter-com bucket.
   - name: nathanbaxter.com
     url: https://nathanbaxter.com/
     <<: *defaults
     group: nathanbaxter.com
 
-  # doggos.indigopod.au: Numbat relay → rathole → Caddy → doggos-indigo
+  # doggos.indigopod.au: Numbat relay → wstunnel → Caddy → doggos-indigo
   # bucket (no CDN). Indigo's Blocs site.
   - name: doggos.indigopod.au
     url: https://doggos.indigopod.au/
@@ -425,7 +425,7 @@ endpoints:
     <<: *defaults
     group: Analytics
 
-  # pets.indigopod.au: Cloudflare CDN → Numbat relay → rathole → the pets
+  # pets.indigopod.au: Cloudflare CDN → Numbat relay → wstunnel → the pets
   # engine container. /api/content exercises the whole stack (edge →
   # container → SQLite → published content), so it catches a tunnel,
   # container, or content-store break — not just a static 200.
@@ -1005,7 +1005,7 @@ endpoints:
       - "[BODY] == 1"
     alerts:
       - type: custom
-        description: "No Numbat Alloy metrics reached ClickHouse in 15+ min: the path to the collector is down, or Alloy's exporter is wedged and autoheal's restart of alloy has not cleared it. Check numbat-logging, the logs-ingest rathole service, Caddy mTLS, and the ClickStack ingestion key."
+        description: "No Numbat Alloy metrics reached ClickHouse in 15+ min: the path to the collector is down, or Alloy's exporter is wedged and autoheal's restart of alloy has not cleared it. Check numbat-logging, bilby's public wstunnel tunnel, Caddy mTLS, and the ClickStack ingestion key."
         failure-threshold: 2
         success-threshold: 2
         send-on-resolved: true

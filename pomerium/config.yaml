@@ -173,8 +173,8 @@ routes:
   - <<: *friends_route
     from: https://bilby.docs.pod.haus
   # fractal's docs server. Same mTLS origin contract as every other protected
-  # route, but terminating on fractal's Caddy through its own loopback rathole
-  # service rather than bilby's.
+  # route, but terminating on fractal's Caddy through its own loopback wstunnel
+  # listener rather than bilby's.
   - <<: *friends_route
     from: https://fractal.docs.pod.haus
     to: https://127.0.0.1:8544
@@ -226,7 +226,7 @@ routes:
     idle_timeout: 10m
     timeout: 30m
   # bandicoot's and voltaire's docs servers. Same shape as fractal's, each
-  # with its own loopback rathole service and its own Caddy mTLS origin.
+  # with its own loopback wstunnel listener and its own Caddy mTLS origin.
   - <<: *friends_route
     from: https://quokka.docs.pod.haus
     to: https://127.0.0.1:8548

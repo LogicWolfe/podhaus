@@ -67,7 +67,7 @@
 # when the proxy aborts a response its upstream cut short: that line has
 # the status the upstream sent (usually 200, 206 for a range) and duration 0,
 # beside the proxy's warning about it in Caddy's own log. remote_ip is the connection's own peer: a LAN client on :443, and
-# on :4443 and :4444 the rathole client that carries Numbat's traffic, so
+# on :4443 and :4444 the wstunnel client that carries Numbat's traffic, so
 # those listeners know the client only from a proxy's X-Forwarded-For
 # (proxied_access_log below). Every site block imports one of the two;
 # tools/tests/test_bilby_caddy_access_log.py fails on a site that does not,
@@ -122,8 +122,8 @@
 	}
 }
 
-# Protected routes are reachable only through Numbat's loopback-bound rathole
-# service. Caddy also requires Pomerium's client certificate on port 4443.
+# Protected routes are reachable only through bilby's wstunnel listener on
+# Numbat's loopback. Caddy also requires Pomerium's client certificate on port 4443.
 :4443 {
 	import pomerium_origin_tls
 	import proxied_access_log

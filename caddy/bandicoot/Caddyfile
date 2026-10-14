@@ -1,7 +1,7 @@
 {
 	# Pomerium authenticates once with mTLS, then preserves each route's Host
 	# header for dispatch. This listener is reachable only through bandicoot's
-	# outbound rathole service — never directly.
+	# tunnel to Numbat (tunnel/bandicoot) — never directly.
 	servers :4443 {
 		strict_sni_host insecure_off
 	}

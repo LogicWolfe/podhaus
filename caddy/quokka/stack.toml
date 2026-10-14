@@ -1,6 +1,6 @@
 [[stack]]
 name = "quokka-caddy"
-description = "Pomerium mTLS origin on quokka — terminates the quokka_http rathole service and dispatches by Host"
+description = "Pomerium mTLS origin on quokka — dispatches each protected route by Host"
 tags = ["quokka", "podhaus"]
 
 [stack.config]

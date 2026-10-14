@@ -1,6 +1,6 @@
 [[stack]]
 name = "numbat-pomerium"
-description = "Pomerium Core on Numbat, backed by Pocket ID and outbound rathole origins"
+description = "Pomerium Core on Numbat, backed by Pocket ID and outbound wstunnel origins"
 tags = ["numbat", "podhaus"]
 
 [stack.config]

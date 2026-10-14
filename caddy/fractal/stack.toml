@@ -1,6 +1,6 @@
 [[stack]]
 name = "fractal-caddy"
-description = "Pomerium mTLS origin on fractal — terminates the fractal_http rathole service and dispatches by Host; serves the local model to bandicoot over the LAN"
+description = "Pomerium mTLS origin on fractal — dispatches each protected route by Host; serves the local model to bandicoot over the LAN"
 tags = ["fractal", "podhaus"]
 
 [stack.config]

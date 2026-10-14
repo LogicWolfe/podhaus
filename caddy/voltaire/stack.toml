@@ -1,6 +1,6 @@
 [[stack]]
 name = "voltaire-caddy"
-description = "Pomerium mTLS origin on voltaire — terminates the voltaire_http rathole service and dispatches by Host"
+description = "Pomerium mTLS origin on voltaire — dispatches each protected route by Host"
 tags = ["voltaire", "podhaus"]
 
 [stack.config]

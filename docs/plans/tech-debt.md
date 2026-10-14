@@ -75,28 +75,6 @@ the affected stack named in the error. Verify both a returned unsuccessful
 update and a thrown execution error, plus the batch deployment path. A failed
 image build must never produce an overall successful deployment result.
 
-## Running stacks' comments still name rathole
-
-**Status:** Open. Fold each into the next change to its stack.
-
-Comments and Komodo descriptions in these stacks still say rathole carries
-their traffic, where the wstunnel tunnels now do
-([Networking](../networking.html) is current): bilby's
-`caddy/Caddyfile`, the per-host `caddy/{bandicoot,fractal,quokka,voltaire}`
-Caddyfiles and `stack.toml` descriptions (which name each host's `_http`
-rathole service), `forgejo/compose.yaml` (the relay holding an idle SSH
-connection), `gatus/conf/config.yaml` (path comments on several public
-checks), `home-assistant/config/http.yaml`, and `pomerium/config.yaml` and
-`pomerium/stack.toml`. The fractal and voltaire Periphery compose files
-(`fractal/periphery/compose.yaml`, `voltaire/periphery/compose.yaml`) say the
-same, and those are Ansible's: an edit restarts Periphery at the next
-playbook run.
-
-They were left because an edit in a stack's directory changes its content
-hash, and the push then recreates the service, Pomerium and bilby's Caddy
-among them, for a comment. Correct each in the same commit as the next real
-change to that stack.
-
 ## ClickStack's comments name the old log shipping paths
 
 **Status:** Open. Fold into the next change to the ClickStack stack.

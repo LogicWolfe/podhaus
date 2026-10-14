@@ -6,7 +6,7 @@
 # address, and without this block HA would record all of them as coming from
 # 172.18.0.x. The full remote path is:
 #
-#   client -> Numbat Pomerium (Pocket ID) -> rathole -> Caddy :4443 -> HA
+#   client -> Numbat Pomerium (Pocket ID) -> wstunnel -> Caddy :4443 -> HA
 #
 # `trusted_proxies` is the list HA will accept an X-Forwarded-For header from;
 # Caddy sets that header, so HA recovers the true client address. dockernet is
