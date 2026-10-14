@@ -20,8 +20,9 @@ The split covers the hosts Ansible provisions: homelab and remote machines of
 any operating system, from the Linux fleet to numbat and the macOS appliance
 pinelake. Nathan's personal laptop stands outside it. Chezmoi owns that machine
 whole and Ansible never runs on it; its only root state, Remote Login and
-sshd's key-only policy, is set once by hand when the laptop is set up (dotfiles
-README, SSH into the MacBook) and never changes after.
+sshd's key-only policy, is set once by hand when the laptop is set up and
+never changes after. [MacBook setup](macbook-setup.md) lists every manual step
+and dependency the laptop has.
 
 Pinelake has one platform-forced exception: OrbStack stores its engine state in
 `baxter`'s home directory and runs as that user. The `pinelake_macos` role owns
