@@ -46,6 +46,7 @@ drop.
 
 Provenance of the lines. Captured on fractal with `docker logs`: caddy_access,
 llm_watcher_resume, llm_watcher_slots, alloy_transfer, rathole_client.
+Captured from the MacBook's wstunnel client log: wstunnel_client.
 Captured from ClickStack: journal_dockerd_error, pomerium_authorize (email replaced),
 pomerium_callback (code and state replaced with stand-ins of the same shape),
 pocket_id_authorize (state replaced), flood_request, rustfs_no_message,
@@ -565,6 +566,11 @@ FIXTURES: tuple[Fixture, ...] = (
             "2026-10-04T05:02:30.518594Z  INFO handle{service=fractal_http}:run: rathole::client: Control channel established",
             Row("rathole-client",
                 "2026-10-04T05:02:30.518594Z  INFO handle{service=fractal_http}:run: rathole::client: Control channel established",
+                "INFO")),
+    Fixture("wstunnel_client", compose("testhost-tunnel", "testhost-tunnel", "testhost-tunnel"),
+            "2026-10-14T05:55:43.905990Z  INFO wstunnel::protocols::tcp::server: Opening TCP connection to relay.numbat.pod.haus:2334",
+            Row("tunnel",
+                "2026-10-14T05:55:43.905990Z  INFO wstunnel::protocols::tcp::server: Opening TCP connection to relay.numbat.pod.haus:2334",
                 "INFO")),
     Fixture("ofelia", compose("ofelia", "ofelia"),
             'Sep  9 16:56:03.726 ERR Job stop job=sky-cache-invalidate execution=9f9b9facaa3e error="error non-zero exit code: 6" duration=3.717301811s failed=true skipped=false',

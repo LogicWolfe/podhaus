@@ -131,6 +131,10 @@ declare "chain" {
 	}
 
 	rathole "run" {
+		forward_to = [wstunnel.run.receiver]
+	}
+
+	wstunnel "run" {
 		forward_to = [flood.run.receiver]
 	}
 

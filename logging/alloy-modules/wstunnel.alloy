@@ -1,0 +1,38 @@
+// Per-service log parser — the wstunnel relay tunnels
+//
+// See komodo-op.alloy for the pattern/rationale. wstunnel (Rust tracing,
+// colour off through NO_COLOR) writes whitespace-separated lines with an
+// RFC3339-nanosecond UTC timestamp, the format komodo-core uses:
+//   2026-10-14T05:46:26.770337Z  INFO wstunnel::tunnel::server::server: Starting wstunnel server listening on 66.226.146.158:2334
+//
+// The level word becomes `detected_level`; the body is the whole line. The
+// row keeps Docker's receive time, which is when wstunnel wrote the line,
+// so the in-line timestamp is not parsed.
+//
+// docker-logs.alloy strips the host's own `<host>-` prefix from the
+// container name, so the service label is `tunnel` for every host's client
+// (quokka-tunnel, bilby-tunnel, ...) and `tunnel-server` on Numbat.
+
+declare "wstunnel" {
+	argument "forward_to" { }
+
+	loki.process "this" {
+		forward_to = argument.forward_to.value
+
+		stage.match {
+			selector = "{service=~\"tunnel|tunnel-server\"}"
+
+			stage.regex {
+				expression = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\s+(?P<lvl>[A-Z]+)\\s"
+			}
+
+			stage.labels {
+				values = {detected_level = "lvl"}
+			}
+		}
+	}
+
+	export "receiver" {
+		value = loki.process.this.receiver
+	}
+}
