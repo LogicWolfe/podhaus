@@ -6,13 +6,30 @@
 # Memory is bounded on every container because fractal's guest is shared with
 # a dev session and has no early out-of-memory protection of its own.
 #
-# Switched off on 2026-10-08. Every service sits behind the `off` profile, which
-# nothing activates, so a Komodo deploy of this stack creates no containers and
-# the push pipeline leaves it alone on later pushes. The stack, the llm-models
-# volume and the model file stay, so bringing it back is: delete the three
-# `profiles` lines below, re-enable the two Gatus checks in the `Local model`
-# group, and push.
+# Switched off on 2026-10-08. The three real services sit behind the `off`
+# profile, which nothing activates, and `llm-off` below is the one container
+# the stack runs while it is off. Without it the stack has no container, Komodo
+# sees it as down, and the push deploy's IfChanged stage full-deploys it on
+# every push; `docker compose up` then refuses a file with no selectable
+# service ("no service selected") and every push deploy fails. Komodo's batch
+# pattern cannot exclude a stack (wildcards and regex only, no negation), so
+# the stack has to deploy cleanly instead. The stack, the llm-models volume and
+# the model file stay. Bringing it back: delete the three `profiles` lines and
+# the `llm-off` service, re-enable the two Gatus checks in the `Local model`
+# group, and push. See docs/runbooks/local-llm.md "While it is switched off".
 services:
+  # Idle stand-in that keeps the stack deployable while it is off. Sleeps; no
+  # network, no volumes. Delete with the `profiles` lines when switching back on.
+  llm-off:
+    container_name: llm-off
+    image: alpine:latest
+    restart: unless-stopped
+    network_mode: none
+    mem_limit: 16m
+    command: ["sleep", "infinity"]
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
   llm-model:
     profiles: ["off"]
     # The shared init image carries curl and a busybox sha256sum, which is all

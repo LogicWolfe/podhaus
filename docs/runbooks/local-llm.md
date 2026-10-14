@@ -1,10 +1,11 @@
 # Local model service
 
 > **Switched off since 2026-10-08.** The three services sit behind the `off`
-> profile in `llm/compose.yaml`, so Komodo deploys the stack with no
-> containers, and the two Gatus checks in the `Local model` group are
-> disabled. The rest of this page describes the service as it runs once
-> that is reverted.
+> profile in `llm/compose.yaml`, an idle `llm-off` container stands in for
+> them so the stack still deploys, and the two Gatus checks in the `Local
+> model` group are disabled. [While it is switched off](#while-it-is-switched-off)
+> says why the stand-in exists and how to switch back on. The rest of this
+> page describes the service as it runs once that is reverted.
 
 A language model that runs on fractal's graphics card (GPU) and answers
 coding clients such as Claude Code and pi at `llm.pod.haus`. The GPU belongs to
@@ -624,6 +625,47 @@ Edits outside `llm/` act on their own stacks: Caddy's listeners and paths and th
 setup page's files (`caddy/fractal/llm-setup/`) on `fractal-caddy`, the routes on
 `pomerium`, log parsers on the `logging` stacks of every host, and alerts on
 `gatus`.
+
+### While it is switched off
+
+The service was switched off on 2026-10-08. Three things make up the off state,
+all in `llm/`:
+
+- `llm-model`, `llm-server` and `llm-watcher` each carry `profiles: ["off"]` in
+  `compose.yaml`. Nothing activates that profile, so a deploy builds, pulls and
+  starts none of them. Their images, the `llm-models` volume and the model file
+  stay on fractal, so switching back on needs no download.
+- `llm-off` is an idle Alpine container (`sleep infinity`, no network, no
+  volumes, 16 MiB) that the deploy does start. It is the only container in the
+  stack while the service is off.
+- The two Gatus checks in the `Local model` group are disabled.
+
+`llm-off` exists because a stack with nothing to run breaks every push deploy.
+The podhaus push procedure's last stage deploys every stack that changed, and it
+treats a stack with no container as new and full-deploys it on every push.
+`docker compose up` refuses a file whose services are all behind an inactive
+profile ("no service selected"), so that deploy fails and the whole procedure
+fails with it. That is what happened between 2026-10-08 and 2026-10-14: every
+push to `main` failed at `fractal-llm` after deploying everything else, and the
+`Komodo procedures` Gatus check stayed red. Komodo's batch pattern cannot leave
+a stack out (it is a union of wildcards and regexes with no negation), so the
+stack has to deploy cleanly instead. With `llm-off` running, Komodo sees a
+running stack, compares content hashes like any other, and leaves it alone on
+pushes that do not touch `llm/`.
+
+To switch back on, in one push:
+
+1. Delete the three `profiles: ["off"]` lines and the `llm-off` service from
+   `llm/compose.yaml`.
+2. Re-enable the two `Local model` checks in `gatus/conf/config.yaml`.
+3. Push. The deploy recreates the stack as described under
+   [What a push to `main` does](#what-a-push-to-main-does); the model loads
+   after the watcher's quiet period.
+
+To switch off again, do the reverse: add the three `profiles` lines, restore
+`llm-off`, disable the two checks, push. Never remove the stack from
+`llm/stack.toml` to switch it off; that would delete the Komodo stack and its
+deploy history.
 
 ### The model download job
 
