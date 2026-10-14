@@ -1,19 +1,11 @@
-# nb-macbook-air — Nathan's MacBook Air (macOS, Apple Silicon), a managed
-# development client. Not a Podhaus runtime host: no Docker, Periphery,
-# Alloy, Komodo, or log shipping — playbooks/nb-macbook-air.yml owns only
-# root SSH policy, safety assertions and the repository source list.
-#
-# Ansible runs on the MacBook itself (playbooks/nb-macbook-air.yml connects
-# locally), so managing it needs no route to it. The split-horizon
-# nb-macbook-air.pod.haus record and its UniFi-reserved wifi address, both in
-# terraform/, serve SSH into the Mac from the development mesh on the home
-# LAN; there is no inbound path from outside the home network.
+# nb-macbook-air — Nathan's MacBook Air (macOS, Apple Silicon), his personal
+# laptop. Never an Ansible target: chezmoi owns the whole machine, including
+# the keys its sshd accepts. It is in inventory only as a member of the
+# development mesh, so the authorized_keys role grants its machine key on the
+# Linux hosts. Its split-horizon nb-macbook-air.pod.haus record and
+# UniFi-reserved wifi address, both in terraform/, serve SSH into the laptop
+# from the mesh on the home LAN; there is no inbound path from outside.
 ---
-# macOS ships no system Python and the Command Line Tools one (3.9) is too
-# old for current ansible-core managed-node support. The mise-managed
-# interpreter tracks the current stable minor and keeps this path.
-ansible_python_interpreter: /Users/nathan/.local/share/mise/installs/python/3.13/bin/python3
-
 # Machine key: a passphrase-less on-disk ed25519 inside FileVault, read
 # directly by ssh and ssh-keygen (no agent). Public half declared here so
 # the authorized_keys role grants it on the Linux mesh; see
@@ -21,17 +13,3 @@ ansible_python_interpreter: /Users/nathan/.local/share/mise/installs/python/3.13
 podhaus_machine_key: >-
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC5zEJO7pWBiUNL3Sx7VvTUCpIIaZoKVvNeqMKymgDl3
   nb-macbook-air machine key
-
-# Docs sources ----------------------------------------------------------
-# The same two sources as the Linux docs hosts, at Mac paths. The Mac's
-# docs server is localhost-only and chezmoi-managed; this list is also what
-# local agents treat as trusted checkouts (see roles/mac_docs_sources).
-podhaus_docs_sources:
-  - name: home
-    type: directory
-    source: /Users/nathan/repos
-    required_path: .
-  - name: chezmoi
-    type: repository
-    source: /Users/nathan/.local/share/chezmoi
-    required_path: .git

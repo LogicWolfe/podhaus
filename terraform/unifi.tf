@@ -116,9 +116,8 @@ resource "unifi_client" "bandicoot" {
 }
 
 # Nathan's MacBook Air, by its wifi MAC. Pinned because the split-horizon
-# nb-macbook-air.pod.haus record and the Ansible connection in
-# ansible/inventory/host_vars/nb-macbook-air.yml both name this address; a
-# DHCP drift would strand the only management path. Imported 2026-08-26
+# nb-macbook-air.pod.haus record names this address; a DHCP drift would
+# strand SSH into the laptop from the development mesh. Imported 2026-08-26
 # from its existing DHCP lease by MAC.
 resource "unifi_client" "nb_macbook_air" {
   mac      = "c0:c7:db:b1:db:f8"

@@ -16,6 +16,13 @@ crisp: anything needing `sudo` is Ansible's, anything that doesn't is
 chezmoi's. The practical consequence is that **chezmoi never prompts for
 a password**.
 
+The split covers the hosts Ansible provisions: homelab and remote machines of
+any operating system, from the Linux fleet to numbat and the macOS appliance
+pinelake. Nathan's personal laptop stands outside it. Chezmoi owns that machine
+whole and Ansible never runs on it; its only root state, Remote Login and
+sshd's key-only policy, is set once by hand when the laptop is set up (dotfiles
+README, SSH into the MacBook) and never changes after.
+
 Pinelake has one platform-forced exception: OrbStack stores its engine state in
 `baxter`'s home directory and runs as that user. The `pinelake_macos` role owns
 its CLI configuration and invokes OrbStack as `baxter`; automatic login creates
@@ -92,14 +99,10 @@ route. Its `pinelake_macos` role is separate from every Linux role.
 
 **kangaroo is not an Ansible target and never will be** — QTS ships no
 Python interpreter, so `kangaroo_bootstrap` is its permanent supported
-path. Nathan's MacBook is present only in the `mac_clients` group and has a
-dedicated `playbooks/nb-macbook-air.yml` entry point, which runs on the Mac
-itself over a local connection (`pipenv run ansible-playbook
-playbooks/nb-macbook-air.yml -K` from `ansible/`), so managing it needs no
-route to it. It receives the narrow root-owned SSH policy in `mac_ssh` and the
-repository source list in `mac_docs_sources`; it is not in `provisioned`,
-`docker_hosts`, `komodo_periphery_hosts`, or `homelab_targets`. Chezmoi remains
-the owner of its user-level development configuration.
+path. Nathan's MacBook is not a target either: chezmoi owns the whole
+laptop. It stays in inventory as a member of `remote_dev_machines`, so the
+`authorized_keys` role grants its machine key on the Linux hosts, and in no
+group a play targets.
 
 ## Layout
 
@@ -119,7 +122,6 @@ ansible/
     numbat.yml             single-host entry point (steady state)
     numbat-bootstrap.yml   fresh-VM bring-up, sequencing preserved as play order
     pinelake.yml           macOS appliance and OrbStack entry point
-    nb-macbook-air.yml     macOS development-client SSH policy entry point
   roles/
     base/                  timezone, baseline packages, dirs, laptop power policy
     disk_tmp/              Root-filesystem /tmp policy, activated at host restart
@@ -135,8 +137,6 @@ ansible/
     firewalld/             declarative zone + service XML (bilby, bandicoot)
     komodo_core_host/      Komodo Core's host directories (bandicoot)
     numbat_edge/           numbat's nftables ruleset, relay-IP dispatcher, loopback sshd
-    mac_ssh/               MacBook FileVault gate, key-only sshd policy and mesh keys
-    mac_docs_sources/      MacBook repository source list (/etc/podhaus/docs-sources.json)
     pinelake_macos/        macOS power, OrbStack and Plex safety gates
 ```
 
@@ -156,9 +156,6 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
   `kangaroo_bootstrap` is permanent, not interim. It is listed here
   rather than omitted so the inventory shows the whole fleet, with
   `ansible_host: unreachable.invalid` so a stray `--limit` can't dial it.
-- `mac_clients` — managed development clients outside the runtime fleet. The
-  dedicated MacBook playbook targets this group; the role asserts that members
-  have not also joined a runtime group.
 - `linux_hosts` and `macos_appliance_hosts` separate operating-system role
   families. Linux-only base, account, and sshd roles never run on Darwin.
 - `docs_hosts` — Bilby, Fractal, Voltaire, Bandicoot, and Quokka. Each declares the aggregate
