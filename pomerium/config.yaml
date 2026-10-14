@@ -235,7 +235,7 @@ routes:
     to: https://127.0.0.1:8547
   - <<: *friends_route
     from: https://voltaire.docs.pod.haus
-    to: https://127.0.0.1:8445
+    to: https://127.0.0.1:8545
   # Nathan's MacBook's docs server, through its wstunnel client
   # (tunnel/numbat/restrictions.yaml). Answers only while the laptop is
   # awake and online.
@@ -309,7 +309,7 @@ routes:
     to: ssh://127.0.0.1:2306
     policy: *nathan_ssh_policy
   - from: ssh://voltaire
-    to: ssh://127.0.0.1:2202
+    to: ssh://127.0.0.1:2302
     policy: *nathan_ssh_policy
   - from: ssh://fractal
     to: ssh://127.0.0.1:2304
