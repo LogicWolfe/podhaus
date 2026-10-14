@@ -45,7 +45,7 @@ discovery.docker reported them, so the pins see what the relabel rules keep and
 drop.
 
 Provenance of the lines. Captured on fractal with `docker logs`: caddy_access,
-llm_watcher_resume, llm_watcher_slots, alloy_transfer, rathole_client.
+llm_watcher_resume, llm_watcher_slots, alloy_transfer.
 Captured from the MacBook's wstunnel client log: wstunnel_client.
 Captured from ClickStack: journal_dockerd_error, pomerium_authorize (email replaced),
 pomerium_callback (code and state replaced with stand-ins of the same shape),
@@ -562,11 +562,6 @@ FIXTURES: tuple[Fixture, ...] = (
             Row("forgejo",
                 "2026/09/09 09:28:39 ...eful/manager_unix.go:142:handleSignals() [W] PID 7. Received SIGTERM. Shutting down...",
                 "WARN")),
-    Fixture("rathole_client", compose("testhost-rathole-client", "rathole-client", "testhost-relay"),
-            "2026-10-04T05:02:30.518594Z  INFO handle{service=fractal_http}:run: rathole::client: Control channel established",
-            Row("rathole-client",
-                "2026-10-04T05:02:30.518594Z  INFO handle{service=fractal_http}:run: rathole::client: Control channel established",
-                "INFO")),
     Fixture("wstunnel_client", compose("testhost-tunnel", "testhost-tunnel", "testhost-tunnel"),
             "2026-10-14T05:55:43.905990Z  INFO wstunnel::protocols::tcp::server: Opening TCP connection to relay.numbat.pod.haus:2334",
             Row("tunnel",

@@ -200,7 +200,7 @@ class TerraMasterMountTests(unittest.TestCase):
         firewall = (
             ROOT / "ansible/roles/numbat_edge/templates/podhaus.nft.j2"
         ).read_text()
-        self.assertIn("443, 2333, 2334 }", firewall)
+        self.assertIn("443, 2334 }", firewall)
         self.assertNotIn("32400", firewall)
 
     def test_pinelake_plex_has_a_protected_browser_route(self) -> None:

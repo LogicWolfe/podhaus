@@ -19,29 +19,6 @@ resource "random_password" "pomerium_gateway_tokens" {
   special = false
 }
 
-resource "random_password" "numbat_rathole_tokens" {
-  for_each = toset([
-    "quokka_http",
-    "quokka_ssh",
-    "bandicoot_http",
-    "bandicoot_ssh",
-    "bilby_ssh",
-    "forgejo_ssh",
-    "fractal_http",
-    "fractal_ssh",
-    "kangaroo_ssh",
-    "pinelake_http",
-    "pinelake_ssh",
-    "protected_http",
-    "public_tls",
-    "voltaire_http",
-    "voltaire_ssh",
-  ])
-
-  length  = 64
-  special = false
-}
-
 resource "tls_private_key" "pomerium_ssh_user_ca" {
   algorithm = "ED25519"
 }
@@ -237,24 +214,6 @@ resource "tls_locally_signed_cert" "pinelake_log_client" {
     "digital_signature",
     "key_encipherment",
   ]
-}
-
-resource "onepassword_item" "numbat_rathole" {
-  vault    = data.onepassword_vault.homelab.uuid
-  title    = "Numbat Rathole"
-  category = "secure_note"
-  tags     = ["terraform-managed"]
-
-  section_map = {
-    Tokens = {
-      field_map = {
-        for name, token in random_password.numbat_rathole_tokens : name => {
-          type  = "CONCEALED"
-          value = token.result
-        }
-      }
-    }
-  }
 }
 
 resource "onepassword_item" "pomerium_secrets" {

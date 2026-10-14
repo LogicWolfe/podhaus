@@ -127,10 +127,6 @@ declare "chain" {
 	}
 
 	forgejo "run" {
-		forward_to = [rathole.run.receiver]
-	}
-
-	rathole "run" {
 		forward_to = [wstunnel.run.receiver]
 	}
 

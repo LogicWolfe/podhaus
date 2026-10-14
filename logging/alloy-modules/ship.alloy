@@ -25,7 +25,7 @@
 // bandicoot's dockernet. Bilby, kangaroo and fractal, on the home LAN, send
 // to the published port in plaintext. Numbat, voltaire and pinelake send to
 // https://logs-ingest.pod.haus, which resolves to Numbat's relay address:
-// Numbat's rathole carries the request to bilby's Caddy, which checks the
+// Numbat's tunnel carries the request to bilby's Caddy, which checks the
 // client certificate and forwards it across the LAN to bandicoot's port 4318.
 // Every request carries the ClickStack ingestion key, which
 // logging/compose.shared.yaml gives every host as CLICKSTACK_INGESTION_KEY; an

@@ -126,19 +126,20 @@
 
     - name: Open the relay ports in the live bootstrap ruleset
       # The final ruleset is staged on disk but deliberately not loaded (it
-      # would close 2222 — see above). The rathole server must be reachable
-      # on 443/2333 before it starts, so exactly those ports are punched
+      # would close 2222 — see above). The tunnel server must be reachable
+      # on 2334, and bilby's public HTTPS listener on 443, before Periphery
+      # starts, so exactly those ports are punched
       # into the *running* bootstrap table; the close stage then replaces
       # the whole table with the final ruleset.
       ansible.builtin.command: >-
         nft insert rule inet podhaus input
-        ip daddr {{ podhaus_numbat_relay_ipv4 }} tcp dport { 443, 2333 } accept
+        ip daddr {{ podhaus_numbat_relay_ipv4 }} tcp dport { 443, 2334 } accept
       when: podhaus_numbat_relay_ipv4 not in numbat_nft_input.stdout
       changed_when: true
 
     - name: Install Docker
-      # Before the relay: the relay is a locally built compose project, so
-      # the engine (and dockernet, which the role owns) must exist first.
+      # Before the tunnel server: it is a compose project, so the engine
+      # (and dockernet, which the role owns) must exist first.
       ansible.builtin.import_role:
         name: docker
 
@@ -149,11 +150,12 @@
         mode: "0755"
 
     - name: Clone the podhaus linked repo
-      # Relay before Periphery, the script's load-bearing order: Periphery
+      # Tunnel server before Periphery, the load-bearing order: Periphery
       # dials wss://core-connect.pod.haus, which resolves back to this very
-      # host's public_tls rathole service and tunnels to Core behind
-      # bilby's caddy — so the relay must be up before Periphery can
-      # connect at all. This checkout is the same clone Komodo's
+      # host's relay address, where bilby's tunnel client holds :443 and
+      # carries it to Core behind bilby's caddy — so the tunnel server must
+      # be up, and bilby's client reconnected, before Periphery can connect
+      # at all. This checkout is the same clone Komodo's
       # linked-repo Periphery later adopts and pulls.
       ansible.builtin.git:
         repo: https://github.com/LogicWolfe/podhaus.git
@@ -161,52 +163,38 @@
         version: main
         depth: 1
 
-    - name: Render the relay environment
-      # The token list is derived from what relay/numbat/compose.yaml
-      # actually consumes, never maintained by hand: the script this
-      # replaced carried a hand-written list that went stale (it predated
-      # fractal_ssh/fractal_http, so a rebuild would have brought the relay
-      # up without fractal's services). A token added to compose with no
-      # matching 1Password field fails the lookup loudly here.
+    - name: Render the tunnel server's environment
+      # Its relay certificate and the relay CA, from the Homelab item
+      # Terraform publishes (terraform/tunnel.tf). Nothing else: what each
+      # client may open is tunnel/numbat/restrictions.yaml, in this clone.
       ansible.builtin.copy:
-        dest: /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat/relay/numbat/.env
+        dest: /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat/tunnel/numbat/.env
         mode: "0600"
         content: |
-          {% for name in numbat_relay_token_env_names | sort %}
-          {{ name }}={{ lookup('community.general.onepassword', 'Numbat Rathole',
-                               section='Tokens', vault='Homelab',
-                               field=name | regex_replace('^RATHOLE_(.+)_TOKEN$', '\\1')
-                                     | lower) }}
-          {% endfor %}
-          RATHOLE_NOISE_LOCAL_PRIVATE_KEY={{ lookup('community.general.onepassword',
-                                                    'Rathole Relay',
-                                                    field='noise_private_key',
-                                                    vault='Homelab') }}
-      vars:
-        numbat_relay_token_env_names: >-
-          {{ (lookup('ansible.builtin.file',
-                     playbook_dir ~ '/../../relay/numbat/compose.yaml')
-              | from_yaml).services['rathole-server'].environment.keys()
-             | select('match', 'RATHOLE_.+_TOKEN$') | list }}
+          TUNNEL_CA_CERT_B64={{ lookup('community.general.onepassword', 'Numbat Tunnel',
+                                       section='PKI', field='ca_cert_b64', vault='Homelab') }}
+          TUNNEL_CERT_B64={{ lookup('community.general.onepassword', 'Numbat Tunnel',
+                                    section='PKI', field='server_cert_b64', vault='Homelab') }}
+          TUNNEL_KEY_B64={{ lookup('community.general.onepassword', 'Numbat Tunnel',
+                                   section='PKI', field='server_key_b64', vault='Homelab') }}
       no_log: true
 
-    - name: Start the relay
-      # build: always mirrors the script's `up -d --build`.
+    - name: Start the tunnel server
       community.docker.docker_compose_v2:
-        project_src: /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat/relay/numbat
-        project_name: numbat-relay
+        project_src: /opt/komodo-periphery/etc-komodo/repos/podhaus-numbat/tunnel/numbat
+        project_name: numbat-tunnel
         state: present
-        build: always
+        pull: always
 
-    - name: Assert the rathole server is running
+    - name: Assert the tunnel server is running
       community.docker.docker_container_info:
-        name: numbat-rathole-server
-      register: numbat_rathole
-      failed_when: not (numbat_rathole.exists and numbat_rathole.container.State.Running)
+        name: numbat-tunnel-server
+      register: numbat_tunnel
+      failed_when: not (numbat_tunnel.exists and numbat_tunnel.container.State.Running)
 
-    - name: Wait for core-connect to answer through the relay
+    - name: Wait for core-connect to answer through bilby's tunnel
       # Probed from the target, as the script did: proves the whole return
-      # path — this host's relay, bilby's caddy, Core — before Periphery
+      # path — this host's tunnel server, bilby's caddy, Core — before Periphery
       # dials it. 400 (not a websocket 101) is the expected answer to a
       # bare GET on the connector endpoint; the script's `curl -sk` becomes
       # validate_certs: false.

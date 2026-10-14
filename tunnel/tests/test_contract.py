@@ -3,12 +3,6 @@
 Numbat's restrictions grant each client certificate a set of listeners; each
 client stack asks for exactly those; every Pomerium upstream on Numbat's
 loopback is served by exactly one tunnel.
-
-While rathole and wstunnel run side by side, wstunnel's loopback listeners sit
-on their own ports and a host moves by repointing its Pomerium routes at them;
-a host's rule may be granted before its client exists. The two share only
-Numbat's public listeners, which bilby's wstunnel client takes over once
-rathole's server stops.
 """
 
 import re
@@ -23,7 +17,6 @@ TUNNEL = ROOT / "tunnel"
 CLIENTS = sorted(p.parent.name for p in TUNNEL.glob("*/compose.yaml") if p.parent.name != "numbat")
 # The MacBook's client is chezmoi's (dotfiles: com.podhaus.docs-tunnel).
 OUTSIDE_THIS_REPOSITORY = {"nb-macbook-air": {("127.0.0.1", 8449)}}
-PUBLIC = {("@RELAY_IPV4@", 443), ("@APPLICATION_IPV4@", 22)}
 
 
 class TaggedLoader(yaml.SafeLoader):
@@ -70,23 +63,11 @@ def requested(client: str) -> set[tuple[str, int]]:
     return listeners
 
 
-def rathole_listeners() -> set[tuple[str, int]]:
-    server = (ROOT / "relay/numbat/server.toml.tmpl").read_text()
-    found = set()
-    for address in re.findall(r'^bind_addr = "([^"]+)"', server, re.MULTILINE):
-        host, port = address.rsplit(":", 1)
-        if host == "relay.numbat.pod.haus" and port == "2333":
-            continue  # rathole's own control port
-        host = {"relay.numbat.pod.haus": "@RELAY_IPV4@", "app.numbat.pod.haus": "@APPLICATION_IPV4@"}.get(host, host)
-        found.add((host, int(port)))
-    return found
-
-
 class ContractTests(unittest.TestCase):
     def test_each_client_asks_for_exactly_what_its_rule_grants(self):
         granted = rules()
         clients = {**{c: requested(c) for c in CLIENTS}, **OUTSIDE_THIS_REPOSITORY}
-        self.assertLessEqual(set(clients), set(granted))
+        self.assertEqual(set(clients), set(granted))
         for client, listeners in clients.items():
             with self.subTest(client=client):
                 self.assertEqual(listeners, granted[client])
@@ -94,14 +75,13 @@ class ContractTests(unittest.TestCase):
     def test_a_listener_has_one_owner(self):
         owners = [listener for listeners in rules().values() for listener in listeners]
         self.assertEqual(len(owners), len(set(owners)))
-        self.assertEqual(set(owners) & rathole_listeners() - PUBLIC, set(), "claimed by rathole and wstunnel")
 
     def test_every_pomerium_upstream_on_loopback_is_served(self):
         config = (ROOT / "pomerium/config.yaml").read_text()
         upstreams = {("127.0.0.1", int(p)) for p in re.findall(r"to: (?:https|ssh)://127\.0\.0\.1:(\d+)", config)}
         upstreams.discard(("127.0.0.1", 22))  # Numbat's own sshd
         in_use = {l for c in CLIENTS for l in requested(c)} | set().union(*OUTSIDE_THIS_REPOSITORY.values())
-        self.assertEqual(upstreams - (rathole_listeners() | in_use), set())
+        self.assertEqual(upstreams - in_use, set())
 
     def test_a_launcher_change_redeploys_every_tunnel(self):
         # The launcher sits outside each stack's directory, so only a

@@ -42,7 +42,7 @@ podhaus.chain "run" {
 	forward_to = [podhaus.ship.run.receiver]
 }
 
-// Over the internet to Numbat's relay address, through rathole to bilby's
+// Over the internet to Numbat's relay address, through wstunnel to bilby's
 // Caddy, which checks this client certificate, and across bilby's LAN to the
 // collector on bandicoot.
 podhaus.ship "run" {
