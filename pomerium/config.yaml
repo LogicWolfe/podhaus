@@ -236,6 +236,12 @@ routes:
   - <<: *friends_route
     from: https://voltaire.docs.pod.haus
     to: https://127.0.0.1:8445
+  # Nathan's MacBook's docs server, through its wstunnel client
+  # (tunnel/numbat/restrictions.yaml). Answers only while the laptop is
+  # awake and online.
+  - <<: *friends_route
+    from: https://mac.docs.pod.haus
+    to: https://127.0.0.1:8449
   - <<: *nathan_route
     from: https://torrent.pinelake.haus
     to: https://127.0.0.1:8446

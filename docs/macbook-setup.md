@@ -111,4 +111,7 @@ SSH. sshd starts per connection on macOS, so nothing needs reloading.
 - `sudo sshd -T | grep -iE '^(authorizedkeysfile|passwordauthentication|allowusers) '`
   shows `.ssh/authorized_keys`, `no` and `nathan`.
 - `docs-url ~/repos/podhaus/docs/macbook-setup.md` prints a localhost link that
-  opens this page.
+  opens this page, and `https://mac.docs.pod.haus/podhaus/macbook-setup.md`
+  opens it through Pomerium. The second needs the laptop to be a Podhaus
+  operator (its `dev` service account reads Homelab), since the tunnel's
+  certificates come from there; chezmoi sets up the rest.
