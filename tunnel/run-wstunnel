@@ -6,6 +6,11 @@
 #
 # SSL_CERT_FILE holds the relay CA alone, so a client trusts Numbat's
 # certificate and no other; on the server it is unused.
+#
+# @RELAY_IPV4@ and @APPLICATION_IPV4@ in the arguments, and in the server's
+# restrictions (TUNNEL_RESTRICTIONS, rendered to /tmp/tunnel), become Numbat's
+# two public addresses, resolved from DNS as Pomerium resolves them, so the
+# repository never carries them.
 set -eu
 umask 077
 dir=/tmp/tunnel
@@ -14,4 +19,22 @@ printf '%s' "$TUNNEL_CA_CERT_B64" | base64 -d > "$dir/ca.pem"
 printf '%s' "$TUNNEL_CERT_B64" | base64 -d > "$dir/cert.pem"
 printf '%s' "$TUNNEL_KEY_B64" | base64 -d > "$dir/key.pem"
 export SSL_CERT_FILE="$dir/ca.pem"
+
+resolve() { getent hosts "$1" | awk 'NR == 1 { print $1 }'; }
+relay=$(resolve relay.numbat.pod.haus)
+application=$(resolve app.numbat.pod.haus)
+test -n "$relay"
+test -n "$application"
+substitute() {
+    printf '%s\n' "$1" | sed -e "s/@RELAY_IPV4@/$relay/g" -e "s/@APPLICATION_IPV4@/$application/g"
+}
+
+# Only the server sets it.
+if [ -n "${TUNNEL_RESTRICTIONS:-}" ]; then
+    substitute "$(cat "$TUNNEL_RESTRICTIONS")" > "$dir/restrictions.yaml"
+fi
+for argument do
+    shift
+    set -- "$@" "$(substitute "$argument")"
+done
 exec /home/app/wstunnel "$@"

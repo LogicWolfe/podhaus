@@ -34,9 +34,12 @@ services:
       - --tls-certificate=/tmp/tunnel/cert.pem
       - --tls-private-key=/tmp/tunnel/key.pem
       - --tls-client-ca-certs=/tmp/tunnel/ca.pem
-      - --restrict-config=/etc/tunnel/numbat/restrictions.yaml
+      - --restrict-config=/tmp/tunnel/restrictions.yaml
       - wss://relay.numbat.pod.haus:2334
     environment:
+      # Rendered with Numbat's addresses at start, so a change takes a
+      # restart; Komodo recreates the server for any change in this stack.
+      TUNNEL_RESTRICTIONS: /etc/tunnel/numbat/restrictions.yaml
       TUNNEL_CA_CERT_B64: ${TUNNEL_CA_CERT_B64}
       TUNNEL_CERT_B64: ${TUNNEL_CERT_B64}
       TUNNEL_KEY_B64: ${TUNNEL_KEY_B64}

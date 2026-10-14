@@ -23,13 +23,19 @@ BUSYBOX = "busybox:stable"
 SERVER_NAME = "relay.numbat.pod.haus"
 
 
+def server_service() -> dict:
+    return yaml.safe_load((TUNNEL / "numbat/compose.yaml").read_text())["services"][
+        "tunnel-server"
+    ]
+
+
 def server_options() -> list[str]:
-    """The server container's user, capabilities and security options, read
-    from the stack's compose file so the test runs it as Numbat does."""
-    service = yaml.safe_load((TUNNEL / "numbat/compose.yaml").read_text())[
-        "services"
-    ]["tunnel-server"]
+    """The server container's user, capabilities, security options and
+    restrictions path, read from the stack's compose file so the test runs it
+    as Numbat does."""
+    service = server_service()
     options = ["--user", service["user"]]
+    options += ["-e", f"TUNNEL_RESTRICTIONS={service['environment']['TUNNEL_RESTRICTIONS']}"]
     options += [f"--cap-drop={cap}" for cap in service["cap_drop"]]
     options += [f"--cap-add={cap}" for cap in service["cap_add"]]
     options += [f"--security-opt={opt}" for opt in service["security_opt"]]
@@ -111,17 +117,14 @@ class TunnelContractTests(unittest.TestCase):
         )
         cls.server = cls.start(
             "server", IMAGE,
-            ["--network-alias", SERVER_NAME, *server_options(),
+            ["--network-alias", SERVER_NAME, "--network-alias", "app.numbat.pod.haus",
+             *server_options(),
              "-v", f"{TUNNEL}:/etc/tunnel:ro",
              "-e", f"TUNNEL_CA_CERT_B64={b64(cls.relay.cert)}",
              "-e", f"TUNNEL_CERT_B64={b64(server_cert)}",
              "-e", f"TUNNEL_KEY_B64={b64(server_key)}",
              "--entrypoint", "/etc/tunnel/run-wstunnel"],
-            "server", "--tls-certificate=/tmp/tunnel/cert.pem",
-            "--tls-private-key=/tmp/tunnel/key.pem",
-            "--tls-client-ca-certs=/tmp/tunnel/ca.pem",
-            "--restrict-config=/etc/tunnel/numbat/restrictions.yaml",
-            f"wss://{SERVER_NAME}:2334",
+            *server_service()["command"],
         )
         time.sleep(2)
 

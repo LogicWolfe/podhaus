@@ -4,8 +4,8 @@
 # a rule to the one client holding that host's relay certificate.
 #
 # Each listener appears in exactly one rule; Pomerium's routes name the
-# loopback ones (pomerium/config.yaml). The server reloads this file when it
-# changes, without dropping connected clients.
+# loopback ones (pomerium/config.yaml). @RELAY_IPV4@ and @APPLICATION_IPV4@
+# become Numbat's public addresses when the server starts (run-wstunnel).
 restrictions:
   - name: nb-macbook-air
     description: Nathan's MacBook's docs origin, for mac.docs.pod.haus
