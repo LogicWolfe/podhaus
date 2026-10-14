@@ -18,9 +18,9 @@
       <p>
         Ansible <code>playbooks/quokka.yml</code> owns machine state; chezmoi
         owns fish, developer tools and agent configuration. The TPM holds its
-        machine SSH identity. Provision the two development service-account tokens
-        separately with <code>op-vault mint dev</code> and
-        <code>op-vault mint switch</code>; each is stored in its own TPM slot.
+        machine SSH identity. Provision its personal development service-account
+        token with <code>op-vault mint dev</code>; it is stored in a TPM slot.
+        Quokka has no Switch development identity.
         Sleep is disabled. Closing the lid arms a one-hour GNOME shutdown;
         opening it or attaching an external display keeps the desktop running.
         Docs, Lumen code embeddings, Ofelia, Autoheal, Periphery and Alloy are
