@@ -177,7 +177,7 @@ routes:
   # service rather than bilby's.
   - <<: *friends_route
     from: https://fractal.docs.pod.haus
-    to: https://127.0.0.1:8444
+    to: https://127.0.0.1:8544
   # The local model's installer files, open to anyone so that `curl | sh`
   # works from a bare terminal: the two install scripts, the token command,
   # the Claude Code launcher and the pi extension. None holds a secret; a key
@@ -185,7 +185,7 @@ routes:
   # only the family and friends groups. Passes no identity headers.
   - <<: *public_route
     from: https://llm.pod.haus
-    to: https://127.0.0.1:8444
+    to: https://127.0.0.1:8544
     prefix: null
     regex: '^/setup/(claude\.sh|pi\.sh|llm-token|claude-podhaus|podhaus\.ts)$'
   # The setup page itself, for the friends policy. The person signs in here
@@ -194,7 +194,7 @@ routes:
   # Caddy records the email as the caller.
   - <<: *friends_route
     from: https://llm.pod.haus
-    to: https://127.0.0.1:8444
+    to: https://127.0.0.1:8544
     prefix: /setup
     pass_identity_headers: true
   # The local model on fractal, through the same tunnel port as its docs
@@ -202,7 +202,7 @@ routes:
   # fall to the model route below.
   - <<: *nathan_route
     from: https://llm.pod.haus
-    to: https://127.0.0.1:8444
+    to: https://127.0.0.1:8544
     regex: '^/control(/.*)?$'
     pass_identity_headers: true
   # The model itself, for the friends policy. Clients have no browser, so they
@@ -220,7 +220,7 @@ routes:
   # Code was seen waiting 330 s), and an answer can stream for many minutes.
   - <<: *friends_route
     from: https://llm.pod.haus
-    to: https://127.0.0.1:8444
+    to: https://127.0.0.1:8544
     bearer_token_format: idp_access_token
     pass_identity_headers: true
     idle_timeout: 10m
@@ -312,7 +312,7 @@ routes:
     to: ssh://127.0.0.1:2202
     policy: *nathan_ssh_policy
   - from: ssh://fractal
-    to: ssh://127.0.0.1:2204
+    to: ssh://127.0.0.1:2304
     policy: *nathan_ssh_policy
   - from: ssh://pinelake
     to: ssh://127.0.0.1:2205
