@@ -67,6 +67,10 @@
 #                                   grants, and never connects to a server its
 #                                   pinned CA did not sign. Needs Docker;
 #                                   skipped with the reason without it.
+#   - pinelake tests:               every TerraMaster bind refuses to create
+#                                   its folder when the volume is missing,
+#                                   and the Plex label sync names torrents by
+#                                   a path Plex mounts.
 #   - forgejo-runner tests:         Docker's stop grace period outlasts the
 #                                   runner's job drain, and a changed
 #                                   registration recreates the runner.
@@ -153,6 +157,8 @@ mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/metube/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/forgejo-runner/tests"
+mise exec -- pipenv run python -m unittest discover \
+  --start-directory "$root/pinelake/tests"
 mise exec -- pipenv run python -m unittest discover \
   --start-directory "$root/tunnel/tests"
 mise exec -- pipenv run python -m unittest discover \

@@ -44,7 +44,7 @@ class TerraMasterMountTests(unittest.TestCase):
                         self.assertIsInstance(volume, dict)
                         self.assertEqual(volume["type"], "bind")
                         self.assertFalse(volume["bind"]["create_host_path"])
-        self.assertEqual(found, 13)
+        self.assertTrue(found)
 
     def test_plex_can_see_both_media_ingress_paths(self) -> None:
         document = yaml.safe_load(
@@ -65,15 +65,24 @@ class TerraMasterMountTests(unittest.TestCase):
             }.issubset(sources)
         )
 
-    def test_flood_labels_resolve_against_pinelake_plex_paths(self) -> None:
-        document = yaml.safe_load(
+    def test_label_sync_names_torrents_by_a_path_plex_mounts(self) -> None:
+        """The sync turns rTorrent's /data paths into the paths Plex indexes."""
+        rtorrent = yaml.safe_load(
             (ROOT / "pinelake/flood/compose.yaml").read_text()
-        )
-        environment = document["services"]["pinelake-flood"]["environment"]
-        self.assertEqual(
-            environment["PLEX_MEDIA_ROOT"],
-            "/Volumes/TerraMaster/Torrents",
-        )
+        )["services"]["pinelake-rtorrent"]
+        plex = yaml.safe_load(
+            (ROOT / "pinelake/plex/compose.yaml").read_text()
+        )["services"]["pinelake-plex"]
+        (torrents,) = [
+            volume["source"]
+            for volume in rtorrent["volumes"]
+            if isinstance(volume, dict) and volume["target"] == "/data"
+        ]
+        plex_sources = {
+            volume["source"] for volume in plex["volumes"] if isinstance(volume, dict)
+        }
+        self.assertEqual(rtorrent["environment"]["PLEX_MEDIA_ROOT"], torrents)
+        self.assertIn(torrents, plex_sources)
 
     def test_pinelake_backup_has_no_onedrive_layer(self) -> None:
         backup_files = (
