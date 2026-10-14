@@ -1,0 +1,46 @@
+# pinelake's wstunnel CLIENT: dials Numbat's tunnel server and publishes
+# pinelake's SSH (ssh://pinelake) and its mTLS origin (torrent, sync and
+# plex.pinelake.haus); its only way in. Numbat grants this certificate exactly
+# these listeners (tunnel/numbat/restrictions.yaml).
+
+# The shared launcher, outside this directory, in the content hash.
+x-podhaus-content-paths:
+  - ../launcher
+
+services:
+  pinelake-tunnel:
+    container_name: pinelake-tunnel
+    image: ghcr.io/erebe/wstunnel:latest
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - label=disable
+      - no-new-privileges=true
+    entrypoint: ["/usr/bin/dumb-init", "--", "/etc/tunnel/launcher/run-wstunnel"]
+    command:
+      - client
+      - --tls-verify-certificate
+      - --tls-certificate=/tmp/tunnel/cert.pem
+      - --tls-private-key=/tmp/tunnel/key.pem
+      - -R
+      - tcp://127.0.0.1:2305:host.docker.internal:22
+      - -R
+      - tcp://127.0.0.1:8546:pinelake-caddy:4443
+      - wss://relay.numbat.pod.haus:2334
+    environment:
+      TUNNEL_CA_CERT_B64: ${TUNNEL_CA_CERT_B64}
+      TUNNEL_CERT_B64: ${TUNNEL_CERT_B64}
+      TUNNEL_KEY_B64: ${TUNNEL_KEY_B64}
+    volumes:
+      # The launcher, from this host's checkout by host path: Komodo runs
+      # Compose inside Periphery, where a relative bind resolves elsewhere.
+      - /Users/Shared/Podhaus/periphery/etc-komodo/repos/podhaus-pinelake/tunnel:/etc/tunnel:ro
+    networks:
+      - dockernet
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+
+networks:
+  dockernet:
+    external: true
