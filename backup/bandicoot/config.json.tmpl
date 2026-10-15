@@ -242,6 +242,33 @@
       },
       "hooks": [],
       "skipIfUnchanged": false
+    },
+    {
+      "id": "brinno",
+      "repo": "podhaus-bandicoot",
+      "paths": ["/userdata/brinno-downloader", "/userdata/pouch/timelapse"],
+      "excludes": ["/userdata/brinno-downloader/work"],
+      "schedule": {
+        "cron": "35 4 * * *",
+        "clock": "CLOCK_LOCAL"
+      },
+      "retention": {
+        "policyTimeBucketed": {
+          "daily": 14,
+          "weekly": 4,
+          "monthly": 6
+        }
+      },
+      "hooks": [
+        {
+          "conditions": ["CONDITION_SNAPSHOT_START"],
+          "onError": "ON_ERROR_FATAL",
+          "actionCommand": {
+            "command": "test -e /userdata/pouch/.podhaus-share-mounted"
+          }
+        }
+      ],
+      "skipIfUnchanged": false
     }
   ]
 }

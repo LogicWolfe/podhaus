@@ -62,6 +62,14 @@ services:
       # bookshelf: its SQLite file (the books' text, reading history, notes
       # and summaries) and the covers it has fetched.
       - /var/lib/bookshelf:/userdata/bookshelf:ro
+      # brinno-downloader: its state SQLite (which cloud files are archived)
+      # and the time-lapse archive itself on Pouch. The plan snapshots
+      # /userdata/pouch/timelapse only; the whole share is bound so the
+      # plan's start hook can see the share's sentinel and refuse to
+      # snapshot an unmounted (empty) Pouch. No `:z`: relabeling NFS is
+      # unsafe, and label=disable above makes it unnecessary.
+      - /var/lib/brinno-downloader:/userdata/brinno-downloader:ro
+      - /mnt/pouch:/userdata/pouch:ro
       # RustFS holds the primary object store, including version history and
       # Terraform state. Bilby's serialized Backrest hook copies its snapshots
       # into the existing off-site repository.
