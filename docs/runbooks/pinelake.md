@@ -78,12 +78,14 @@ Power the host on and let OrbStack and Periphery start. Then, in one push:
    away (docs/plans/gatus-dead-mans-switches.md): the two `wget … GATUS_`
    hooks in `backup/pinelake/config.json.tmpl`, the three `GATUS_*` lines in
    `backup/pinelake/stack.toml`, the `GATUS_RAR_ENDPOINT_ID` line in
-   `pinelake/flood/compose.yaml`, and then the three `GATUS_*` placeholder
-   references in `backup/compose.shared.yaml`'s `backrest-init` environment,
-   which exist only so the env lint tolerates pinelake's declarations. Until
-   this is done the hooks push to endpoints that no longer exist and log a
-   Backrest error each night, which the *Backrest Pinelake Nightly* check
-   reports.
+   `pinelake/flood/compose.yaml`, and the eight `GATUS_*` environment lines
+   (with their comment) in both services of `backup/compose.shared.yaml`.
+   That shared file is compose text of the pinelake backup stack, so its
+   text was kept byte-identical while the host was away: changing it made
+   `BatchDeployStackIfChanged` deploy `pinelake-backup` to the disabled host
+   and fail the procedure (2026-10-16). Until this is done the hooks push to
+   endpoints that no longer exist and log a Backrest error each night, which
+   the *Backrest Pinelake Nightly* check reports.
 5. Push, then check komodo.pod.haus → Servers shows pinelake `Ok` and the
    `Komodo procedures` check is green.
 
