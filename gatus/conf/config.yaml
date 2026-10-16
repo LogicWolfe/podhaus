@@ -539,7 +539,6 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
 
-
   - name: Quokka Periphery (via Komodo)
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
@@ -554,7 +553,6 @@ endpoints:
     conditions:
       - "[STATUS] == 200"
       - "[BODY].status == Ok"
-
 
   - name: Voltaire Periphery (via Komodo)
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
@@ -653,7 +651,6 @@ endpoints:
       - "[BODY].State.Status == running"
       - "[BODY].State.Health.Status == healthy"
 
-
   - name: Docs (bandicoot, via Komodo)
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
@@ -671,7 +668,6 @@ endpoints:
       - "[STATUS] == 200"
       - "[BODY].State.Status == running"
       - "[BODY].State.Health.Status == healthy"
-
 
   - name: Docs (voltaire, via Komodo)
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
@@ -1223,14 +1219,456 @@ endpoints:
 
 # --- Heartbeat endpoints (push-style) ---
 
+  # --- ClickStack-backed dead-man's switches ---
+  # "Has X happened recently" is asked of ClickHouse (the bandicoot ClickStack
+  # store, HTTP port published on the LAN), not inferred from a push's
+  # silence: a pull endpoint checks on start and every check is stateless, so
+  # a Gatus restart cannot defer it the way it defers a push heartbeat's
+  # window. Each query returns one row with one column `why`: `ok`, or a
+  # sentence naming what is wrong, which the failed condition carries into the
+  # alert. Design and the full table: docs/plans/gatus-dead-mans-switches.md.
+
+  # Brinno construction time-lapse downloader (fenwick-brinno-downloader on
+  # bandicoot). One trace per hourly cycle, root span brinno.reconcile; one
+  # brinno.archive span per video stored. Four questions, one endpoint each.
+  - name: Brinno
+    group: Timelapse
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT if(n > 0, 'ok', 'no video archived in 48h') AS why
+      FROM (SELECT count() AS n FROM default.otel_traces
+      WHERE ServiceName = 'brinno-downloader' AND SpanName = 'brinno.archive'
+      AND Timestamp > now() - INTERVAL 48 HOUR)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "No site time-lapse footage has been archived for two days. The camera may be offline, unpowered or moved, its MCS cloud upload may have stalled, or the downloader is failing every download (then the Brinno stuck day check names the day). Investigate: the cycle traces in ClickStack (ServiceName brinno-downloader), `docker logs brinno-downloader` on bandicoot, the camera's power and connectivity, or the MCS app (mcs.my.brinno.com)."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Brinno downloader
+    group: Timelapse
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT if(n > 0, 'ok', 'no reconcile cycle in 3h') AS why
+      FROM (SELECT count() AS n FROM default.otel_traces
+      WHERE ServiceName = 'brinno-downloader' AND SpanName = 'brinno.reconcile'
+      AND Timestamp > now() - INTERVAL 3 HOUR)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "The Brinno downloader has not completed an hourly cycle in three hours: the container is down or wedged, or its traces are not reaching ClickStack (then the Bandicoot Telemetry Pipeline check is red too). Investigate: `docker ps` and `docker logs brinno-downloader` on bandicoot, then the fenwick-brinno-downloader stack in Komodo."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Brinno stuck day
+    group: Timelapse
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT if(toInt32OrZero(SpanAttributes['brinno.files_overdue']) = 0, 'ok',
+      concat(SpanAttributes['brinno.files_overdue'], ' overdue: ', SpanAttributes['brinno.overdue'])) AS why
+      FROM default.otel_traces
+      WHERE ServiceName = 'brinno-downloader' AND SpanName = 'brinno.reconcile'
+      AND Timestamp > now() - INTERVAL 7 DAY
+      ORDER BY Timestamp DESC LIMIT 1
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "A day of site time-lapse footage has been retried for longer than the downloader's overdue window (two days) without a download that verifies: the cloud keeps rendering an empty or truncated file, or never finishes the render. The condition text names the day. Investigate: that day's render and download spans in ClickStack, then the file in the MCS app (mcs.my.brinno.com)."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Brinno card
+    group: Timelapse
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(total = 0 OR used = 0, 'no card estimate on the latest cycle',
+      used * 10 >= total * 9, concat('card ', toString(intDiv(used * 100, total)), '% full'), 'ok') AS why
+      FROM (SELECT toUInt64OrZero(SpanAttributes['brinno.card_used_bytes']) AS used,
+      toUInt64OrZero(SpanAttributes['brinno.card_total_bytes']) AS total
+      FROM default.otel_traces
+      WHERE ServiceName = 'brinno-downloader' AND SpanName = 'brinno.reconcile'
+      AND Timestamp > now() - INTERVAL 7 DAY
+      ORDER BY Timestamp DESC LIMIT 1)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "The camera's SD card is over 90% full by the downloader's estimate (the cloud's sizes of the files still on the card against the configured 128 GB). Retention should keep it near a month of footage; a full card means deletions are being refused (red brinno.retire spans in the cycle trace) or the card was swapped for a smaller one. Investigate the latest cycle trace in ClickStack, then the camera."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  # Backrest nightly pipelines, one endpoint per host, from Backrest's own
+  # logs in ClickStack. Backrest schedules a plan's `forget` only once a
+  # snapshot exists, so "every plan that ran backup also ran forget" proves
+  # the snapshots landed; "no ERROR task failed" catches a failed backup,
+  # prune or check and a fatal hook (bilby's off-site mirror runs as one).
+  - name: Backrest Nightly
+    group: Backup
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(errors > 0, concat(toString(errors), ' backrest errors, latest: ', latest_error),
+      length(missing) > 0, concat('backed up without forget: ', arrayStringConcat(missing, ', ')),
+      length(backed) = 0, 'no plan backed up in 25h', 'ok') AS why
+      FROM (SELECT backed, arraySort(arrayFilter(p -> NOT has(forgotten, p), backed)) AS missing, errors, latest_error
+      FROM (SELECT groupUniqArrayIf(plan, Body LIKE '%running task%backup for plan%') AS backed,
+      groupUniqArrayIf(plan, Body LIKE '%running task%forget for plan%') AS forgotten,
+      countIf(Body LIKE '%ERROR%task failed%') AS errors,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%ERROR%task failed%') AS latest_error
+      FROM (SELECT Body, extract(Body, 'for plan [^a-z0-9]+([a-z0-9-]+)') AS plan FROM default.otel_logs
+      WHERE ServiceName = 'backrest' AND ResourceAttributes['host.name'] = 'bilby'
+      AND TimestampTime > now() - INTERVAL 25 HOUR)))
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "Bilby's nightly backups did not all land in the last 25 hours, or Backrest on bilby logged an error (a failed backup, prune or check, or the off-site mirror hook on the backrest-state plan, which copies bandicoot's repository and uploads to OneDrive). The condition text names the plan or the error. Investigate: `docker logs backrest` on bilby, the Backrest UI (backups.pod.haus), and /mnt/jump/backups on bilby."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Backrest Nightly (bandicoot)
+    group: Backup
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(errors > 0, concat(toString(errors), ' backrest errors, latest: ', latest_error),
+      length(missing) > 0, concat('backed up without forget: ', arrayStringConcat(missing, ', ')),
+      length(backed) = 0, 'no plan backed up in 25h', 'ok') AS why
+      FROM (SELECT backed, arraySort(arrayFilter(p -> NOT has(forgotten, p), backed)) AS missing, errors, latest_error
+      FROM (SELECT groupUniqArrayIf(plan, Body LIKE '%running task%backup for plan%') AS backed,
+      groupUniqArrayIf(plan, Body LIKE '%running task%forget for plan%') AS forgotten,
+      countIf(Body LIKE '%ERROR%task failed%') AS errors,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%ERROR%task failed%') AS latest_error
+      FROM (SELECT Body, extract(Body, 'for plan [^a-z0-9]+([a-z0-9-]+)') AS plan FROM default.otel_logs
+      WHERE ServiceName = 'backrest' AND ResourceAttributes['host.name'] = 'bandicoot'
+      AND TimestampTime > now() - INTERVAL 25 HOUR)))
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "Bandicoot's local nightly backups did not all land in the last 25 hours, or Backrest on bandicoot logged an error. The condition text names the plan or the error. The separate Backrest Nightly check on bilby reports their off-site copy. Investigate: `docker logs backrest` on bandicoot and the bind's sentinel (`ls /mnt/jump/backups-bandicoot/.podhaus-share-mounted`)."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Backrest Kangaroo Nightly
+    group: Backup
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(errors > 0, concat(toString(errors), ' backrest errors, latest: ', latest_error),
+      length(missing) > 0, concat('backed up without forget: ', arrayStringConcat(missing, ', ')),
+      length(backed) = 0, 'no plan backed up in 25h', 'ok') AS why
+      FROM (SELECT backed, arraySort(arrayFilter(p -> NOT has(forgotten, p), backed)) AS missing, errors, latest_error
+      FROM (SELECT groupUniqArrayIf(plan, Body LIKE '%running task%backup for plan%') AS backed,
+      groupUniqArrayIf(plan, Body LIKE '%running task%forget for plan%') AS forgotten,
+      countIf(Body LIKE '%ERROR%task failed%') AS errors,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%ERROR%task failed%') AS latest_error
+      FROM (SELECT Body, extract(Body, 'for plan [^a-z0-9]+([a-z0-9-]+)') AS plan FROM default.otel_logs
+      WHERE ServiceName = 'backrest' AND ResourceAttributes['host.name'] = 'kangaroo'
+      AND TimestampTime > now() - INTERVAL 25 HOUR)))
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "Kangaroo's nightly backups did not all land in the last 25 hours, or Backrest on kangaroo logged an error (its OneDrive upload runs as a hook on the backrest-state plan). The condition text names the plan or the error. Investigate: `docker logs backrest` on kangaroo (or filter ServiceName backrest, host kangaroo in HyperDX) and the Backrest UI."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Backrest Pinelake Nightly
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
+    group: Backup
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(errors > 0, concat(toString(errors), ' backrest errors, latest: ', latest_error),
+      length(missing) > 0, concat('backed up without forget: ', arrayStringConcat(missing, ', ')),
+      length(backed) = 0, 'no plan backed up in 25h', 'ok') AS why
+      FROM (SELECT backed, arraySort(arrayFilter(p -> NOT has(forgotten, p), backed)) AS missing, errors, latest_error
+      FROM (SELECT groupUniqArrayIf(plan, Body LIKE '%running task%backup for plan%') AS backed,
+      groupUniqArrayIf(plan, Body LIKE '%running task%forget for plan%') AS forgotten,
+      countIf(Body LIKE '%ERROR%task failed%') AS errors,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%ERROR%task failed%') AS latest_error
+      FROM (SELECT Body, extract(Body, 'for plan [^a-z0-9]+([a-z0-9-]+)') AS plan FROM default.otel_logs
+      WHERE ServiceName = 'backrest' AND ResourceAttributes['host.name'] = 'pinelake'
+      AND TimestampTime > now() - INTERVAL 25 HOUR)))
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "Pinelake's nightly backups did not all land in the last 25 hours, or Backrest on pinelake logged an error. The condition text names the plan or the error. Inspect pinelake-backup through Komodo and the local TerraMaster restic repository."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  # Per-plan switches on bilby: the quiesced Forgejo snapshot (plus its
+  # ofelia recovery job, which exits non-zero when it had to restart a
+  # Forgejo left stopped) and the two hourly plans.
+  - name: Backrest Forgejo
+    group: Backup
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(errors > 0, concat(toString(errors), ' errors, latest: ', latest_error),
+      recoveries > 0, concat('recovery job failed: ', latest_recovery),
+      forgets = 0, 'no completed backup of plan forgejo in 25h', 'ok') AS why
+      FROM (SELECT countIf(Body LIKE '%running task%forget for plan%') AS forgets,
+      countIf(Body LIKE '%ERROR%task failed%') AS errors,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%ERROR%task failed%') AS latest_error
+      FROM default.otel_logs WHERE ServiceName = 'backrest' AND ResourceAttributes['host.name'] = 'bilby'
+      AND Body LIKE '%forgejo%' AND TimestampTime > now() - INTERVAL 25 HOUR) AS b
+      CROSS JOIN (SELECT count() AS recoveries, anyLast(substring(Body, 1, 240)) AS latest_recovery
+      FROM default.otel_logs WHERE ServiceName = 'ofelia' AND Body LIKE '%Job stop job=forgejo-backup-recover %'
+      AND Body LIKE '%failed=true%' AND TimestampTime > now() - INTERVAL 25 HOUR) AS r
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "Forgejo's quiesced nightly snapshot did not complete in the last 25 hours, its stop/finish hook failed, or the five-minute recovery job had to restart a Forgejo left stopped by an interrupted snapshot. The condition text says which. Check the backrest Forgejo plan, `docker logs backrest`, `docker logs ofelia`, and `/data/forgejo-backup.lock` inside Backrest on bilby."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Backrest Pets
+    group: Backup
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(errors > 0, concat(toString(errors), ' errors, latest: ', latest_error),
+      forgets = 0, 'no completed backup of plan pets in 3h', 'ok') AS why
+      FROM (SELECT countIf(Body LIKE '%running task%forget for plan%') AS forgets,
+      countIf(Body LIKE '%ERROR%task failed%') AS errors,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%ERROR%task failed%') AS latest_error
+      FROM default.otel_logs WHERE ServiceName = 'backrest' AND ResourceAttributes['host.name'] = 'bilby'
+      AND Body LIKE '%pets%' AND TimestampTime > now() - INTERVAL 3 HOUR)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "The hourly pets backup has not completed a snapshot in three hours, or logged an error. The plan runs every hour on bilby; Backrest may be down or the plan failing. Investigate: `docker logs backrest` on bilby, the Backrest UI (backups.pod.haus), or ServiceName backrest in HyperDX (watch.pod.haus)."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Backrest Yiayia
+    group: Backup
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(errors > 0, concat(toString(errors), ' errors, latest: ', latest_error),
+      forgets = 0, 'no completed backup of plan yiayia-stories in 3h', 'ok') AS why
+      FROM (SELECT countIf(Body LIKE '%running task%forget for plan%') AS forgets,
+      countIf(Body LIKE '%ERROR%task failed%') AS errors,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%ERROR%task failed%') AS latest_error
+      FROM default.otel_logs WHERE ServiceName = 'backrest' AND ResourceAttributes['host.name'] = 'bilby'
+      AND Body LIKE '%yiayia-stories%' AND TimestampTime > now() - INTERVAL 3 HOUR)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "The hourly yiayia-stories backup has not completed a snapshot in three hours, or logged an error. Investigate: `docker logs backrest` on bilby, the Backrest UI (backups.pod.haus), or ServiceName backrest in HyperDX (watch.pod.haus)."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  # ofelia jobs with a daily or monthly cadence, from ofelia's own
+  # `Job stop job=<name> … failed=<bool>` lines in ClickStack.
+  - name: ClickStack Mongo Dump
+    group: Observability
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(runs = 0, 'no clickstack-mongo-dump run in 25h',
+      ok = 0, concat('clickstack-mongo-dump failed: ', latest_error), 'ok') AS why
+      FROM (SELECT count() AS runs, countIf(Body LIKE '%failed=false%') AS ok,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%failed=true%') AS latest_error
+      FROM default.otel_logs WHERE ServiceName = 'ofelia' AND Body LIKE '%Job stop job=clickstack-mongo-dump %'
+      AND TimestampTime > now() - INTERVAL 25 HOUR)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "HyperDX's nightly mongo dump (03:50 AWST, ofelia on bandicoot) did not run or failed in the last 25 hours, so the dashboards/alerts/source config (tiny but hand-built, not reconstructible from telemetry) may have no fresh archive. Check `docker logs bandicoot-ofelia` and `docker logs clickstack-mongo`, and /var/lib/clickstack/mongo-dumps for the latest archive."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Plex Stats Cleanup
+    group: Plex
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 1h
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(runs = 0, 'no plex-stats-cleanup run in 33 days',
+      ok = 0, concat('plex-stats-cleanup failed: ', latest_error), 'ok') AS why
+      FROM (SELECT count() AS runs, countIf(Body LIKE '%failed=false%') AS ok,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%failed=true%') AS latest_error
+      FROM default.otel_logs WHERE ServiceName = 'ofelia' AND Body LIKE '%Job stop job=plex-stats-cleanup %'
+      AND TimestampTime > now() - INTERVAL 33 DAY)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "The monthly Plex statistics prune + VACUUM (1st of the month, 05:30 AWST) has not run successfully in 33 days; the Plex DB stats tables will slowly bloat. Low urgency. Check `docker logs ofelia` on bilby and `docker exec plex /scripts/stats-cleanup.sh`."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  # Daily safety-net scan of the rtorrent RAR-extraction and publish
+  # pipeline (flood/scripts/rar-backlog.sh, ofelia at 04:50 local). Its
+  # stdout says healthy or UNHEALTHY with the offending paths; the latest
+  # run's line is judged.
+  - name: RAR Extraction
+    group: Torrents
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(last = '', 'no rar-backlog run in 25h',
+      last LIKE '%failed=true%', concat('rar-backlog failed: ', substring(last, 1, 240)),
+      last LIKE '%UNHEALTHY%', extract(last, 'stdout="([^"]{0,300})'), 'ok') AS why
+      FROM (SELECT argMax(Body, TimestampTime) AS last FROM default.otel_logs
+      WHERE ServiceName = 'ofelia' AND ResourceAttributes['host.name'] = 'bilby'
+      AND Body LIKE '%Job stop job=rar-backlog %' AND TimestampTime > now() - INTERVAL 25 HOUR)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "The RAR extraction pipeline on bilby is unhealthy or its daily scan did not run. Either the rtorrent event.download.finished hook (rtorrent-extract.sh) failed (check `/flood-db/rtorrent-extract.log` inside the rtorrent container), the scan found RAR folders over 2h old with nothing extracted or torrents never published to Plex (the condition text lists them), or ofelia stopped running the job (`docker logs ofelia | grep rar-backlog`). Manual scan: `docker exec rtorrent /scripts/rar-backlog.sh`."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
+  - name: Pinelake RAR Extraction
+    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
+    group: Torrents
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 10m
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT multiIf(last = '', 'no rar-backlog run in 25h',
+      last LIKE '%failed=true%', concat('rar-backlog failed: ', substring(last, 1, 240)),
+      last LIKE '%UNHEALTHY%', extract(last, 'stdout="([^"]{0,300})'), 'ok') AS why
+      FROM (SELECT argMax(Body, TimestampTime) AS last FROM default.otel_logs
+      WHERE ServiceName = 'ofelia' AND ResourceAttributes['host.name'] = 'pinelake'
+      AND Body LIKE '%Job stop job=rar-backlog %' AND TimestampTime > now() - INTERVAL 25 HOUR)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "Pinelake's RAR extraction pipeline is unhealthy or its daily scan did not run. Inspect pinelake-rtorrent and pinelake-ofelia through Komodo; the condition text lists the offending paths when the scan itself reported them."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
 external-endpoints:
-  # `heartbeat.interval` is the staleness threshold — Gatus synthesises a
-  # failure result if no push arrives within this window. The top-level
-  # `interval:` field is NOT recognised on external-endpoints (it's only
-  # for HTTP-polled endpoints) and was previously silently ignored, which
-  # left these heartbeats as event-only — they could only ever alert on a
-  # received-but-failed push, never on missing pushes. See Gatus README
-  # → External Endpoints.
+  # Push endpoints. `heartbeat.interval` is the staleness window, and Gatus
+  # checks it on a timer that starts at process boot, so every restart (each
+  # deploy touching gatus/) defers the check by one whole window. Only short
+  # windows live here for that reason; anything "has X happened in the last
+  # day" is a ClickStack-backed pull endpoint above (see the dead-man's
+  # switches block in `endpoints:` and docs/plans/gatus-dead-mans-switches.md).
 
   - name: Sky invalidation
     group: Cache
@@ -1240,29 +1678,6 @@ external-endpoints:
     alerts:
       - type: custom
         description: "Sky's release monitor has not checked in for 3 minutes. The minute job may be stopped or unable to read the RustFS manifest; inspect the caddy/ofelia logs before trusting the edge cache."
-        failure-threshold: 1
-        success-threshold: 1
-        send-on-resolved: true
-
-  # Brinno construction time-lapse downloader (the fenwick-brinno-downloader
-  # stack). It pushes a heartbeat per archived video — roughly daily, since
-  # it downloads the previous day's footage once the camera finishes
-  # uploading it. >48h of silence means no new footage is landing (a
-  # two-day grace tolerates a late upload / a missed day). A day whose
-  # download keeps failing verification past the service's overdue window
-  # arrives as success=false with an error naming the day. Endpoint key
-  # (for the service's push URL) is `timelapse_brinno`. Uses the
-  # general-purpose heartbeat push token — these tokens aren't per-service
-  # (the URL's endpoint key is what routes a heartbeat to the right check),
-  # so new endpoints share GATUS_HEARTBEAT_PUSH_TOKEN rather than minting one.
-  - name: Brinno
-    group: Timelapse
-    token: ${GATUS_HEARTBEAT_PUSH_TOKEN}
-    heartbeat:
-      interval: 48h
-    alerts:
-      - type: custom
-        description: "Site time-lapse footage is not being archived. The brinno-downloader checks in once per archived video (~daily): >48h of silence means no new footage is being downloaded — the camera may be offline, unpowered, or moved, its MCS cloud upload may have stalled, or the downloader is stuck. A reported error instead names a day the downloader has been retrying for over two days without a download that verifies (an empty or truncated render, or a render the cloud never finishes). Investigate: `docker logs brinno-downloader`, the cycle trace in ClickStack, the camera's power/connectivity, or the MCS app (mcs.my.brinno.com)."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true
@@ -1306,135 +1721,6 @@ external-endpoints:
         success-threshold: 1
         send-on-resolved: true
 
-  - name: Backrest Nightly
-    group: Backup
-    token: ${GATUS_BACKREST_PUSH_TOKEN}
-    heartbeat:
-      interval: 25h
-    alerts:
-      - type: custom
-        description: "Bilby's off-site backup did not complete: a local backup, Bandicoot snapshot copy or OneDrive upload failed or stopped reporting. Inspect the Backrest hook logs and /mnt/jump/backups and /mnt/jump/backups-bandicoot on Bilby."
-        failure-threshold: 1
-        success-threshold: 1
-        send-on-resolved: true
-
-  # bandicoot's nightly pipeline: the backrest-state plan pushes success
-  # after the clickstack-mongo plan has run; any repo error pushes failure.
-  - name: Backrest Nightly (bandicoot)
-    group: Backup
-    token: ${GATUS_OFELIA_PUSH_TOKEN}
-    heartbeat:
-      interval: 25h
-    alerts:
-      - type: custom
-        description: "Bandicoot's local nightly backups failed or stopped reporting. The separate Bilby nightly check reports their off-site copy. Investigate: `docker logs backrest` on bandicoot, and the bind's sentinel (`ls /mnt/jump/backups-bandicoot/.podhaus-share-mounted`)."
-        failure-threshold: 1
-        success-threshold: 1
-        send-on-resolved: true
-
-  - name: Backrest Forgejo
-    group: Backup
-    token: ${GATUS_BACKREST_PUSH_TOKEN}
-    heartbeat:
-      interval: 25h
-    alerts:
-      - type: custom
-        description: "Forgejo's quiesced nightly snapshot either reported a failure or did not check in at all — read the errors field to tell which. The hook stops Forgejo, snapshots local SQLite state plus Jump repositories, restarts Forgejo, and only then reports success; a separate recovery job reports a failure if it finds Forgejo left stopped by an interrupted snapshot. Check the backrest Forgejo plan, `docker logs backrest`, `docker logs ofelia`, and `/data/forgejo-backup.lock` inside Backrest."
-        failure-threshold: 1
-        success-threshold: 1
-        send-on-resolved: true
-
-  # Hourly pets backup heartbeat. The pets plan (DB + assets in one
-  # consistent snapshot) pushes on EVERY run — success OR unchanged-skip —
-  # so it checks in hourly without false alarms during quiet periods.
-  # Failures still also surface immediately on "Backrest Nightly" (the
-  # repo-level any-error hook names the failing plan).
-  - name: Backrest Yiayia
-    group: Backup
-    token: ${GATUS_BACKREST_PUSH_TOKEN}
-    heartbeat:
-      interval: 3h
-    alerts:
-      - type: custom
-        description: "The hourly yiayia-stories backup stopped checking in. The plan pushes a heartbeat every hour on success or unchanged-skip; >3h of silence means it stopped running or backrest is down. Investigate: `docker logs backrest`, the backrest UI (backups.pod.haus), or query in HyperDX (watch.pod.haus)."
-        failure-threshold: 1
-        success-threshold: 1
-        send-on-resolved: true
-
-  - name: Backrest Pets
-    group: Backup
-    token: ${GATUS_BACKREST_PUSH_TOKEN}
-    heartbeat:
-      interval: 3h
-    alerts:
-      - type: custom
-        description: "The hourly pets backup stopped checking in. The pets plan pushes a heartbeat every hour on success or unchanged-skip; >3h of silence means it stopped running or backrest is down. Investigate: `docker logs backrest`, the backrest UI (backups.pod.haus), or query in HyperDX (watch.pod.haus)."
-        failure-threshold: 1
-        success-threshold: 1
-        send-on-resolved: true
-
-  # Daily safety-net check from flood/rar-backlog.sh (ofelia-driven at
-  # 04:50 AWST). Real-time extraction is handled by the rtorrent
-  # event.download.finished hook (flood/scripts/rtorrent-extract.sh);
-  # this is the cron backstop that scans for RAR folders older than 2h
-  # with no extracted content alongside — i.e., the hook didn't fire
-  # or failed silently. Missing heartbeat OR success=false both trigger
-  # Postmark alerts via the shared default-alert config. 25h staleness
-  # threshold tolerates one missed firing.
-  - name: RAR Extraction
-    group: Torrents
-    token: ${GATUS_OFELIA_PUSH_TOKEN}
-    heartbeat:
-      interval: 25h
-    alerts:
-      - type: custom
-        description: "RAR extraction pipeline is unhealthy. Either the rtorrent event.download.finished hook (rtorrent-extract.sh) didn't fire or failed (check `/flood-db/rtorrent-extract.log` inside the rtorrent container), the cron job itself is broken (check ofelia + `docker logs ofelia | grep rar-backlog`), or the scanner found folders with RAR files >2h old and no extracted content alongside. Manual scan: `docker exec rtorrent /scripts/rar-backlog.sh`. Full backlog paths land in the job output collected by Ofelia."
-        failure-threshold: 1
-        success-threshold: 1
-        send-on-resolved: true
-
-  - name: Pinelake RAR Extraction
-    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
-    group: Torrents
-    token: ${GATUS_OFELIA_PUSH_TOKEN}
-    heartbeat:
-      interval: 25h
-    alerts:
-      - type: custom
-        description: "Pinelake's RAR extraction and publish-backlog job stopped checking in or reported an error. Inspect pinelake-rtorrent and pinelake-ofelia through Komodo; corrupt or incomplete archives are disposable, but completed media must publish before torrent working data is removed."
-        failure-threshold: 1
-        success-threshold: 1
-        send-on-resolved: true
-
-  # Kangaroo's Backrest. Separate from bilby's because it's a separate
-  # restic repo on a separate host. Hooks fire success/failure POSTs to
-  # this endpoint via bilby's LAN-published :8080. The kangaroo Backrest pipeline schedules at 06:00 — 25h interval
-  # tolerates one missed firing before alerting.
-  - name: Backrest Kangaroo Nightly
-    group: Backup
-    token: ${GATUS_BACKREST_KANGAROO_PUSH_TOKEN}
-    heartbeat:
-      interval: 25h
-    alerts:
-      - type: custom
-        description: "Kangaroo's nightly Backrest pipeline didn't check in. Either no snapshots ran on kangaroo (check `docker logs backrest` filtered by host=kangaroo in HyperDX (watch.pod.haus)), or the success-hook on the backrest-state plan failed. Manually trigger a snapshot of any kangaroo plan from gatus.pod.haus to test."
-        failure-threshold: 3
-        success-threshold: 2
-        send-on-resolved: true
-
-  - name: Backrest Pinelake Nightly
-    enabled: false  # pinelake is offline; see docs/runbooks/pinelake.md
-    group: Backup
-    token: ${GATUS_OFELIA_PUSH_TOKEN}
-    heartbeat:
-      interval: 25h
-    alerts:
-      - type: custom
-        description: "Pinelake's nightly Backrest pipeline stopped checking in. Inspect pinelake-backup through Komodo and verify the local TerraMaster restic repository."
-        failure-threshold: 3
-        success-threshold: 2
-        send-on-resolved: true
-
   # --- ofelia job dead-man's-switches ---
   # Every ofelia job pushes a heartbeat on each run; missing pushes mean
   # the job silently stopped firing. The 2026-05/06 incident proved this:
@@ -1443,36 +1729,12 @@ external-endpoints:
   # labels only at startup). Only that one job had a heartbeat then; these
   # close the gap for the rest. Shared GATUS_OFELIA_PUSH_TOKEN.
 
-  # clickstack-mongo-dump — nightly HyperDX mongo logical dump (03:50 AWST).
-  # The mongo image has no wget/curl, so /scripts/mongo-dump.sh pushes via
-  # a bash /dev/tcp request. 25h tolerates one missed firing.
-  - name: ClickStack Mongo Dump
-    group: Observability
-    token: ${GATUS_OFELIA_PUSH_TOKEN}
-    heartbeat:
-      interval: 25h
-    alerts:
-      - type: custom
-        description: "HyperDX mongo nightly dump didn't check in — the dashboards/alerts/source config (tiny but hand-built, not reconstructible from telemetry) may have no fresh archive. Check ofelia + `docker logs clickstack-mongo`, and /var/lib/clickstack/mongo-dumps for the latest archive."
-        failure-threshold: 3
-        success-threshold: 2
-        send-on-resolved: true
-
-  # plex-stats-cleanup — monthly statistics prune + VACUUM (1st, 05:30
-  # AWST). 32-day interval tolerates the monthly cadence; gatus sqlite
-  # storage persists last-seen across restarts so this won't false-red on
-  # a deploy.
-  - name: Plex Stats Cleanup
-    group: Plex
-    token: ${GATUS_OFELIA_PUSH_TOKEN}
-    heartbeat:
-      interval: 768h
-    alerts:
-      - type: custom
-        description: "Monthly Plex statistics prune + VACUUM hasn't run in over a month — the Plex DB stats tables will slowly bloat. Low urgency. Check ofelia + `docker exec plex /scripts/stats-cleanup.sh`."
-        failure-threshold: 1
-        success-threshold: 1
-        send-on-resolved: true
+  # --- ofelia job pushes (short windows) ---
+  # The ofelia-driven jobs below push on each run; a missed window means the
+  # job silently stopped (ofelia reads labels only at startup, so a job can
+  # vanish when its container was down at an ofelia restart). Shared
+  # GATUS_OFELIA_PUSH_TOKEN. The daily/monthly ofelia jobs are ClickStack
+  # queries in `endpoints:` instead.
 
   # pinelake-stignore — reconciles Pouch's .stignore allowlist with
   # pinelake-tagged finished torrents; ofelia ticks every 5 min (plus the

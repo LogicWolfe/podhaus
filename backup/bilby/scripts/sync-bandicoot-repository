@@ -1,31 +1,18 @@
 #!/bin/sh
 # This runs only as Backrest's backrest-state hook. It is the sole writer of
 # copied snapshots in Bilby's repository and always attempts its OneDrive sync.
+# A non-zero exit fails the hook, which Backrest logs as a task error; the
+# Backrest Nightly check in Gatus reads that from ClickStack.
 set -eu
 
 destination_repository=/repos/podhaus
 destination_repository_id=4f9bd4ec0f9b81cbf02e52b05a54892070a13f83c15f1e7c8f1b8578155cef63
 
-report_failure() {
-  status=$?
-  trap - EXIT
-  wget -qO- --post-data='' \
-    --header "Authorization: Bearer $GATUS_BACKREST_PUSH_TOKEN" \
-    "$GATUS_BASE_URL/api/v1/endpoints/$GATUS_BACKREST_ENDPOINT_ID/external?success=false&error=offsite+mirror+failed" \
-    >/dev/null || true
-  exit "$status"
-}
-
 repository_id() {
   restic -r "$1" cat config --json | jq -er '.id'
 }
 
-trap report_failure EXIT
-
 [ -e "$destination_repository/.podhaus-share-mounted" ]
-[ -n "${GATUS_BACKREST_PUSH_TOKEN:-}" ]
-[ -n "${GATUS_BASE_URL:-}" ]
-[ -n "${GATUS_BACKREST_ENDPOINT_ID:-}" ]
 
 password_command='jq -er '\''.repos[] | select(.id == "podhaus") | .password'\'' /config/config.json'
 export RESTIC_PASSWORD_COMMAND="$password_command"
@@ -47,5 +34,3 @@ else
 fi
 
 [ "$copy_failed" = false ] || exit 1
-
-trap - EXIT

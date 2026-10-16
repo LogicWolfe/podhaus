@@ -44,14 +44,12 @@ class OffsiteContractTest(unittest.TestCase):
                     stale_plan=failure.removeprefix("stale:") if failure.startswith("stale:") else "",
                 )
                 self.assertNotEqual(run.returncode, 0)
-                self.assertEqual(run.calls.count("wget"), 1)
                 self.assertNotIn("copy", run.calls)
                 self.assertIn("rclone", run.calls)
 
     def test_fresh_source_copies_forgets_checks_destination_then_uploads(self) -> None:
         run = self.run_sync()
         self.assertEqual(run.returncode, 0)
-        self.assertNotIn("wget", run.calls)
         self.assertLess(run.calls.index("copy"), run.calls.index("forget"))
         destination_check = next(
             index for index, call in enumerate(run.calls) if call.startswith("snapshots:destination:")
@@ -59,18 +57,17 @@ class OffsiteContractTest(unittest.TestCase):
         self.assertLess(run.calls.index("forget"), destination_check)
         self.assertLess(destination_check, run.calls.index("rclone"))
 
-    def test_copy_failure_still_uploads_and_reports_failure(self) -> None:
+    def test_copy_failure_still_uploads_and_exits_non_zero(self) -> None:
+        """The hook's exit status is the failure signal Backrest logs and Gatus reads."""
         run = self.run_sync(fail_copy=True)
         self.assertNotEqual(run.returncode, 0)
-        self.assertEqual(run.calls.count("wget"), 1)
         self.assertIn("copy", run.calls)
         self.assertNotIn("forget", run.calls)
         self.assertIn("rclone", run.calls)
 
-    def test_upload_failure_reports_failure(self) -> None:
+    def test_upload_failure_exits_non_zero(self) -> None:
         run = self.run_sync(fail_rclone=True)
         self.assertNotEqual(run.returncode, 0)
-        self.assertEqual(run.calls.count("wget"), 1)
         self.assertIn("rclone", run.calls)
 
     def run_sync(
@@ -111,9 +108,6 @@ class OffsiteContractTest(unittest.TestCase):
                 [executable],
                 env=os.environ | {
                     "PATH": f"{commands}:{os.environ['PATH']}",
-                    "GATUS_BACKREST_PUSH_TOKEN": "bilby-token",
-                    "GATUS_BASE_URL": "http://gatus",
-                    "GATUS_BACKREST_ENDPOINT_ID": "bilby",
                     "MISSING_PLAN": missing_plan,
                     "STALE_PLAN": stale_plan,
                     "FAIL_COPY": str(fail_copy).lower(),
@@ -164,7 +158,6 @@ esac
             "#!/bin/sh\nprintf '%s\\n' rclone >> \"$CALL_LOG\"\n"
             "[ \"$FAIL_RCLONE\" != true ] || exit 1\n"
         )
-        (commands / "wget").write_text("#!/bin/sh\nprintf '%s\\n' wget >> \"$CALL_LOG\"\n")
         for command in commands.iterdir():
             command.chmod(0o755)
 

@@ -33,8 +33,6 @@ services:
     # label=disable lifts SELinux confinement for that.
     security_opt:
       - label=disable
-    environment:
-      GATUS_BACKREST_ENDPOINT_ID: ${GATUS_BACKREST_ENDPOINT_ID}
     image: podhaus-backrest:local
     pull_policy: never
     build:

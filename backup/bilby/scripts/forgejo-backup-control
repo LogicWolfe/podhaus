@@ -13,18 +13,10 @@ CONTROL=/data/forgejo-backup.control
 # belong to a run that died between the stop and finish hooks. The slowest
 # nightly run observed is 69s.
 STALE_LOCK_SECONDS=900
-GATUS_URL="${GATUS_BASE_URL:?set GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_FORGEJO_ENDPOINT_ID:?set GATUS_BACKREST_FORGEJO_ENDPOINT_ID}/external"
 
-push_result() {
-  local success=$1 error=${2:-}
-  curl -fsS -X POST \
-    -H "Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN:?set GATUS_BACKREST_PUSH_TOKEN}" \
-    --get \
-    --data-urlencode "success=$success" \
-    --data-urlencode "error=$error" \
-    "$GATUS_URL" >/dev/null
-}
-
+# Outcomes are reported by exit status alone: a failing hook is a Backrest
+# error line and a failing recovery tick is an ofelia failed=true line, both
+# of which the Backrest Forgejo check in Gatus reads from ClickStack.
 wait_healthy() {
   local attempt
   for attempt in $(seq 1 60); do
@@ -79,16 +71,15 @@ finish_backup() {
   fi
 
   if [[ -n "$recovery_error" ]]; then
-    push_result false "$recovery_error" || true
+    echo "$recovery_error" >&2
     return 1
   fi
 
   rm -f "$LOCK"
   if [[ -n "$snapshot_error" ]]; then
-    push_result false "Forgejo snapshot failed: $snapshot_error" || true
+    echo "Forgejo snapshot failed: $snapshot_error" >&2
     return 1
   fi
-  push_result true
 }
 
 # Matches on the process basename, which identifies restic whatever path
@@ -111,11 +102,11 @@ recover_interrupted() {
   echo "recovering Forgejo from interrupted backup"
   if start_forgejo; then
     rm -f "$LOCK"
-    push_result false "Recovered Forgejo after an interrupted Backrest snapshot" || true
+    echo "Recovered Forgejo after an interrupted Backrest snapshot" >&2
   else
-    push_result false "Forgejo backup recovery could not restore service health" || true
-    return 1
+    echo "Forgejo backup recovery could not restore service health" >&2
   fi
+  return 1
 }
 
 # The snapshot's own hooks must run, so they wait for the control lock. The
@@ -126,7 +117,9 @@ exec 9>"$CONTROL"
 case "${1:-}" in
   stop)
     flock 9
-    recover_interrupted
+    # A recovery is reported by the recovery tick's own failure; the snapshot
+    # that found the stale lock still proceeds.
+    recover_interrupted || true
     stop_forgejo
     ;;
   finish)

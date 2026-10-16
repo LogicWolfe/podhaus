@@ -95,7 +95,6 @@ services:
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
       GATUS_BASE_URL: http://gatus:8080
       GATUS_LABEL_SYNC_ENDPOINT_ID: torrents_plex-label-sync
-      GATUS_RAR_ENDPOINT_ID: torrents_rar-extraction
       GATUS_STIGNORE_ENDPOINT_ID: torrents_pinelake-stignore
       # Only Bilby mutates source-side Syncthing exclusions; Pinelake disables this.
       PINELAKE_STIGNORE_SOURCE: 'true'

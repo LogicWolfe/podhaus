@@ -74,7 +74,17 @@ Power the host on and let OrbStack and Periphery start. Then, in one push:
    stage full-deploys it, since it is new to Komodo.
 3. Delete the twelve `enabled: false  # pinelake is offline` lines from
    `gatus/conf/config.yaml`; `grep -n 'pinelake is offline'` finds them.
-4. Push, then check komodo.pod.haus → Servers shows pinelake `Ok` and the
+4. Strip the Gatus push plumbing the other hosts lost while pinelake was
+   away (docs/plans/gatus-dead-mans-switches.md): the two `wget … GATUS_`
+   hooks in `backup/pinelake/config.json.tmpl`, the three `GATUS_*` lines in
+   `backup/pinelake/stack.toml`, the `GATUS_RAR_ENDPOINT_ID` line in
+   `pinelake/flood/compose.yaml`, and then the three `GATUS_*` placeholder
+   references in `backup/compose.shared.yaml`'s `backrest-init` environment,
+   which exist only so the env lint tolerates pinelake's declarations. Until
+   this is done the hooks push to endpoints that no longer exist and log a
+   Backrest error each night, which the *Backrest Pinelake Nightly* check
+   reports.
+5. Push, then check komodo.pod.haus → Servers shows pinelake `Ok` and the
    `Komodo procedures` check is green.
 
 Expect a burst of Gatus "resolved" alerts from the heartbeat checks as their

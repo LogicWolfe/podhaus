@@ -108,10 +108,13 @@
         </li>
         <li>Push the target stack. Ofelia reads the recreated
           target's labels from the Docker event.</li>
-        <li>If the job is critical, add a Gatus push heartbeat — the script should POST
-          success/failure to a bearer-token-protected push endpoint, and Gatus's
-          dead-man's-switch interval (25h is the convention) catches missed pings. Pattern in
-          <code>flood/scripts/rar-backlog.sh</code>.</li>
+        <li>If the job is critical, add a Gatus check that reads ofelia's
+          <code>Job stop job=&lt;name&gt; … failed=&lt;bool&gt;</code> line from ClickStack
+          (the <em>ClickStack Mongo Dump</em> and <em>RAR Extraction</em> endpoints in
+          <code>gatus/conf/config.yaml</code> are the pattern): the script's exit status and
+          stdout are the verdict, nothing to push. A push heartbeat is right only for a job
+          ticking every few minutes; see
+          <a href="/monitoring.html#push-token">Monitoring → adding a monitor</a>.</li>
       </ol>
 
     </main>

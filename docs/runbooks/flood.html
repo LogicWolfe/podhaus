@@ -214,7 +214,8 @@
       <p>
         <strong><code>flood/scripts/rar-backlog.sh</code></strong> — daily ofelia job at
         04:50 in each host's local timezone, the cron-driven backstop for the whole pipeline.
-        Two checks are folded into the host's RAR-extraction Gatus heartbeat:
+        Two checks are folded into its verdict, which the host's <em>RAR Extraction</em> Gatus
+        check reads from the job's ofelia stop line in ClickStack:
       </p>
       <ul>
         <li><strong>Extraction</strong> — scans <code>/data/torrents</code> for folders
@@ -254,7 +255,7 @@
           (directory bind, so host edits propagate without restart):
           <code>flood-publish.py</code> (per-file hardlink publisher + <code>--gaps</code>
           reporter), <code>rtorrent-extract.sh</code> (finished-hook RAR extraction),
-          <code>rar-backlog.sh</code> (daily safety-net + Gatus heartbeat), and
+          <code>rar-backlog.sh</code> (daily safety-net scan), and
           <code>pinelake-stignore.py</code>.</li>
       </ul>
       <blockquote>
@@ -417,8 +418,8 @@
         <li><a href="/scheduling.html">Scheduling</a> — the ofelia labels that schedule
           the publish tick, <code>rar-backlog.sh</code>, and
           <code>pinelake-stignore.py</code>.</li>
-        <li><a href="/monitoring.html">Monitoring</a> — the Gatus push endpoint that receives
-          the heartbeat.</li>
+        <li><a href="/monitoring.html">Monitoring</a> — the Gatus checks: the label-sync and
+          stignore ticks push a heartbeat, the daily scan is read from ClickStack.</li>
         <li><a href="/runbooks/syncthing.html#stignore">Syncthing → .stignore</a> — the file
           this stack writes into, and how hand-curated and auto-injected entries co-exist.</li>
       </ul>

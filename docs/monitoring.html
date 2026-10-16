@@ -97,9 +97,25 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           for unauthenticated requests, which the default <code>[STATUS] &lt; 400</code>
           condition accepts as healthy — masking backend failure. Bit us on 2026-05-30
           (see <a href="/postmortems/2026-05-30-power-outage-nfs-recovery.md">postmortem</a>).</li>
+        <li><strong>ClickStack-backed dead-man's switch</strong> — a POST to ClickHouse's
+          HTTP port on bandicoot (<code>${BANDICOOT_LAN_IPV4}:8123</code>, the <code>default</code>
+          user) with an SQL body that returns one row, one column <code>why</code>: <code>ok</code>
+          or a sentence naming what is wrong. The condition is <code>[BODY].why == ok</code>, so
+          the failed condition Gatus forwards to Fenwick carries the reason. Every "has X
+          happened in the last day" check is one of these: the Backrest nightlies and per-plan
+          checks (from Backrest's own log lines), the Brinno downloader (from its cycle and
+          archive spans), the daily and monthly ofelia jobs (from ofelia's <code>Job stop</code>
+          lines). A pull check runs at Gatus start and every run is stateless, which is the
+          point: Gatus checks a push endpoint's heartbeat window on a timer that starts at
+          boot, so each deploy restarting Gatus deferred those checks by a whole window
+          (issue 1237 upstream, unfixed). Design, table and queries:
+          <a href="/plans/gatus-dead-mans-switches.md">plan</a>.</li>
         <li><strong>Push (external endpoints)</strong> — bearer-token-protected URLs that
-          jobs/scripts POST to with <code>success=true|false&amp;error=...</code>. Used for
-          Backrest nightly heartbeats, Sky cache invalidation, and the RAR-extraction backlog scan.</li>
+          jobs/scripts POST to with <code>success=true|false&amp;error=...</code>. Kept only
+          where the window is short enough that a restart's deferral does not matter: Sky cache
+          invalidation (3 m), StreamFab Publish (5 m), the Plex label sync and pinelake stignore
+          ticks (30 m), the Sky Restic repository check (2 h), and MeTube's event-only plexify
+          verdict.</li>
         <li><strong>Komodo-API check</strong> — Gatus calls Komodo Core's <code>/read</code>
           API and asserts a downstream state. Periphery checks cover every Komodo
           host through <code>GetServerState</code>. Remote-container checks use
@@ -238,11 +254,13 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         <em>Gatus Heartbeat Push Token</em>) rather than minting another. The older
         per-service tokens (<code>GATUS_BACKREST_PUSH_TOKEN</code>,
         <code>GATUS_OFELIA_PUSH_TOKEN</code>, <code>GATUS_BACKREST_KANGAROO_PUSH_TOKEN</code>)
-        are kept as-is — no migration. The brinno site-time-lapse downloader's
-        <code>timelapse_brinno</code> heartbeat (group <em>Timelapse</em>, 48h staleness
-        window) is the reference example: it pushes to
-        <code>gatus:8080/api/v1/endpoints/timelapse_brinno/external?success=true</code> with
-        that bearer.
+        are kept as-is — no migration. Keep a push's window short (minutes, an hour or two):
+        a Gatus restart defers the next staleness check by one full window. For anything
+        judged daily, write a ClickStack-backed dead-man's switch instead — the service's
+        own log line or span is the proof, and the <em>Backrest Nightly</em> and
+        <em>Brinno</em> endpoints in <code>gatus/conf/config.yaml</code> are the reference
+        examples. Run the SQL against ClickHouse by hand first; it must answer
+        <code>{"why":"ok"}</code> today.
       </p>
       <p>
         Sky's backup check is storage-driven. The hourly
@@ -739,11 +757,12 @@ $DK restart alloy backrest                           # reattach by name + rebuil
       <h2 id="see-also">See also</h2>
       <ul>
         <li><a href="/backup-and-recovery.html#alerts">Backup &amp; recovery → alerts</a> —
-          how Backrest's nightly heartbeat plugs into Gatus.</li>
+          what the Backrest checks read from Backrest's logs.</li>
         <li><a href="/runbooks/local-llm.md">Local model service</a>: the watcher's
           states, health reasons and the two Gatus checks behind the alerts above.</li>
-        <li><a href="/scheduling.html">Scheduling</a> — the ofelia job that pushes the daily
-          RAR-backlog heartbeat, and the nightly ClickStack <code>mongodump</code> job.</li>
+        <li><a href="/scheduling.html">Scheduling</a> — the ofelia jobs, including the daily
+          RAR-backlog scan and the nightly ClickStack <code>mongodump</code>, whose
+          <code>Job stop</code> lines the Gatus checks read.</li>
       </ul>
 
     </main>

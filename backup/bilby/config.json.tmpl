@@ -25,15 +25,7 @@
         },
         "readDataSubsetPercent": 10
       },
-      "hooks": [
-        {
-          "conditions": ["CONDITION_ANY_ERROR"],
-          "onError": "ON_ERROR_IGNORE",
-          "actionCommand": {
-            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_ENDPOINT_ID}/external?success=false&error=backrest+{{ .Task }}+failed+for+{{ .Plan.Id }}'"
-          }
-        }
-      ],
+      "hooks": [],
       "autoUnlock": true,
       "autoInitialize": true
     }
@@ -256,24 +248,6 @@
       "skipIfUnchanged": true
     },
     {
-      "id": "clickstack",
-      "repo": "podhaus",
-      "paths": ["/userdata/clickstack"],
-      "schedule": {
-        "cron": "5 5 * * *",
-        "clock": "CLOCK_LOCAL"
-      },
-      "retention": {
-        "policyTimeBucketed": {
-          "daily": 14,
-          "weekly": 4,
-          "monthly": 6
-        }
-      },
-      "hooks": [],
-      "skipIfUnchanged": true
-    },
-    {
       "id": "forgejo",
       "repo": "podhaus",
       "paths": ["/userdata/forgejo/local", "/userdata/forgejo/jump"],
@@ -328,13 +302,6 @@
           "actionCommand": {
             "command": "/hooks/sync-bandicoot-repository"
           }
-        },
-        {
-          "conditions": ["CONDITION_SNAPSHOT_SUCCESS", "CONDITION_SNAPSHOT_SKIPPED"],
-          "onError": "ON_ERROR_IGNORE",
-          "actionCommand": {
-            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_ENDPOINT_ID}/external?success=true'"
-          }
         }
       ],
       "skipIfUnchanged": true
@@ -355,15 +322,7 @@
           "monthly": 6
         }
       },
-      "hooks": [
-        {
-          "conditions": ["CONDITION_SNAPSHOT_SUCCESS", "CONDITION_SNAPSHOT_SKIPPED"],
-          "onError": "ON_ERROR_IGNORE",
-          "actionCommand": {
-            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_PETS_ENDPOINT_ID}/external?success=true'"
-          }
-        }
-      ],
+      "hooks": [],
       "skipIfUnchanged": true
     },
     {
@@ -382,15 +341,7 @@
           "monthly": 24
         }
       },
-      "hooks": [
-        {
-          "conditions": ["CONDITION_SNAPSHOT_SUCCESS", "CONDITION_SNAPSHOT_SKIPPED"],
-          "onError": "ON_ERROR_IGNORE",
-          "actionCommand": {
-            "command": "wget -qO- --post-data='' --header='Authorization: Bearer ${GATUS_BACKREST_PUSH_TOKEN}' '${GATUS_BASE_URL}/api/v1/endpoints/${GATUS_BACKREST_YIAYIA_ENDPOINT_ID}/external?success=true'"
-          }
-        }
-      ],
+      "hooks": [],
       "skipIfUnchanged": true
     }
   ]

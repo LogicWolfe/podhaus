@@ -44,7 +44,6 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
           <tr><td><code>umami</code></td><td><code>/var/lib/umami-pgdata</code></td><td>04:45</td></tr>
           <tr><td><code>mumble</code></td><td>Murmur SQLite + server TLS cert</td><td>04:55</td></tr>
           <tr><td><code>logging</code></td><td>Alloy runtime state (<code>logging_alloy-data</code>) — config-as-code parsers live in git, so this is just WAL/positions</td><td>05:00</td></tr>
-          <tr><td><code>clickstack</code></td><td>HyperDX app-state via nightly <code>mongodump</code> (dashboards/alerts/users/sources/ingestion-key). ClickHouse telemetry is deliberately <em>not</em> backed up — regenerable.</td><td>05:05</td></tr>
           <tr><td><code>gatus</code></td><td><code>gatus_gatus-data</code></td><td>05:10</td></tr>
           <tr><td><code>backrest-state</code></td><td>Backrest's own DB</td><td>06:00</td></tr>
           <tr><td><code>bugsink</code></td><td>Bugsink SQLite + event store</td><td>05:25</td></tr>
@@ -59,7 +58,8 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
       </p>
       <p>
         Forgejo's plan uses start/end hooks to stop the service, snapshot both storage tiers,
-        restart it, wait for health, and report a dedicated Gatus heartbeat. A recovery job
+        restart it and wait for health; a hook that fails is a Backrest error line, which the
+        <em>Backrest Forgejo</em> Gatus check reads from ClickStack. A recovery job
         ticks every five minutes, offset to :03 and :08 so it never runs while the snapshot
         has Forgejo stopped. It restarts Forgejo only when the quiesce lock is more than
         fifteen minutes old and no <code>restic</code> process is running &mdash; a healthy
@@ -72,9 +72,9 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
         snapshot dated today for every Bandicoot plan before copying those snapshots into Bilby's
         repository and applying retention only to <code>created-by:bandicoot</code> snapshots.
         If that source copy fails, it still mirrors Bilby's already-verified repository to OneDrive,
-        then returns failure. Its existing nightly heartbeat reports only after the complete copy
-        and upload, so it proves Bilby's aggregate off-site copy and upload without hiding a
-        Bandicoot failure.
+        then returns failure. The hook is fatal, so that failure is a Backrest error line and the
+        <em>Backrest Nightly</em> check goes red; a quiet night proves Bilby's aggregate off-site
+        copy and upload without hiding a Bandicoot failure.
       </p>
 
       <h2 id="bandicoot-plans">Bandicoot plans</h2>
@@ -109,7 +109,7 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
       </table>
       <p>
         The <code>backrest-state</code> success hook then mirrors Kangaroo's repository to
-        OneDrive and reports its Gatus heartbeat. The repository lives on the SSD-backed Jump
+        OneDrive. The repository lives on the SSD-backed Jump
         volume directly, so there is no NFS roundtrip from inside the container.
       </p>
 
@@ -230,24 +230,33 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
 
       <h2 id="alerts">Alerting</h2>
       <p>
-        Two failure surfaces, both go through Gatus → Fenwick (Signal) — the default
-        service-alert path; see <a href="/monitoring.html#alerting-flow">Monitoring</a>:
+        Backrest pushes nothing. Alloy ships every Backrest container's log to ClickStack, and
+        one Gatus check per host (<em>Backrest Nightly</em>, <em>Backrest Nightly
+        (bandicoot)</em>, <em>Backrest Kangaroo Nightly</em>, <em>Backrest Pinelake
+        Nightly</em>) asks ClickHouse every ten minutes about the last 25 hours of those
+        lines; the alert goes through Gatus → Fenwick (Signal) like every other, see
+        <a href="/monitoring.html#alerting-flow">Monitoring</a>. The check is red when:
       </p>
       <ul>
-        <li><strong>Per-plan error</strong>: Backrest's <code>CONDITION_ANY_ERROR</code> hook
-          posts <code>success=false&amp;error=...</code> to the Gatus push endpoint. Alerts
-          within minutes (failure-threshold: 3).</li>
-        <li><strong>Missing nightly heartbeat</strong>: the Gatus push endpoint has a 25-hour
-          interval window — if no successful ping arrives, the dead-man's-switch fires. Catches
-          the case where Backrest itself is down.</li>
+        <li><strong>Backrest logged an error</strong> — any <code>ERROR … task failed</code>
+          line: a failed backup, prune or check, or a fatal hook (bilby's off-site mirror).
+          The condition text quotes the latest one.</li>
+        <li><strong>A plan backed up without its forget</strong> — Backrest schedules a plan's
+          <code>forget</code> task only once a snapshot exists, so a <code>running task backup
+          for plan</code> line with no matching <code>forget for plan</code> line is a backup
+          that produced nothing. The condition text names the plan.</li>
+        <li><strong>No plan backed up at all</strong> in the window: Backrest is down, or its
+          logs are not reaching ClickStack (then the host's <em>Telemetry Pipeline</em> check
+          is red too).</li>
       </ul>
       <p>
-        Each backup stack declares its heartbeat endpoint in <code>stack.toml</code>.
-        Endpoint identifiers must match Gatus's generated group/name keys, including
-        punctuation: Bandicoot uses <code>backup_backrest-nightly-(bandicoot)</code>.
-        The pre-commit checks compare all backup heartbeat identifiers with the external
-        endpoints in <code>gatus/conf/config.yaml</code>. See
-        <a href="/monitoring.html">Monitoring</a> for the Gatus side.
+        <em>Backrest Forgejo</em>, <em>Backrest Pets</em> and <em>Backrest Yiayia</em> ask the
+        same of one plan's lines (3 h for the hourly plans); the Forgejo check also fails on a
+        <code>failed=true</code> stop of the ofelia recovery job, which exits non-zero when it
+        had to restart a Forgejo left stopped. A partial backup (some files unreadable) is a
+        Backrest warning, not an error, and is not caught. The queries are in
+        <code>gatus/conf/config.yaml</code>; the reasoning in
+        <a href="/plans/gatus-dead-mans-switches.md">the plan</a>.
       </p>
 
       <h2 id="add-plan">Adding a plan for a new stack</h2>

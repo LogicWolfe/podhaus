@@ -13,11 +13,10 @@
 #      the user would ever "Remove and delete data". See
 #      docs/runbooks/flood.html.
 #
-# Pushes result to Gatus heartbeat endpoint:
-#   0 unhealthy → success=true
-#   ≥1 unhealthy → success=false + body listing first few paths
-# If the script itself never runs (container dead, ofelia broken), Gatus
-# misses the 25h heartbeat and alerts as a dead-man's switch.
+# The verdict is this script's stdout, which ofelia records on its
+# "Job stop" line and Alloy ships to ClickStack: "healthy" or "UNHEALTHY"
+# with the offending paths. The RAR Extraction check in Gatus reads the
+# latest such line, so a scan that never runs is caught the same way.
 #
 # Scheduled via an Ofelia label on each rTorrent container; runs at 04:50 in the
 # scheduler's local timezone.
@@ -25,15 +24,6 @@
 set -u
 
 AGE_MINUTES=120  # 2 hours — RARs younger than this may still be extracting
-TOKEN="${GATUS_OFELIA_PUSH_TOKEN:-}"
-
-if [ -z "$TOKEN" ]; then
-    echo "[rar-backlog] ERROR: GATUS_OFELIA_PUSH_TOKEN not set in env" >&2
-    exit 1
-fi
-: "${GATUS_BASE_URL:?GATUS_BASE_URL is required}"
-: "${GATUS_RAR_ENDPOINT_ID:?GATUS_RAR_ENDPOINT_ID is required}"
-GATUS_URL="${GATUS_BASE_URL%/}/api/v1/endpoints/${GATUS_RAR_ENDPOINT_ID}/external"
 
 unhealthy_list=/tmp/rar-backlog-unhealthy.$$
 dir_list=/tmp/rar-backlog-dirs.$$
@@ -88,28 +78,11 @@ unhealthy_count=$(wc -l < "$unhealthy_list" | tr -d ' ')
 
 if [ "$unhealthy_count" -eq 0 ]; then
     echo "[rar-backlog] healthy: no unextracted RAR folders or publish gaps"
-    wget -qO- --post-data='' \
-        --header="Authorization: Bearer ${TOKEN}" \
-        "${GATUS_URL}?success=true" > /dev/null
     rm -f "$unhealthy_list"
     exit 0
 fi
 
 echo "[rar-backlog] UNHEALTHY: ${unhealthy_count} extraction/publish issues"
 sed 's/^/  /' "$unhealthy_list"
-
-# Build a short URL-safe error string: count + first 3 item basenames.
-# Gatus renders this in [RESULT_ERRORS] in the alert email. Full list
-# remains in the stdout above (→ Alloy → ClickStack).
-sample=$(head -3 "$unhealthy_list" | awk -F/ '{print $NF}' | tr '\n' ',' | sed 's/,$//')
-error_msg="${unhealthy_count} extraction/publish issues; sample: ${sample}"
-# Percent-encode spaces → +, plus the delimiters that break query parsing
-# (%, &, #, ?, ", ;, ,). Busybox has no `jq -r @uri`, so do it crudely.
-error_enc=$(printf '%s' "$error_msg" \
-    | sed 's/%/%25/g; s/ /+/g; s/&/%26/g; s/#/%23/g; s/?/%3F/g; s/"/%22/g; s/;/%3B/g; s/,/%2C/g')
-
-wget -qO- --post-data="" \
-    --header="Authorization: Bearer ${TOKEN}" \
-    "${GATUS_URL}?success=false&error=${error_enc}" > /dev/null
 rm -f "$unhealthy_list"
 exit 0
