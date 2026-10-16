@@ -1248,7 +1248,9 @@ external-endpoints:
   # stack). It pushes a heartbeat per archived video — roughly daily, since
   # it downloads the previous day's footage once the camera finishes
   # uploading it. >48h of silence means no new footage is landing (a
-  # two-day grace tolerates a late upload / a missed day). Endpoint key
+  # two-day grace tolerates a late upload / a missed day). A day whose
+  # download keeps failing verification past the service's overdue window
+  # arrives as success=false with an error naming the day. Endpoint key
   # (for the service's push URL) is `timelapse_brinno`. Uses the
   # general-purpose heartbeat push token — these tokens aren't per-service
   # (the URL's endpoint key is what routes a heartbeat to the right check),
@@ -1260,7 +1262,7 @@ external-endpoints:
       interval: 48h
     alerts:
       - type: custom
-        description: "Site time-lapse footage stopped arriving. The brinno-downloader checks in once per archived video (~daily); >48h of silence means no new footage is being downloaded — the camera may be offline, unpowered, or moved, its MCS cloud upload may have stalled, or the downloader is stuck. Investigate: `docker logs brinno-downloader`, the camera's power/connectivity, or the MCS app (mcs.my.brinno.com)."
+        description: "Site time-lapse footage is not being archived. The brinno-downloader checks in once per archived video (~daily): >48h of silence means no new footage is being downloaded — the camera may be offline, unpowered, or moved, its MCS cloud upload may have stalled, or the downloader is stuck. A reported error instead names a day the downloader has been retrying for over two days without a download that verifies (an empty or truncated render, or a render the cloud never finishes). Investigate: `docker logs brinno-downloader`, the cycle trace in ClickStack, the camera's power/connectivity, or the MCS app (mcs.my.brinno.com)."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true
