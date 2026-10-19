@@ -9,6 +9,10 @@ ansible_python_interpreter: /usr/bin/python3
 podhaus_docker_engine_managed: true
 podhaus_docker_live_restore: true
 podhaus_docs_sources:
+  - name: claude-worktrees
+    type: directory
+    source: /home/nathan/.claude-worktrees
+    required_path: .
   - name: home
     type: directory
     source: /home/nathan/repos

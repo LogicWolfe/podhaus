@@ -62,6 +62,10 @@ podhaus_repos_dir: /home/nathan/repos
 # paths remain user state; Ansible owns the read-only adapters, not the
 # repositories beneath $HOME.
 podhaus_docs_sources:
+  - name: claude-worktrees
+    type: directory
+    source: /home/nathan/.claude-worktrees
+    required_path: .
   - name: home
     type: directory
     source: /home/nathan/repos

@@ -52,6 +52,10 @@ podhaus_docker_live_restore: true
 # User checkouts stay user state; Ansible exposes read-only docs slots.
 podhaus_repos_dir: /home/nathan/repos
 podhaus_docs_sources:
+  - name: claude-worktrees
+    type: directory
+    source: /home/nathan/.claude-worktrees
+    required_path: .
   - name: home
     type: directory
     source: /home/nathan/repos
