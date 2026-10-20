@@ -83,6 +83,8 @@ services:
       - komodo_postgres-data:/userdata/komodo/postgres:ro
       - komodo_ferretdb-state:/userdata/komodo/ferretdb:ro
       - onepassword_op-connect-data:/userdata/onepassword:ro
+      # Radarr: its database + config, kept in the radarr stack's named volume.
+      - radarr_radarr-config:/userdata/radarr:ro
     labels:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
       podhaus.depends-on-backrest-init: ${BUILD_HASH_BACKREST_INIT:-unset}
@@ -100,4 +102,6 @@ volumes:
   komodo_ferretdb-state:
     external: true
   onepassword_op-connect-data:
+    external: true
+  radarr_radarr-config:
     external: true
