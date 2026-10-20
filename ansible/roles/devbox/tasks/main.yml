@@ -84,3 +84,19 @@
   # op-vault supplies the selected machine service account at execution time.
   ansible.builtin.command: op --version
   changed_when: false
+
+- name: Permit the clipboard SSH reverse tunnel under SELinux
+  tags: [clipboard-tunnel]
+  when: ansible_facts.selinux.status == 'enabled'
+  block:
+    - name: Install SELinux port management support
+      ansible.builtin.dnf:
+        name: policycoreutils-python-utils
+        state: present
+
+    - name: Label the clipboard tunnel port for SSH
+      community.general.seport:
+        ports: "18339"
+        proto: tcp
+        setype: ssh_port_t
+        state: present

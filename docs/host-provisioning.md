@@ -141,6 +141,11 @@ ansible/
     pinelake_macos/        macOS power, OrbStack and Plex safety gates
 ```
 
+On development hosts with SELinux enabled, the `devbox` role labels TCP port
+18339 as `ssh_port_t`. This lets SSH bind the reverse tunnel that connects the
+remote clipboard tools to the Mac's cc-clip daemon. The listener remains on
+loopback; the port is not opened in the firewall.
+
 ### Inventory groups
 
 Hosts are grouped twice: by **whether Ansible manages them**, and by
