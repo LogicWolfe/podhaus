@@ -19,6 +19,15 @@
         <code>bsdtar</code>; the web container owns the interface and settings.
       </p>
       <p>
+        Bilby's Flood also publishes port <code>3000</code> on the LAN for
+        Fenwick, which runs on bandicoot and adds downloads through Flood's API
+        (<code>http://bilby.pod.haus:3000</code>; the bot's
+        <code>docs/downloads.html</code> has the tools). Flood runs with
+        <code>--auth=none</code>, so that port trusts anyone on the home LAN; if
+        that ever matters, give Flood a user and Fenwick the password, since the
+        bot already does the cookie exchange.
+      </p>
+      <p>
         <code>flood/Dockerfile.flood</code> builds Flood 4.16.2 from the private
         <a href="https://git.pod.haus/LogicWolfe/flood">LogicWolfe/flood fork</a>,
         branch <code>podhaus</code>. Its patch logs caught request failures and captures

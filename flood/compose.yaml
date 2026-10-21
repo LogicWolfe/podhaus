@@ -44,6 +44,11 @@ services:
         condition: service_healthy
     command: --auth=none --rtsocket=/tmp/rtorrent.sock
     user: "1000:1001"
+    # Published on the LAN for Fenwick on bandicoot, which adds downloads
+    # through the API (fenwick's docs/downloads.html). People keep using
+    # torrent.pod.haus; with --auth=none this port trusts the whole LAN.
+    ports:
+      - "3000:3000"
     environment:
       HOME: /flood-db
       FLOOD_SECRET: ${FLOOD_SECRET}
