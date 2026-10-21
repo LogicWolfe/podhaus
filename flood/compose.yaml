@@ -54,6 +54,11 @@ services:
       FLOOD_SECRET: ${FLOOD_SECRET}
       TZ: ${TZ}
       LOG_FORMAT: json
+      # Node tries each address of a far-away host for 250 ms by default,
+      # which is less than a round trip to a tracker abroad, so Flood's
+      # fetch of a torrent URL failed with ETIMEDOUT while wget from the
+      # same container succeeded (2026-10-21). Five seconds per attempt.
+      NODE_OPTIONS: --network-family-autoselection-attempt-timeout=5000
     # Failed upload bytes are private and disappear on every container restart.
     tmpfs:
       - /tmp/failed-uploads:rw,noexec,nosuid,nodev,size=128m,mode=0700,uid=1000,gid=1001

@@ -28,6 +28,17 @@
         bot already does the cookie exchange.
       </p>
       <p>
+        Adding a torrent by URL makes Flood fetch it with Node. Node tries each
+        of a host's addresses for 250 ms before moving on, which is shorter than
+        a round trip to a tracker abroad, so every such add failed with
+        <code>ETIMEDOUT</code> while <code>wget</code> in the same container
+        succeeded. The service sets
+        <code>NODE_OPTIONS=--network-family-autoselection-attempt-timeout=5000</code>
+        for that reason. A failed URL fetch is a 500 from
+        <code>/api/torrents/add-urls</code> with an empty message; the axios error
+        is in the container log.
+      </p>
+      <p>
         <code>flood/Dockerfile.flood</code> builds Flood 4.16.2 from the private
         <a href="https://git.pod.haus/LogicWolfe/flood">LogicWolfe/flood fork</a>,
         branch <code>podhaus</code>. Its patch logs caught request failures and captures
