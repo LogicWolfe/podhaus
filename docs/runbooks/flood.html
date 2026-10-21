@@ -113,6 +113,28 @@
         engine request per torrent within a single web upload, so do not infer an
         engine size-limit failure from the combined batch size. Use the logged exception.
       </p>
+      <h2 id="stalled-torrent">A torrent that will not download</h2>
+      <p>
+        <code>rtorrent.log</code> answers this from HyperDX: filter
+        <code>ServiceName = 'rtorrent'</code> and the body on the torrent's info hash
+        (shown in Flood's details pane). Three kinds of line carry it:
+      </p>
+      <ul>
+        <li><code>I torrent &lt;event&gt; &lt;hash&gt; …</code>: one per lifecycle event
+          (inserted, opened, resumed, paused, closed, hash queued/done/failed, finished,
+          erased) with the state, completed bytes, connected peers, the directory, the
+          publish destination and the engine's message for that torrent. A move, stop,
+          re-check or restart in Flood shows up here as the sequence it ran.</li>
+        <li><code>&lt;hash&gt;-&gt;tracker_http: … tracker reply : … complete:N
+          incomplete:N</code>, then <code>tracker_list: received new peers : size:N</code>
+          and <code>peer_list: inserted peers inserted:N … available:N</code>: what each
+          announce reported and how many peers it actually handed over. Many seeders
+          with <code>size:0</code> is the tracker withholding peers; peers inserted but
+          none connected is a connection problem.</li>
+        <li><code>received failure</code> (WARN): an announce that failed. The same
+          words with <code>previous family succeeded</code> are INFO: the container has
+          no IPv6, so every announce's IPv6 attempt fails after IPv4 has worked.</li>
+      </ul>
       <h2 id="atomic-publish">Atomic publish: redirect + hardlink</h2>
       <p>
         The core of the pipeline, and why Plex never sees a partial file:

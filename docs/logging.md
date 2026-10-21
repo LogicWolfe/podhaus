@@ -444,7 +444,10 @@ and a read-only bind in the compose overlay:
 - **The Flood job logs and `rtorrent.log`** (bilby and Pinelake):
   `flood-publish`, `rtorrent-extract`, `plex-label-sync` and `pinelake-stignore`
   write to files under flood-db because rtorrent's finish hooks discard their
-  stdout, and rtorrent's own log is opened by `flood/conf/rtorrent.rc`.
+  stdout, and rtorrent's own log is opened by `flood/conf/rtorrent.rc`: every
+  announce and what the tracker returned, peer-list and storage errors, and one
+  line per torrent lifecycle event (see the Flood runbook's stalled-torrent
+  section).
 - **ClickHouse's error log** (bandicoot): the only place ClickHouse's own errors
   land, read from the end and parsed by the same module as its stdout.
 

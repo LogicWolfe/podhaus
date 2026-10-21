@@ -23,10 +23,37 @@ network.xmlrpc.size_limit.set = 10000000
 # rtorrent's own log: tracker and peer failures otherwise go nowhere (the
 # daemon has no stdout on the container). Written into the session dir so
 # the logging stack's flood_job_logs module tails it alongside the job
-# logs. "info" cascades to notice/warn/error/critical and their subsystem
-# groups; lines are `<epoch> <C|E|W|N|I|D> <message>`.
-log.open_file = "log", /flood-db/rtorrent.log
+# logs, flushed per line so a stalled torrent shows up while it is stalled.
+# The level groups ("info") carry only `<epoch> <C|E|W|N|I|D> <message>`
+# lines and never include the subsystem groups, so each subsystem is named:
+# every announce with the tracker's seed and peer counts and how many peers
+# it handed over, what the peer list did with them, and peer-connection and
+# storage errors. Those lines are `<epoch> <hash>-><subsystem>: <message>`.
+log.open_file.flush = "log", /flood-db/rtorrent.log
 log.add_output = "info", "log"
+log.add_output = "tracker_requests", "log"
+log.add_output = "tracker_events", "log"
+log.add_output = "peer_list_events", "log"
+log.add_output = "protocol_network_errors", "log"
+log.add_output = "protocol_storage_errors", "log"
+log.add_output = "torrent_info", "log"
+log.add_output = "storage_info", "log"
+
+# One line per lifecycle event of each torrent, so a manual stop, move,
+# re-check or restart in Flood leaves the state it left the torrent in.
+method.insert = d.podhaus_log, simple|private, "log.print=info,\"torrent \",(argument.0),\" \",(d.hash),\" state=\",(d.state),\" open=\",(d.is_open),\" hashing=\",(d.hashing),\" completed_bytes=\",(d.completed_bytes),\" size_bytes=\",(d.size_bytes),\" peers=\",(d.peers_connected),\" directory=\",(d.directory),\" publishdir=\",(d.custom,publishdir),\" message=\",(d.message),\" name=\",(d.name)"
+method.set_key = event.download.inserted_new, log_lifecycle, "d.podhaus_log=inserted_new"
+method.set_key = event.download.opened, log_lifecycle, "d.podhaus_log=opened"
+method.set_key = event.download.resumed, log_lifecycle, "d.podhaus_log=resumed"
+method.set_key = event.download.paused, log_lifecycle, "d.podhaus_log=paused"
+method.set_key = event.download.closed, log_lifecycle, "d.podhaus_log=closed"
+method.set_key = event.download.hash_queued, log_lifecycle, "d.podhaus_log=hash_queued"
+method.set_key = event.download.hash_done, log_lifecycle, "d.podhaus_log=hash_done"
+method.set_key = event.download.hash_failed, log_lifecycle, "d.podhaus_log=hash_failed"
+method.set_key = event.download.hash_final_failed, log_lifecycle, "d.podhaus_log=hash_final_failed"
+method.set_key = event.download.hash_removed, log_lifecycle, "d.podhaus_log=hash_removed"
+method.set_key = event.download.finished, log_lifecycle, "d.podhaus_log=finished"
+method.set_key = event.download.erased, log_lifecycle, "d.podhaus_log=erased"
 
 schedule = watch_directory,1,1,"load.start=/data/.watch/*.torrent"
 schedule = untied_directory,5,5,"stop_untied=/data/.watch/*.torrent"

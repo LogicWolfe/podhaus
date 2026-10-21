@@ -257,6 +257,10 @@ BACKREST = "\t".join([
 ])
 PLEX_LINE = r'''Sep 09, 2026 17:44:40.556 [281472660173024] DEBUG - Transcoder: Cleaning up resources'''
 PLEX_IDENTITY = r'''Sep 09, 2026 17:44:41.002 [281472660173024] DEBUG - Request: [172.18.0.12:40112 (Subnet)] GET /identity (4 live) #1c0 Signed-in'''
+RTORRENT_LIFECYCLE = r'''1792567553 I torrent closed 4F198D17038DE088A67305E568540B7B25415642 state=0 open=0 hashing=0 completed_bytes=0 size_bytes=65536 peers=0 directory=/data/torrents publishdir=/data/Kids message=Tracker: [v6 : Could not connect to server] name=probe.bin'''
+RTORRENT_TRACKER_REPLY = r'''1792567160 C02A1B1043B4E130FE979582F8A5A03E7F58D518->tracker_http: 0xffffb13dea00 : tracker reply : state:updated url:https://tracker.example/announce : interval:3249 min_interval:1726 complete:7 incomplete:0 downloaded:8'''
+RTORRENT_FAMILY_FALLBACK = r'''1792567160 C02A1B1043B4E130FE979582F8A5A03E7F58D518->tracker_http: 0xffffb13dea00 : received failure : previous family succeeded : url:https://tracker.example/announce : Could not resolve hostname'''
+RTORRENT_TRACKER_FAILURE = r"""1792567555 4F198D17038DE088A67305E568540B7B25415642->tracker_list: received failure : requester:0xffff459ce600 group:0 url:https://tracker.example/announce msg:'v6 : Could not connect to server'"""
 CLICKHOUSE_ERROR = r'''2026.05.16 12:00:24.261660 [ 747 ] {} <Error> default.otel_logs (b1c2d3e4-0000-4000-8000-000000000000): Code: 252. DB::Exception: Too many parts (300)'''
 DOCKERD_ERROR = r'''time="2026-10-04T18:52:30.318099418+08:00" level=error msg="healthcheck failed fatally" error="session healthcheck failed fatally: Unavailable: connection error: desc = \"transport: Error while dialing: only one connection allowed\""'''
 LUMEN_SWEEP_DOCKER_ERROR = r'''docker: Error response from daemon: failed to create task for container: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: mkdir /home/nathan/repos/indy-board-overview: read-only file system'''
@@ -639,6 +643,15 @@ FIXTURES: tuple[Fixture, ...] = (
             "1757408695 W Could not find tracker for announce",
             Row("rtorrent", "1757408695 W Could not find tracker for announce", "WARN",
                 timestamp="2025-09-09T09:04:55+00:00")),
+    Fixture("rtorrent_lifecycle", File(f"{FLOOD_DB}/rtorrent.log", *RTORRENT), RTORRENT_LIFECYCLE,
+            Row("rtorrent", RTORRENT_LIFECYCLE, "INFO", timestamp="2026-10-21T07:25:53+00:00")),
+    Fixture("rtorrent_tracker_reply", File(f"{FLOOD_DB}/rtorrent.log", *RTORRENT), RTORRENT_TRACKER_REPLY,
+            Row("rtorrent", RTORRENT_TRACKER_REPLY, "INFO", timestamp="2026-10-21T07:19:20+00:00")),
+    Fixture("rtorrent_tracker_family_fallback", File(f"{FLOOD_DB}/rtorrent.log", *RTORRENT),
+            RTORRENT_FAMILY_FALLBACK,
+            Row("rtorrent", RTORRENT_FAMILY_FALLBACK, "INFO", timestamp="2026-10-21T07:19:20+00:00")),
+    Fixture("rtorrent_tracker_failure", File(f"{FLOOD_DB}/rtorrent.log", *RTORRENT), RTORRENT_TRACKER_FAILURE,
+            Row("rtorrent", RTORRENT_TRACKER_FAILURE, "WARN", timestamp="2026-10-21T07:25:55+00:00")),
     Fixture("rtorrent_extract", File(f"{FLOOD_DB}/rtorrent-extract.log", *RTORRENT),
             "[rtorrent-extract] no archive found under /data/torrents/stand-in — non-rar torrent, nothing to do",
             Row("rtorrent", "[rtorrent-extract] no archive found under /data/torrents/stand-in — non-rar torrent, nothing to do",
