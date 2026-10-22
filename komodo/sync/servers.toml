@@ -95,10 +95,7 @@ tags = ["pinelake", "podhaus"]
 [server.config]
 # Outbound mode: the appliance dials Core and accepts no management ingress.
 address = ""
-# Offline for an extended stay. Disabled so Core stops polling it, closes
-# the unreachable alert, and keeps the Komodo Alerts check meaningful for
-# the hosts that are up. Re-enable when it is back: docs/runbooks/pinelake.md.
-enabled = false
+enabled = true
 # Media indexing, downloads, and software transcodes legitimately saturate the
 # host. Reachability, stack state, disk, and native mount signals remain useful.
 send_cpu_alerts = false

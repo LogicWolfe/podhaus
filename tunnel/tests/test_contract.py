@@ -33,12 +33,6 @@ TaggedLoader.add_multi_constructor(
 )
 
 
-def stack_definition(client: str) -> dict:
-    """The client's stack.toml, or its stack.toml.offline while the host is held out of Komodo (docs/runbooks/pinelake.md)."""
-    (path,) = (TUNNEL / client).glob("stack.toml*")
-    return tomllib.loads(path.read_text())
-
-
 def rules() -> dict[str, set[tuple[str, int]]]:
     """Each rule's client and the listeners it grants, as (bind, port)."""
     document = yaml.load((TUNNEL / "numbat/restrictions.yaml").read_text(), TaggedLoader)
@@ -127,7 +121,7 @@ class ContractTests(unittest.TestCase):
     def test_each_client_uses_its_own_certificate(self):
         for client in CLIENTS:
             with self.subTest(client=client):
-                stack = stack_definition(client)
+                stack = tomllib.loads((TUNNEL / client / "stack.toml").read_text())
                 environment = stack["stack"][0]["config"]["environment"]
                 field = client.upper().replace("-", "_")
                 self.assertIn(f"TUNNEL_CERT_B64=[[OP__KOMODO__NUMBAT_TUNNEL__{field}_CERT_B64]]", environment)

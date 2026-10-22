@@ -105,7 +105,6 @@ services:
       GATUS_OFELIA_PUSH_TOKEN: ${GATUS_OFELIA_PUSH_TOKEN}
       GATUS_BASE_URL: https://gatus.pod.haus
       GATUS_LABEL_SYNC_ENDPOINT_ID: torrents_pinelake-plex-label-sync
-      GATUS_RAR_ENDPOINT_ID: torrents_pinelake-rar-extraction
       PINELAKE_STIGNORE_SOURCE: 'false'
       # Native Plex needs the macOS external-volume path.
       PLEX_MEDIA_ROOT: /Volumes/TerraMaster/Torrents

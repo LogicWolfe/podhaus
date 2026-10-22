@@ -13,9 +13,6 @@ ignore_services = ["backrest-init"]
 environment = """
 TZ=America/Edmonton
 RESTIC_REPO_PASSWORD=[[OP__KOMODO__RESTIC_REPO_PASSWORD__CREDENTIAL]]
-GATUS_BACKREST_PUSH_TOKEN=[[OP__KOMODO__GATUS_OFELIA_PUSH_TOKEN__TOKEN]]
-GATUS_BASE_URL=https://gatus.pod.haus
-GATUS_BACKREST_ENDPOINT_ID=backup_backrest-pinelake-nightly
 BACKREST_INSTANCE=pinelake
 """
 

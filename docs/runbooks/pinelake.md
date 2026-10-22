@@ -1,9 +1,5 @@
 # Pinelake
 
-> **Offline since 2026-10-14.** The host is powered down for an extended stay.
-> [While the host is offline](#while-the-host-is-offline) lists the three
-> settings that hold the fleet steady without it and the order to undo them.
-
 Pinelake is the Apple M1 Mac mini media appliance in the second household:
 Plex, Flood, Syncthing, Backrest, ingress, logging, scheduling and Autoheal, all
 as Komodo stacks on OrbStack. Its Periphery agent, wstunnel client and Alloy
@@ -42,54 +38,43 @@ sends a "resolved" alert when the host returns.
 
 ## While the host is offline
 
-Three settings, all in this repo, make an offline pinelake cost nothing. Each
-carries a comment pointing back here.
+Two settings, both in this repo, make an offline pinelake cost nothing. Give
+each a comment pointing back here.
 
-1. **The Komodo server is disabled**: `enabled = false` in
+1. **Disable the Komodo server**: `enabled = false` on the pinelake server in
    `komodo/sync/servers.toml`. Core stops polling it, marks it `Disabled`,
    closes the open unreachable alert, and reports its stacks as `unknown`, which
    the `Komodo stacks` check does not count as unhealthy.
-2. **The never-deployed `pinelake-tunnel` stack is out of the sync**: its
-   definition is `tunnel/pinelake/stack.toml.offline`. The sync reads only
-   `.toml` files, so the rename hides it, and the stack was deleted from Komodo
-   by hand because the podhaus sync never deletes resources on its own. Nothing
-   was lost: it had never deployed. The other pinelake stacks stay in the sync;
-   they have deployed before and no-op while their files are untouched.
-3. **The twelve pinelake Gatus checks are disabled**: each has
-   `enabled: false` with the comment `pinelake is offline`.
+2. **Disable the twelve pinelake Gatus checks**: give each `enabled: false`
+   with the comment `pinelake is offline`.
 
-While these are in place, **do not edit files under a pinelake stack's content
-hash** (`pinelake/`, the pinelake overlays, `tunnel/pinelake/`): the push deploy
-would try to deploy the changed stack to the disabled host and fail. Make those
-edits after the host is back, or accept a red `Komodo procedures` check until
-then.
+Every pinelake stack has deployed before, so each no-ops while its files are
+untouched. A pinelake stack that has never deployed would full-deploy on every
+push and fail; hold its `stack.toml` out of the sync by renaming it (the sync
+reads only `.toml` files) and delete the stack from Komodo by hand, since the
+podhaus sync never deletes resources on its own.
+
+While the host is offline, **do not edit files under a pinelake stack's content
+hash or compose text**: `pinelake/`, the pinelake overlays, `tunnel/pinelake/`,
+the shared `compose.shared.yaml` files those overlays combine with, and the
+extra paths in each stack's `x-podhaus-content-paths` (`flood/`,
+`logging/alloy-modules/`, `tunnel/launcher/`). The push deploy would try to
+deploy the changed stack to the disabled host and fail. Make those edits after
+the host is back, or accept a red `Komodo procedures` check until then.
 
 ## Bringing the host back
 
 Power the host on and let OrbStack and Periphery start. Then, in one push:
 
 1. Set `enabled = true` on the pinelake server in `komodo/sync/servers.toml`.
-2. Rename `tunnel/pinelake/stack.toml.offline` back to `stack.toml`. The push
-   deploy's sync stage recreates the `pinelake-tunnel` stack and its deploy
-   stage full-deploys it, since it is new to Komodo.
-3. Delete the twelve `enabled: false  # pinelake is offline` lines from
+2. Delete the `enabled: false  # pinelake is offline` lines from
    `gatus/conf/config.yaml`; `grep -n 'pinelake is offline'` finds them.
-4. Strip the Gatus push plumbing the other hosts lost while pinelake was
-   away (docs/plans/gatus-dead-mans-switches.md): the two `wget … GATUS_`
-   hooks in `backup/pinelake/config.json.tmpl`, the three `GATUS_*` lines in
-   `backup/pinelake/stack.toml`, the `GATUS_RAR_ENDPOINT_ID` line in
-   `pinelake/flood/compose.yaml`, and the eight `GATUS_*` environment lines
-   (with their comment) in both services of `backup/compose.shared.yaml`.
-   That shared file is compose text of the pinelake backup stack, so its
-   text was kept byte-identical while the host was away: changing it made
-   `BatchDeployStackIfChanged` deploy `pinelake-backup` to the disabled host
-   and fail the procedure (2026-10-16). Until this is done the hooks push to
-   endpoints that no longer exist and log a Backrest error each night, which
-   the *Backrest Pinelake Nightly* check reports.
-5. Push, then check komodo.pod.haus → Servers shows pinelake `Ok` and the
+3. Rename any held-out `stack.toml` back. The push deploy's sync stage
+   recreates the stack and its deploy stage full-deploys it, since it is new
+   to Komodo.
+4. Push, then check komodo.pod.haus → Servers shows pinelake `Ok` and the
    `Komodo procedures` check is green.
 
-Expect a burst of Gatus "resolved" alerts from the heartbeat checks as their
-first pushes land. Komodo's update history keeps a few `pinelake-tunnel`
-deploys stuck at `InProgress` from pushes made while the host was off; they
-are inert and need no cleanup.
+The push deploy redeploys every pinelake stack whose files changed while the
+host was away. Expect a burst of Gatus "resolved" alerts as the heartbeat
+checks see their first pushes.
