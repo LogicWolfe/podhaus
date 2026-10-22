@@ -32,11 +32,11 @@ services:
       ofelia.enabled: "true"
       # Gatus's `Backup / Sky Restic Maintenance` check reads these jobs'
       # results from ofelia's log lines in ClickStack.
-      ofelia.job-exec.sky-backups-check.schedule: "0 20 16 22 10 *"
+      ofelia.job-exec.sky-backups-check.schedule: "0 0 4 * * 0"
       ofelia.job-exec.sky-backups-check.command: "/scripts/maintain.sh check"
-      ofelia.job-exec.sky-backups-prune.schedule: "0 20 16 22 10 *"
+      ofelia.job-exec.sky-backups-prune.schedule: "0 0 4 8 * *"
       ofelia.job-exec.sky-backups-prune.command: "/scripts/maintain.sh prune"
-      ofelia.job-exec.sky-backups-read-subset.schedule: "0 20 16 22 10 *"
+      ofelia.job-exec.sky-backups-read-subset.schedule: "0 0 4 22 * *"
       ofelia.job-exec.sky-backups-read-subset.command: "/scripts/maintain.sh read-subset"
 
 networks:
