@@ -1,0 +1,19 @@
+[[stack]]
+name = "sky-backups"
+description = "Integrity checks and pruning for Sky's Restic repository on Pouch"
+tags = ["podhaus"]
+
+[stack.config]
+server = "podhaus"
+files_on_host = true
+run_directory = "/etc/komodo/repo/sky-backups"
+
+environment = """
+TZ=[[TZ]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
+RESTIC_REPOSITORY=[[OP__KOMODO__SKY_BACKUPS__RESTIC_REPOSITORY]]
+RESTIC_PASSWORD=[[OP__KOMODO__SKY_BACKUPS__RESTIC_PASSWORD]]
+AWS_ACCESS_KEY_ID=[[OP__KOMODO__SKY_BACKUPS__USERNAME]]
+AWS_SECRET_ACCESS_KEY=[[OP__KOMODO__SKY_BACKUPS__PASSWORD]]
+AWS_DEFAULT_REGION=[[OP__KOMODO__SKY_BACKUPS__AWS_DEFAULT_REGION]]
+"""

@@ -99,7 +99,7 @@ services:
       SKY_BACKUPS_ENDPOINT: https://pouch.pod.haus
       SKY_BACKUPS_BUCKET: sky-backups
       SKY_BACKUPS_PREFIX: personal-laptop
-      SKY_BACKUPS_MAX_AGE: 7d
+      SKY_BACKUPS_MAX_AGE: 14d
       SKY_BACKUPS_ACCESS_KEY: ${SKY_BACKUPS_ACCESS_KEY}
       SKY_BACKUPS_SECRET_KEY: ${SKY_BACKUPS_SECRET_KEY}
       GATUS_BASE_URL: http://gatus:8080

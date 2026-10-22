@@ -1596,6 +1596,43 @@ endpoints:
         success-threshold: 1
         send-on-resolved: true
 
+  # sky-backups/ maintains Sky's Restic repository: a weekly integrity check,
+  # a monthly prune and a monthly read of a tenth of the pack data. Each needs
+  # a successful run within its cadence plus a day's slack.
+  - name: Sky Restic Maintenance
+    group: Backup
+    url: http://${BANDICOOT_LAN_IPV4}:8123/
+    method: POST
+    interval: 1h
+    headers:
+      X-ClickHouse-User: default
+      X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
+    body: >-
+      SELECT concat(multiIf(checks = 0, 'no successful sky-backups-check in 8 days',
+      prunes = 0, 'no successful sky-backups-prune in 33 days',
+      reads = 0, 'no successful sky-backups-read-subset in 33 days', 'ok'),
+      if((checks = 0 OR prunes = 0 OR reads = 0) AND latest_error != '',
+      concat('; latest failure: ', latest_error), '')) AS why
+      FROM (SELECT
+      countIf(Body LIKE '%Job stop job=sky-backups-check %failed=false%'
+      AND TimestampTime > now() - INTERVAL 8 DAY) AS checks,
+      countIf(Body LIKE '%Job stop job=sky-backups-prune %failed=false%') AS prunes,
+      countIf(Body LIKE '%Job stop job=sky-backups-read-subset %failed=false%') AS reads,
+      anyLastIf(substring(Body, 1, 240), Body LIKE '%failed=true%') AS latest_error
+      FROM default.otel_logs WHERE ServiceName = 'ofelia'
+      AND match(Body, 'Job stop job=sky-backups-(check|prune|read-subset) ')
+      AND TimestampTime > now() - INTERVAL 33 DAY)
+      FORMAT JSONEachRow
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].why == ok"
+    alerts:
+      - type: custom
+        description: "A maintenance job for Sky's Restic repository (sky-backups stack on bilby) has not succeeded within its window; the condition text names it. A missed prune only grows the repository, but a failed check can mean damaged backups. Check `docker logs ofelia` on bilby, then run `docker exec sky-backups-maintenance /scripts/maintain.sh check` there."
+        failure-threshold: 2
+        success-threshold: 1
+        send-on-resolved: true
+
   # Daily safety-net scan of the rtorrent RAR-extraction and publish
   # pipeline (flood/scripts/rar-backlog.sh, ofelia at 04:50 local). Its
   # stdout says healthy or UNHEALTHY with the offending paths; the latest
@@ -1706,7 +1743,7 @@ external-endpoints:
       interval: 2h
     alerts:
       - type: custom
-        description: "Sky's Restic repository has no snapshot committed within the last 7 days, or the hourly RustFS snapshot check has stopped reporting. Check the laptop's backup scheduler and Restic logs, then inspect sky-backups/personal-laptop/snapshots/ at pouch.pod.haus. The client must not use --skip-if-unchanged."
+        description: "Sky's Restic repository has no snapshot committed within the last 14 days, or the hourly RustFS snapshot check has stopped reporting. Check the laptop's backup scheduler and Restic logs, then inspect sky-backups/personal-laptop/snapshots/ at pouch.pod.haus. The client must not use --skip-if-unchanged."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true

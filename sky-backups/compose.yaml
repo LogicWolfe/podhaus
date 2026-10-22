@@ -1,0 +1,47 @@
+services:
+  sky-backups-maintenance:
+    container_name: sky-backups-maintenance
+    image: restic/restic:latest
+    restart: unless-stopped
+    # Ofelia execs each maintenance job into this idle container.
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["exec sleep infinity"]
+    # Restic records this name on its repository locks.
+    hostname: sky-backups-maintenance
+    # SELinux: same label=disable pattern as every other bilby stack so the
+    # bind-mounted scripts dir is readable.
+    security_opt:
+      - label=disable
+    networks:
+      - dockernet
+    volumes:
+      - ${PODHAUS_REPO}/sky-backups/scripts:/scripts:ro
+      # Restic's metadata cache. The objects it holds stay encrypted.
+      - sky-backups-cache:/root/.cache/restic
+    environment:
+      TZ: ${TZ}
+      # Sky's own repository key and encryption password, from the
+      # Terraform-owned `Sky Backups` 1Password item.
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      ofelia.enabled: "true"
+      # Gatus's `Backup / Sky Restic Maintenance` check reads these jobs'
+      # results from ofelia's log lines in ClickStack.
+      ofelia.job-exec.sky-backups-check.schedule: "0 20 16 22 10 *"
+      ofelia.job-exec.sky-backups-check.command: "/scripts/maintain.sh check"
+      ofelia.job-exec.sky-backups-prune.schedule: "0 20 16 22 10 *"
+      ofelia.job-exec.sky-backups-prune.command: "/scripts/maintain.sh prune"
+      ofelia.job-exec.sky-backups-read-subset.schedule: "0 20 16 22 10 *"
+      ofelia.job-exec.sky-backups-read-subset.command: "/scripts/maintain.sh read-subset"
+
+networks:
+  dockernet:
+    external: true
+
+volumes:
+  sky-backups-cache:

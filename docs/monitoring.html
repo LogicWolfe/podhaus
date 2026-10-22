@@ -266,12 +266,14 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         Sky's backup check is storage-driven. The hourly
         <code>sky-backups-monitor</code> job lists encrypted snapshot objects under
         <code>sky-backups/personal-laptop/snapshots/</code> in Pouch RustFS and reports whether
-        the newest object was committed within seven days. The job pushes its result to Gatus
+        the newest object was committed within fourteen days. The job pushes its result to Gatus
         over dockernet; the laptop has no Gatus token or callback. Its
         <code>Backup / Sky Restic Repository</code> endpoint has a two-hour heartbeat window so
         a stopped monitor also becomes unhealthy.
         Before the first snapshot, the repository's <code>config</code> object supplies the
-        seven-day initialization grace period.
+        fourteen-day initialization grace period. The repository's maintenance jobs on bilby
+        are a separate pull check, <code>Backup / Sky Restic Maintenance</code>, over Ofelia's
+        <code>Job stop</code> lines.
       </p>
 
       <h2 id="ingest-staleness">Ingest-staleness alerts</h2>

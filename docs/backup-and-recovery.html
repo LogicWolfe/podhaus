@@ -150,10 +150,18 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
       <p>
         Gatus has a <code>Backup / Sky Restic Repository</code> check. An hourly monitor lists
         committed <code>snapshots/&lt;id&gt;</code> objects in RustFS and requires one written within
-        the last seven days. A normal restic backup creates a snapshot even when the source tree
+        the last fourteen days. The laptop is often off for a week at a time, so a shorter
+        window raises false alarms. A normal restic backup creates a snapshot even when the source tree
         hasn't changed, so the check measures completed backup runs without a client callback.
-        A new empty repository gets seven days from its <code>config</code> object's creation time
+        A new empty repository gets fourteen days from its <code>config</code> object's creation time
         to produce the first snapshot.
+      </p>
+      <p>
+        The laptop backs up and forgets its own old snapshots. The weekly
+        <code>restic check</code>, the monthly prune and the monthly read of a tenth of the
+        pack data run on bilby in the <code>sky-backups</code> stack, which Gatus's
+        <code>Backup / Sky Restic Maintenance</code> check watches. See the
+        <a href="/runbooks/pouch-rustfs#maintenance">Pouch RustFS runbook</a>.
       </p>
 
       <h2 id="gateway-no-backup">The gateway is intentionally unbacked</h2>
