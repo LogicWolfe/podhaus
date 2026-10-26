@@ -312,7 +312,10 @@ networks:
         (<code>bearer_token_format: idp_access_token</code>): pi or Claude Code send the
         token that the setup page's <code>llm-token</code> command fetches through Pocket ID's device
         sign-in as their API key, and the friends policy applies to it. Pomerium checks
-        each token with Pocket ID once, at first use, and honours it for 30 days. The
+        each token with Pocket ID once, at first use, and honours it for 30 days.
+        <code>books.pod.haus</code> takes the same token for bookshelf's API under the
+        Nathan-only policy, and Pomerium drops the <code>Authorization</code> header before
+        forwarding so bookshelf reads the signed identity header as it does for a browser. The
         <code>/setup</code> paths are a public route: the setup page there signs in through
         Pocket ID in the browser and shows the same kind of token, so Pocket ID's group
         limit on the client is its gate. The

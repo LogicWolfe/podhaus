@@ -160,9 +160,21 @@ routes:
     from: https://sonarr.pod.haus
   # bookshelf verifies the signed assertion header itself and admits only
   # Nathan's address, so the route must pass identity headers.
+  #
+  # Command-line clients have no browser, so they send a Pocket ID access
+  # token as a bearer token, as on the llm.pod.haus model route (the
+  # llm-token command prints one). Pomerium checks it with Pocket ID's
+  # userinfo endpoint once and keeps the session for cookie_expire; the
+  # policy still decides access. The Authorization header is removed on the
+  # way upstream because bookshelf treats any request carrying one as a
+  # service call that must present bookshelf's own token, and would refuse
+  # it. Without it bookshelf reads the signed assertion, as for a browser.
+  # Services that do call with bookshelf's token reach it on the LAN, not here.
   - <<: *nathan_route
     from: https://books.pod.haus
     pass_identity_headers: true
+    bearer_token_format: idp_access_token
+    remove_request_headers: [Authorization]
 
   # Per-host docs servers. One docs permission for every docs site: the same
   # friends policy as docs.pod.haus, so a link to any host's docs server opens
