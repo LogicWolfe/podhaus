@@ -9,4 +9,8 @@ name = "pypi"
 pyyaml = "*"
 # Control-node only. Nothing is installed on Ansible targets beyond the
 # Python interpreter Fedora already ships. See docs/host-provisioning.md.
-ansible-core = "*"
+# At least 2.22, the first ansible-core that imports on Python 3.15, which
+# `python = "latest"` in mise.toml resolves to. Naming the release candidate
+# lets pip take 2.22's candidates until 2.22.0 ships; after that this is
+# satisfied by every release and never holds a version back.
+ansible-core = ">=2.22.0rc1"
