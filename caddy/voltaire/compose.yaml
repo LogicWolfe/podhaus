@@ -36,7 +36,7 @@ services:
 
   voltaire-caddy:
     container_name: voltaire-caddy
-    image: caddy:2
+    image: caddy:latest
     restart: unless-stopped
     depends_on:
       voltaire-caddy-secrets-init:

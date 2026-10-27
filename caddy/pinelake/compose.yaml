@@ -26,7 +26,7 @@ services:
 
   pinelake-caddy:
     container_name: pinelake-caddy
-    image: caddy:2
+    image: caddy:latest
     restart: unless-stopped
     depends_on:
       pinelake-caddy-secrets-init:

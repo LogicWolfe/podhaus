@@ -13,7 +13,7 @@
 services:
   nathanbaxter-dev:
     container_name: nathanbaxter-dev
-    image: node:lts
+    image: node:latest
     working_dir: /app
     # On (re)start: idempotent install (fast no-op if package-lock is
     # unchanged and the node_modules named volume already populated),

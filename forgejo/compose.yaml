@@ -100,7 +100,10 @@ x-forgejo-volumes: &forgejo-volumes
 services:
   forgejo-preflight:
     container_name: forgejo-preflight
-    image: codeberg.org/forgejo/forgejo:16.0.1-rootless@sha256:71863f6b6c5837a27b3a2d133c3161c78a432aa878d57798d74b1d917ff842be
+    # Forgejo publishes no latest tag, only version lines. 17 is held back
+    # while 17.0.1 can fail to start (forgejo/forgejo#15048, open 2026-10-26);
+    # move this line to 17-rootless once that is settled.
+    image: codeberg.org/forgejo/forgejo:16-rootless
     user: "1000:100"
     entrypoint: ["/bin/sh", "-ec"]
     command:
@@ -124,7 +127,7 @@ services:
 
   forgejo:
     container_name: forgejo
-    image: codeberg.org/forgejo/forgejo:16.0.1-rootless@sha256:71863f6b6c5837a27b3a2d133c3161c78a432aa878d57798d74b1d917ff842be
+    image: codeberg.org/forgejo/forgejo:16-rootless
     user: "1000:100"
     restart: unless-stopped
     depends_on:
@@ -152,7 +155,7 @@ services:
 
   forgejo-auth-init:
     container_name: forgejo-auth-init
-    image: codeberg.org/forgejo/forgejo:16.0.1-rootless@sha256:71863f6b6c5837a27b3a2d133c3161c78a432aa878d57798d74b1d917ff842be
+    image: codeberg.org/forgejo/forgejo:16-rootless
     user: "1000:100"
     restart: "no"
     depends_on:

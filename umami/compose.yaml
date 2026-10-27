@@ -14,6 +14,8 @@
 services:
   umami-postgres:
     container_name: umami-postgres
+    # Major, not latest: a newer Postgres refuses the older data directory,
+    # so moving majors is a pg_upgrade of the volume, not a tag change.
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -39,14 +41,11 @@ services:
 
   umami:
     container_name: umami
-    # v3.2.0 — current major. GHCR only ships v3 as the unpinned
-    # `latest`; Docker Hub's official umamisoftware org (same account
-    # that publishes their cloud-* SaaS builds) carries a real arm64
-    # `3.2.0` pin, so we pin there rather than ride a moving `latest`.
-    # v3 is Postgres-only (no DATABASE_TYPE); serves the tracker at
-    # /script.js, ingests at /api/send, liveness at /api/heartbeat.
-    # Migrations run automatically on start.
-    image: docker.io/umamisoftware/umami:3.2.0
+    # Docker Hub's official umamisoftware org publishes multi-arch images
+    # (arm64 included). v3 is Postgres-only (no DATABASE_TYPE); serves the
+    # tracker at /script.js, ingests at /api/send, liveness at
+    # /api/heartbeat. Migrations run automatically on start.
+    image: docker.io/umamisoftware/umami:latest
     restart: unless-stopped
     depends_on:
       umami-postgres:

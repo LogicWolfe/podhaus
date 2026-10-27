@@ -36,7 +36,7 @@ services:
 
   quokka-caddy:
     container_name: quokka-caddy
-    image: caddy:2
+    image: caddy:latest
     restart: unless-stopped
     depends_on:
       quokka-caddy-secrets-init:

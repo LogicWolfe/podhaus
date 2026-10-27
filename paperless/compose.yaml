@@ -1,6 +1,8 @@
 services:
   paperless-postgres:
     container_name: paperless-postgres
+    # Major, not latest: a newer Postgres refuses the older data directory,
+    # so moving majors is a pg_upgrade of the volume, not a tag change.
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -26,7 +28,7 @@ services:
 
   paperless-redis:
     container_name: paperless-redis
-    image: redis:7
+    image: redis:latest
     restart: unless-stopped
     labels:
       autoheal: "true"
@@ -55,7 +57,7 @@ services:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   paperless-gotenberg:
     container_name: paperless-gotenberg
-    image: gotenberg/gotenberg:8
+    image: gotenberg/gotenberg:latest
     restart: unless-stopped
     command: gotenberg --chromium-disable-javascript=true --chromium-allow-list=file:///tmp/.*
     labels:

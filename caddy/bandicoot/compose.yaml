@@ -36,7 +36,7 @@ services:
 
   bandicoot-caddy:
     container_name: bandicoot-caddy
-    image: caddy:2
+    image: caddy:latest
     restart: unless-stopped
     depends_on:
       bandicoot-caddy-secrets-init:

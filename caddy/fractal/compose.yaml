@@ -38,7 +38,7 @@ services:
 
   fractal-caddy:
     container_name: fractal-caddy
-    image: caddy:2
+    image: caddy:latest
     restart: unless-stopped
     depends_on:
       fractal-caddy-secrets-init:

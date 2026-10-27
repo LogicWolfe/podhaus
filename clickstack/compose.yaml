@@ -25,7 +25,7 @@ x-podhaus-content-paths:
 services:
   clickstack-clickhouse:
     container_name: clickstack-clickhouse
-    image: clickhouse/clickhouse-server:26.1-alpine
+    image: clickhouse/clickhouse-server:latest-alpine
     restart: unless-stopped
     # SELinux enforcing on Fedora Asahi Remix: clickhouse writes its data
     # dir and reads the bound config.d; label=disable covers both.
@@ -89,6 +89,9 @@ services:
 
   clickstack-mongo:
     container_name: clickstack-mongo
+    # The exact image HyperDX's own compose file names. Not latest: MongoDB
+    # moves majors one at a time through feature-compatibility steps, so a
+    # jump from 5 to the current major does not start on this volume.
     image: mongo:5.0.32-focal
     restart: unless-stopped
     security_opt:
@@ -130,7 +133,7 @@ services:
 
   clickstack-otel:
     container_name: clickstack-otel
-    image: docker.clickhouse.com/clickhouse/clickstack-otel-collector:2
+    image: docker.clickhouse.com/clickhouse/clickstack-otel-collector:latest
     restart: unless-stopped
     environment:
       CLICKHOUSE_ENDPOINT: "tcp://clickstack-clickhouse:9000?dial_timeout=10s"
@@ -172,7 +175,7 @@ services:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   hyperdx:
     container_name: hyperdx
-    image: docker.hyperdx.io/hyperdx/hyperdx:2
+    image: docker.hyperdx.io/hyperdx/hyperdx:latest
     restart: unless-stopped
     # Hide the hardcoded "Ready to deploy on ClickHouse Cloud?" upsell
     # banner (AppNavCloudBanner — no env/state gate exists upstream; the

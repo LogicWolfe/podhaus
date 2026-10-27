@@ -25,7 +25,8 @@ x-podhaus-content-paths:
 
 services:
   runner:
-    image: code.forgejo.org/forgejo/runner@sha256:7fb853bfe73c229be6349398359c0a7bd01fadfd17c106607b2221150b799ed2
+    # The runner publishes no latest tag, only version lines.
+    image: code.forgejo.org/forgejo/runner:13
     command: ["forgejo-runner", "daemon", "--config", "/etc/forgejo-runner/config.yml"]
     restart: unless-stopped
     user: "0:0"

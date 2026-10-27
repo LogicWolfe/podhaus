@@ -11,7 +11,7 @@ services:
   # ownership, then exits 0 (declared in stack.toml ignore_services).
   bugsink-init:
     container_name: bugsink-init
-    image: bugsink/bugsink:2@sha256:cf9ad368d436f0e9dd6e686d0becf5062cc079518efbf032a084c5f73fcf7754
+    image: bugsink/bugsink:latest
     user: "0:0"
     entrypoint: ["/bin/sh", "-c", "chown -R 14237:14237 /data"]
     volumes:
@@ -23,11 +23,7 @@ services:
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
   bugsink:
     container_name: bugsink
-    # Bugsink ships no granular semver tags; `2` is the upstream stable
-    # major channel (receives patches, no breaking changes). Pinned by
-    # digest so upgrades are deliberate — bump the digest to take a new
-    # release.
-    image: bugsink/bugsink:2@sha256:cf9ad368d436f0e9dd6e686d0becf5062cc079518efbf032a084c5f73fcf7754
+    image: bugsink/bugsink:latest
     restart: unless-stopped
     depends_on:
       bugsink-init:
