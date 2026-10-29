@@ -197,6 +197,11 @@ carry over).
 Start only after [Sky's return to the Framework](sky-framework-return.md) has
 a verified Framework backup.
 
+While lent, quokka is on Wi-Fi with no fixed address. `quokka.pod.haus`
+points at the USB Ethernet adapter's reserved address, and the Pomerium SSH
+route is down with the tunnel container stopped. Either plug the adapter back
+in, or reach it on the LAN with `ssh-machine nathan@quokka.local`.
+
 1. **Remove Sky's account.** Disable her backup timers and Syncthing, then
    `userdel -r sky`. On Kangaroo, remove quokka's Syncthing device. Remove
    `/etc/ssh/sshd_config.d/00-sky-access.conf` (`sshd -t`, reload) and
