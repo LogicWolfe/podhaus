@@ -74,11 +74,12 @@ Framework.
 7. **Update her chezmoi status page.** `docs/current-status.md` says the
    Framework is authoritative again and quokka is retired from her setup.
 
-Quokka's snapshots stay in the repository under their own host name. Her
-backup script passes `--host` to `restic forget`, so the Framework's retention
-runs never remove them. Run `restic forget --host quokka-<machine-id> --prune` from
-`sky-backups-maintenance` on bilby only once she is satisfied nothing is
-missing.
+Quokka's snapshots stay in the repository under their own host name. Bilby's
+daily `restic forget` groups by host, so the Framework's snapshots never thin
+quokka's, and its yearly keep holds quokka's last snapshot for years. To
+drop them, pass the IDs from `restic snapshots --host quokka-<machine-id>` to
+`restic forget`, then run `prune`, from `sky-backups-maintenance` on bilby,
+and only once she is satisfied nothing is missing.
 
 ## Verification
 

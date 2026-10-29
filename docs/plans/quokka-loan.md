@@ -20,7 +20,12 @@ lid closed, and woke when the lid opened. Sky's keyring unlocked at login, her
 restored Signal Desktop reconnected as her existing linked device, and the full
 Bitwarden-backed `chezmoi-apply` ran after new-device verification. All 30 Work
 files missing from the synced copy were deleted by her Curtin laptop on 23 and
-26 October. Sky's login and Signal conversations were confirmed at the screen.
+26 October. Sky's login and Signal conversations were confirmed at the screen. Her
+suspend-then-hibernate setup was tested the same day with a one-minute delay:
+quokka slept, woke itself, wrote a 6 GiB image to the swapfile, switched off,
+and the power button brought her session back in the same boot. Bilby's
+`sky-backups-maintenance` now runs `restic forget` daily, grouped by host, and
+her backup script no longer forgets anything.
 
 If something in Sky's Work folder looks wrong later, start here. A checksum
 comparison of the backup's `~/Work` (snapshot `e236b98b`) against Kangaroo's
@@ -188,7 +193,7 @@ carry over).
 | Her setup converged | Her `validate-system` passes |
 | Backups work from quokka | A manual `restic-sky-backups.service` run succeeds, a snapshot with host `quokka-<machine-id>` appears when listed from `sky-backups-maintenance` on bilby, and the hourly `sky-backups-monitor` reports it as fresh |
 | Syncthing has its own identity | Quokka's device ID differs from every ID on Kangaroo; both folders reach Up to Date |
-| Quokka is a laptop again | `systemctl get-default` is `graphical.target`; `gdm` is active; `systemctl is-enabled suspend.target` is not `masked`; the logind override is gone. Lid-close suspend is confirmed by closing the lid |
+| Quokka is a laptop again | `systemctl get-default` is `graphical.target`; `gdm` is active; `systemctl is-enabled suspend.target` is not `masked`; the logind override is gone. Lid-close suspend is confirmed by closing the lid, and hibernation by a `systemctl suspend` with `HibernateDelaySec=1min` that ends in the laptop switched off and resuming to the same boot |
 | The fleet is quiet | After the parking push, Komodo shows quokka `Disabled`, and the `Komodo stacks` and `Komodo procedures` checks stay green |
 
 ## Returning quokka to the fleet
