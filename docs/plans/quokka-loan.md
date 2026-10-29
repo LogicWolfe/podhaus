@@ -10,6 +10,17 @@ Moving Sky back onto her Framework is a separate plan,
 [Sky's return to the Framework](sky-framework-return.md). Quokka's return
 waits for that plan's last step, a verified Framework backup.
 
+## Status
+
+The loan is in place as of 2026-10-29: quokka is parked, every change in the
+two tables below is applied, and every check in
+[Verification of the loan](#verification-of-the-loan) passed, including a
+reboot straight to the login screen. Two items are open. Bitwarden on quokka is
+not yet signed in, because it needs the new-device code emailed to Sky; her
+next `chezmoi-apply` asks for it. Lid-close suspend was not watched directly:
+quokka went silent as soon as lid handling came back with its lid closed.
+[Returning quokka to the fleet](#returning-quokka-to-the-fleet) is still to do.
+
 ## Why lend quokka instead of reinstalling it
 
 Quokka already runs Fedora 44 on x86-64, the same as the Framework, so Sky's
@@ -87,12 +98,14 @@ disk.
 
 | Fleet behaviour now | Change while lent | Undone by |
 |---|---|---|
-| Docker runs Periphery, docs, Lumen, Alloy, Ofelia, Autoheal, Caddy and the tunnel | `systemctl disable --now docker.service docker.socket` | Ansible `docker` role, then Komodo redeploys |
-| Boots to `multi-user.target`; GNOME starts only with a display attached and stops an hour after the lid closes (`gnome_on_demand` role) | Disable and stop the lid watcher, the desktop policy service and the stop timer; move the DRM udev rule aside; `set-default graphical.target`; enable `gdm` | Ansible `gnome_on_demand` role |
-| All sleep targets masked; lid and idle ignored (`base` role, `podhaus_is_laptop`) | Unmask the five sleep targets; move `/etc/systemd/logind.conf.d/10-podhaus-laptop.conf` aside | Ansible `base` role |
+| Docker runs Periphery, docs, Lumen, Alloy, Ofelia, Autoheal, Caddy and the tunnel | Every container stopped with `docker stop` (live restore keeps containers running when only the daemon stops), then `docker.service`, `docker.socket` and `containerd.service` disabled and stopped | Ansible `docker` role, then Komodo redeploys |
+| Boots to `multi-user.target`; GNOME starts only with a display attached and stops an hour after the lid closes (`gnome_on_demand` role) | Disable and stop the lid watcher, the desktop policy service and the stop timer; rename the DRM rule to `70-podhaus-desktop-policy.rules.lent`; `set-default graphical.target`; enable `gdm` | Rename the rule back, then the Ansible `gnome_on_demand` role |
+| All sleep targets masked; lid and idle ignored (`base` role, `podhaus_is_laptop`) | Unmask the five sleep targets; rename `/etc/systemd/logind.conf.d/10-podhaus-laptop.conf` to `10-podhaus-laptop.conf.lent` | Rename it back, then the Ansible `base` role |
 | Docs-source reconcile timer and boot unit (`docs_sources` role) | Disable them | Ansible `docs_sources` role |
 | Nathan's user manager lingers | `loginctl disable-linger nathan` | `loginctl enable-linger nathan` |
 | Nathan on the login screen | `SystemAccount=true` in `/var/lib/AccountsService/users/nathan` | Delete that line |
+| GDM logs Nathan in automatically (`AutomaticLoginEnable=True` in `/etc/gdm/custom.conf`, set by hand, not by Ansible) | `AutomaticLoginEnable=False`; the `AutomaticLogin=nathan` line stays | Set it back to `True` |
+| The saved `PodHaus` Wi-Fi connection does not autoconnect | `connection.autoconnect yes` | `nmcli connection modify PodHaus connection.autoconnect no` |
 
 Left as is: the TPM-bound disk unlock (no passphrase at boot), the memory
 pressure guard, `/tmp` placement, the timezone, the development packages, SSH
@@ -102,16 +115,19 @@ drop-in for user managers.
 Sky's chezmoi source makes three system-level changes of its own when it
 applies: it installs her packages and Flatpaks system-wide, writes
 `/etc/ssh/sshd_config.d/00-sky-access.conf` (password and key login on,
-keyboard-interactive and root login off), and enables `firewalld` with SSH
-allowed. Quokka is not in the fleet's `firewalld_hosts` group, so the return
-removes the drop-in and disables `firewalld`.
+keyboard-interactive and root login off), and enables `sshd.service`, which
+was disabled on quokka before. `firewalld` was already enabled with SSH allowed,
+so her setup changed nothing there. The return removes the drop-in and disables
+`sshd.service` again.
 
 ## Sky's account
 
-1. Create `sky` in `wheel`, with a temporary password that must be changed at
-   first login, and a temporary passwordless sudoers drop-in so her chezmoi
-   scripts, which call `sudo`, can run unattended. Enable linger for her during
-   setup so her user units can be started remotely.
+1. Create `sky` (UID 1001) in `wheel`, with her Framework login password from
+   the 1Password item `Sky Laptop` (vault Dev), so the GNOME login keyring
+   restored from the backup unlocks at her first login. Add a temporary
+   passwordless sudoers drop-in so her chezmoi scripts, which call `sudo`, can
+   run unattended, and enable linger during setup so her user units can be
+   started remotely.
 2. Restore `e236b98b` as `sky` into `~/Restore`, running as a transient
    systemd unit so an SSH drop does not stop it, with two exclusions:
    `~/.local/state/syncthing` (the Framework's device identity, which must
@@ -122,9 +138,11 @@ removes the drop-in and disables `firewalld`.
    on her Firefox, Zotero, Calibre and Publii databases.
 4. Apply her chezmoi source in its non-secret mode
    (`--override-data '{"sshAccessKeyItemUUID":"","resticS3CredentialItemUUID":""}'`)
-   to install her software, then the full `chezmoi-apply`, unlocking her
-   Bitwarden with the login Nathan stored in 1Password as `Bitwarden Sky`
-   (vault Dev). The restore runs before either, reading the Terraform-owned
+   to install her software and converge everything but the two Bitwarden
+   items, then the full `chezmoi-apply`, unlocking her Bitwarden with the
+   master password in the `bitwarden` field of `Sky Laptop`. Bitwarden asks for
+   new-device verification on quokka, a code emailed to her login address, so
+   the full apply waits for that code. The restore runs before either, reading the Terraform-owned
    1Password item `Sky Backups` (vault Homelab), which holds the same
    credential as her Bitwarden item; the full apply then rewrites
    `~/.config/restic/sky-backups.env` from Bitwarden.
@@ -138,7 +156,11 @@ removes the drop-in and disables `firewalld`.
    Override. Then switch both folders to send-and-receive and enable the
    service.
 6. Remove the sudoers drop-in and Sky's linger, and update her
-   `docs/current-status.md` to say quokka is her laptop for now.
+   `docs/current-status.md` to say quokka is her laptop for now. Without
+   linger her user manager runs only while she is logged in, as on the
+   Framework. Her backup service takes a sleep inhibitor, which the system
+   grants only to an active desktop session, so a timer run with no one logged
+   in would fail.
 
 Sky does three things herself: changes the password, joins Wi-Fi, and links
 Signal again (its private state is never restored, so desktop history does not
@@ -164,20 +186,27 @@ a verified Framework backup.
 1. **Remove Sky's account.** Disable her backup timers and Syncthing, then
    `userdel -r sky`. On Kangaroo, remove quokka's Syncthing device. Remove
    `/etc/ssh/sshd_config.d/00-sky-access.conf` (`sshd -t`, reload) and
-   `systemctl disable --now firewalld`. Her system-wide packages and Flatpaks
+   `systemctl disable sshd.service`. Her system-wide packages and Flatpaks
    may stay; they do not affect the fleet roles.
-2. **Undo the host changes.** Restore the moved logind and udev files, remove
-   `SystemAccount=true` for Nathan, and `loginctl enable-linger nathan`.
+2. **Undo the host changes.** Rename the two `.lent` files back, remove
+   `SystemAccount=true` for Nathan, set `AutomaticLoginEnable=True` in
+   `/etc/gdm/custom.conf`, turn `PodHaus` autoconnect off again, and
+   `loginctl enable-linger nathan`.
 3. **Reapply Ansible first.** `ansible-playbook playbooks/quokka.yml --check
    --diff`, read every delta, then run it for real. It masks the sleep
    targets, restores the lid policy and GNOME on demand, and re-enables Docker,
    Periphery and the docs-source units. If the `docker` role does not start the
    daemon on its own, start `docker.service` by hand. Periphery must answer
    before the next step, because that step deploys to it.
-4. **Unpark.** Revert the podhaus parking commit and push, then revert the
-   docs-server commit and push. The syncs recreate the four held-out stacks; as
+4. **Unpark.** Revert the podhaus parking commit (`68a419c`) and push, then
+   revert the docs-server commit (`2c19e1e`) and push. The syncs recreate the four held-out stacks; as
    stacks new to Komodo, the next podhaus push deploy and the docs push deploy
    fully deploy them.
+5. **Start the stacks that stayed in Komodo.** The containers were stopped by
+   hand, so Docker does not restart them, and an unchanged stack is never
+   redeployed. Run `BatchDeployStack` with pattern `quokka-*` from Komodo,
+   which also covers anything step 4 missed. If Periphery itself is not
+   running after the Ansible run, `docker start komodo-periphery` first.
 
 Verify:
 
