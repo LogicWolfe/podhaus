@@ -29,9 +29,8 @@ the backup, and 38 only in the backup: 30 deleted by her Curtin laptop on 23
 and 26 October, and 8 Task Coach `.tsk.lock`/`.tsk.delta` files that
 `.stglobalignore` keeps local. Six files differ in content and were not
 attributed to a device. The restored pre-sync copies of `~/Work` and the
-Leftover Words site are on quokka under
-`~sky/.local/share/cutover-quarantine/2026-10-29-quokka-syncthing-seed`, and
-both backups still hold them.
+Leftover Words site were then deleted from quokka; snapshots `e236b98b` and
+`ba565d45` still hold them.
 
 [Returning quokka to the fleet](#returning-quokka-to-the-fleet) is still to do.
 
@@ -200,7 +199,10 @@ a verified Framework backup.
 While lent, quokka is on Wi-Fi with no fixed address. `quokka.pod.haus`
 points at the USB Ethernet adapter's reserved address, and the Pomerium SSH
 route is down with the tunnel container stopped. Either plug the adapter back
-in, or reach it on the LAN with `ssh-machine nathan@quokka.local`.
+in, or resolve `quokka.local` over mDNS and connect to that address with
+`ssh-machine nathan@<address>`. Connecting by the `.local` name fails host-key
+verification, because the known key under `quokka.pod.haus` is the Pomerium
+edge's.
 
 1. **Remove Sky's account.** Disable her backup timers and Syncthing, then
    `userdel -r sky`. On Kangaroo, remove quokka's Syncthing device. Remove
