@@ -20,7 +20,20 @@ lid closed, and woke when the lid opened. Sky's keyring unlocked at login, her
 restored Signal Desktop reconnected as her existing linked device, and the full
 Bitwarden-backed `chezmoi-apply` ran after new-device verification. All 30 Work
 files missing from the synced copy were deleted by her Curtin laptop on 23 and
-26 October. [Returning quokka to the fleet](#returning-quokka-to-the-fleet) is still to do.
+26 October. Sky's login and Signal conversations were confirmed at the screen.
+
+If something in Sky's Work folder looks wrong later, start here. A checksum
+comparison of the backup's `~/Work` (snapshot `e236b98b`) against Kangaroo's
+copy, which quokka matches exactly, found 3,802 identical files, 46 new since
+the backup, and 38 only in the backup: 30 deleted by her Curtin laptop on 23
+and 26 October, and 8 Task Coach `.tsk.lock`/`.tsk.delta` files that
+`.stglobalignore` keeps local. Six files differ in content and were not
+attributed to a device. The restored pre-sync copies of `~/Work` and the
+Leftover Words site are on quokka under
+`~sky/.local/share/cutover-quarantine/2026-10-29-quokka-syncthing-seed`, and
+both backups still hold them.
+
+[Returning quokka to the fleet](#returning-quokka-to-the-fleet) is still to do.
 
 ## Why lend quokka instead of reinstalling it
 
