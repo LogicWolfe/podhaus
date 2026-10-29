@@ -123,7 +123,7 @@ tags = ["quokka", "podhaus"]
 
 [server.config]
 address = ""
-enabled = true
+enabled = false  # quokka is lent to Sky; see docs/plans/quokka-loan.md
 send_cpu_alerts = false
 disk_warning = 85.0
 disk_critical = 95.0

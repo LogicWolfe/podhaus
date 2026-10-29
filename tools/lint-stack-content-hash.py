@@ -66,6 +66,7 @@ SKIP_PATH_FRAGMENTS = (
     "kangaroo/periphery",
     "numbat/periphery",
     "quokka/periphery",
+    "autoheal/quokka",  # quokka is lent to Sky; its stack.toml is held out
     "voltaire/periphery",
 )
 

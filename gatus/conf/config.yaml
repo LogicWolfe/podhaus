@@ -540,6 +540,7 @@ endpoints:
       - "[BODY].status == Ok"
 
   - name: Quokka Periphery (via Komodo)
+    enabled: false  # quokka is lent to Sky
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Komodo
@@ -632,6 +633,7 @@ endpoints:
       - "[BODY].State.Health.Status == healthy"
 
   - name: Docs (quokka, via Komodo)
+    enabled: false  # quokka is lent to Sky
     url: http://${BANDICOOT_LAN_IPV4}:9120/read
     method: POST
     group: Docs
