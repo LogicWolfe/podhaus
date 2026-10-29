@@ -29,7 +29,7 @@ reports which of these it is.
 | Framework state | Starting point |
 |---|---|
 | Original SSD readable, Fedora boots | Her old home folder as of 2026-10-23, with her original Syncthing identity and chezmoi state. Go straight to the one-writer switch |
-| New or wiped SSD | Install Fedora Workstation with disk encryption, create `sky`, and follow the two-stage bootstrap in her chezmoi README. That needs her at the keyboard for the install and for Bitwarden. Syncthing then gets a new identity, onboarded receive-only through Kangaroo as her `docs/syncthing-onboarding.md` describes |
+| New or wiped SSD | Install Fedora Workstation with disk encryption, turn Secure Boot off in firmware, create `sky`, and follow the two-stage bootstrap in her chezmoi README. That needs her at the keyboard for the install and for Bitwarden. Syncthing then gets a new identity, onboarded receive-only through Kangaroo as her `docs/syncthing-onboarding.md` describes |
 
 ## The one-writer switch
 
@@ -65,7 +65,9 @@ Framework.
    once.
 5. **Re-enable her setup on the Framework.** Run `chezmoi-apply` (Sky
    authenticates Bitwarden), then `validate-system`. Her backup timers come
-   back on through chezmoi.
+   back on through chezmoi, and so does hibernation after sleep. Hibernation
+   needs Secure Boot off: with it on, the setup script stops the apply with
+   that message.
 6. **Take a Framework backup.** Run `restic-sky-backups.service` and confirm a
    new snapshot from host `framework-2f2dafc2` (or the new host name after a
    reinstall) in the repository.

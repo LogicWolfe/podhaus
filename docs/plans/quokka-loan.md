@@ -207,7 +207,14 @@ edge's.
 1. **Remove Sky's account.** Disable her backup timers and Syncthing, then
    `userdel -r sky`. On Kangaroo, remove quokka's Syncthing device. Remove
    `/etc/ssh/sshd_config.d/00-sky-access.conf` (`sshd -t`, reload) and
-   `systemctl disable sshd.service`. Her system-wide packages and Flatpaks
+   `systemctl disable sshd.service`. Remove her hibernation setup too, since
+   her logind drop-in sorts after the fleet's `10-podhaus-laptop.conf` and
+   would override its lid policy: `swapoff /var/swap/swapfile`, disable and
+   delete `var-swap-swapfile.swap`, delete the `/var/swap` subvolume and its
+   `semanage fcontext` rule, delete every `50-sky-hibernate.conf` (under
+   `/etc/systemd/logind.conf.d/`, `/etc/systemd/sleep.conf.d/`,
+   `/etc/systemd/system/systemd-suspend.service.d/` and `/etc/dracut.conf.d/`),
+   then `dracut --force --regenerate-all`. Her system-wide packages and Flatpaks
    may stay; they do not affect the fleet roles.
 2. **Undo the host changes.** Rename the two `.lent` files back, remove
    `SystemAccount=true` for Nathan, set `AutomaticLoginEnable=True` in
