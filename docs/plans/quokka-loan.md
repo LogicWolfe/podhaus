@@ -14,12 +14,13 @@ waits for that plan's last step, a verified Framework backup.
 
 The loan is in place as of 2026-10-29: quokka is parked, every change in the
 two tables below is applied, and every check in
-[Verification of the loan](#verification-of-the-loan) passed, including a
-reboot straight to the login screen. Two items are open. Bitwarden on quokka is
-not yet signed in, because it needs the new-device code emailed to Sky; her
-next `chezmoi-apply` asks for it. Lid-close suspend was not watched directly:
-quokka went silent as soon as lid handling came back with its lid closed.
-[Returning quokka to the fleet](#returning-quokka-to-the-fleet) is still to do.
+[Verification of the loan](#verification-of-the-loan) passed. Quokka rebooted
+straight to the login screen, suspended when lid handling came back with its
+lid closed, and woke when the lid opened. Sky's keyring unlocked at login, her
+restored Signal Desktop reconnected as her existing linked device, and the full
+Bitwarden-backed `chezmoi-apply` ran after new-device verification. All 30 Work
+files missing from the synced copy were deleted by her Curtin laptop on 23 and
+26 October. [Returning quokka to the fleet](#returning-quokka-to-the-fleet) is still to do.
 
 ## Why lend quokka instead of reinstalling it
 
