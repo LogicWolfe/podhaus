@@ -157,8 +157,8 @@ pinelake state ──→ pinelake Backrest ──→ TerraMaster local repositor
         to produce the first snapshot.
       </p>
       <p>
-        The laptop backs up and forgets its own old snapshots. The weekly
-        <code>restic check</code>, the monthly prune and the monthly read of a tenth of the
+        The laptop only backs up. Bilby forgets old snapshots under the retention policy, per host,
+        and runs the weekly <code>restic check</code>, the monthly prune and the monthly read of a tenth of the
         pack data run on bilby in the <code>sky-backups</code> stack, which Gatus's
         <code>Backup / Sky Restic Maintenance</code> check watches. See the
         <a href="/runbooks/pouch-rustfs#maintenance">Pouch RustFS runbook</a>.

@@ -9,6 +9,13 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "sky-backups/scripts/maintain.sh"
 
 
+FORGET = (
+    "--retry-lock 1h forget --tag personal-laptop --group-by host "
+    "--keep-within-hourly 2d --keep-daily 7 --keep-weekly 5 "
+    "--keep-monthly 12 --keep-yearly 3"
+)
+
+
 class SkyBackupsMaintenanceTests(unittest.TestCase):
     def run_maintenance(self, *arguments, month="10"):
         """Run the script against stub restic, flock and date commands and
@@ -46,11 +53,17 @@ class SkyBackupsMaintenanceTests(unittest.TestCase):
             calls = calls_path.read_text().splitlines() if calls_path.exists() else []
             return process, calls
 
-    def test_prune_clears_abandoned_locks_first(self):
+    def test_prune_forgets_first_so_it_never_runs_without_forget(self):
         process, calls = self.run_maintenance("prune")
 
         self.assertEqual(process.returncode, 0, process.stderr)
-        self.assertEqual(calls, ["unlock", "--retry-lock 1h prune"])
+        self.assertEqual(calls, ["unlock", FORGET, "--retry-lock 1h prune"])
+
+    def test_forget_applies_the_retention_policy_to_each_host(self):
+        process, calls = self.run_maintenance("forget")
+
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(calls, ["unlock", FORGET])
 
     def test_read_subset_rotates_through_august_and_september(self):
         august, august_calls = self.run_maintenance("read-subset", month="08")
@@ -62,7 +75,7 @@ class SkyBackupsMaintenanceTests(unittest.TestCase):
         self.assertEqual(september_calls[-1], "--retry-lock 1h check --read-data-subset=2/10")
 
     def test_unknown_operation_never_touches_the_repository(self):
-        process, calls = self.run_maintenance("forget")
+        process, calls = self.run_maintenance("defrag")
 
         self.assertEqual(process.returncode, 64)
         self.assertEqual(calls, [])

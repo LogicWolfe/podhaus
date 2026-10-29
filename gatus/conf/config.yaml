@@ -1598,9 +1598,9 @@ endpoints:
         success-threshold: 1
         send-on-resolved: true
 
-  # sky-backups/ maintains Sky's Restic repository: a weekly integrity check,
-  # a monthly prune and a monthly read of a tenth of the pack data. Each needs
-  # a successful run within its cadence plus a day's slack.
+  # sky-backups/ maintains Sky's Restic repository: a daily forget,
+  # a weekly integrity check, a monthly prune and a monthly read of a tenth of the
+  # pack data. Each needs a successful run within its cadence plus a day's slack.
   - name: Sky Restic Maintenance
     group: Backup
     url: http://${BANDICOOT_LAN_IPV4}:8123/
@@ -1611,18 +1611,21 @@ endpoints:
       X-ClickHouse-Key: ${CLICKHOUSE_PASSWORD}
     body: >-
       SELECT concat(multiIf(checks = 0, 'no successful sky-backups-check in 8 days',
+      forgets = 0, 'no successful sky-backups-forget in 2 days',
       prunes = 0, 'no successful sky-backups-prune in 33 days',
       reads = 0, 'no successful sky-backups-read-subset in 33 days', 'ok'),
-      if((checks = 0 OR prunes = 0 OR reads = 0) AND latest_error != '',
+      if((checks = 0 OR forgets = 0 OR prunes = 0 OR reads = 0) AND latest_error != '',
       concat('; latest failure: ', latest_error), '')) AS why
       FROM (SELECT
       countIf(Body LIKE '%Job stop job=sky-backups-check %failed=false%'
       AND TimestampTime > now() - INTERVAL 8 DAY) AS checks,
+      countIf(Body LIKE '%Job stop job=sky-backups-forget %failed=false%'
+      AND TimestampTime > now() - INTERVAL 2 DAY) AS forgets,
       countIf(Body LIKE '%Job stop job=sky-backups-prune %failed=false%') AS prunes,
       countIf(Body LIKE '%Job stop job=sky-backups-read-subset %failed=false%') AS reads,
       anyLastIf(substring(Body, 1, 240), Body LIKE '%failed=true%') AS latest_error
       FROM default.otel_logs WHERE ServiceName = 'ofelia'
-      AND match(Body, 'Job stop job=sky-backups-(check|prune|read-subset) ')
+      AND match(Body, 'Job stop job=sky-backups-(check|forget|prune|read-subset) ')
       AND TimestampTime > now() - INTERVAL 33 DAY)
       FORMAT JSONEachRow
     conditions:
@@ -1630,7 +1633,7 @@ endpoints:
       - "[BODY].why == ok"
     alerts:
       - type: custom
-        description: "A maintenance job for Sky's Restic repository (sky-backups stack on bilby) has not succeeded within its window; the condition text names it. A missed prune only grows the repository, but a failed check can mean damaged backups. Check `docker logs ofelia` on bilby, then run `docker exec sky-backups-maintenance /scripts/maintain.sh check` there."
+        description: "A maintenance job for Sky's Restic repository (sky-backups stack on bilby) has not succeeded within its window; the condition text names it. A missed forget or prune only grows the repository, but a failed check can mean damaged backups. Check `docker logs ofelia` on bilby, then run `docker exec sky-backups-maintenance /scripts/maintain.sh check` there."
         failure-threshold: 2
         success-threshold: 1
         send-on-resolved: true

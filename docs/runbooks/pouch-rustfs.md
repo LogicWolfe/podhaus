@@ -50,10 +50,9 @@ AWS_DEFAULT_REGION=us-east-1
 ```
 
 The `personal-laptop` repository is initialized, so the client must not run
-`restic init` again. Sky's client runs the backups and forgets its own old
-snapshots after each one. Integrity checks and pruning run on bilby instead
-(see Maintenance below), because the laptop is rarely on long enough for a
-monthly job to start. Don't enable RustFS bucket versioning: restic owns snapshot retention,
+`restic init` again. Sky's client only runs the backups. Bilby forgets old
+snapshots, checks integrity and prunes (see Maintenance below), because the
+laptop is rarely on long enough for a weekly or monthly job to start. Don't enable RustFS bucket versioning: restic owns snapshot retention,
 and S3 versions would retain packs that restic has pruned.
 
 Do not use `restic backup --skip-if-unchanged` on the client. A normal backup
@@ -96,11 +95,15 @@ same `Sky Backups` 1Password item as the laptop:
 
 | Job | Schedule | Runs |
 |---|---|---|
+| `sky-backups-forget` | 03:30 daily | `restic forget` with the retention policy, per host |
 | `sky-backups-check` | 04:00 Sunday | `restic check` |
-| `sky-backups-prune` | 04:00 on the 8th | `restic prune` |
+| `sky-backups-prune` | 04:00 on the 8th | `restic forget`, then `restic prune` |
 | `sky-backups-read-subset` | 04:00 on the 22nd | `restic check --read-data-subset=<n>/10`, a different tenth each month |
 
-`sky-backups/scripts/maintain.sh` runs each one. Jobs that coincide queue on a
+`sky-backups/scripts/maintain.sh` runs each one. Retention keeps hourly snapshots from the last two days, then 7 daily, 5 weekly, 12
+monthly and 3 yearly, applied to each host separately so one machine's history never
+decides what another keeps. Forget runs daily, so hourly snapshots are thinned as the policy expects, and prune runs it
+first, so a prune never works from a stale snapshot list. Jobs that coincide queue on a
 local lock. Each first runs `restic unlock`, which removes only locks their
 owner stopped refreshing; a running laptop backup refreshes its lock every five
 minutes and is never touched. Then it waits up to an hour for any live lock. A
@@ -108,7 +111,7 @@ laptop backup that starts during a prune waits 15 minutes for its lock and
 then fails, so the jobs run at 04:00, when the laptop is almost always off.
 
 Gatus's `Backup / Sky Restic Maintenance` check reads Ofelia's `Job stop` lines
-in ClickStack. It needs a successful check within eight days and a successful
+in ClickStack. It needs a successful forget and check within eight days and a successful
 prune and data read within 33 days. Run a job by hand on bilby with
 `docker exec sky-backups-maintenance /scripts/maintain.sh check`; a manual run
 writes no Ofelia line, so it doesn't satisfy the Gatus check.

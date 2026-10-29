@@ -1,7 +1,15 @@
 #!/bin/sh
 # Maintain Sky's Restic repository on Pouch. Ofelia runs one operation per
-# job; Sky's laptop only backs up and forgets its own snapshots.
+# job; Sky's laptop only backs up. Retention (forget) and pruning live here.
 set -eu
+
+# Thins each host's snapshots on its own, so one laptop's history never
+# decides what another keeps.
+forget() {
+    restic --retry-lock 1h forget --tag personal-laptop --group-by host \
+        --keep-within-hourly 2d --keep-daily 7 --keep-weekly 5 \
+        --keep-monthly 12 --keep-yearly 3
+}
 
 : "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY is required}"
 : "${RESTIC_PASSWORD:?RESTIC_PASSWORD is required}"
@@ -20,11 +28,14 @@ case "${1:-}" in
         subset=$(( (year * 12 + ${month#0}) % 10 + 1 ))
         set -- check --read-data-subset="${subset}/10"
         ;;
+    forget)
+        set -- forget
+        ;;
     prune)
         set -- prune
         ;;
     *)
-        echo "usage: maintain.sh check|read-subset|prune" >&2
+        echo "usage: maintain.sh check|read-subset|forget|prune" >&2
         exit 64
         ;;
 esac
@@ -41,4 +52,16 @@ restic unlock
 
 # Waits out a laptop backup that still holds its lock. A first backup of a
 # large tree has taken about an hour.
-exec restic --retry-lock 1h "$@"
+case "$1" in
+    forget)
+        forget
+        ;;
+    prune)
+        # Prune frees only what forget has released.
+        forget
+        restic --retry-lock 1h prune
+        ;;
+    *)
+        exec restic --retry-lock 1h "$@"
+        ;;
+esac
