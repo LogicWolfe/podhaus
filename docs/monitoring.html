@@ -559,6 +559,16 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         There is a single HyperDX account, <code>nathan@nathanbaxter.com</code>; credentials
         are in 1Password as <code>clickstack-hyperdx</code>.
       </p>
+      <p>
+        The same ClickHouse also serves <code>dash.pod.haus</code>, the
+        Evidence dashboards (their own repository, <code>dash</code>, with
+        the stack; Podhaus wires the deploy, front door and health check as
+        for bookshelf). They query as the <code>evidence</code> user, defined
+        as config in <code>clickstack/clickhouse-conf/users/evidence.xml</code>
+        with SELECT on the telemetry database and nothing else; its password
+        is the Terraform-generated <code>clickstack-evidence</code> Homelab
+        item, which both stacks read.
+      </p>
 
       <h3 id="known-issues">Known issues</h3>
       <ul>

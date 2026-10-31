@@ -313,3 +313,17 @@ git_provider = "github.com"
 git_account = "LogicWolfe"
 repo = "LogicWolfe/docs-server"
 branch = "main"
+
+# Bandicoot clone of the dash repo (the Evidence dashboards over ClickStack's
+# ClickHouse). Same linked_repo + run_build pattern as fenwick and bookshelf.
+[[repo]]
+name = "dash"
+description = "Komodo-managed clone of the dash repo on bandicoot's Periphery"
+tags = ["podhaus", "bandicoot", "dash"]
+
+[repo.config]
+server = "bandicoot"
+git_provider = "git.pod.haus"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/dash"
+branch = "main"

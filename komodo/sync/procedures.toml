@@ -274,6 +274,31 @@ executions = [
 ]
 
 
+# dash-push-deploy — push-to-deploy for the dash stack on bandicoot (the
+# Evidence dashboards), the same two stages as bookshelf-push-deploy.
+
+[[procedure]]
+name = "dash-push-deploy"
+description = "Push-to-deploy for the dash stack."
+tags = ["dash", "podhaus"]
+config.webhook_enabled = true
+config.schedule_enabled = false
+
+[[procedure.config.stage]]
+name = "Reconcile dash stack definition (sync TOML -> Komodo)"
+enabled = true
+executions = [
+  { execution.type = "RunSync", execution.params = { sync = "dash" }, enabled = true }
+]
+
+[[procedure.config.stage]]
+name = "Deploy dash (build + up; layer cache makes an unchanged push a no-op)"
+enabled = true
+executions = [
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "dash" }, enabled = true },
+]
+
+
 # nathanbaxter-deploy — push-to-deploy for nathanbaxter.com.
 #
 # Bound to the nathanbaxter Forgejo push webhook — the repo lives on

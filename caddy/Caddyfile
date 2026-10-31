@@ -154,6 +154,7 @@
 	@metube host metube.pod.haus
 	@sonarr host sonarr.pod.haus
 	@watch host watch.pod.haus
+	@dash host dash.pod.haus
 	@docs host docs.pod.haus bilby.docs.pod.haus
 	@rustfs_console host rustfs.pod.haus
 	@sync host sync.pod.haus
@@ -185,6 +186,8 @@
 		reverse_proxy @sonarr {$BANDICOOT_LAN_IPV4}:8989
 		# HyperDX lives on bandicoot; the front door stays here.
 		reverse_proxy @watch {$BANDICOOT_LAN_IPV4}:8080
+		# dash (Evidence dashboards) lives on bandicoot; the front door stays here.
+		reverse_proxy @dash {$BANDICOOT_LAN_IPV4}:8790
 		reverse_proxy @docs docs:8000
 		reverse_proxy @rustfs_console {$BANDICOOT_LAN_IPV4}:9001
 		reverse_proxy @sync {$KANGAROO_LAN_IPV4}:8384

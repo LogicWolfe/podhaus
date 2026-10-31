@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  Where ClickHouse reads its users from. The image's default is users.xml
+  (plus users.d, where the entrypoint writes the default user from
+  CLICKHOUSE_PASSWORD) and the SQL-managed access directory; this keeps both
+  and adds our own users file, bound from clickhouse-conf/users, so a user
+  defined as config survives a rebuilt data directory.
+-->
+<clickhouse>
+    <user_directories replace="replace">
+        <users_xml>
+            <path>users.xml</path>
+        </users_xml>
+        <users_xml>
+            <path>/etc/clickhouse-server/podhaus-users/evidence.xml</path>
+        </users_xml>
+        <local_directory>
+            <path>/var/lib/clickhouse/access/</path>
+        </local_directory>
+    </user_directories>
+</clickhouse>

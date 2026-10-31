@@ -136,3 +136,18 @@ include_variables = true
 include_resources = true
 delete = false
 managed = false
+
+# The dash sync reads only the root stack.toml, as for bookshelf. Stage 1 of
+# dash-push-deploy runs it explicitly.
+[[resource_sync]]
+name = "dash"
+description = "ResourceSync for the stack def that lives in the dash repo."
+tags = ["dash", "podhaus"]
+
+[resource_sync.config]
+linked_repo = "dash"
+resource_path = ["stack.toml"]
+include_variables = true
+include_resources = true
+delete = false
+managed = false

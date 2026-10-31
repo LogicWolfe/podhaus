@@ -46,6 +46,7 @@ locals {
     "bookbinder"     = "bookbinder-push-deploy"
     "bookcard"       = "bookcard-push-deploy"
     "bookshelf"      = "bookshelf-push-deploy"
+    "dash"           = "dash-push-deploy"
     "fenwick"        = "fenwick-push-deploy"
     "indy-board"     = "indy-board-push-deploy"
     "nathanbaxter"   = "nathanbaxter-deploy"
@@ -67,6 +68,9 @@ resource "forgejo_repository_webhook" "komodo_deploy" {
   events {
     push = true
   }
+
+  # A webhook on a repository Terraform also creates must wait for it.
+  depends_on = [forgejo_repository.dash]
 }
 
 # Fenwick was migrated through Forgejo's repository migration API, then
@@ -115,6 +119,36 @@ resource "forgejo_repository_branch_rule" "fenwick_main" {
   ]
   block_on_outdated_branch = true
   dismiss_stale_approvals  = true
+}
+
+# dash: the Evidence dashboards over ClickStack's ClickHouse. Created here
+# empty, then the project is pushed to it; its stack lives in the repo and
+# podhaus wires the deploy (komodo/sync, the webhook above).
+resource "forgejo_repository" "dash" {
+  owner       = "LogicWolfe"
+  name        = "dash"
+  description = "dash — Evidence dashboards over ClickStack, at dash.pod.haus"
+  private     = true
+
+  default_branch    = "main"
+  has_actions       = true
+  has_issues        = true
+  has_packages      = false
+  has_projects      = false
+  has_pull_requests = true
+  has_releases      = false
+  has_wiki          = false
+
+  allow_merge_commits   = false
+  allow_rebase          = false
+  allow_rebase_explicit = false
+  allow_squash_merge    = true
+  default_merge_style   = "squash"
+  archive_on_destroy    = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Read-only deploy key for the nathanbaxter-deploy builder container.

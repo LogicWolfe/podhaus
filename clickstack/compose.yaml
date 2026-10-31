@@ -34,6 +34,10 @@ services:
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      # The read-only `evidence` user's password, read by
+      # clickhouse-conf/users/evidence.xml (from_env). The dash stack
+      # presents the same Homelab item.
+      CLICKHOUSE_EVIDENCE_PASSWORD: ${CLICKHOUSE_EVIDENCE_PASSWORD}
       TZ: ${TZ}
     volumes:
       # Local NVMe (decision 2). clickhouse chowns /var/lib/clickhouse
@@ -45,6 +49,12 @@ services:
       # memory + bounds the internal log so neither runs away on the
       # shared box. Upstream defaults stay; we only override specifics.
       - ${PODHAUS_REPO}/clickstack/clickhouse-conf/config.d:/etc/clickhouse-server/config.d:ro
+      # Users defined as config (the read-only `evidence` user for dash),
+      # at a path of our own: the image's entrypoint writes the default
+      # user into users.d itself, so that directory stays the image's.
+      # config.d/user-directories.xml names this file as a second users
+      # file.
+      - ${PODHAUS_REPO}/clickstack/clickhouse-conf/users:/etc/clickhouse-server/podhaus-users:ro
     ports:
       # ClickHouse HTTP for Gatus's telemetry-pipeline heartbeats, which run
       # on bilby and query row counts here. Password-protected (default

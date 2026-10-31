@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  The read-only user the dash stack (Evidence dashboards) queries as. SELECT
+  on the telemetry database and nothing else; readonly=2 rather than 1
+  because Evidence sets output-format settings per query, which 1 refuses.
+  The password is the clickstack-evidence Homelab item, delivered as
+  CLICKHOUSE_EVIDENCE_PASSWORD (compose.yaml).
+-->
+<clickhouse>
+    <users>
+        <evidence>
+            <password from_env="CLICKHOUSE_EVIDENCE_PASSWORD"/>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>evidence</profile>
+            <quota>default</quota>
+            <grants>
+                <query>GRANT SELECT ON default.*</query>
+            </grants>
+        </evidence>
+    </users>
+    <profiles>
+        <evidence>
+            <readonly>2</readonly>
+            <max_execution_time>30</max_execution_time>
+            <max_memory_usage>1000000000</max_memory_usage>
+        </evidence>
+    </profiles>
+</clickhouse>

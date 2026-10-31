@@ -131,6 +131,13 @@ endpoints:
     <<: *defaults
     group: Observability
 
+  # The Evidence dashboards over ClickStack's ClickHouse; the page is 200
+  # while the server is up, whatever its queries return.
+  - name: dash (Evidence dashboards)
+    url: http://${BANDICOOT_LAN_IPV4}:8790/
+    <<: *defaults
+    group: Observability
+
   # home-assistant runs in network_mode: host, so it's reachable from
   # dockernet via the bridge gateway (same address Cloudflare Tunnel uses).
   # `/manifest.json` is unauthenticated and returns 200 when HA is up.

@@ -120,6 +120,10 @@ routes:
     prefix: /api/mcp
   - <<: *family_route
     from: https://watch.pod.haus
+  # dash: the Evidence dashboards over the same ClickHouse. Pomerium is its
+  # only sign-in; the page itself asks for none.
+  - <<: *family_route
+    from: https://dash.pod.haus
   - <<: *friends_route
     from: https://docs.pod.haus
   - <<: *family_route
