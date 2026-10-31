@@ -129,6 +129,9 @@ resource "forgejo_repository" "dash" {
   name        = "dash"
   description = "dash — Evidence dashboards over ClickStack, at dash.pod.haus"
   private     = true
+  # Empty, so the project's own history is the first push; the provider's
+  # default makes an initial commit the push would then have to merge.
+  auto_init = false
 
   default_branch    = "main"
   has_actions       = true
