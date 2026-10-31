@@ -121,17 +121,16 @@ resource "forgejo_repository_branch_rule" "fenwick_main" {
   dismiss_stale_approvals  = true
 }
 
-# dash: the Evidence dashboards over ClickStack's ClickHouse. Created here
-# empty, then the project is pushed to it; its stack lives in the repo and
-# podhaus wires the deploy (komodo/sync, the webhook above).
+# dash: the Evidence dashboards over ClickStack's ClickHouse. Its stack lives
+# in the repo; podhaus wires the deploy (komodo/sync, the webhook above).
+# Created empty with the Forgejo CLI and imported (owner:name), as fenwick
+# was: the Forgejo Terraform token manages repository policy, webhooks and
+# deploy keys but has no scope to create repositories.
 resource "forgejo_repository" "dash" {
   owner       = "LogicWolfe"
   name        = "dash"
   description = "dash — Evidence dashboards over ClickStack, at dash.pod.haus"
   private     = true
-  # Empty, so the project's own history is the first push; the provider's
-  # default makes an initial commit the push would then have to merge.
-  auto_init = false
 
   default_branch    = "main"
   has_actions       = true
