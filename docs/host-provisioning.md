@@ -524,3 +524,18 @@ separates unavailable tooling, incomplete indexes and valid empty results;
 warms a selected worktree and verifies completion. They are available to both
 Claude and Codex. Docker access is required for the launcher and the embedding
 service must be available locally for indexing and semantic queries.
+
+## Agent sessions
+
+Development work on these hosts runs inside coding-agent sessions that must
+outlive the SSH connection that started them and the laptop's sleep. Two
+pieces provide that, both `$HOME` state and so chezmoi's: a per-host agent
+runtime, today herdr-core (tmux stays installed and usable), and an operator
+interface on Nathan's Mac, today the Herdr desktop app, which holds one
+connection to each host's runtime. The host-side consequences are the ones
+above: the out-of-memory order that spends agents before the runtime and the
+services, and `sshd_liveness` clearing the dead connections a sleeping laptop
+leaves. The dotfiles README's Herdr section describes the runtime and the
+machine links; the window side (mods, keys, settings, launchers) is the
+[herdr](https://git.pod.haus/LogicWolfe/herdr) repository, whose docs this
+server also serves.
