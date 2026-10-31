@@ -240,6 +240,16 @@ edge's.
    redeployed. Run `BatchDeployStack` with pattern `quokka-*` from Komodo,
    which also covers anything step 4 missed. If Periphery itself is not
    running after the Ansible run, `docker start komodo-periphery` first.
+6. **Link quokka into Herdr.** In the dotfiles repo, set `parked = false` on
+   quokka in `.chezmoidata/fleet.toml` and push. Run `chezmoi-update` on quokka,
+   then `chezmoi apply` on the Mac, which adds it. Not before step 2: herdr-core
+   turns linger on for the login it runs as, and linger stays off while Sky has
+   the machine.
+7. **Check for the old herdr terminal app.** It was removed from every other
+   machine while quokka was away. `command -v herdr` must find nothing, and
+   `~/.config/herdr` and `~/.local/state/herdr` must not exist. If `herdr` is
+   there, run `cargo uninstall herdr` and delete those two folders. Leave
+   `herdr-core` alone.
 
 Verify:
 
@@ -248,4 +258,5 @@ Verify:
 - `quokka.docs.pod.haus` serves
 - `systemctl get-default` is `multi-user.target`
 - `getent passwd sky` is empty
+- `hc machine ls` on the Mac shows quokka connected
 - Kangaroo lists no quokka device
