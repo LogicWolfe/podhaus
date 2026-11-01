@@ -315,7 +315,11 @@ networks:
         each token with Pocket ID once, at first use, and honours it for 30 days.
         <code>books.pod.haus</code> takes the same token for bookshelf's API under the
         Nathan-only policy, and Pomerium drops the <code>Authorization</code> header before
-        forwarding so bookshelf reads the signed identity header as it does for a browser. The
+        forwarding so bookshelf reads the signed identity header as it does for a browser.
+        <code>fenwick.dev.pod.haus</code> takes it the same way under its family policy, so
+        Fenwick dev's end-to-end suite signs in as a household member with no browser:
+        <code>curl -H "Authorization: Bearer $(llm-token)" https://fenwick.dev.pod.haus/api/me</code>
+        answers as the token's owner. The
         <code>/setup</code> paths are a public route: the setup page there signs in through
         Pocket ID in the browser and shows the same kind of token, so Pocket ID's group
         limit on the client is its gate. The
@@ -405,8 +409,9 @@ networks:
           <tr><td><code>kangaroo-backup.pod.haus</code></td><td>Backrest UI on kangaroo</td></tr>
           <tr><td><code>books.pod.haus</code></td><td>bookshelf on bandicoot through bilby's Caddy (nathan-only; bookshelf verifies Pomerium's signed identity header itself)</td></tr>
           <tr><td><code>fenwick.pod.haus</code></td><td>Fenwick home-helper API</td></tr>
-          <tr><td><code>fenwick.dev.pod.haus</code></td><td>Fenwick dev, built from the fenwick repo's dev branch, on bandicoot through bilby's Caddy (family route). Answers only while dev is ahead of main.</td></tr>
+          <tr><td><code>fenwick.dev.pod.haus</code></td><td>Fenwick dev, built from the fenwick repo's dev branch, on bandicoot through bilby's Caddy (family route; also a Pocket ID access token as bearer key). Answers only while dev is ahead of main.</td></tr>
           <tr><td><code>signal.fenwick.dev.pod.haus</code></td><td>Fenwick dev's stand-in Signal phone page (nathan-only: it sends as any household member)</td></tr>
+          <tr><td><code>push.fenwick.dev.pod.haus</code></td><td>Fenwick dev's stand-in Web Push service on bandicoot port 8090, public through the relay address and Caddy <code>:4444</code> (no Pomerium; only <code>/push/*</code> is forwarded, anything else is 404). The dev bot's subscriptions name <code>https://push.fenwick.dev.pod.haus/push/&lt;id&gt;</code>.</td></tr>
           <tr><td><code>metube.pod.haus</code></td><td>MeTube web UI (family route)</td></tr>
           <tr><td><code>komodo.pod.haus</code></td><td>Komodo Core UI</td></tr>
           <tr><td><code>torrent.pod.haus</code></td><td>Flood UI</td></tr>

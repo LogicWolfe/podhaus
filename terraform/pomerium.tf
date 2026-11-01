@@ -557,3 +557,14 @@ resource "cloudflare_dns_record" "fenwick_dev_signal" {
   proxied = false
   ttl     = 300
 }
+
+# Fenwick dev's stand-in Web Push service: a public machine endpoint the dev
+# bot posts to, so the relay address and Caddy :4444 (fenwick-events' posture).
+resource "cloudflare_dns_record" "fenwick_dev_push" {
+  zone_id = local.zones["pod.haus"]
+  name    = "push.fenwick.dev.pod.haus"
+  type    = "A"
+  content = local.numbat_relay_ipv4
+  proxied = false
+  ttl     = 300
+}

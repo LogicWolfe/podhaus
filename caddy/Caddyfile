@@ -680,6 +680,24 @@ fenwick-events.pod.haus:4444 {
 	}
 }
 
+# Fenwick dev's stand-in Web Push service on bandicoot. The dev bot sends its
+# notifications to the endpoint a subscription names, which must be a public
+# HTTPS name with a real certificate, so it comes in through the relay like
+# any push service would. Only the push path reaches the stand-in; its phone
+# page stays behind Pomerium on signal.fenwick.dev.pod.haus.
+push.fenwick.dev.pod.haus:4444 {
+	import access_log
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	handle /push/* {
+		reverse_proxy {$BANDICOOT_LAN_IPV4}:8090
+	}
+	handle {
+		respond 404
+	}
+}
+
 pets.indigopod.au:4444 {
 	import proxied_access_log
 	tls {
