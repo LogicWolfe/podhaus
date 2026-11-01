@@ -109,6 +109,11 @@ storage_binds_managed_dirs:
   - path: /var/lib/sonarr
     owner: "1000"
     group: "100"
+  # Fenwick dev's state, re-seeded from a scrubbed production snapshot each
+  # time the stack is recreated.
+  - path: /var/lib/fenwick-dev
+    owner: "1000"
+    group: "100"
 
 # Both halves of both automount pairs, as on bilby.
 storage_binds_rate_limit_dropin_dirs:
@@ -117,11 +122,11 @@ storage_binds_rate_limit_dropin_dirs:
   - mnt-jump.mount.d
   - mnt-jump.automount.d
 
-# The two fenwick-private bridges (browser-quarantine topology; rationale in
-# the fenwick repo's docs/networking.html). Labels match the live networks
-# exactly; subnets stay auto-assigned — see the docker role's network task
-# for why they must not be specified. Copied from bilby's host_vars for the
-# Fenwick family's move here; removed from bilby's once the move lands.
+# The fenwick-private bridges, a private and a browser-quarantine pair each
+# for production and for Fenwick dev (rationale in the fenwick repo's
+# docs/networking.html). Labels match the live networks exactly; subnets stay
+# auto-assigned — see the docker role's network task for why they must not be
+# specified.
 podhaus_extra_networks:
   - name: fenwick-net
     labels:
@@ -130,6 +135,14 @@ podhaus_extra_networks:
   - name: fenwick-webagent-net
     labels:
       fenwick.net: webagent-quarantine
+      managed-by: fenwick-repo
+  - name: fenwick-dev-net
+    labels:
+      fenwick.net: dev-private
+      managed-by: fenwick-repo
+  - name: fenwick-dev-webagent-net
+    labels:
+      fenwick.net: dev-webagent-quarantine
       managed-by: fenwick-repo
 
 # Core runs on this host; its own Periphery dials it on the LAN name

@@ -199,9 +199,11 @@ hosted JetKVM is Pinelake's independent recovery path.
   (`ansible/roles/docker`) — the only config-as-code path, since Komodo
   has no `CreateNetwork` execution and Compose won't adopt a pre-existing
   external network. Every host declares its own `dockernet` this way
-  (bandicoot's is what Komodo Core itself attaches to); bilby additionally
-  declares, via `podhaus_extra_networks`, the two Fenwick-private nets
-  `fenwick-net` and `fenwick-webagent-net` (the browser-quarantine link);
+  (bandicoot's is what Komodo Core itself attaches to); bandicoot
+  additionally declares, via `podhaus_extra_networks`, the Fenwick-private
+  nets `fenwick-net` and `fenwick-webagent-net` (the browser-quarantine
+  link) and Fenwick dev's pair, `fenwick-dev-net` and
+  `fenwick-dev-webagent-net`;
   per-container membership stays config-as-code in each stack's
   `compose.yaml`. Fenwick's topology + rationale live in the fenwick
   repo's `docs/networking.html`.

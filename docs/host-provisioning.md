@@ -281,7 +281,7 @@ live file, and flipping bilby to true is a scheduled human act, never a
 handler side effect. The dockernet task deliberately leaves
 `attachable` unspecified (`docker_network` recreates a network over any
 specified-and-different option — fatal on a live host), and
-`podhaus_extra_networks` declares label-only bridges (bilby's fenwick
+`podhaus_extra_networks` declares label-only bridges (bandicoot's fenwick
 nets) whose auto-assigned subnets must stand. The role installs
 `python3-requests` because `community.docker.docker_network` needs it
 on the target; the alternative — a `docker network inspect || create`

@@ -170,7 +170,7 @@
 
 - name: Create the additional host-provisioned bridge networks
   # podhaus_extra_networks: bridges that stacks reference as `external: true`
-  # beyond dockernet (bilby: the two fenwick nets). Labels only — no ipam and
+  # beyond dockernet (bandicoot: the fenwick nets). Labels only — no ipam and
   # no attachable, because the live networks carry auto-assigned subnets
   # (fenwick: 172.27/172.28) that must stand; specifying different ipam would
   # recreate them under running containers, and nothing depends on specific
