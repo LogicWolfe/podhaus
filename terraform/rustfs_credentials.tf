@@ -208,3 +208,34 @@ resource "random_password" "rustfs_serviceaccount_fenwick" {
     prevent_destroy = true
   }
 }
+
+# Alphanumeric for the same reason as fenwick's.
+resource "random_password" "rustfs_user_fenwick_dev" {
+  length  = 56
+  special = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "random_password" "rustfs_serviceaccount_fenwick_dev" {
+  length  = 40
+  special = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# The service account's access key id, in the 20-character upper-case form
+# RustFS issues its own keys in.
+resource "random_string" "rustfs_serviceaccount_fenwick_dev_access_key" {
+  length  = 20
+  lower   = false
+  special = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}

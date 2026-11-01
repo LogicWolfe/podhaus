@@ -287,6 +287,71 @@ resource "onepassword_item" "rustfs_fenwick" {
   }
 }
 
+# fenwick-dev — Fenwick dev's private object store, the same shape as
+# fenwick's above. Its service account is created here, so its access key is
+# generated rather than an imported literal.
+resource "aws_s3_bucket" "fenwick_dev" {
+  bucket        = "fenwick-dev"
+  force_destroy = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "rustfs_policy" "fenwick_dev" {
+  name = "fenwick-dev"
+  statement = [
+    {
+      effect    = "Allow"
+      action    = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+      ressource = ["arn:aws:s3:::fenwick-dev/*"]
+    },
+    {
+      effect    = "Allow"
+      action    = ["s3:ListBucket", "s3:GetBucketLocation"]
+      ressource = ["arn:aws:s3:::fenwick-dev"]
+    },
+  ]
+}
+
+resource "rustfs_user" "fenwick_dev" {
+  access_key = "fenwick-dev"
+  secret_key = random_password.rustfs_user_fenwick_dev.result
+  policy     = rustfs_policy.fenwick_dev.name
+}
+
+resource "rustfs_serviceaccount" "fenwick_dev" {
+  access_key  = random_string.rustfs_serviceaccount_fenwick_dev_access_key.result
+  secret_key  = random_password.rustfs_serviceaccount_fenwick_dev.result
+  name        = "fenwick-dev"
+  description = ""
+  user        = rustfs_user.fenwick_dev.access_key
+}
+
+# → OP__KOMODO__RUSTFS_FENWICK_DEV__ACCESS_KEY_ID / __SECRET_ACCESS_KEY.
+resource "onepassword_item" "rustfs_fenwick_dev" {
+  vault    = data.onepassword_vault.homelab.uuid
+  title    = "RustFS Fenwick Dev"
+  category = "secure_note"
+  tags     = ["terraform-managed", "fenwick"]
+
+  section_map = {
+    S3 = {
+      field_map = {
+        ACCESS_KEY_ID = {
+          type  = "STRING"
+          value = rustfs_serviceaccount.fenwick_dev.access_key
+        }
+        SECRET_ACCESS_KEY = {
+          type  = "CONCEALED"
+          value = rustfs_serviceaccount.fenwick_dev.secret_key
+        }
+      }
+    }
+  }
+}
+
 # doggos-indigo — Indigo's "Doggos Alive" site, exported from Blocs for
 # iPad and published by her over RustFS's SFTP server (see
 # docs/runbooks/doggos-indigo.md). Blocs logs in as the scoped IAM user
