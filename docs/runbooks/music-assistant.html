@@ -52,7 +52,7 @@
           ring.</li>
         <li>HA automation <code>doorbell_living_room_chime</code> (alias
           "Doorbell chime — living room", in
-          <code>/var/lib/home-assistant/automations.yaml</code>):
+          <code>home-assistant/config/automations.yaml</code> in this repo):
           <strong>snapshot</strong> the player volume →
           <code>media_player.volume_set</code> to <code>0.6</code> → 0.5s
           settle → <code>music_assistant.play_announcement</code> →
@@ -63,10 +63,7 @@
       <p>
         The chime is <code>/var/lib/home-assistant/www/doorbell.wav</code>
         (served unauthenticated at <code>/local/doorbell.wav</code>, which MA
-        fetches at <code>http://bilby.pod.haus:8123/local/doorbell.wav</code> — the
-        split-horizon name rather than an address, because Home Assistant's UI
-        automation editor rewrites <code>automations.yaml</code> wholesale and would
-        resolve an <code>!env_var</code> tag away). It
+        fetches at <code>http://bilby.pod.haus:8123/local/doorbell.wav</code>). It
         carries a deliberate <strong>~4.5s of leading silence</strong> — AirPlay
         clips audio while it establishes the stream, and the Formation waking
         from deep sleep (after a long idle) takes a couple of seconds, so the
@@ -148,7 +145,7 @@
           DR restores them.</li>
         <li>The HA-side UniFi Protect + Music Assistant integrations live in
           <code>/var/lib/home-assistant/.storage</code> (UI-configured). The
-          doorbell automation and the chime file <em>are</em> plain files under
+          doorbell automation is in this repo, and the chime file is a plain file under
           <code>/var/lib/home-assistant/</code>, which is backed up by the
           <code>home-assistant</code> plan.</li>
       </ul>
@@ -177,9 +174,7 @@
         <li><code>backup/bilby/{compose.yaml,config.json.tmpl}</code> — the MA
           backup plan + read-only volume mount.</li>
         <li>Host-side (not in repo, but backed up):
-          <code>/var/lib/home-assistant/automations.yaml</code> (the chime
-          automation) and <code>/var/lib/home-assistant/www/doorbell.wav</code>
-          (the sound).</li>
+          <code>/var/lib/home-assistant/www/doorbell.wav</code> (the sound).</li>
       </ul>
 
     </main>

@@ -19,11 +19,6 @@
     entity_id: 170713970479a3ac84655dc7d30c55ca
     domain: binary_sensor
     trigger: device
-  - type: occupied
-    device_id: 30adc0743e9ac4d87c05a776a629d43c
-    entity_id: 43f9b2a5a74f2a467446b2c19156616f
-    domain: binary_sensor
-    trigger: device
   conditions: []
   actions:
   - action: notify.notify

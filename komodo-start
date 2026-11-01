@@ -91,17 +91,9 @@ seed_variable "ONEPASSWORD_CONNECT_TOKEN" \
 seed_variable "ONEPASSWORD_API_KEY" "$api_key"
 seed_variable "ONEPASSWORD_API_SECRET" "$api_secret"
 
-# PODHAUS_CHECKOUT is host-discovered (= $PWD at bootstrap time) and
-# consumed only by home-assistant's live UI-editable config bind — the
-# one deliberate read-write checkout bind in the repo. Every other stack
-# binds the deploy tree via the fixed PODHAUS_REPO declared in
-# komodo/sync/variables.toml.
-#
 # TZ and MEDIA_DIR (other global non-secret vars) live in
 # komodo/sync/variables.toml and apply via the ResourceSync's
 # include_variables=true config. They're not seeded here.
-echo "Seeding host-discovered variable into Komodo..."
-seed_variable "PODHAUS_CHECKOUT"  "$PWD"            false
 
 # Fenwick stack-private vars (FENWICK_SIGNAL_*, FENWICK_ADMIN_*) live
 # in fenwick/stack.toml as [[variable]] blocks and apply via the

@@ -10,6 +10,6 @@ run_directory = "/etc/komodo/repo/home-assistant"
 
 environment = """
 TZ=[[TZ]]
-PODHAUS_CHECKOUT=[[PODHAUS_CHECKOUT]]
+PODHAUS_REPO=[[PODHAUS_REPO]]
 BILBY_LAN_IPV4=[[LAN_BILBY_IPV4]]
 """

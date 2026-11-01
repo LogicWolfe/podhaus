@@ -22,16 +22,11 @@ entities to Apple Home so Siri can drive them through HA.
 HA's `/config` mixes version-controllable YAML with state that must never be
 in git. The split:
 
-- **In the repo** — `home-assistant/config/`, bind-mounted to `/config/podhaus`
-  via `${PODHAUS_CHECKOUT}/home-assistant/config:/config/podhaus:z` — the one
-  deliberate read-write checkout bind in the repo. Every other stack's
-  `${PODHAUS_REPO}` bind is read-only against the Komodo-managed **deploy
-  tree**; this one reads bilby's live working checkout (`~/repos/podhaus`)
-  instead, so the UI editor's atomic-rename saves land somewhere committable
-  rather than in a tree the push webhook can force-reset at any time. See
-  [Komodo → operating models](/komodo.html#operating-models). (That bind
-  needs `PODHAUS_CHECKOUT=[[PODHAUS_CHECKOUT]]` in `home-assistant/stack.toml`'s
-  environment, or `${PODHAUS_CHECKOUT}` expands empty.)
+- **In the repo** — `home-assistant/config/`, bind-mounted read-only to
+  `/config/podhaus` from the Komodo-managed deploy tree
+  (`${PODHAUS_REPO}/home-assistant/config`), which `podhaus-push-deploy` forces to
+  `origin/main` before it deploys. Bilby's working checkout plays no part. See
+  [Komodo → operating models](/komodo.html#operating-models).
 - **On the host, never in git** — `.storage/` (auth tokens, the entity/device/
   area registries, HomeKit pairing state), the recorder DB
   (`home-assistant_v2.db`), and logs.
@@ -42,12 +37,17 @@ relocate it, and single-file bind mounts are banned. So the host root is a thin
 `config/configuration.root.yaml` as its **DR mirror** — the two must stay in
 sync (they rarely change; see packages below).
 
+**HA's UI editors cannot change these files.** The automation, script and scene
+editors always use `automations.yaml`, `scripts.yaml` and `scenes.yaml` at the
+`/config` root, and the bootstrap doesn't load those. A UI edit lands there and
+has no effect, so edit the file in this repo instead.
+
 | Repo file | Role |
 |---|---|
 | `config/configuration.root.yaml` | DR reference of the host bootstrap |
 | `config/homeassistant.yaml` | `external_url`/`internal_url` + `packages: !include_dir_named packages` |
 | `config/http.yaml` | `use_x_forwarded_for` + `trusted_proxies: 172.18.0.0/16` |
-| `config/automations.yaml`, `scripts.yaml`, `scenes.yaml` | Flat `!include` targets — the UI editors write here, so they stay flat (not packages) |
+| `config/automations.yaml`, `scripts.yaml`, `scenes.yaml` | Flat `!include` targets |
 | `config/packages/*.yaml` | One file per integration (drop-in) |
 
 **Adding an integration is a drop-in.** `homeassistant.yaml` declares
@@ -317,23 +317,11 @@ then an empty body to complete the `link` step). It returns
 
 ## Deploy
 
-Commit + push → `podhaus-push-deploy` pulls the deploy tree, and its content-hash
-stage sees the changed files in `home-assistant/` and recreates the container.
-
-That recreate does not deliver the change. HA reads `config/` from bilby's working
-checkout, which a push never updates, so pull it first or HA restarts on the old
-files:
-
-```sh
-ssh bilby.pod.haus 'git -C ~/repos/podhaus pull --ff-only'
-```
-
-Validate before relying on it:
+Config changes ship like any stack: commit + push → `podhaus-push-deploy` pulls the
+deploy tree, and its content-hash stage sees the changed files in `home-assistant/`
+and recreates the container, which starts on the new config. To validate what's
+deployed:
 
 ```sh
 docker exec home-assistant python -m homeassistant --script check_config -c /config
 ```
-
-For fast automation iteration without a container recreate, call the
-`automation.reload` service (the bind-mounted file is already live; reload
-re-reads it in place).

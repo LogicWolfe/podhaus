@@ -311,12 +311,7 @@ description = "Service port (well-known, not a secret)"</code></pre>
         (<code>/etc/komodo/repos/podhaus-deploy</code>) — a clone the push
         webhook pulls to <code>origin/main</code>.
         Every <code>${PODHAUS_REPO}</code> bind in the repo is
-        <code>:ro</code> except one: home-assistant's UI-editable config
-        mount uses <code>${PODHAUS_CHECKOUT}</code> instead — a
-        host-discovered variable seeded by <code>komodo-start</code>
-        pointing at bilby's live working checkout, so the UI editor's
-        saves land somewhere committable rather than in a tree the
-        webhook can reset at any time. See
+        <code>:ro</code>. See
         <a href="/secrets.html#non-secret-variables">Secrets → non-secret
         variables</a> and <a href="/komodo.html#operating-models">Komodo
         → operating models</a>.

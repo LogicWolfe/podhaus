@@ -167,14 +167,6 @@ hosted JetKVM is Pinelake's independent recovery path.
   stack-private ones (e.g. `FENWICK_*`) live as inline `[[variable]]`
   blocks in the relevant `<stack>/stack.toml`. Pinelake's stack environments
   set `TZ=America/Edmonton` explicitly instead of consuming the Perth default.
-  - **Exception:** `PODHAUS_CHECKOUT` is host-discovered (`= $PWD` at
-    bootstrap time, varies per host), so it can't live in a TOML.
-    `komodo-start` seeds it directly via the Komodo API. It's consumed
-    by exactly one bind — home-assistant's UI-editable config mount,
-    the one deliberate read-write checkout bind in the repo. Every
-    other `${PODHAUS_REPO}` bind is fixed (declared in
-    `komodo/sync/variables.toml`, pointing at the Komodo-managed
-    deploy tree, not the working checkout).
   - **Caveat:** the sync runs with `delete: false` (additive only —
     flipping `delete: true` would nuke komodo-op's continuously-synced
     `OP__KOMODO__*` vars). Side effect: a variable removed from TOML
@@ -182,7 +174,7 @@ hosted JetKVM is Pinelake's independent recovery path.
     (`DeleteVariable`). See `docs/secrets.html`.
 - Volumes are declared in compose without `external: true` unless they
   exist outside the stack — Docker Compose creates them on first deploy.
-- `komodo-start` is bootstrap-only (Komodo Core stack up + 5
+- `komodo-start` is bootstrap-only (Komodo Core stack up + 4
   chicken-and-egg vars + deploy-tree bootstrap + create-resource-sync +
   bootstrap double-sync). Every deploy after that is a push to `main`,
   which runs the `podhaus-push-deploy` procedure (pulls the deploy trees
@@ -262,7 +254,7 @@ hosted JetKVM is Pinelake's independent recovery path.
 | `komodo/sync/procedures.toml` | `podhaus-push-deploy`, plus one push-deploy procedure per service repo that holds its own stack. `podhaus-push-deploy` is the GitHub webhook entrypoint: a first stage `PullRepo` force-pulls both deploy trees (`podhaus-bandicoot`, `podhaus-deploy`) to `origin/main`, then three numbered stages deploy what they hold: Stage 0 RunSync (reconcile defs) → Stage 1 RunAction `podhaus-inject-content-hashes` (stamp content hashes into stored env **and** force-deploy stacks with stale hash labels — the actual config-only/build-context trigger) → Stage 2 BatchDeployStackIfChanged "*" over the stacks tagged `podhaus` (owns compose-text changes + new stacks; does NOT see hash changes). `fenwick-push-deploy` names its three production stacks exactly, so it never deploys `fenwick-dev`. Ofelia `0.4.0-beta.5` follows Docker events and no longer needs a deployment-boundary restart. |
 | `komodo/sync/actions.toml` | Komodo Actions invoked by procedures. `podhaus-inject-content-hashes` is Stage 1 of `podhaus-push-deploy`. For every stack visible at `/syncs/podhaus` (the deploy tree), it hashes (a) the stack directory (committed files; `.env` excluded) → `STACK_CONTENT_HASH`, and (b) each service's resolved build context → `BUILD_HASH_<UPPER_SERVICE>`; injects both into stored env. **Then it force-deploys any stack whose running container has stale `podhaus.*` labels or, for a build service, a stale baked `STACK_CONTENT_HASH`, while its compose text is unchanged**. This reconcile is the load-bearing trigger for podhaus's "any in-stack file change → recreate; any build-context change → image rebuild + recreate" property, because Komodo's IfChanged (Stage 2) only diffs compose text and never sees a hash change. `podhaus-purge-stack-cache` reads a deployed stack's `podhaus.cloudflare-cache-*` labels and purges those tags after the stack's deployment stage. `fenwick-dev-reconcile`, run by a Forgejo webhook on every push or branch deletion in the fenwick repo, deploys the `fenwick-dev` stack (`fenwick-dev/stack.toml`) at the dev branch's tip while dev holds commits main does not, and destroys it otherwise. See the Stage-1/content-hash notes in "When adding a new service" and [`docs/caching.md`](docs/caching.md). |
 | `tools/lint-stack-content-hash.py` | Pre-commit consumer-wiring lint for the content-hash mechanism: every service has the `podhaus.stack-content-hash` label; every build service has `build.args.STACK_CONTENT_HASH` referencing its own `BUILD_HASH_<self>` + the matching `ARG`/`ENV` pair in its Dockerfile; every service that `depends_on` a build service has the `podhaus.depends-on-<dep>` label. Run via `tools/pre-commit` alongside `lint-stack-env.py`. |
-| `komodo-start` | Bootstrap-only script, run on bandicoot: Komodo Core stack up, 5 chicken-and-egg vars seeded (4 `ONEPASSWORD_*` + `PODHAUS_CHECKOUT`, the host-discovered `$PWD` consumed only by home-assistant's live config bind), idempotent bootstrap of Core's own sync tree (`CreateServer bandicoot` + `CreateRepo podhaus-bandicoot` + `PullRepo` + poll, so `/syncs/podhaus` is populated before the first sync reads it), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync), then the same idempotent bootstrap for bilby's own deploy tree (`podhaus-deploy`, which by then has a server to attach to). Needs no sudo — host prerequisites (`/opt/komodo/keys`, dockernet) come from `ansible/playbooks/bandicoot.yml`. Idempotent — safe to re-run. |
+| `komodo-start` | Bootstrap-only script, run on bandicoot: Komodo Core stack up, 4 chicken-and-egg `ONEPASSWORD_*` vars seeded, idempotent bootstrap of Core's own sync tree (`CreateServer bandicoot` + `CreateRepo podhaus-bandicoot` + `PullRepo` + poll, so `/syncs/podhaus` is populated before the first sync reads it), idempotent CreateResourceSync (with existence check), bootstrap double-sync (first sync + wait for komodo-op + second sync), then the same idempotent bootstrap for bilby's own deploy tree (`podhaus-deploy`, which by then has a server to attach to). Needs no sudo — host prerequisites (`/opt/komodo/keys`, dockernet) come from `ansible/playbooks/bandicoot.yml`. Idempotent — safe to re-run. |
 | `tools/lint-stack-env.py` | Pre-commit env-lint: walks every `<stack>/stack.toml`'s `environment` block, verifies each key is referenced in compose. |
 | `tools/lint-stack-toml.py` | Pre-commit lint: rejects `deploy = true` on any podhaus-tagged stack. See "Hard rules" for why — Komodo's `Sync Deploy` sub-stage in `RunSync` would auto-deploy on Stage 0 and break on transient linked-repo timeouts. |
 | `mise.toml` + `Pipfile` | Current stable Python and Pipenv plus the unpinned Python tooling dependencies, and Node for the two `node --test` suites the hook runs. Bootstrap with the commands in `README.md`; no lock file is kept. |
@@ -323,7 +315,7 @@ hosted JetKVM is Pinelake's independent recovery path.
    co-located). Use `komodo/sync/variables.toml` only for things every
    stack might reference (currently TZ + MEDIA_DIR). The sync applies
    both. **Don't** add to `komodo-start` — that script is bootstrap-only
-   and the only seed it still owns is host-discovered `PODHAUS_CHECKOUT`.
+   and it seeds only the `ONEPASSWORD_*` credentials.
 5. **Push the commit.** The webhook fires `podhaus-push-deploy`, which
    pulls both Komodo-managed deploy trees to `origin/main`
    (`PullRepo podhaus-bandicoot`, `PullRepo podhaus-deploy`). Its
