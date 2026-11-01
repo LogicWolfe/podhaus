@@ -1,0 +1,12 @@
+# Lets an SSH session's local port forward (ssh -L) connect to the host's
+# unreserved ports, where development services listen. Fedora's policy
+# refuses it, so a tunnel opens and every connection through it fails.
+module podhaus_ssh_local_forward 1.0;
+
+require {
+	type sshd_session_t;
+	type unreserved_port_t;
+	class tcp_socket name_connect;
+}
+
+allow sshd_session_t unreserved_port_t:tcp_socket name_connect;

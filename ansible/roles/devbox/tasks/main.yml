@@ -100,3 +100,42 @@
         proto: tcp
         setype: ssh_port_t
         state: present
+
+# Any SSH session on the host may now forward to any unreserved port, which
+# is the point on a development machine: tunnels to its dev services.
+- name: Permit SSH local forwards to development ports under SELinux
+  tags: [ssh-local-forward]
+  when: ansible_facts.selinux.status == 'enabled'
+  block:
+    - name: Install the SELinux module compiler
+      ansible.builtin.dnf:
+        name: checkpolicy
+        state: present
+
+    - name: Place the SSH local-forward policy module source
+      ansible.builtin.copy:
+        src: podhaus_ssh_local_forward.te
+        dest: /etc/selinux/podhaus_ssh_local_forward.te
+        owner: root
+        group: root
+        mode: "0644"
+      register: devbox_ssh_local_forward_te
+
+    - name: List loaded SELinux modules
+      ansible.builtin.command: semodule -l
+      register: devbox_selinux_modules
+      changed_when: false
+      check_mode: false
+
+    - name: Build and load the SSH local-forward policy module
+      when: >-
+        devbox_ssh_local_forward_te.changed or
+        'podhaus_ssh_local_forward' not in devbox_selinux_modules.stdout_lines
+      ansible.builtin.shell: |
+        set -eu
+        work=$(mktemp -d)
+        trap 'rm -rf "$work"' EXIT
+        checkmodule -M -m -o "$work/podhaus_ssh_local_forward.mod" /etc/selinux/podhaus_ssh_local_forward.te
+        semodule_package -o "$work/podhaus_ssh_local_forward.pp" -m "$work/podhaus_ssh_local_forward.mod"
+        semodule -i "$work/podhaus_ssh_local_forward.pp"
+      changed_when: true
