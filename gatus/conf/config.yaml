@@ -123,6 +123,23 @@ _defaults: &defaults
     - "[STATUS] < 400"
   alerts: *alerts
 
+# Twelve failures at the five-minute interval ride out a Protect restart, which
+# leaves the sensors unavailable for up to 40 minutes.
+_camera_detection: &camera_detection
+  group: Cameras
+  interval: 5m
+  headers:
+    Authorization: Bearer ${HOME_ASSISTANT_TOKEN}
+  conditions:
+    - "[STATUS] == 200"
+    - "[BODY].state == off"
+  alerts:
+    - type: custom
+      description: "This camera has made no smart detection for 72 hours, or Home Assistant has lost its detection data. Video still records, so nothing else will show this. The usual cause is a stalled UniFi AI Port: restart the AI Port from its page in UniFi Protect, because restarting the UDM does not restart it, then walk past the camera. A house left empty for three days can also trigger this."
+      failure-threshold: 12
+      success-threshold: 2
+      send-on-resolved: true
+
 # --- Service liveness (internal probes) ---
 
 endpoints:
@@ -145,6 +162,17 @@ endpoints:
     url: http://172.18.0.1:8123/manifest.json
     <<: *defaults
     group: Home Assistant
+
+  # Gatus cannot compare timestamps, so Home Assistant judges the age of each
+  # camera's last detection and these read the verdict.
+  # See home-assistant/config/packages/protect_detection_health.yaml.
+  - name: G4 Pro detections
+    url: http://172.18.0.1:8123/api/states/binary_sensor.g4_pro_detection_stale
+    <<: *camera_detection
+
+  - name: G4 Doorbell detections
+    url: http://172.18.0.1:8123/api/states/binary_sensor.g4_doorbell_detection_stale
+    <<: *camera_detection
 
   # Probe the QNAP web UI directly on the LAN — gatus is on dockernet,
   # which NATs out to the LAN gateway. Self-signed cert, hence insecure.

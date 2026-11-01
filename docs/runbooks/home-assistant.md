@@ -267,6 +267,27 @@ automation** or Apple's **Adaptive Lighting**, both of which live in Apple's
 closed database that neither system can read. Check the Home app's Automation
 tab, and Adaptive Lighting per-accessory.
 
+## Camera detection health
+
+The G4 Doorbell and the G4 camera named **G4 Pro** are paired with the UniFi AI
+Port, so all their detection depends on it, including plain motion. Back gate is
+the same model as G4 Pro but unpaired, and detects on the camera itself.
+
+A stalled AI Port looks healthy. Protect shows it and both cameras connected and
+recording, while neither camera produces a detection.
+`config/packages/protect_detection_health.yaml` turns on
+`binary_sensor.g4_pro_detection_stale` or
+`binary_sensor.g4_doorbell_detection_stale` once that camera's last smart
+detection is 72 hours old. It goes `unavailable` if the timestamp is missing.
+Gatus's **Cameras** group reads both and alerts after an hour of anything but
+`off`. A house left empty for three days will also trigger it.
+
+To recover, restart the AI Port from its page in Protect. Restarting the UDM does
+not restart it. Then walk past each camera and look for a person event in Protect.
+If a camera stays silent, unassign it from the AI Port and test it alone: that
+separates a faulty AI Port from a faulty camera, at the cost of face and plate
+detection while unassigned.
+
 ## Nanoleaf
 
 Nanoleaf controllers pair with a token stored **on the controller**, so
@@ -294,9 +315,18 @@ then an empty body to complete the `link` step). It returns
 
 ## Deploy
 
-Config changes ship like any stack: commit + push → `podhaus-push-deploy` pulls
-the deploy tree, and its content-hash stage sees the changed files in `home-assistant/` and
-recreates the container. Validate first with:
+Commit + push → `podhaus-push-deploy` pulls the deploy tree, and its content-hash
+stage sees the changed files in `home-assistant/` and recreates the container.
+
+That recreate does not deliver the change. HA reads `config/` from bilby's working
+checkout, which a push never updates, so pull it first or HA restarts on the old
+files:
+
+```sh
+ssh bilby.pod.haus 'git -C ~/repos/podhaus pull --ff-only'
+```
+
+Validate before relying on it:
 
 ```sh
 docker exec home-assistant python -m homeassistant --script check_config -c /config

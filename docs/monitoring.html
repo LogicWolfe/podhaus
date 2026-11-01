@@ -275,6 +275,13 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         (forget, check, prune and data read) are a separate pull check, <code>Backup / Sky Restic Maintenance</code>, over Ofelia's
         <code>Job stop</code> lines.
       </p>
+      <p>
+        The <code>Cameras</code> group watches for a stalled UniFi AI Port, which Protect
+        reports as healthy. Gatus cannot compare timestamps, so Home Assistant judges the age
+        of each paired camera's last smart detection and Gatus reads the verdict over its REST
+        API. See the
+        <a href="runbooks/home-assistant.md#camera-detection-health">Home Assistant runbook</a>.
+      </p>
 
       <h2 id="ingest-staleness">Ingest-staleness alerts</h2>
       <p>

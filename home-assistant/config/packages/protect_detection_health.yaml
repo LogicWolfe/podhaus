@@ -1,0 +1,31 @@
+# Whether the cameras paired with the UniFi AI Port are still detecting anything,
+# loaded as a package (see ../homeassistant.yaml) and watched by Gatus.
+#
+# A stalled AI Port looks healthy: Protect shows it and its cameras connected and
+# recording while they produce no motion or smart detections at all. The age of
+# the last detection is the only signal that shows it. Back gate has its own
+# detection and needs no check here.
+#
+# The 72 hours sits well above the longest gap seen while healthy, 16.7 hours
+# overnight, so an empty weekend stays quiet. A longer absence can pass it, which
+# makes a holiday a false alarm rather than a missed failure. A check against Back
+# gate would remove that, and would also hide a failure of Protect's detection
+# across all three cameras.
+#
+# as_datetime has no default on purpose: a missing timestamp fails the render, the
+# sensor goes unavailable, and Gatus treats anything but "off" as a failure.
+
+template:
+  - binary_sensor:
+      - name: G4 Pro detection stale
+        unique_id: g4_pro_detection_stale
+        device_class: problem
+        state: >-
+          {{ now() - as_datetime(states('event.outside_g4_pro_smart_detection'))
+             > timedelta(hours=72) }}
+      - name: G4 Doorbell detection stale
+        unique_id: g4_doorbell_detection_stale
+        device_class: problem
+        state: >-
+          {{ now() - as_datetime(states('event.hallway_g4_doorbell_smart_detection'))
+             > timedelta(hours=72) }}
