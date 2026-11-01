@@ -119,7 +119,8 @@
               stamps content hashes and directly reconciles stale
               running stacks when committed config or build context
               changed without a compose-text change. Stage 2's
-              <code>BatchDeployStackIfChanged&nbsp;"*"</code> handles
+              <code>BatchDeployStackIfChanged&nbsp;"*"</code>, over the
+              stacks tagged <code>podhaus</code>, handles
               compose-text changes and new stacks.</td>
             <td>Same workflow and the same Stage 1 / Stage 2. Hashes are
               computed from the deploy tree's current state and compared with
@@ -283,9 +284,11 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           entrypoint (pulls the deploy tree to <code>origin/main</code>,
           then syncs and deploys it — see the Auto-deploy note below),
           plus one push-deploy procedure per service repo that holds its
-          own stack.</li>
-        <li><code>komodo/sync/actions.toml</code> — Komodo Actions
-          referenced by procedures.
+          own stack. <code>fenwick-push-deploy</code> names its three
+          production stacks exactly, so a push to the fenwick repo's main
+          never deploys <code>fenwick-dev</code>.</li>
+        <li><code>komodo/sync/actions.toml</code> — Komodo Actions,
+          run as procedure stages or by a webhook.
           <code>podhaus-inject-content-hashes</code>
           is Stage 1 of <code>podhaus-push-deploy</code>. It walks every stack at Komodo Core's
           <code>/syncs/podhaus</code> mount (the deploy tree), hashes each committed stack
@@ -295,7 +298,17 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           is the intentional exclusion.
           <code>podhaus-purge-stack-cache</code> reads a deployed stack's
           <code>podhaus.cloudflare-cache-*</code> labels and purges those tags after its
-          deployment stage. See <a href="/caching.md">Public site caching</a>.</li>
+          deployment stage. See <a href="/caching.md">Public site caching</a>.
+          <code>fenwick-dev-reconcile</code> is the one Action a webhook runs
+          directly: every push or branch deletion in the fenwick repo
+          (<code>terraform/forgejo.tf</code>) makes it compare the repo's
+          <code>dev</code> branch with <code>main</code> through Forgejo's API,
+          reading with the Forgejo Terraform token. While <code>dev</code> holds
+          commits <code>main</code> does not, it deploys the
+          <code>fenwick-dev</code> stack at <code>dev</code>'s tip; otherwise it
+          destroys it. The stack's definition is
+          <code>fenwick-dev/stack.toml</code>, which clones
+          <code>compose.dev.yaml</code> from the <code>dev</code> branch.</li>
         <li><code>komodo/sync/syncs.toml</code> — child ResourceSyncs for the
           separate-repo services (<code>fenwick</code>, <code>pets</code>,
           <code>docs</code>, <code>yiayia-stories</code>, <code>indy-board</code>,
@@ -418,7 +431,8 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         and build-context edits, and it works uniformly for files_on_host
         and linked_repo stacks.
         <strong>Stage 2</strong>
-        <code>BatchDeployStackIfChanged&nbsp;"*"</code>: deploy
+        <code>BatchDeployStackIfChanged&nbsp;"*"</code> filtered by the
+        <code>podhaus</code> tag: deploy
         compose-text changes and brand-new stacks. Stage 1 skips those
         cases, so the two paths do not recreate the same stack twice;
         unchanged stacks no-op. Ofelia follows the Docker events emitted by
@@ -426,7 +440,12 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         <a href="/scheduling.html">Scheduling</a>.
         The <code>"*"</code> pattern means
         <strong>new stacks auto-deploy on the next push with no
-        <code>github.tf</code> edit and no per-stack registration</strong>.
+        <code>github.tf</code> edit and no per-stack registration</strong>,
+        provided they carry the tag; <code>tools/lint-stack-toml.py</code>
+        rejects a stack without it. The one untagged stack is
+        <code>fenwick-dev</code>, which Stage 2 would otherwise deploy on first
+        sight and on every change to its compose file; its own Action decides
+        when it runs.
         Stages run sequentially so each completes before the next
         fires (deterministic, vs the asynchronous polling of
         <code>managed: true</code>).

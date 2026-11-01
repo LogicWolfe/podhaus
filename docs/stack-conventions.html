@@ -47,8 +47,8 @@
           podhaus stack omits <code>deploy = true</code>); Stage 1
           (<code>RunAction "podhaus-inject-content-hashes"</code>) stamps
           per-stack content hashes; Stage 2
-          <code>BatchDeployStackIfChanged "*"</code> first-deploys the new
-          stack via the <code>(None, _) =&gt; FullDeploy</code> arm in
+          <code>BatchDeployStackIfChanged "*"</code>, over the stacks tagged
+          <code>podhaus</code>, first-deploys the new stack via the <code>(None, _) =&gt; FullDeploy</code> arm in
           <code>DeployStackIfChanged</code>, which never reads
           <code>stack.config.deploy</code> (Komodo source
           <code>bin/core/src/api/execute/stack.rs:368-447</code>).
@@ -587,6 +587,7 @@ chmod +x .git/hooks/pre-commit</code></pre>
       <ul>
         <li>☐ <code>compose.yaml</code> + <code>stack.toml</code> in <code>&lt;name&gt;/</code></li>
         <li>☐ <code>stack.toml</code> <strong>omits</strong> <code>deploy = true</code> (Komodo's Sync Deploy auto-deploys are not used; Stage 2 of <code>podhaus-push-deploy</code> is the deploy authority — the pre-commit lint enforces this)</li>
+        <li>☐ <code>stack.toml</code> tags the stack <code>podhaus</code> (Stage 2 of <code>podhaus-push-deploy</code> deploys only tagged stacks — the pre-commit lint enforces this)</li>
         <li>☐ <code>dockernet</code> external network declared (if reachable from other containers)</li>
         <li>☐ Bind mounts use <code>${PODHAUS_REPO}/...</code>, not relative paths</li>
         <li>☐ All bind mounts are <strong>directory</strong> binds, never single files (see above)</li>

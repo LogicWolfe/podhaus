@@ -89,6 +89,11 @@ def main() -> int:
             env_block = cfg.get("environment", "").strip()
             if not env_block:
                 continue
+            if cfg.get("repo"):
+                # Komodo clones this stack's files from another repository,
+                # so its compose file is not in this checkout to check.
+                print(f"stack-env lint: skipped {rel} (files come from {cfg['repo']})")
+                continue
 
             keys = parse_env_keys(env_block)
             if not keys:

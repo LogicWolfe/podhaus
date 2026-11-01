@@ -1,0 +1,74 @@
+# Komodo Stack — fenwick-dev, a second Fenwick built from the fenwick repo's
+# dev branch, up only while dev holds commits main does not.
+#
+# The definition lives here only because the fenwick repo's main branch cannot
+# change yet; it moves into that repo's own stack.toml when dev's work merges.
+#
+# Nothing deploys it on a push to its branch. The fenwick-dev-reconcile Action
+# (komodo/sync/actions.toml), called by a Forgejo webhook on every push to the
+# fenwick repo, deploys it while dev is ahead of main and destroys it once dev
+# holds nothing more. It carries no `podhaus` tag, so podhaus-push-deploy's
+# deploy stage, which selects stacks by that tag, never brings it up.
+
+[[stack]]
+name = "fenwick-dev"
+description = "Fenwick dev: the bot and its web agent built from the fenwick repo's dev branch, with stand-ins for Signal and 1Password. Up only while dev is ahead of main."
+tags = ["fenwick", "bandicoot"]
+
+[stack.config]
+server = "bandicoot"
+git_provider = "git.pod.haus"
+git_account = "LogicWolfe"
+repo = "LogicWolfe/fenwick"
+branch = "dev"
+file_paths = ["compose.dev.yaml"]
+project_name = "fenwick-dev"
+run_build = true
+# Content-stable image ids, as for the production bot stack.
+build_extra_args = ["--provenance=false"]
+# Every deploy recreates the containers: the bot re-seeds its database from a
+# scrubbed production snapshot when it is recreated.
+extra_args = ["--force-recreate"]
+webhook_enabled = false
+# Going down is this stack's normal state, so its state changes raise no alert.
+send_alerts = false
+
+environment = """
+TZ=[[TZ]]
+ANTHROPIC_API_KEY=[[OP__KOMODO__ANTHROPIC_API_FENWICK__CREDENTIAL]]
+OPENROUTER_API_KEY=[[OP__KOMODO__OPENROUTER_API__CREDENTIAL]]
+CLICKSTACK_INGESTION_KEY=[[OP__KOMODO__CLICKSTACK_INGESTION_KEY__CREDENTIAL]]
+FENWICK_KAGI_API_KEY=[[OP__KOMODO__KAGI_API__CREDENTIAL]]
+SONARR_API_KEY=[[OP__KOMODO__SONARR_API__CREDENTIAL]]
+RADARR_API_KEY=[[OP__KOMODO__RADARR_API__CREDENTIAL]]
+FENWICK_ADMIN_SIGNAL=[[FENWICK_ADMIN_SIGNAL]]
+FENWICK_ADMIN_NAME=[[FENWICK_ADMIN_NAME]]
+FENWICK_DEV_SIGNAL_ACCOUNT=[[FENWICK_DEV_SIGNAL_ACCOUNT]]
+FENWICK_DEV_OP_VAULT=[[FENWICK_DEV_OP_VAULT]]
+FENWICK_DEV_OP_TOKEN=[[FENWICK_DEV_OP_TOKEN]]
+RUSTFS_DEV_ACCESS_KEY_ID=[[OP__KOMODO__RUSTFS_FENWICK_DEV__ACCESS_KEY_ID]]
+RUSTFS_DEV_SECRET_ACCESS_KEY=[[OP__KOMODO__RUSTFS_FENWICK_DEV__SECRET_ACCESS_KEY]]
+VAPID_DEV_PUBLIC_KEY=[[OP__KOMODO__FENWICK_DEV_VAPID__PUBLIC_KEY]]
+VAPID_DEV_PRIVATE_KEY=[[OP__KOMODO__FENWICK_DEV_VAPID__PRIVATE_KEY]]
+FENWICK_DEV_INTERNAL_HTTP_TOKEN=[[OP__KOMODO__FENWICK_DEV_INTERNAL_TOKEN__CREDENTIAL]]
+"""
+
+# Signal and 1Password Connect are stand-ins on dev, so these name nothing
+# real and are not secrets. Keep them non-secret: Komodo redacts a secret
+# variable's value everywhere in the stack's deploy state, and "dev" is part
+# of the project name.
+
+[[variable]]
+name = "FENWICK_DEV_SIGNAL_ACCOUNT"
+value = "+61400000000"
+description = "Placeholder Signal number for Fenwick dev's stand-in Signal service"
+
+[[variable]]
+name = "FENWICK_DEV_OP_VAULT"
+value = "dev"
+description = "Vault id Fenwick dev hands its stand-in 1Password Connect"
+
+[[variable]]
+name = "FENWICK_DEV_OP_TOKEN"
+value = "dev"
+description = "Token Fenwick dev hands its stand-in 1Password Connect"

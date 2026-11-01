@@ -73,6 +73,27 @@ resource "forgejo_repository_webhook" "komodo_deploy" {
   depends_on = [forgejo_repository.dash]
 }
 
+# Every push to the fenwick repository, on any branch, and every branch
+# deletion run the fenwick-dev-reconcile Action (komodo/sync/actions.toml),
+# which deploys the fenwick-dev stack while dev holds commits main does not
+# and destroys it once dev holds nothing more or is gone. Komodo reads the
+# branch from the delivery's `ref`, which a deletion carries too; __ANY__
+# accepts every branch.
+resource "forgejo_repository_webhook" "fenwick_dev_reconcile" {
+  repository    = forgejo_repository.fenwick.full_name
+  type          = "forgejo"
+  url           = "https://komodo.pod.haus/listener/github/action/fenwick-dev-reconcile/__ANY__"
+  content_type  = "json"
+  secret        = var.komodo_webhook_secret
+  branch_filter = "*"
+  active        = true
+
+  events {
+    push   = true
+    delete = true
+  }
+}
+
 # Fenwick was migrated through Forgejo's repository migration API, then
 # imported into this resource. Terraform owns repository policy but must never
 # be able to destroy source history.

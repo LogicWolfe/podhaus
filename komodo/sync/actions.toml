@@ -715,3 +715,75 @@ await cloudflare(`/zones/${zoneLookup.result[0].id}/purge_cache`, {
 });
 console.log(`[podhaus-purge-stack-cache] stack=${stackName} zone=${zone} tags=${purgeTags.join(',')}`);
 """
+
+[[action]]
+name = "fenwick-dev-reconcile"
+description = "Deploy the fenwick-dev stack while the fenwick repo's dev branch holds commits main does not, at dev's tip; destroy it once dev holds nothing more. Run by a Forgejo webhook on every push to the fenwick repo."
+tags = ["fenwick", "podhaus"]
+
+[action.config]
+# Reached only through its webhook (terraform/forgejo.tf), which fires on a
+# push or a branch deletion on any branch. Komodo queues webhook runs of one
+# Action, so two pushes never reconcile at once.
+run_at_startup = false
+schedule_enabled = false
+schedule = ""
+failure_alert = true
+webhook_enabled = true
+reload_deno_deps = false
+
+file_contents = """
+const STACK = 'fenwick-dev';
+const TOKEN_VARIABLE = 'OP__KOMODO__FORGEJO_TERRAFORM__CREDENTIAL';
+const REPO_API = 'https://git.pod.haus/api/v1/repos/LogicWolfe/fenwick';
+
+const token = (await komodo.read('GetVariable', { name: TOKEN_VARIABLE })).value;
+if (typeof token !== 'string' || token.length === 0) throw new Error(`${TOKEN_VARIABLE} is empty`);
+
+// Answers null for a 404 only where the caller says one is an answer.
+async function forgejo(path, missingIsAnswer) {
+  const response = await fetch(`${REPO_API}${path}`, {
+    headers: { Authorization: `token ${token}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (response.status === 404 && missingIsAnswer) return null;
+  if (response.status === 401 || response.status === 403) {
+    throw new Error(`Forgejo refused ${path} with ${response.status}: the token in ${TOKEN_VARIABLE} cannot read LogicWolfe/fenwick`);
+  }
+  if (!response.ok) throw new Error(`Forgejo ${path} failed: ${response.status} ${await response.text()}`);
+  return await response.json();
+}
+
+// The comparison's commit list is newest first and is not where the tip is
+// read; the branch answers that.
+const branch = await forgejo('/branches/dev', true);
+const devTip = branch === null ? null : branch.commit.id;
+let ahead = false;
+if (devTip !== null) {
+  const comparison = await forgejo('/compare/main...dev', false);
+  if (!Number.isInteger(comparison.total_commits)) throw new Error('compare main...dev carried no total_commits');
+  ahead = comparison.total_commits > 0;
+}
+
+const [listed] = await komodo.read('ListStacks', { query: { names: [STACK] } });
+if (!listed) throw new Error(`${STACK} is not a Komodo stack`);
+const state = listed.info.state;
+// Komodo records the short hash it deployed; dev's tip is the full one.
+const deployed = listed.info.deployed_hash || null;
+const atTip = devTip !== null && deployed !== null && devTip.startsWith(deployed);
+const facts = `push=${ARGS.WEBHOOK_BRANCH} dev=${devTip ?? 'absent'} ahead=${ahead} deployed=${deployed ?? 'none'} state=${state}`;
+
+async function run(execution) {
+  console.log(`[fenwick-dev-reconcile] ${facts}: ${execution}`);
+  const update = await komodo.execute_and_poll(execution, { stack: STACK });
+  if (!update.success) throw new Error(`${execution} ${STACK} failed; see Komodo update ${update._id?.$oid}`);
+}
+
+if (ahead && !(state === 'running' && atTip)) {
+  await run('DeployStack');
+} else if (!ahead && state !== 'down' && state !== 'unknown') {
+  await run('DestroyStack');
+} else {
+  console.log(`[fenwick-dev-reconcile] ${facts}: nothing to do`);
+}
+"""

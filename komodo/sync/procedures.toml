@@ -64,8 +64,13 @@
 # stacks. Stage 1 deliberately leaves those alone, so the stages do not
 # recreate the same stack twice. Unchanged stacks no-op.
 #
-# Wildcard `*` means new stacks are covered automatically — no repo
-# edit, no list, no 20-cap, ever.
+# Wildcard `*` filtered by the `podhaus` tag means new stacks are covered
+# automatically — no repo edit, no list, no 20-cap, ever. Every stack carries
+# the tag except fenwick-dev. Stage 2 full-deploys a stack it has never
+# deployed and redeploys one whose compose file changed, either of which
+# would bring dev up while it holds nothing main does not; the
+# fenwick-dev-reconcile Action alone decides when it runs. A stack that loses
+# the tag stops deploying on podhaus pushes.
 #
 # Caveat: a push that edits podhaus-push-deploy in this file cannot apply
 # that edit itself. Komodo's `resource::update::<Procedure>` has a busy
@@ -111,13 +116,13 @@ executions = [
 name = "Deploy changed stacks (surgical, content-hash-aware)"
 enabled = true
 executions = [
-  { execution.type = "BatchDeployStackIfChanged", execution.params = { pattern = "*" }, enabled = true }
+  { execution.type = "BatchDeployStackIfChanged", execution.params = { pattern = "*", tags = ["podhaus"] }, enabled = true }
 ]
 
 
-# fenwick-push-deploy — push-to-deploy for stacks sourced from the
-# fenwick repo (the bot + the credential-redactor service; both
-# linked_repo + run_build, Komodo builds the images on bandicoot).
+# fenwick-push-deploy — push-to-deploy for the production stacks sourced
+# from the fenwick repo (the bot, its web agent and the Brinno downloader;
+# all linked_repo + run_build, Komodo builds the images on bandicoot).
 #
 # Bound to the fenwick repo's Forgejo push webhook on main
 # (terraform/forgejo.tf): a push to main deploys.
@@ -127,9 +132,10 @@ executions = [
 #     Without it, a push that adds a new [[variable]] reaches the deploy via
 #     the on-disk file but the deploy uses the stored pre-change resource
 #     def — same trap that bit fenwick on 2026-05-17.
-#   - Stage 1 BatchDeployStack "fenwick*" (matches both the bare
-#     "fenwick" stack and "fenwick-*") force-deploys every fenwick
-#     stack. Each deploy pulls the stack host's clone of the repo, or
+#   - Stage 1 BatchDeployStack force-deploys the three production
+#     stacks by exact name, never a wildcard, so a push to main never
+#     brings up fenwick-dev (fenwick-dev-reconcile in actions.toml owns
+#     it). Each deploy pulls the stack host's clone of the repo, or
 #     clones it when missing, before compose, so no working checkout is
 #     ever an input. Force, not IfChanged: the stale-clone deadlock means
 #     BatchDeployStackIfChanged would no-op forever for linked_repo
@@ -144,7 +150,7 @@ executions = [
 
 [[procedure]]
 name = "fenwick-push-deploy"
-description = "Push-to-deploy for stacks sourced from the fenwick repo (the bot + the credential-redactor service)."
+description = "Push-to-deploy for the production stacks sourced from the fenwick repo: fenwick, fenwick-web-agent, fenwick-brinno-downloader."
 tags = ["fenwick", "podhaus"]
 config.webhook_enabled = true
 config.schedule_enabled = false
@@ -160,7 +166,7 @@ executions = [
 name = "Deploy fenwick stacks (build + up; layer cache makes unchanged stacks no-ops)"
 enabled = true
 executions = [
-  { execution.type = "BatchDeployStack", execution.params = { pattern = "fenwick*" }, enabled = true },
+  { execution.type = "BatchDeployStack", execution.params = { pattern = "fenwick, fenwick-web-agent, fenwick-brinno-downloader" }, enabled = true },
 ]
 
 

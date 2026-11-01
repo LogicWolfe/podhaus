@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 '''
-Lint that no podhaus-tagged stack.toml carries `deploy = true`.
+Lint every stack.toml for two deploy-authority rules: no stack carries
+`deploy = true`, and every stack carries the `podhaus` tag unless Komodo
+clones its files from another repository (`repo` in its config).
+
+The tag is how Stage 2 of podhaus-push-deploy selects stacks
+(`BatchDeployStackIfChanged "*"` filtered by `podhaus`), so a stack that
+loses it silently stops deploying. The one deliberate exception is a stack
+that its own trigger brings up and down, such as fenwick-dev: Stage 2 would
+full-deploy it on first sight.
 
 Komodo's RunSync has a built-in "Sync Deploy" sub-stage that auto-deploys
 any stack whose stored config differs from deployed when `deploy = true`
@@ -64,11 +72,16 @@ def main() -> int:
         for s in stacks:
             checked += 1
             tags = s.get("tags", [])
-            if "podhaus" not in tags:
-                continue
+            if "podhaus" not in tags and not s.get("config", {}).get("repo"):
+                errors.append(
+                    f"{rel}: stack {s.get('name')} has no `podhaus` tag, so "
+                    f"Stage 2 of podhaus-push-deploy never deploys it. Add "
+                    f"the tag; only a stack whose files Komodo clones from "
+                    f"another repository may go without it."
+                )
             if s.get("deploy") is True:
                 errors.append(
-                    f"{rel}: `deploy = true` on a podhaus stack — Komodo's "
+                    f"{rel}: `deploy = true` on a stack — Komodo's "
                     f"RunSync Sync Deploy sub-stage will auto-deploy it and "
                     f"a single linked-repo Periphery timeout will fail "
                     f"Stage 0. Omit the field (defaults to false); Stage 2 "
@@ -77,7 +90,7 @@ def main() -> int:
                 )
 
     if errors:
-        print("stack-toml lint: BAD DEPLOY FLAG", file=sys.stderr)
+        print("stack-toml lint: BAD DEPLOY AUTHORITY", file=sys.stderr)
         for e in errors:
             print(f"  {e}", file=sys.stderr)
         return 1
