@@ -6,6 +6,11 @@
 # the last detection is the only signal that shows it. Back gate has its own
 # detection and needs no check here.
 #
+# The last-detection sensors exist because the Protect event entities come back
+# blank after a Home Assistant restart, until the camera next detects something.
+# A trigger-based template sensor restores its value, so a restart neither clears
+# a stall nor raises a false alarm.
+#
 # The 72 hours sits well above the longest gap seen while healthy, 16.7 hours
 # overnight, so an empty weekend stays quiet. A longer absence can pass it, which
 # makes a holiday a false alarm rather than a missed failure. A check against Back
@@ -16,16 +21,36 @@
 # sensor goes unavailable, and Gatus treats anything but "off" as a failure.
 
 template:
+  - triggers:
+      - trigger: state
+        entity_id: event.outside_g4_pro_smart_detection
+        not_to: [unknown, unavailable]
+    sensor:
+      - name: G4 Pro last detection
+        unique_id: g4_pro_last_detection
+        device_class: timestamp
+        state: "{{ trigger.to_state.state }}"
+
+  - triggers:
+      - trigger: state
+        entity_id: event.hallway_g4_doorbell_smart_detection
+        not_to: [unknown, unavailable]
+    sensor:
+      - name: G4 Doorbell last detection
+        unique_id: g4_doorbell_last_detection
+        device_class: timestamp
+        state: "{{ trigger.to_state.state }}"
+
   - binary_sensor:
       - name: G4 Pro detection stale
         unique_id: g4_pro_detection_stale
         device_class: problem
         state: >-
-          {{ now() - as_datetime(states('event.outside_g4_pro_smart_detection'))
+          {{ now() - as_datetime(states('sensor.g4_pro_last_detection'))
              > timedelta(hours=72) }}
       - name: G4 Doorbell detection stale
         unique_id: g4_doorbell_detection_stale
         device_class: problem
         state: >-
-          {{ now() - as_datetime(states('event.hallway_g4_doorbell_smart_detection'))
+          {{ now() - as_datetime(states('sensor.g4_doorbell_last_detection'))
              > timedelta(hours=72) }}

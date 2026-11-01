@@ -278,8 +278,10 @@ recording, while neither camera produces a detection.
 `config/packages/protect_detection_health.yaml` turns on
 `binary_sensor.g4_pro_detection_stale` or
 `binary_sensor.g4_doorbell_detection_stale` once that camera's last smart
-detection is 72 hours old. It goes `unavailable` if the timestamp is missing.
-Gatus's **Cameras** group reads both and alerts after an hour of anything but
+detection is 72 hours old. Those read `sensor.g4_pro_last_detection` and
+`sensor.g4_doorbell_last_detection`, which keep their value across a Home Assistant
+restart. Protect's own event entities go blank on a restart until the next
+detection. The stale sensors go `unavailable` if the timestamp is missing. Gatus's **Cameras** group reads both and alerts after an hour of anything but
 `off`. A house left empty for three days will also trigger it.
 
 To recover, restart the AI Port from its page in Protect. Restarting the UDM does
