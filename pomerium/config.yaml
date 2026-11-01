@@ -72,6 +72,9 @@ routes:
     from: https://fenwick.pod.haus
     pass_identity_headers: true
   - <<: *family_route
+    from: https://fenwick.dev.pod.haus
+    pass_identity_headers: true
+  - <<: *family_route
     from: https://kangaroo-backup.pod.haus
   - <<: *family_route
     from: https://kangaroo.pod.haus
@@ -158,6 +161,11 @@ routes:
                 is: nathan@nathanbaxter.com
   - <<: *nathan_route
     from: https://dev.nathanbaxter.com
+  # Fenwick dev's stand-in Signal phone page lets whoever holds it send
+  # messages as any household member, so it is Nathan's alone; Fenwick dev
+  # itself is a family route, like fenwick.pod.haus above.
+  - <<: *nathan_route
+    from: https://signal.fenwick.dev.pod.haus
   # Sonarr is an admin tool (numbers MeTube's downloads for Plex), not a
   # family surface like MeTube itself — nathan_route, not family_route.
   - <<: *nathan_route

@@ -144,6 +144,8 @@
 	@backup host backup.pod.haus
 	@books host books.pod.haus
 	@fenwick host fenwick.pod.haus
+	@fenwick_dev host fenwick.dev.pod.haus
+	@fenwick_dev_signal host signal.fenwick.dev.pod.haus
 	@kangaroo_backup host kangaroo-backup.pod.haus
 	@kangaroo host kangaroo.pod.haus
 	@komodo host komodo.pod.haus
@@ -172,6 +174,9 @@
 		reverse_proxy @books {$BANDICOOT_LAN_IPV4}:8789
 		# The bot lives on bandicoot; the front door stays here.
 		reverse_proxy @fenwick {$BANDICOOT_LAN_IPV4}:8088
+		# Fenwick dev and its stand-in Signal phone page, also on bandicoot.
+		reverse_proxy @fenwick_dev {$BANDICOOT_LAN_IPV4}:8089
+		reverse_proxy @fenwick_dev_signal {$BANDICOOT_LAN_IPV4}:8090
 		reverse_proxy @kangaroo_backup {$KANGAROO_LAN_IPV4}:9898
 		reverse_proxy @kangaroo {$KANGAROO_LAN_IPV4}:8080
 		# Komodo Core lives on bandicoot; the front door stays here.

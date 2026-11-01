@@ -536,3 +536,24 @@ resource "cloudflare_dns_record" "mac_docs" {
   proxied = false
   ttl     = 300
 }
+
+# Fenwick dev, the second Fenwick built from the fenwick repo's dev branch,
+# and the phone page of its stand-in Signal service. Protected browser names,
+# so the application address.
+resource "cloudflare_dns_record" "fenwick_dev" {
+  zone_id = local.zones["pod.haus"]
+  name    = "fenwick.dev.pod.haus"
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
+}
+
+resource "cloudflare_dns_record" "fenwick_dev_signal" {
+  zone_id = local.zones["pod.haus"]
+  name    = "signal.fenwick.dev.pod.haus"
+  type    = "A"
+  content = local.numbat_application_ipv4
+  proxied = false
+  ttl     = 300
+}
