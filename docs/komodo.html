@@ -459,6 +459,28 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         deploying stacks from the Komodo UI.
       </blockquote>
 
+      <h2 id="api-users">API users and keys</h2>
+      <p>
+        Komodo's users and API keys live in its database, not in the
+        ResourceSync, so they are made by hand through the API
+        (<code>CreateServiceUser</code>, <code>UpdatePermissionOnTarget</code>,
+        <code>CreateApiKeyForServiceUser</code>) and rebuilt the same way after a
+        fresh install. Each key's pair is a Homelab 1Password item, the key in
+        <code>username</code> and the secret in <code>credential</code>.
+      </p>
+      <table>
+        <thead><tr><th>User</th><th>Permissions</th><th>1Password item</th><th>Used by</th></tr></thead>
+        <tbody>
+          <tr><td><code>nathan</code> (local, admin)</td><td>Everything</td><td><code>Komodo API OnePassword Sync</code></td><td>komodo-op, <code>komodo-start</code>, and hand-run API calls</td></tr>
+          <tr><td><code>fenwick-e2e</code> (service)</td><td>Read on the <code>fenwick-dev</code> stack only; it cannot see any other resource, change or deploy anything</td><td><code>Komodo API Fenwick E2E</code></td><td>Fenwick dev's end-to-end suite, which reads <code>GetStack fenwick-dev</code>'s <code>info.deployed_hash</code> to know which commit it is testing</td></tr>
+        </tbody>
+      </table>
+      <p>
+        A refused execute call still answers HTTP 200: Komodo records the
+        attempt as a failed update whose log says the permission was missing.
+        Read and write calls are refused outright.
+      </p>
+
       <h2 id="scripts">komodo-* scripts at the repo root</h2>
       <table>
         <thead><tr><th>Script</th><th>Purpose</th></tr></thead>
