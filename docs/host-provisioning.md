@@ -146,6 +146,15 @@ On development hosts with SELinux enabled, the `devbox` role labels TCP port
 remote clipboard tools to the Mac's cc-clip daemon. The listener remains on
 loopback; the port is not opened in the firewall.
 
+The role also loads a one-rule SELinux module,
+`roles/devbox/files/podhaus_ssh_local_forward.te`, that lets an SSH session
+connect to unreserved ports (`sshd_session_t` `name_connect` on
+`unreserved_port_t`). Fedora's policy refuses that, so an `ssh -L` tunnel to a
+development service opens but every connection through it fails. Fenwick dev's
+end-to-end suite tunnels bandicoot's 8089, 8090 and 9120 this way. Any SSH
+session on the host may forward to any unreserved port. Apply it alone with
+`--tags ssh-local-forward`.
+
 ### Inventory groups
 
 Hosts are grouped twice: by **whether Ansible manages them**, and by
