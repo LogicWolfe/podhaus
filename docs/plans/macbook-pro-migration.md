@@ -129,7 +129,7 @@ Verification: `chezmoi status` lists only always-run scripts;
 localhost link; from the Air, `ssh-machine nathan@nb-macbook-pro.local true`
 still works; `sudo sshd -T` shows `passwordauthentication no`.
 
-### D. Handoff to an agent on the Pro 🔄 started 2026-11-09
+### D. Handoff to an agent on the Pro ✅ 2026-11-09
 
 Moves to the same paths on the Pro: this plan, its appendices and the
 [migration log](macbook-pro-migration-log.md) through a clone of `podhaus`;
@@ -137,11 +137,13 @@ this session's working notes `~/.claude/notes/94c571e6-4cda-4128-96dd-f1f08d0200
 Pro to Air SSH is `ssh-machine nathan@nb-macbook-air.pod.haus` (D2; the Air's
 Bonjour name is `nathans-macbook-air.local`, not its hostname).
 
-Start: a tmux session on the Pro, personal-account Claude Code in
-`~/repos/podhaus`, briefed with the plan, the log, the notes, "start at
-stage E", and the rule that every step appends a log entry. Herdr is not
-the vehicle because its install waits for stage F. The Air-side session ends
-once the Pro agent has read the plan and written its first log entry.
+Started as a Herdr space on the Pro (terminal `migration`, in
+`~/repos/podhaus`) rather than tmux, at Nathan's request: Herdr.app 0.1.14
+was copied from the Air and launched, which installed herdr-core 0.1.19, the
+latest release of generation 1; the next apply linked voltaire, bandicoot,
+bilby and fractal, and `hc machine update` brought each devbox's core to
+0.1.19. The brief is `~/bootstrap/stage-d-brief.md` on the Pro. The agent runs
+stage E unattended and stops before stage F.
 
 ### E. Pro agent: applications, settings, state, repositories, Podhaus ⏳
 
@@ -392,10 +394,9 @@ When the Pro has passed stage E's verification and Nathan has worked on it.
 3. Dotfiles: `podhaus_operator = true` on the Pro's entry; `docs-tunnel-update`
    reads its field labels from `uname -n`. Apply on the Pro; `mac.docs.pod.haus`
    is served by the Pro.
-4. Herdr.app on the Pro, launched once; `chezmoi apply` links voltaire,
-   bandicoot, bilby and fractal. The remote agents (three Codex and one
-   Claude on voltaire, one Claude each on bandicoot and bilby) appear without
-   moving anything. Copy `shared.json`, not `window.json`.
+4. Herdr is already installed and linked on the Pro (stage D). Remaining:
+   copy `shared.json` from the Air for the layout, colours and scene
+   assignments, not `window.json`.
 5. Check `nb-macbook-pro.pod.haus` resolves on the LAN and a devbox can SSH
    to it.
 
