@@ -126,13 +126,14 @@ resource "unifi_client" "nb_macbook_air" {
   # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
 
-# Nathan's MacBook Pro, the Air's successor, on the same terms: by its wifi
-# hardware MAC, so Private Wi-Fi Address must stay off for the home network
-# or the reservation never matches. If the controller already lists this MAC
-# when the first apply runs, the provider adopts that client (allow_existing
-# defaults to true) rather than failing.
+# Nathan's MacBook Pro, the Air's successor, on the same terms, by the MAC
+# its wifi presents on the home network (ifconfig en0). That is a locally
+# administered address even with Private Wi-Fi Address off; the hardware MAC
+# is 7c:d6:2c:5f:05:7a, should the presented one ever change. If the
+# controller already lists this MAC when the first apply runs, the provider
+# adopts that client (allow_existing defaults to true) rather than failing.
 resource "unifi_client" "nb_macbook_pro" {
-  mac      = "7c:d6:2c:5f:05:7a"
+  mac      = "42:81:37:89:e8:5c"
   name     = "Nathans MacBook Pro"
   fixed_ip = local.nb_macbook_pro_ip
   # No network_id: Default LAN, same constraint as the kangaroo clients.

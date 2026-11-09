@@ -87,6 +87,9 @@ Podhaus carries both:
   laptop's retirement.
 - Both are in `remote_dev_machines`, and each has its own address in
   `config/lan-addresses.json`, UniFi reservation and `.pod.haus` record.
+  Reserve the MAC that `ifconfig en0` reports while the laptop is on the home
+  network, since macOS 27 may present a locally administered address
+  regardless of the Private Wi-Fi Address toggle.
 - The docs tunnel runs on one laptop at a time. Terraform issues both a client
   certificate (`terraform/tunnel.tf`), but `tunnel/numbat/restrictions.yaml`
   gives each listener exactly one rule, so `mac.docs.pod.haus` belongs to the
