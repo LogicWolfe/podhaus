@@ -399,30 +399,35 @@ stops reporting whitespace drift.
 remaining steps need no root: rsync, `git clone`, `chezmoi apply` (its Touch ID
 script no-ops while `/etc/pam.d/sudo_local` matches).
 
-### F. Cutover ⏳
+### F. Cutover ✅ 2026-11-09 evening
 
-When the Pro has passed stage E's verification and Nathan has worked on it.
+Done once Nathan said the Pro was good and the Air was being erased:
 
-1. On the Air: `launchctl bootout gui/501/com.podhaus.docs-tunnel` and
-   `…docs-origin`; quit Herdr.app.
-2. Podhaus: the Numbat rule for listener 8449 moves to `nb-macbook-pro`;
-   Numbat restarts.
-3. Dotfiles: `podhaus_operator = true` on the Pro's entry; `docs-tunnel-update`
-   reads its field labels from `uname -n`. Apply on the Pro; `mac.docs.pod.haus`
-   is served by the Pro.
-4. Herdr is already installed and linked on the Pro (stage D). Remaining:
-   copy `shared.json` from the Air for the layout, colours and scene
-   assignments, not `window.json`.
-5. Check `nb-macbook-pro.pod.haus` resolves on the LAN and a devbox can SSH
-   to it.
+1. The Air was already off the network, so nothing was stopped on it.
+2. Podhaus `9ad7cb2`: the Numbat rule for listener 8449 is named for the
+   Pro's certificate; the tunnel tests follow.
+3. Dotfiles `3e41114`: the Pro's fleet entry has `podhaus_operator = true`
+   and `lan = true` (no mDNS fallback now that DNS has its record), and
+   `docs-tunnel-update` labels its certificate fields by the machine's
+   hostname. `chezmoi apply` on the Pro rendered the docs origin and tunnel
+   agents, fetched the Pro's certificates and started both.
+4. Herdr's `shared.json` came over in stage E3.
+5. `nb-macbook-pro.pod.haus` resolves on the LAN (E5); the devboxes' SSH
+   config picks it up on their next `chezmoi apply`.
 
-### G. Retire the Air ⏳
+### G. Retire the Air ✅ 2026-11-09 evening
 
-Dotfiles: delete the Air's fleet entry and `op-vault` case. Podhaus: delete
-its reservation, DNS record, catalog entry, host vars and inventory
-membership; rename the key file and the GitHub key resource name (with `moved`, title unchanged);
-re-render Pomerium keys and Komodo variables. Then the Air can be wiped. The
-machine key is the Pro's, so nothing is revoked.
+Dotfiles `3e41114`: the Air's fleet entry and `op-vault` cases are gone, and
+the tests that used the Air as the MacBook fixture name the Pro. Podhaus
+`9ad7cb2`, applied with Terraform (0 to add, 2 to change, 5 to destroy):
+the Air's UniFi reservation, split-horizon record and tunnel client
+certificate destroyed; the GitHub key resource renamed in place with a
+`moved` block (title unchanged, so the key was not replaced); the key file
+is `forgejo/keys/nathan/nb-macbook-pro-machine.pub` with a Pro comment,
+which updated the Pocket ID claim; inventory, Pomerium key render, address
+catalog and Komodo variables follow. The Komodo variable
+`LAN_NB_MACBOOK_AIR_IPV4` lingers until deleted through the API, because the
+sync is additive. Nathan erased the Air the same evening.
 
 ## Agents and Herdr
 
