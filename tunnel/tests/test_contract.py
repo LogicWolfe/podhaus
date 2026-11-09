@@ -17,6 +17,10 @@ TUNNEL = ROOT / "tunnel"
 CLIENTS = sorted(p.parent.name for p in TUNNEL.glob("*/compose.yaml") if p.parent.name != "numbat")
 # The MacBook's client is chezmoi's (dotfiles: com.podhaus.docs-tunnel).
 OUTSIDE_THIS_REPOSITORY = {"nb-macbook-air": {("127.0.0.1", 8449)}}
+# Certificates issued before their client has a rule, so a replacement
+# laptop holds one when its cutover moves the MacBook rule to its name.
+# Numbat denies a certificate no rule names, so these open nothing.
+AWAITING_A_RULE = {"nb-macbook-pro"}
 
 
 class TaggedLoader(yaml.SafeLoader):
@@ -128,7 +132,12 @@ class ContractTests(unittest.TestCase):
                 self.assertIn(f"TUNNEL_KEY_B64=[[OP__KOMODO__NUMBAT_TUNNEL__{field}_KEY_B64]]", environment)
 
     def test_terraform_issues_a_certificate_to_every_client(self):
-        self.assertEqual(terraform_clients(), set(CLIENTS) | set(OUTSIDE_THIS_REPOSITORY))
+        self.assertEqual(
+            terraform_clients(), set(CLIENTS) | set(OUTSIDE_THIS_REPOSITORY) | AWAITING_A_RULE
+        )
+
+    def test_a_client_awaiting_a_rule_has_none(self):
+        self.assertEqual(AWAITING_A_RULE & set(rules()), set())
 
 
 if __name__ == "__main__":

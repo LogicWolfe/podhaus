@@ -46,6 +46,11 @@ value = "10.0.0.202"
 description = "Shared LAN address from config/lan-addresses.json"
 
 [[variable]]
+name = "LAN_NB_MACBOOK_PRO_IPV4"
+value = "10.0.0.203"
+description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
 name = "LAN_QUOKKA_IPV4"
 value = "10.0.0.199"
 description = "Shared LAN address from config/lan-addresses.json"

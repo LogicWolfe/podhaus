@@ -49,16 +49,27 @@ FENWICK_USER = "Nathan"
 
 
 def registered_keys() -> list[str]:
-    '''Personal key first, then machine keys sorted by hostname.'''
+    '''Personal key first, then machine keys sorted by hostname.
+
+    Two hosts may declare the same key while it moves between machines (a
+    laptop and its successor); it is registered once. The same key material
+    under two different comments is refused, because the comment is the
+    owner label and only one can win.
+    '''
     groups = yaml.safe_load((INVENTORY / "hosts.yml").read_text())["all"]["children"]
     personal = yaml.safe_load((INVENTORY / "group_vars" / "all.yml").read_text())[
         "podhaus_personal_key"
     ]
-    keys = [" ".join(personal.split())]
+    declared = [personal]
     for host in sorted(groups["remote_dev_machines"]["hosts"] or {}):
         host_vars = yaml.safe_load((INVENTORY / "host_vars" / f"{host}.yml").read_text())
-        keys.append(" ".join(host_vars["podhaus_machine_key"].split()))
-    return keys
+        declared.append(host_vars["podhaus_machine_key"])
+    keys: dict[str, str] = {}
+    for key in (" ".join(raw.split()) for raw in declared):
+        material = " ".join(key.split()[:2])
+        if keys.setdefault(material, key) != key:
+            sys.exit(f"one key declared with two comments: {keys[material]!r} and {key!r}")
+    return list(keys.values())
 
 
 def fingerprint(key: str) -> str:

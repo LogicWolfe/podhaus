@@ -1,7 +1,8 @@
 # MacBook setup
 
-How Nathan's personal laptop, `nb-macbook-air`, is set up from a fresh macOS
-install. Chezmoi owns the machine whole; Ansible never runs on it (see
+How Nathan's personal laptop is set up from a fresh macOS install. Paths
+below write its hostname as `<laptop>`: `nb-macbook-pro`, which is replacing
+`nb-macbook-air`. Chezmoi owns the machine whole; Ansible never runs on it (see
 [Host provisioning](host-provisioning.md)). Chezmoi cannot do every step:
 some need a person at the keyboard, an account outside the machine, or root.
 This page lists all of them, so the laptop's real dependencies are written
@@ -36,12 +37,12 @@ passphrase-less ed25519 file inside FileVault, minted by hand as the dotfiles
 README's "Minting a soft key" describes. Registering it is configuration in
 this repository:
 
-- `forgejo/keys/nathan/nb-macbook-air-machine.pub`: Terraform adds it to the
+- `forgejo/keys/nathan/<laptop>-machine.pub`: Terraform adds it to the
   Pocket ID `ssh_keys` claim, which Forgejo syncs, and registers it with GitHub
   for authentication (`terraform/github.tf`).
 - GitHub commit signing: added by hand at github.com/settings/keys, the one
   registration Terraform cannot own.
-- `podhaus_machine_key` in `ansible/inventory/host_vars/nb-macbook-air.yml`,
+- `podhaus_machine_key` in `ansible/inventory/host_vars/<laptop>.yml`,
   with the laptop in the `remote_dev_machines` group: the `authorized_keys`
   role grants the key on the Linux development hosts, and
   `tools/render-pomerium-keys.py` registers it with Pomerium's SSH routes.
@@ -64,12 +65,34 @@ chezmoi apply
 ## Home network
 
 The laptop's wifi MAC holds a UniFi reservation, and the split-horizon record
-`nb-macbook-air.pod.haus` points at it, so the development hosts can SSH to the
+`<laptop>.pod.haus` points at it, so the development hosts can SSH to the
 laptop on the home LAN. The address lives in `config/lan-addresses.json`; the
 reservation and record are in `terraform/unifi.tf` and
 `terraform/dns_unifi_split_horizon.tf`. A new laptop means a new MAC in
 `unifi.tf` and a Terraform apply. There is no route to the laptop from outside
 the home network.
+
+## Second laptop during a migration
+
+A replacement laptop runs alongside the old one until it is proven, and
+Podhaus carries both:
+
+- They share one machine key. The key moves to the new laptop rather than
+  being minted, so it stays registered once, under the old laptop's file in
+  `forgejo/keys/nathan/` and the old laptop's GitHub key: GitHub refuses the
+  same key twice, and a second file would repeat it in the Pocket ID claim.
+  Both laptops' host_vars declare a byte-identical `podhaus_machine_key`, so
+  the `authorized_keys` role and `tools/render-pomerium-keys.py` each keep one
+  copy. Renaming the file, its comment and the GitHub key waits for the old
+  laptop's retirement.
+- Both are in `remote_dev_machines`, and each has its own address in
+  `config/lan-addresses.json`, UniFi reservation and `.pod.haus` record.
+- The docs tunnel runs on one laptop at a time. Terraform issues both a client
+  certificate (`terraform/tunnel.tf`), but `tunnel/numbat/restrictions.yaml`
+  gives each listener exactly one rule, so `mac.docs.pod.haus` belongs to the
+  laptop that rule names. Cutover stops the tunnel on the old laptop, moves the
+  rule to the new laptop's name, and makes the new laptop a Podhaus operator in
+  the dotfiles.
 
 ## After the first apply
 

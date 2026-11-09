@@ -1,0 +1,22 @@
+# nb-macbook-pro — Nathan's MacBook Pro (macOS, Apple Silicon), his personal
+# laptop and the MacBook Air's successor. Never an Ansible target: chezmoi
+# owns the whole machine, including the keys its sshd accepts. It is in
+# inventory only as a member of the development mesh, so the authorized_keys
+# role grants its machine key on the Linux hosts. Its split-horizon
+# nb-macbook-pro.pod.haus record and UniFi-reserved wifi address, both in
+# terraform/, serve SSH into the laptop from the mesh on the home LAN; there
+# is no inbound path from outside.
+---
+# Machine key: a passphrase-less on-disk ed25519 inside FileVault, read
+# directly by ssh and ssh-keygen (no agent). Public half declared here so
+# the authorized_keys role grants it on the Linux mesh; see
+# group_vars/all.yml.
+#
+# While both laptops are in service they share this one key: it moved from
+# the Air rather than being minted. The value stays byte-identical to
+# nb-macbook-air.yml so the authorized_keys role and the Pomerium key render
+# each keep a single copy. When the Air's host_vars go, its comment becomes
+# "nb-macbook-pro machine key".
+podhaus_machine_key: >-
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC5zEJO7pWBiUNL3Sx7VvTUCpIIaZoKVvNeqMKymgDl3
+  nb-macbook-air machine key

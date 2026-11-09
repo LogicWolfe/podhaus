@@ -118,6 +118,16 @@ resource "unifi_dns_record" "nb_macbook_air_pod_haus" {
   enabled     = true
 }
 
+# nb-macbook-pro.pod.haus → the MacBook Pro's reserved wifi address, on the
+# same LAN-only, SSH-only terms as the Air's record above.
+resource "unifi_dns_record" "nb_macbook_pro_pod_haus" {
+  name        = "nb-macbook-pro.pod.haus"
+  record_type = "A"
+  value       = local.nb_macbook_pro_ip
+  ttl         = "5m0s"
+  enabled     = true
+}
+
 # music.pod.haus → bilby (Caddy) on LAN. Home Assistant runs on bilby and
 # its server-to-server websocket to Music Assistant can't carry a
 # browser session, so it must reach MA without traversing the
