@@ -109,7 +109,7 @@ class TunnelContractTests(unittest.TestCase):
         cls.relay = Authority(certs, "relay")
         cls.rogue = Authority(certs, "rogue")
         server_cert, server_key = cls.relay.issue("server", SERVER_NAME)
-        cls.mac = cls.relay.issue("nb-macbook-air")
+        cls.mac = cls.relay.issue("nb-macbook-pro")
         cls.bilby = cls.relay.issue("bilby")
         docker("network", "create", cls.network)
         cls.start(
@@ -224,7 +224,7 @@ class TunnelContractTests(unittest.TestCase):
         self.assertEqual(self.read_listener(8451), "")
 
     def test_a_certificate_from_another_ca_is_refused_by_the_server(self):
-        rogue_mac = self.rogue.issue("nb-macbook-air")
+        rogue_mac = self.rogue.issue("nb-macbook-pro")
         self.client("rogue-cert", self.relay.cert, rogue_mac, "127.0.0.1:8452")
         time.sleep(5)
         self.assertEqual(self.read_listener(8452), "")

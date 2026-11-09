@@ -18,7 +18,6 @@ class LanAddresses:
     turn_touch_burrow_ipv4: str
     led_strip_grasshopper_ipv4: str
     pizero_ipv4: str
-    nb_macbook_air_ipv4: str
     nb_macbook_pro_ipv4: str
     quokka_ipv4: str
 

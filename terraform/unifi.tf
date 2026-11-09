@@ -115,18 +115,7 @@ resource "unifi_client" "bandicoot" {
   # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
 
-# Nathan's MacBook Air, by its wifi MAC. Pinned because the split-horizon
-# nb-macbook-air.pod.haus record names this address; a DHCP drift would
-# strand SSH into the laptop from the development mesh. Imported 2026-08-26
-# from its existing DHCP lease by MAC.
-resource "unifi_client" "nb_macbook_air" {
-  mac      = "c0:c7:db:b1:db:f8"
-  name     = "Nathans MacBook Air"
-  fixed_ip = local.nb_macbook_air_ip
-  # No network_id: Default LAN, same constraint as the kangaroo clients.
-}
-
-# Nathan's MacBook Pro, the Air's successor, on the same terms, by the MAC
+# Nathan's MacBook Pro, pinned like Bandicoot above, by the MAC
 # its wifi presents on the home network (ifconfig en0). That is a locally
 # administered address even with Private Wi-Fi Address off; the hardware MAC
 # is 7c:d6:2c:5f:05:7a, should the presented one ever change. If the

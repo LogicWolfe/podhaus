@@ -323,7 +323,7 @@ routes:
                 - 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEcljMJnML/KqPHE0FFmzxgK0U7eRooK3GZH1/JeGFkR82EUx9cVoVQ88BO9SvbTfX+7CA3HAQvHPtCDuNbZTfs= bandicoot machine key'
                 - 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBICkcW0YaP8wowCjemalLW81NWyautlRaCMEfbadXgFib10oScWeU+l2CWzhmwUFDl0njYlicAtgtVMXYtq16iM= bilby machine key'
                 - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGc4palJ9QLWwFABcbyHKXNUvrTRpKdAkqATs8Bmr5xW fractal machine key'
-                - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC5zEJO7pWBiUNL3Sx7VvTUCpIIaZoKVvNeqMKymgDl3 nb-macbook-air machine key'
+                - 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC5zEJO7pWBiUNL3Sx7VvTUCpIIaZoKVvNeqMKymgDl3 nb-macbook-pro machine key'
                 - 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBOlMzOliGBC+plAujmuE7ZQCHNlMRxgJTo6YrKYc6HXnjlFTo925OEmabyE0b2rHABcbTVSOTJuNWSjXV/2TyQI= quokka machine key'
                 - 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBOzuSyhdhW8qk35HF8k7ftbnXPJrGEKGpf0QSdD2VCddcAX3NGMIa21nalGFpBOFK3QDBgd+nOogSOC8H/vzEjY= voltaire machine key'
       - allow:

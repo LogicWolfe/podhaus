@@ -79,15 +79,14 @@ resource "github_repository_webhook" "pets_deploy" {
   }
 }
 
-# nb-macbook-air's machine key, read from the same file that feeds the
+# nb-macbook-pro's machine key, read from the same file that feeds the
 # Forgejo ssh_keys claim in pocket_id.tf. Requires the admin:public_key
 # scope on the Homelab GitHub PAT.
 #
-# The key moved to nb-macbook-pro rather than being minted, so while both
-# laptops are in service this one registration serves both. GitHub refuses
-# the same key twice, so the Pro gets no resource of its own. A `moved`
-# block can rename this resource in place, but a new title replaces the key
-# on GitHub: the provider forces a new resource on any title change.
+# The key moved here from the retired nb-macbook-air rather than being
+# minted, so the registration is the Air's, renamed in place by the `moved`
+# block below. Its GitHub title still says nb-macbook-air: the provider
+# forces a new resource on any title change, which would replace the key.
 #
 # Only the type and key-material fields are sent: GitHub stores keys with
 # the comment stripped, and the provider's DiffSuppressFunc only trims
@@ -102,15 +101,20 @@ resource "github_repository_webhook" "pets_deploy" {
 #
 # Reference doc (integrations/github v6):
 #   https://registry.terraform.io/providers/integrations/github/latest/docs/resources/user_ssh_key
-resource "github_user_ssh_key" "nb_macbook_air_machine" {
+moved {
+  from = github_user_ssh_key.nb_macbook_air_machine
+  to   = github_user_ssh_key.nb_macbook_pro_machine
+}
+
+resource "github_user_ssh_key" "nb_macbook_pro_machine" {
   title = "nb-macbook-air machine key"
   key = join(" ", slice(
-    split(" ", trimspace(file("${path.module}/../forgejo/keys/nathan/nb-macbook-air-machine.pub"))),
+    split(" ", trimspace(file("${path.module}/../forgejo/keys/nathan/nb-macbook-pro-machine.pub"))),
     0, 2,
   ))
 }
 
-# bandicoot's machine key, on the same terms as nb-macbook-air's above:
+# bandicoot's machine key, on the same terms as nb-macbook-pro's above:
 # authentication only, from the file that feeds the Forgejo claim; the
 # signing-key registration stays out-of-band.
 resource "github_user_ssh_key" "bandicoot_machine" {

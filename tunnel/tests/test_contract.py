@@ -16,11 +16,11 @@ ROOT = Path(__file__).resolve().parents[2]
 TUNNEL = ROOT / "tunnel"
 CLIENTS = sorted(p.parent.name for p in TUNNEL.glob("*/compose.yaml") if p.parent.name != "numbat")
 # The MacBook's client is chezmoi's (dotfiles: com.podhaus.docs-tunnel).
-OUTSIDE_THIS_REPOSITORY = {"nb-macbook-air": {("127.0.0.1", 8449)}}
+OUTSIDE_THIS_REPOSITORY = {"nb-macbook-pro": {("127.0.0.1", 8449)}}
 # Certificates issued before their client has a rule, so a replacement
-# laptop holds one when its cutover moves the MacBook rule to its name.
-# Numbat denies a certificate no rule names, so these open nothing.
-AWAITING_A_RULE = {"nb-macbook-pro"}
+# machine holds one when its cutover moves a rule to its name. Numbat
+# denies a certificate no rule names, so these open nothing.
+AWAITING_A_RULE = set()
 
 
 class TaggedLoader(yaml.SafeLoader):

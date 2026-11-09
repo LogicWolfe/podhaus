@@ -105,21 +105,11 @@ resource "unifi_dns_record" "bandicoot_pod_haus" {
   enabled     = true
 }
 
-# nb-macbook-air.pod.haus → the MacBook Air's reserved wifi address, LAN
+# nb-macbook-pro.pod.haus → the MacBook Pro's reserved wifi address, LAN
 # only. SSH-only, like fractal: there is no HTTPS route and deliberately no
 # public or Pomerium record — the Mac has no inbound path from outside the
-# home network. LAN clients (bilby-resident agents running its Ansible
-# playbook, and Nathan moving between machines) connect direct.
-resource "unifi_dns_record" "nb_macbook_air_pod_haus" {
-  name        = "nb-macbook-air.pod.haus"
-  record_type = "A"
-  value       = local.nb_macbook_air_ip
-  ttl         = "5m0s"
-  enabled     = true
-}
-
-# nb-macbook-pro.pod.haus → the MacBook Pro's reserved wifi address, on the
-# same LAN-only, SSH-only terms as the Air's record above.
+# home network. LAN clients (agents on the Linux hosts, and Nathan moving
+# between machines) connect direct.
 resource "unifi_dns_record" "nb_macbook_pro_pod_haus" {
   name        = "nb-macbook-pro.pod.haus"
   record_type = "A"

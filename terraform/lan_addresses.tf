@@ -10,7 +10,6 @@ locals {
   turn_touch_burrow_ip     = local.lan_addresses.turn_touch_burrow_ipv4
   led_strip_grasshopper_ip = local.lan_addresses.led_strip_grasshopper_ipv4
   pizero_ip                = local.lan_addresses.pizero_ipv4
-  nb_macbook_air_ip        = local.lan_addresses.nb_macbook_air_ipv4
   nb_macbook_pro_ip        = local.lan_addresses.nb_macbook_pro_ipv4
   quokka_ip                = local.lan_addresses.quokka_ipv4
 }

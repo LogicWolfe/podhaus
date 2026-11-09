@@ -7,10 +7,10 @@
 # loopback ones (pomerium/config.yaml). @RELAY_IPV4@ and @APPLICATION_IPV4@
 # become Numbat's public addresses when the server starts (run-wstunnel).
 restrictions:
-  - name: nb-macbook-air
+  - name: nb-macbook-pro
     description: Nathan's MacBook's docs origin, for mac.docs.pod.haus
     match:
-      - !PathPrefix "^nb-macbook-air$"
+      - !PathPrefix "^nb-macbook-pro$"
     allow:
       - !ReverseTunnel
         protocol:

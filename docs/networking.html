@@ -156,7 +156,7 @@ networks:
       <p>
         Authentication is mutual TLS against a relay CA that Terraform owns
         (<code>terraform/tunnel.tf</code>). Each client holds its own certificate, whose
-        common name is its host name (the MacBook is <code>nb-macbook-air</code>). Numbat
+        common name is its host name (the MacBook is <code>nb-macbook-pro</code>). Numbat
         requires the certificate and accepts only the common name as the upgrade path the
         client uses, and <code>tunnel/numbat/restrictions.yaml</code> maps that name, one
         rule per host, to the exact listeners the host may open. Everything else is denied,
