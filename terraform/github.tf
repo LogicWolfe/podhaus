@@ -83,6 +83,12 @@ resource "github_repository_webhook" "pets_deploy" {
 # Forgejo ssh_keys claim in pocket_id.tf. Requires the admin:public_key
 # scope on the Homelab GitHub PAT.
 #
+# The key moved to nb-macbook-pro rather than being minted, so while both
+# laptops are in service this one registration serves both. GitHub refuses
+# the same key twice, so the Pro gets no resource of its own. A `moved`
+# block can rename this resource in place, but a new title replaces the key
+# on GitHub: the provider forces a new resource on any title change.
+#
 # Only the type and key-material fields are sent: GitHub stores keys with
 # the comment stripped, and the provider's DiffSuppressFunc only trims
 # whitespace — a comment-bearing value would diff forever and, with

@@ -15,6 +15,7 @@ locals {
     "fractal",
     "kangaroo",
     "nb-macbook-air",
+    "nb-macbook-pro",
     "pinelake",
     "quokka",
     "voltaire",
