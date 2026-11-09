@@ -145,9 +145,36 @@ bilby and fractal, and `hc machine update` brought each devbox's core to
 0.1.19. The brief is `~/bootstrap/stage-d-brief.md` on the Pro. The agent runs
 stage E unattended and stops before stage F.
 
-### E. Pro agent: applications, settings, state, repositories, Podhaus ⏳
+### E. Pro agent: applications, settings, state, repositories, Podhaus 🔄 run unattended 2026-11-09 afternoon
 
-#### E1. Applications to install
+**Where it stands.** E1, E2, E5, E6's package half and E7 are done. E3, E4 and
+E6's managed files are blocked on one thing only: the agent's shell inside the
+Herdr space cannot reach any LAN address (every connection to `10.0.0.x`
+returns "No route to host" while the internet works), which is macOS's Local
+Network privacy gate on Herdr. Once Herdr has that permission, the copy script
+at `/private/tmp/claude-501/-Users-nathan-repos-podhaus/f721d263-374c-4a4a-a781-58c5905c9d7a/scratchpad/stage-e3-copy.sh`
+(also summarised in E3) runs as written; the repository list and the
+managed-file contents come from the Air the same way.
+
+#### What only Nathan can do at the keyboard
+
+| Item | Why | Unblocks |
+|---|---|---|
+| System Settings, Privacy & Security, Local Network: allow Herdr (and Ghostty) | The agent's shell cannot reach the Air or any devbox over the LAN | E3 state copy, E4 reclones, E6 managed files, every `ssh-machine` LAN route |
+| 1Password, Settings, Developer: SSH agent on (the socket is still absent) | Plain `ssh`, commit signing with the personal key, Pomerium's identity hint | Then `chezmoi init` (no URL) and `chezmoi apply`, and delete `~/.ssh/config.d/90-bootstrap.conf` |
+| System Settings, Login Items: approve Stay, Lunar, Adrafinil, Magnet as login items (or add them from each app) | Registering them through System Events raised an Automation prompt nobody could click | Login items match the Air |
+| System Settings, Spotlight, Search results: switch every row off except Applications, Folders, System Settings; then run `defaults read com.apple.Spotlight EnabledPreferenceRules` | Only two rule ids are confirmed; the exact array macOS writes is the value MacBook setup should record | Spotlight minimal; the setup doc |
+| Firefox first launch: accept "make default browser"; sign in to the Firefox Account if the profile copy has not landed yet | The default-browser change needs a confirmation click | Default browser |
+| iStat Menus: do **not** launch until the Air's four plists have been copied (E3); then launch, approve the helper, check the licence | The licence sits in the copied plist | iStat Menus |
+| Licences and sign-ins: Lunar (Paddle, plus Screen Recording and Accessibility), Magnet and Stay (Accessibility, Screen Recording), DaisyDisk (Full Disk Access), NordVPN (network extension), Tailscale (`tailscale up` in a browser), Claude desktop, ChatGPT, Slack, Signal and WhatsApp device links, Plex, Steam, Microsoft 365 (Word, Excel, PowerPoint, Outlook, OneDrive, To Do, Teams), Orion (Kagi), Brave sync, StreamFab (direct download and licence) | Accounts and TCC grants | E1 sign-in column |
+| App Store: install the iPhone apps Audible, Big Ass Fans, Sensibo, MacroFactor | `mas` cannot install iPhone apps | E1 |
+| Safari: enable the 1Password, Kagi, Consent-O-Matic and Hush extensions | Extension toggles are GUI-only | E1 |
+| Claude Code: `claude-switch` then `/login` if not yet done; `/mcp` Notion OAuth in each account | Account state is in the Keychain | Agents |
+| Lock screen: require password immediately after sleep; iCloud Drive: Desktop and Documents sync on; wallpaper, Night Shift, True Tone, Finder sidebar by hand | Not scriptable without the login password or TCC | E2 GUI rows |
+| Review the dotfiles change `8ffcd6d` (package script) if wanted; decide whether the `clipboard-tunnel` Ansible tag also runs on voltaire and fractal | The cc-clip failure on bandicoot is an SELinux port label the devbox role applies; those two hosts are unlabelled too but still work | cc-clip on bandicoot |
+
+
+#### E1. Applications to install ✅ installed; sign-ins pending
 
 Beyond what the first apply already installs (Homebrew; fish, git-delta,
 starship, git-lfs, cloudflared, gh, awscli, micro, tmux, zellij, mise,
@@ -242,7 +269,7 @@ Ollama is installed by chezmoi's Lumen step. The service starts: `brew
 services start syncthing` with a fresh identity (D9); `sudo brew services
 start tailscale` and a browser login.
 
-#### E2. macOS settings to apply
+#### E2. macOS settings to apply ✅ headless rows written; GUI rows on Nathan's list
 
 Headless with `defaults write` unless the last column says otherwise; the
 exact commands are in the [settings appendix](macbook-pro-migration/settings.md).
@@ -253,7 +280,7 @@ exact commands are in the [settings appendix](macbook-pro-migration/settings.md)
 | Keyboard | Delay until repeat | 15 (shortest) | Logout |
 | Keyboard | Caps Lock acts as Right Control on the built-in keyboard | Remapped | Logout |
 | Keyboard | Spotlight shortcut Cmd+Space | Off on the Air for Alfred; **stays on** on the Pro, Alfred is dropped | Not applied |
-| Spotlight | Search results limited to Applications, Folders and System Settings; Siri Suggestions and Websites off; "Help Apple Improve Search" off | New for the Pro. The macOS 27 settings pane still carries the old `orderedItems` on/off list (APPLICATIONS, DIRECTORIES, SYSTEM_PREFS, MENU_SPOTLIGHT_SUGGESTIONS, MENU_WEBSEARCH, ...), so a `defaults write com.apple.Spotlight orderedItems` is the candidate; unverified on the redesigned Spotlight. See the [Spotlight note](macbook-pro-migration/spotlight.md) | Try headless, then Nathan flips one toggle in the GUI so the exact structure macOS writes can be read back and the write corrected; data-sharing opt-out may need a profile approved by hand |
+| Spotlight | Search results limited to Applications, Folders and System Settings; Siri Suggestions and Websites off; "Help Apple Improve Search" off | New for the Pro. macOS 27 lists the categories turned **off** as `System.<name>` ids in `com.apple.Spotlight` `EnabledPreferenceRules` (confirmed: `System.iphoneApps`, `System.documents`; inferred from the Spotlight framework's enum: images, movies, music, presentations, spreadsheets, developer, calculator, contacts, dictionary, safari, tips, pdf; unknown: Mail and Messages, Events, Fonts, Bookmarks, Siri Suggestions, Conversion). The fourteen known ids are written; `Search Queries Data Sharing Status` already reads 2. The [Spotlight note](macbook-pro-migration/spotlight.md)'s `orderedItems` route is obsolete | Nathan finishes the six unknown rows in the GUI and reads the array back for MacBook setup |
 | Keyboard | Symbolic hotkey 176, believed to be dictation | Off | Logout |
 | Keyboard | Text replacements (18), smart quotes, spelling language | Already identical on the Pro via iCloud | Nothing to do |
 | Trackpad | Tracking speed | 2 | Logout |
@@ -286,7 +313,7 @@ exact commands are in the [settings appendix](macbook-pro-migration/settings.md)
 | Hot corner | Bottom right: Quick Note | Stock default on both; **turn it off** on the Pro (Nathan): `wvous-br-corner` 1 | `killall Dock` |
 | Unknown | Night Shift, True Tone, Safari preferences, Finder sidebar, wallpaper ("The Beach") | Not readable headlessly on the Air | GUI, by hand |
 
-#### E3. State copied from the Air
+#### E3. State copied from the Air ⏳ script ready, blocked on Local Network access
 
 Over SSH with rsync from the Pro, exact include list in the
 [state appendix](macbook-pro-migration/state.md), minus the VS Code and iTerm
@@ -322,7 +349,7 @@ copied: Syncthing keys, OrbStack, signal-cli data, herdr-core install,
 Caddy instance id, Ollama models, Zed and VS Code caches, npm and uv caches,
 pipenv virtualenvs, mise and rustup installs, Claude Desktop VM images.
 
-#### E4. Repositories ✅ branch sort executed on the Air
+#### E4. Repositories 🔄 branch sort done on the Air; reclones on the Pro wait for the Air's repo list
 
 Every clean repo under `~/repos` is recloned from its origin; worktrees are
 recreated with `wt` only where still used. Local-only content is handled
@@ -368,20 +395,22 @@ its Numbat rule.
 | `forgejo/keys/nathan/nb-macbook-air-machine.pub`, `terraform/github.tf` | Unchanged now (one key, shared); renamed in the retirement PR with a `moved` block |
 | `docs/macbook-setup.md` | Hostname generalised; a note on running two laptops during a migration; the bootstrap corrections from the log |
 
-#### E6. Chezmoi additions (D11)
+#### E6. Chezmoi additions (D11) 🔄 packages pushed (`8ffcd6d`); managed files wait for the Air's copies
 
-A dotfiles change after stage A lands: casks `ghostty` and `1password`;
-formulae `git-filter-repo git-machete sapling libpq rsync rclone sentry-cli
-tailscale pandoc typst poppler tesseract pngpaste ffmpeg cloc pigz`; managed
+Done: casks `ghostty` and `1password`; formulae `mas rsync rclone sentry-cli
+tailscale syncthing poppler tesseract pandoc` (the culled formulae are not
+added). Pending: managed
 files `~/.mcp.json`, `~/.codex/hooks.json` and `rules/`,
 `~/.cursor/hooks.json`, `~/.pi/agent/settings.json` and `mcp.json`,
 `~/.ssh/id_personal.pub`, Adrafinil's `config.json`; the Claude settings
 template written in the formatting Claude Code uses, so `chezmoi status`
 stops reporting whitespace drift.
 
-#### E7. Close of stage E
+#### E7. Close of stage E ✅
 
-Remove `/etc/sudoers.d/zz-bootstrap` and confirm `sudo -n true` fails.
+`/etc/sudoers.d/zz-bootstrap` removed 2026-11-09; `sudo -n true` fails. The
+remaining steps need no root: rsync, `git clone`, `chezmoi apply` (its Touch ID
+script no-ops while `/etc/pam.d/sudo_local` matches).
 
 ### F. Cutover ⏳
 
