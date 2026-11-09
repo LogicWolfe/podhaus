@@ -147,20 +147,20 @@ stage E unattended and stops before stage F.
 
 ### E. Pro agent: applications, settings, state, repositories, Podhaus 🔄 run unattended 2026-11-09 afternoon
 
-**Where it stands.** E1, E2, E5, E6's package half and E7 are done. E3, E4 and
-E6's managed files are blocked on one thing only: the agent's shell inside the
-Herdr space cannot reach any LAN address (every connection to `10.0.0.x`
-returns "No route to host" while the internet works), which is macOS's Local
-Network privacy gate on Herdr. Once Herdr has that permission, the copy script
-at `/private/tmp/claude-501/-Users-nathan-repos-podhaus/f721d263-374c-4a4a-a781-58c5905c9d7a/scratchpad/stage-e3-copy.sh`
-(also summarised in E3) runs as written; the repository list and the
-managed-file contents come from the Air the same way.
+**Where it stands.** E1, E2, E4, E5, E6 and E7 are done. E3 is complete except
+the Firefox profiles (the Pro's own Firefox folder is privacy-protected for the
+agent's shell) and the three large folders, which are copying. The LAN block
+that stalled the first run was macOS's Local Network permission for Herdr;
+Nathan granted it.
 
 #### What only Nathan can do at the keyboard
 
 | Item | Why | Unblocks |
 |---|---|---|
-| System Settings, Privacy & Security, Local Network: allow Herdr (and Ghostty) | The agent's shell cannot reach the Air or any devbox over the LAN | E3 state copy, E4 reclones, E6 managed files, every `ssh-machine` LAN route |
+| ✅ Local Network for Herdr (granted) | | |
+| System Settings, Privacy & Security, Full Disk Access: add Herdr, then tell the agent to rerun the Firefox copy | The Pro's `~/Library/Application Support/Firefox` is privacy-protected; rsync gets "Operation not permitted" | Firefox profiles (E3) |
+| Fix or drop the two `github.com/orijin-plus` remotes (`Orijin-Platform-Backend`, `Orijin-Platform-Frontend`): the clones are refused, the org looks renamed | Only the owner can tell where they went | E4 |
+| Decide `~/.cursor/hooks.json`: seed it in chezmoi with only Adrafinil's entries, or leave the app to write it | It still carries retired CodeIsland entries | E6 |
 | 1Password, Settings, Developer: SSH agent on (the socket is still absent) | Plain `ssh`, commit signing with the personal key, Pomerium's identity hint | Then `chezmoi init` (no URL) and `chezmoi apply`, and delete `~/.ssh/config.d/90-bootstrap.conf` |
 | System Settings, Login Items: approve Stay, Lunar, Adrafinil, Magnet as login items (or add them from each app) | Registering them through System Events raised an Automation prompt nobody could click | Login items match the Air |
 | System Settings, Spotlight, Search results: switch every row off except Applications, Folders, System Settings; then run `defaults read com.apple.Spotlight EnabledPreferenceRules` | Only two rule ids are confirmed; the exact array macOS writes is the value MacBook setup should record | Spotlight minimal; the setup doc |
@@ -313,7 +313,7 @@ exact commands are in the [settings appendix](macbook-pro-migration/settings.md)
 | Hot corner | Bottom right: Quick Note | Stock default on both; **turn it off** on the Pro (Nathan): `wvous-br-corner` 1 | `killall Dock` |
 | Unknown | Night Shift, True Tone, Safari preferences, Finder sidebar, wallpaper ("The Beach") | Not readable headlessly on the Air | GUI, by hand |
 
-#### E3. State copied from the Air ⏳ script ready, blocked on Local Network access
+#### E3. State copied from the Air 🔄 everything but Firefox landed; Documents, Desktop, Pictures copying
 
 Over SSH with rsync from the Pro, exact include list in the
 [state appendix](macbook-pro-migration/state.md), minus the VS Code and iTerm
@@ -349,7 +349,7 @@ copied: Syncthing keys, OrbStack, signal-cli data, herdr-core install,
 Caddy instance id, Ollama models, Zed and VS Code caches, npm and uv caches,
 pipenv virtualenvs, mise and rustup installs, Claude Desktop VM images.
 
-#### E4. Repositories 🔄 branch sort done on the Air; reclones on the Pro wait for the Air's repo list
+#### E4. Repositories ✅ 41 of 43 recloned; two Orijin-Platform remotes dead (Nathan)
 
 Every clean repo under `~/repos` is recloned from its origin; worktrees are
 recreated with `wt` only where still used. Local-only content is handled
@@ -395,11 +395,16 @@ its Numbat rule.
 | `forgejo/keys/nathan/nb-macbook-air-machine.pub`, `terraform/github.tf` | Unchanged now (one key, shared); renamed in the retirement PR with a `moved` block |
 | `docs/macbook-setup.md` | Hostname generalised; a note on running two laptops during a migration; the bootstrap corrections from the log |
 
-#### E6. Chezmoi additions (D11) 🔄 packages pushed (`8ffcd6d`); managed files wait for the Air's copies
+#### E6. Chezmoi additions (D11) ✅ packages `8ffcd6d`; `.mcp.json` and Codex rules `0dfbc78`, `cb0448a`; four items were already managed
 
 Done: casks `ghostty` and `1password`; formulae `mas rsync rclone sentry-cli
 tailscale syncthing poppler tesseract pandoc` (the culled formulae are not
-added). Pending: managed
+added); `~/.mcp.json` (Macs only) and a once-seeded `~/.codex/rules/default.rules`.
+Already managed before this stage: pi settings and MCP, `~/.ssh/id_personal.pub`,
+Adrafinil's config, and the Claude settings target shows no drift on the Pro.
+Left unmanaged: `~/.codex/hooks.json` (Adrafinil's installer owns it) and
+`~/.cursor/hooks.json` (carries retired CodeIsland entries; Nathan decides).
+The original list for reference: managed
 files `~/.mcp.json`, `~/.codex/hooks.json` and `rules/`,
 `~/.cursor/hooks.json`, `~/.pi/agent/settings.json` and `mcp.json`,
 `~/.ssh/id_personal.pub`, Adrafinil's `config.json`; the Claude settings
