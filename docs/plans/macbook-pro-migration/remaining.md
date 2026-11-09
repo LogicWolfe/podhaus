@@ -33,6 +33,20 @@ goes with the plan.
   the template's deep-merge keeps them across applies.
 - **Settings:** output volume matched to the Air; three-finger vertical swipe
   on an external trackpad matched.
+- **Clipboard bridge on bandicoot fixed.** cc-clip is the bridge that puts a
+  devbox's clipboard (and Codex's Ctrl-V images) onto the Mac through a
+  reverse SSH tunnel on port 18339. On bandicoot SELinux refused to let sshd
+  listen on that port; the podhaus devbox role has a task that labels the
+  port for sshd and it had never run there. Ran that one task
+  (`ansible-playbook playbooks/bandicoot.yml --tags clipboard-tunnel`, check
+  mode first, one change) and `cc-clip setup bandicoot.pod.haus --all` now
+  completes. voltaire and fractal get the same label the next time their
+  playbooks run.
+- **wattsworth's Air-only commit is on the Pro.** The branch
+  `docs-timesheets-reorg` (one commit, 2026-04-22, moving the timesheets docs
+  from `docs/plans/` into a `docs/timesheets.md` reference page and a
+  `timesheets-next.md` plan) was fetched from the cull bundle into
+  `~/repos/wattsworth`. It is not pushed; see decisions.
 - **Home state:** the two SQLite guidance PDFs sitting loose in the Air's home
   folder copied; the Air's 77 SSH known-hosts entries merged into the Pro's
   file (the previous file is kept as `known_hosts.pre-merge`). The audit
@@ -48,7 +62,7 @@ does not matter except where noted.
 
 | Item | Why it matters |
 |---|---|
-| 1Password: approve the SSH key-use prompts for `ssh` (tick "remember"/always allow) | Until then every plain `ssh`, and git's first contact through the 1Password agent, waits on the dialog; a `git pull` waited a minute before falling back to the machine key |
+| ✅ 1Password SSH key-use approval | Plain `ssh bilby.pod.haus` now signs with the Personal SSH Key and returns |
 | System Settings, Login Items: Stay, Lunar, Adrafinil, Magnet (NordVPN, Magnet and Adrafinil are already there) | Registering through System Events raised an Automation prompt nobody could click |
 | System Settings, Spotlight: switch off every category except Applications, Folders and System Settings, then run `defaults read com.apple.Spotlight EnabledPreferenceRules` and paste the array into the MacBook setup doc | Fourteen category ids are written; the ids for Mail and Messages, Events, Fonts, Bookmarks, Siri Suggestions, Websites and Conversion only appear once toggled in the GUI |
 | Lock screen: require password immediately (`sysadminctl -screenLock immediate -password -`, or System Settings, Lock Screen) | The Pro waits 300 seconds; the Air was immediate |
@@ -56,26 +70,15 @@ does not matter except where noted.
 
 ### Licences, sign-ins and first launches
 
-| App | What to do |
-|---|---|
-| iStat Menus | Launch, approve the helper, check the licence (the four plists are in place), then align the menu-bar item visibility with the Air: Battery, CPU, Memory, Network differ in the stored state |
-| Lunar | Licence (Paddle), Screen Recording and Accessibility; display settings are machine-specific so set them fresh |
-| Stay | Accessibility and Screen Recording; the Air's saved window layouts live in its plist and were not copied (they are display-specific) |
-| Magnet | Accessibility |
-| DaisyDisk | Full Disk Access |
-| NordVPN | Network extension approval |
-| Tailscale | `tailscale up` and the browser sign-in; the Pro reports `NeedsLogin` under node name `nb-macbook-pro` |
-| Syncthing | Pair the Pro with the Air (or the other devices) in the Syncthing UI and add the "Leftover Words" folder at `~/Documents/Publii/sites/leftover-words`, which the Documents copy already placed; the Pro's Syncthing has no folders and no peers. Do not copy the Air's `key.pem`: two devices would share one ID |
-| OneDrive, iCloud Drive | Sign in; OneDrive-Personal (1.5 GB) and the Switch Technologies libraries live in `~/Library/CloudStorage` on the Air and repopulate on sign-in, as do iCloud Drive (603 MB), Books, Pixelmator, Playgrounds and Ulysses's library |
-| Claude desktop, ChatGPT, Slack, Signal, WhatsApp | Sign in; Signal and WhatsApp are device links from the phone |
-| Plex, Steam | Sign in; Steam games (Caves of Qud, Pathogenic, Slay the Spire 2 were in the Air's `~/Applications`) redownload |
-| Microsoft 365 (Word, Excel, PowerPoint, Outlook, OneDrive, To Do, Teams) | Sign in |
-| Orion (Kagi), Brave sync | Sign in |
-| StreamFab | Direct download from streamfab.com and licence entry (activation count is limited) |
-| Zed | First launch; see the Zed decision below for the settings |
-| Safari | Enable the 1Password, Kagi, Consent-O-Matic and Hush extensions |
-| App Store | Install the iPhone apps Audible, Big Ass Fans, Sensibo, MacroFactor (`mas` cannot) |
-| Claude Code | `claude-switch` then `/login` if the Switch account is missing; `/mcp` Notion OAuth in each account |
+Nathan does these as each app is first needed; none blocks anything else.
+iStat Menus (licence is in the copied plist; align the menu-bar items with
+the Air), Lunar, Stay, Magnet, DaisyDisk, NordVPN, Tailscale (`tailscale up`),
+Syncthing (pair the Pro and add the "Leftover Words" folder at
+`~/Documents/Publii/sites/leftover-words`; never copy the Air's `key.pem`),
+OneDrive and iCloud Drive, the chat apps, Plex, Steam, Microsoft 365, Orion,
+Brave sync, StreamFab, Zed, the Safari extensions, the four iPhone apps from
+the App Store, Claude Code `/login` for the Switch account and `/mcp` for
+Notion.
 
 ### Appearance and small GUI-only settings
 
@@ -88,21 +91,17 @@ next plugged in.
 
 | Decision | Options and trade-off |
 |---|---|
-| iCloud Drive Desktop and Documents sync | The Air has it on; the Pro is off and `~/Desktop` and `~/Documents` are the local copies from the Air. Turning it on merges those into iCloud Drive. Turn it on in System Settings, Apple Account, iCloud, iCloud Drive, after checking the Pro's folders are what you expect; or leave it off and treat the Pro's copies as the truth |
-| The two Orijin-Platform repositories | Working copies are now on the Pro with history, but `github.com/orijin-plus` is dead. Point them at the renamed org (`git remote set-url`), or leave them as local archives |
-| wattsworth `docs-timesheets-reorg` | One commit (`48f8b03`) exists only on the Air and in the copied bundle. Push the branch (`git push origin docs-timesheets-reorg`, publishes it) or rely on the bundle |
-| Air worktrees not recreated | Eight clean extra checkouts on the Air with nothing unpushed: `bookshelf-audible-purchase` (`audible-purchase`, no upstream), `hybrid-haul-truck-agent-dependencies` and `-agent-telemetry` (remote branches gone), `hybrid-haul-truck-notion-plan` (detached), `hybrid-haul-truck-workbook-fixes` (`plan-workbook-smoke-follow-ups`), `indy-board-button-order`, `podhaus-visual-test` (`visual-test`, no upstream), `terraform-sandbox-runner-auth`. Recreate any you still want with `git -C ~/repos/<repo> worktree add ~/repos/<dir> <branch>`; the two with no upstream exist only on the Air |
+| iCloud Drive Desktop and Documents sync: **on, like the Air** (decided) | The Air's Desktop and Documents are the iCloud ones, so everything the Pro copied is already in iCloud. When a second Mac turns the sync on with files already in its local Desktop and Documents, macOS does not merge them: it files them under `Desktop - nb-macbook-pro` and `Documents - nb-macbook-pro` inside iCloud, so the Pro would upload 33 GB of duplicates. Sequence: the agent moves the Pro's local `~/Desktop` and `~/Documents` contents aside to `~/Air-copies/`; Nathan turns the switch on (System Settings, Apple Account, iCloud, iCloud Drive, Desktop & Documents Folders); iCloud fills the folders; the agent compares and deletes `~/Air-copies/` |
+| The two Orijin-Platform repositories | `Orijin-Platform-Backend` and `-Frontend` are old client work whose GitHub remote, the `orijin-plus` organisation, no longer exists (clones are refused). Their full history is now on the Pro, so nothing is lost. Nothing to do unless the org was renamed and you want to repoint them with `git remote set-url` |
+| wattsworth `docs-timesheets-reorg` | The branch is now in the Pro's clone. Push it to origin so it survives the Air (`git -C ~/repos/wattsworth push origin docs-timesheets-reorg`) or drop it if the timesheets docs reorganisation is no longer wanted |
 | Graphite (`gt`) and Bun | Both on the Air as tapped formulae with no Keep or Drop row. `brew install withgraphite/tap/graphite`, `brew install oven-sh/bun/bun`, or treat as dropped |
 | Bartender 6 | On the Air, not installed on the Pro, no decision recorded. The native menu bar settings already match; install it or drop it |
 | Zed settings | The Air's `~/.config/zed/settings.json` carries theme, font sizes, unified diff view, new-window CLI behaviour, agent model and permissions and the `codex-acp` registry entry that the chezmoi-managed file lacks, plus a `keymap.json`. Fold them into the dotfiles source (a plain copy is overwritten on the next apply) or start fresh |
 | `~/.cursor/hooks.json` | Seed it in chezmoi with only Adrafinil's entries, or leave the app to write it; it still carries retired CodeIsland entries |
 | Codex sessions | `~/.codex/sessions` (443 MB) exists only on the Air. Codex is skipped on the Pro; copy it only if you want to resume those threads |
 | Switch work Claude profile | `~/.claude-switch` is 92 MB on the Air (86 MB of transcripts) and 4 KB on the Pro; the state inventory said memory only, and the copy script carried none of it. Copy `~/.claude-switch/projects` the way the personal transcripts were copied, or start that profile fresh |
-| pi agent extras | The Air's `~/.pi/agent` has `auth.json` (a login), `models-store.json` and 7 MB of sessions that the Pro lacks; settings, MCP and extensions were copied. Sign in again, or copy `models-store.json` and the sessions |
-| OrbStack dev containers | The Air has four stopped containers (postgres 17 and mongo 7 for hybrid-sim, a chat-investor sandbox, redis), unused for months. The plan says rebuild; the two databases may hold data worth a `pg_dump`/`mongodump` before the Air is wiped |
 | Mail, Messages, Safari | Mail (461 MB) and Messages (227 MB database plus 7 GB of attachments) exist on the Air and are privacy-protected on both machines. iCloud brings Safari bookmarks and Messages back; Mail re-syncs from the accounts. Copying `chat.db` by hand fights iCloud sync, so the recommendation is to rely on the accounts and only export anything not in iCloud |
 | Dropped apps' data | CrossOver bottles (4.9 GB), VS Code (2 GB), Conductor (`conductor.db`), Alfred, MailMate, IINA, Goose, iTerm2 remain on the Air only. Nothing to do unless an app comes back; the Air's disk is the archive until stage G |
-| `clipboard-tunnel` Ansible tag | The cc-clip failure on bandicoot is an SELinux port label the devbox role applies; voltaire and fractal are unlabelled too but work. Run the tag on bandicoot alone, or on all three |
 | Dotfiles review | Package script change `8ffcd6d` (desktop formulae and casks in the non-headless branch) if wanted |
 
 ## Gates to stages F and G
