@@ -667,7 +667,11 @@ These have failure modes that you must not introduce:
   plus any service's build context) — same path
   for files_on_host and linked_repo. Ofelia follows the resulting
   Docker events and reloads job labels itself. Push is not cheap and not a no-op — treat it as a
-  deploy.
+  deploy. **Push a `pomerium/` change on its own.** Numbat's Periphery
+  dials Core through Pomerium, so when one procedure run redeploys Pomerium
+  and another Numbat stack, the other stack's deploy times out at Core
+  ("Timed out waiting for message") and its change waits for the next push
+  (bit the MacBook cutover on 2026-11-09).
 - **Before adding or modifying a Cloudflare / UniFi / GitHub TF
   resource, read the provider's resource doc.** Schemas change
   between minor versions and `terraform apply` errors with "Attribute X

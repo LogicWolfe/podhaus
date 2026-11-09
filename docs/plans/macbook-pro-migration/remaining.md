@@ -103,8 +103,25 @@ next plugged in.
 | Mail, Messages, Safari | Mail (461 MB) and Messages (227 MB database plus 7 GB of attachments) exist on the Air and are privacy-protected on both machines. iCloud brings Safari bookmarks and Messages back; Mail re-syncs from the accounts. Copying `chat.db` by hand fights iCloud sync, so the recommendation is to rely on the accounts and only export anything not in iCloud |
 | Dropped apps' data | CrossOver bottles (4.9 GB), VS Code (2 GB), Conductor (`conductor.db`), Alfred, MailMate, IINA, Goose, iTerm2 remain on the Air only. Nothing to do unless an app comes back; the Air's disk is the archive until stage G |
 | Dotfiles review | Package script change `8ffcd6d` (desktop formulae and casks in the non-headless branch) if wanted |
+| Komodo variable `LAN_NB_MACBOOK_AIR_IPV4` | Lingers in Komodo because the sync is additive. Delete it in the Komodo UI (Variables); the API's local login refused the agent, so it is a click |
+| git's SSH on the Mac and 1Password | The git config's Mac branch (`ssh -i <machine key>`, deliberately without `IdentitiesOnly`, per Nathan's 2026-08 ruling so the personal key is a fallback) consults the 1Password agent first, because OpenSSH offers agent keys before file keys. Once the key-use prompt is approved with "always allow" it is instant; before that every git contact waited a minute. Keep the ruling, or add `-o IdentityAgent=none` and give up the personal-key fallback for git |
+| `gh` scope | The Pro's `gh` login lacks `admin:repo_hook`, so a webhook cannot be redelivered from here. `gh auth refresh -h github.com -s admin:repo_hook` if wanted |
 
-## Gates to stages F and G
+## Closed after the cutover
+
+- Stages F and G are done; the Air is erased. bandicoot, bilby and fractal
+  ran `chezmoi update` and now route SSH to `nb-macbook-pro.pod.haus` with no
+  trace of the Air; voltaire is off the LAN and picks the change up at its
+  next interactive login (its route needs a Pomerium sign-in nobody could
+  approve).
+- `config.fish` tests for Homebrew by path, so a non-interactive fish over
+  SSH no longer fails on starship (dotfiles `94d871b`).
+- The MacBook setup page carries the lessons: Full Disk Access and Local
+  Network before an agent starts, iCloud sync before copying, the Spotlight
+  array, the 1Password approval, the Podhaus clone's hook and venv, and the
+  Pomerium-separate push for the cutover rule.
+
+## Stages F and G, as they were run
 
 Stage F (cutover) starts when Nathan says the Pro is good for daily work. It
 is unchanged in the plan: stop the docs tunnel and origin agents on the Air,

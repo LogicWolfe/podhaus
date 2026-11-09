@@ -185,13 +185,18 @@ Hosts are grouped twice: by **whether Ansible manages them**, and by
 
 Ansible is a control-node dependency only; nothing is installed on
 targets beyond a Python interpreter, which Fedora already has. It lives
-in the repo's `.venv`.
+in the repo's `.venv` (created by the `pipenv install` in `README.md`), not
+on `PATH`, so call it by path or through Pipenv.
 
 ```sh
 cd ansible
-op-vault dev -- ansible-playbook playbooks/fractal.yml --check --diff
-op-vault dev -- ansible-playbook playbooks/fractal.yml
+op-vault dev -- ../.venv/bin/ansible-playbook playbooks/fractal.yml --check --diff
+op-vault dev -- ../.venv/bin/ansible-playbook playbooks/fractal.yml
 ```
+
+A single role task can be run alone with `--tags`; the devbox role's
+`clipboard-tunnel` tag, for example, labels the clipboard bridge's port for
+sshd under SELinux.
 
 Authentication uses the caller's machine-key agent. `group_vars/all.yml`
 passes `IdentityAgent` through from `$SSH_AUTH_SOCK`, so the same machine key

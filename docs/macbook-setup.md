@@ -1,8 +1,7 @@
 # MacBook setup
 
 How Nathan's personal laptop is set up from a fresh macOS install. Paths
-below write its hostname as `<laptop>`: `nb-macbook-pro`, which is replacing
-`nb-macbook-air`. Chezmoi owns the machine whole; Ansible never runs on it (see
+below write its hostname as `<laptop>`, today `nb-macbook-pro`. Chezmoi owns the machine whole; Ansible never runs on it (see
 [Host provisioning](host-provisioning.md)). Chezmoi cannot do every step:
 some need a person at the keyboard, an account outside the machine, or root.
 This page lists all of them, so the laptop's real dependencies are written
@@ -22,6 +21,7 @@ The first `chezmoi apply` needs these in place.
 | 1Password app and CLI, signed in, SSH agent enabled | The first clone authenticates with the personal key in 1Password; it stays the identity for interactive SSH on the Mac | Install both, sign in, enable Settings → Developer → SSH agent |
 | Temporary `~/.ssh/config` | Points ssh at 1Password's agent for the first clone; chezmoi replaces it | `Host *` with `IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"` |
 | Ghostty | The terminal chezmoi configures and Claude Code notifies through; chezmoi does not install it | `brew install --cask ghostty`, after the first apply has installed Homebrew, or the download from ghostty.org before it |
+| Full Disk Access for the terminal an agent will run in (Ghostty, or Herdr when the agent runs in a Herdr space), and Local Network for Herdr | macOS keeps `~/Library/Mail`, `Messages`, `Safari`, `Application Support/Firefox` and `Mobile Documents` unreadable to a shell without it, and blocks every LAN connection from an app without Local Network; an unattended agent cannot answer either prompt | System Settings → Privacy & Security → Full Disk Access and Local Network, before the agent starts |
 | cc-clip | Chezmoi asks `cc-clip version` while rendering the script that sets up each dev box's clipboard tunnel, so an apply without it fails | `curl -fsSL https://raw.githubusercontent.com/ShunmeiCho/cc-clip/main/scripts/install.sh \| sh` |
 
 Then bootstrap chezmoi with the command in the dotfiles README, checking
@@ -95,12 +95,42 @@ Podhaus carries both:
   gives each listener exactly one rule, so `mac.docs.pod.haus` belongs to the
   laptop that rule names. Cutover stops the tunnel on the old laptop, moves the
   rule to the new laptop's name, and makes the new laptop a Podhaus operator in
-  the dotfiles.
+  the dotfiles. Push the rule change on its own: Numbat's Periphery reaches
+  Core through Pomerium, so a push that also redeploys Pomerium loses the
+  tunnel server's deploy to a timeout and the rule change does not land until
+  the next push. The new laptop's client is refused with HTTP 400 until the
+  tunnel server restarts; Numbat's `tunnel-server` log in HyperDX shows
+  "Tunnel accepted due to matched restriction: <laptop>" once it has.
+- Retirement removes the old laptop's fleet entry, address, reservation,
+  record and tunnel client, renames the key file and its GitHub resource in
+  place (`moved` block, title unchanged), and leaves one Komodo variable
+  (`LAN_<OLD>_IPV4`) to delete by hand, because the sync is additive.
 
 ## After the first apply
 
 - Run the commands the apply prints to make fish the login shell, then reopen
   the terminal.
+- The first plain `ssh` (and git's first contact, which consults the
+  1Password agent before falling back to the machine key) raises 1Password's
+  key-use prompt; approve it with "always allow" or every connection waits
+  on the dialog.
+- iCloud Drive → Desktop & Documents Folders **before** copying anything into
+  `~/Desktop` or `~/Documents`: a second Mac that turns the sync on with files
+  already there does not merge them, it files them under `Desktop - <laptop>`
+  and `Documents - <laptop>` in iCloud as duplicates.
+- Spotlight search results are `EnabledPreferenceRules` in
+  `com.apple.Spotlight`: an array of the categories turned **off**, as
+  `System.<category>` ids. The headless equivalent of leaving only
+  Applications, Folders and System Settings on is
+  `defaults write com.apple.Spotlight EnabledPreferenceRules -array System.iphoneApps System.documents System.images System.movies System.music System.presentations System.spreadsheets System.developer System.calculator System.contacts System.dictionary System.safari System.tips System.pdf`;
+  the ids for Mail and Messages, Events, Fonts, Bookmarks, Siri Suggestions,
+  Websites and Conversion are unconfirmed and only appear after a toggle in
+  the GUI (`defaults read com.apple.Spotlight EnabledPreferenceRules`).
+- Login items (Stay, Lunar, Adrafinil, Magnet) are added in System Settings;
+  registering them through System Events raises an Automation prompt.
+- A podhaus clone needs `pipenv install` (README) and
+  `ln -sf ../../tools/pre-commit .git/hooks/pre-commit` before its first
+  commit, and Terraform needs `terraform init` once.
 - `gh auth login` and `codex login`, both interactive.
 - Open OrbStack once to finish its first-run setup.
 - Open Adrafinil once and approve its privileged helper, then start `codex`
