@@ -145,34 +145,15 @@ bilby and fractal, and `hc machine update` brought each devbox's core to
 0.1.19. The brief is `~/bootstrap/stage-d-brief.md` on the Pro. The agent runs
 stage E unattended and stops before stage F.
 
-### E. Pro agent: applications, settings, state, repositories, Podhaus 🔄 run unattended 2026-11-09 afternoon
+### E. Pro agent: applications, settings, state, repositories, Podhaus ✅ 2026-11-09
 
-**Where it stands.** Every sub-stage is done. The one hand step left is moving
-the staged Firefox folder (`~/Firefox-from-air`) into `~/Library/Application
-Support/Firefox` in Finder, because that destination is privacy-protected for
-the agent's shell. The LAN block that stalled the first run was macOS's Local
-Network permission for Herdr; Nathan granted it. Stage F waits for Nathan to
-confirm the Pro is good for daily work.
-
-#### What only Nathan can do at the keyboard
-
-| Item | Why | Unblocks |
-|---|---|---|
-| ✅ Local Network for Herdr (granted) | | |
-| Finder: move `~/Firefox-from-air` to `~/Library/Application Support/Firefox` (Shift-Cmd-G to get there), then launch Firefox | That destination is privacy-protected for the agent's shell; the copy itself is done | Firefox profiles (E3) |
-| Fix or drop the two `github.com/orijin-plus` remotes (`Orijin-Platform-Backend`, `Orijin-Platform-Frontend`): the clones are refused, the org looks renamed | Only the owner can tell where they went | E4 |
-| Decide `~/.cursor/hooks.json`: seed it in chezmoi with only Adrafinil's entries, or leave the app to write it | It still carries retired CodeIsland entries | E6 |
-| 1Password, Settings, Developer: SSH agent on (the socket is still absent) | Plain `ssh`, commit signing with the personal key, Pomerium's identity hint | Then `chezmoi init` (no URL) and `chezmoi apply`, and delete `~/.ssh/config.d/90-bootstrap.conf` |
-| System Settings, Login Items: approve Stay, Lunar, Adrafinil, Magnet as login items (or add them from each app) | Registering them through System Events raised an Automation prompt nobody could click | Login items match the Air |
-| System Settings, Spotlight, Search results: switch every row off except Applications, Folders, System Settings; then run `defaults read com.apple.Spotlight EnabledPreferenceRules` | Only two rule ids are confirmed; the exact array macOS writes is the value MacBook setup should record | Spotlight minimal; the setup doc |
-| Firefox first launch: accept "make default browser"; sign in to the Firefox Account if the profile copy has not landed yet | The default-browser change needs a confirmation click | Default browser |
-| iStat Menus: do **not** launch until the Air's four plists have been copied (E3); then launch, approve the helper, check the licence | The licence sits in the copied plist | iStat Menus |
-| Licences and sign-ins: Lunar (Paddle, plus Screen Recording and Accessibility), Magnet and Stay (Accessibility, Screen Recording), DaisyDisk (Full Disk Access), NordVPN (network extension), Tailscale (`tailscale up` in a browser), Claude desktop, ChatGPT, Slack, Signal and WhatsApp device links, Plex, Steam, Microsoft 365 (Word, Excel, PowerPoint, Outlook, OneDrive, To Do, Teams), Orion (Kagi), Brave sync, StreamFab (direct download and licence) | Accounts and TCC grants | E1 sign-in column |
-| App Store: install the iPhone apps Audible, Big Ass Fans, Sensibo, MacroFactor | `mas` cannot install iPhone apps | E1 |
-| Safari: enable the 1Password, Kagi, Consent-O-Matic and Hush extensions | Extension toggles are GUI-only | E1 |
-| Claude Code: `claude-switch` then `/login` if not yet done; `/mcp` Notion OAuth in each account | Account state is in the Keychain | Agents |
-| Lock screen: require password immediately after sleep; iCloud Drive: Desktop and Documents sync on; wallpaper, Night Shift, True Tone, Finder sidebar by hand | Not scriptable without the login password or TCC | E2 GUI rows |
-| Review the dotfiles change `8ffcd6d` (package script) if wanted; decide whether the `clipboard-tunnel` Ansible tag also runs on voltaire and fractal | The cc-clip failure on bandicoot is an SELinux port label the devbox role applies; those two hosts are unlabelled too but still work | cc-clip on bandicoot |
+**Where it stands.** Every sub-stage is done, the Firefox profiles are in
+place, the 1Password agent is wired in and the bootstrap identity file is
+gone. An evening audit of both machines (apps, settings, home state,
+repositories and agents) found no gap the agent could close that it did not
+close. What remains is one sitting at the keyboard and a short list of
+decisions, broken down in [what is left](macbook-pro-migration/remaining.md).
+Stage F waits for Nathan to confirm the Pro is good for daily work.
 
 
 #### E1. Applications to install ✅ installed; sign-ins pending
@@ -314,7 +295,7 @@ exact commands are in the [settings appendix](macbook-pro-migration/settings.md)
 | Hot corner | Bottom right: Quick Note | Stock default on both; **turn it off** on the Pro (Nathan): `wvous-br-corner` 1 | `killall Dock` |
 | Unknown | Night Shift, True Tone, Safari preferences, Finder sidebar, wallpaper ("The Beach") | Not readable headlessly on the Air | GUI, by hand |
 
-#### E3. State copied from the Air ✅ all 33.7 GB landed; Firefox staged at `~/Firefox-from-air` for Nathan to move in Finder
+#### E3. State copied from the Air ✅ all 33.7 GB landed; Firefox profiles moved into place by Nathan in Finder
 
 Over SSH with rsync from the Pro, exact include list in the
 [state appendix](macbook-pro-migration/state.md), minus the VS Code and iTerm
