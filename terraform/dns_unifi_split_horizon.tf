@@ -107,9 +107,9 @@ resource "unifi_dns_record" "bandicoot_pod_haus" {
 
 # nb-macbook-pro.pod.haus → the MacBook Pro's reserved wifi address, LAN
 # only. SSH-only, like fractal: there is no HTTPS route and deliberately no
-# public or Pomerium record — the Mac has no inbound path from outside the
-# home network. LAN clients (agents on the Linux hosts, and Nathan moving
-# between machines) connect direct.
+# public record. LAN clients (agents on the Linux hosts, and Nathan moving
+# between machines) connect direct; everywhere else uses Pomerium's
+# ssh://nb-macbook-pro route at ssh.pod.haus, which needs no record here.
 resource "unifi_dns_record" "nb_macbook_pro_pod_haus" {
   name        = "nb-macbook-pro.pod.haus"
   record_type = "A"

@@ -347,6 +347,9 @@ routes:
   - from: ssh://fractal
     to: ssh://127.0.0.1:2304
     policy: *nathan_ssh_policy
+  - from: ssh://nb-macbook-pro
+    to: ssh://127.0.0.1:2308
+    policy: *nathan_ssh_policy
   - from: ssh://pinelake
     to: ssh://127.0.0.1:2305
     policy:

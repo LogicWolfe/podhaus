@@ -83,10 +83,9 @@ resource "github_repository_webhook" "pets_deploy" {
 # Forgejo ssh_keys claim in pocket_id.tf. Requires the admin:public_key
 # scope on the Homelab GitHub PAT.
 #
-# The key moved here from the retired nb-macbook-air rather than being
-# minted, so the registration is the Air's, renamed in place by the `moved`
-# block below. Its GitHub title still says nb-macbook-air: the provider
-# forces a new resource on any title change, which would replace the key.
+# The `moved` block below carries the registration over from the retired
+# nb-macbook-air's resource address. The provider forces a new resource on
+# any title change, so a title change deletes and recreates the key.
 #
 # Only the type and key-material fields are sent: GitHub stores keys with
 # the comment stripped, and the provider's DiffSuppressFunc only trims
@@ -107,7 +106,7 @@ moved {
 }
 
 resource "github_user_ssh_key" "nb_macbook_pro_machine" {
-  title = "nb-macbook-air machine key"
+  title = "nb-macbook-pro machine key"
   key = join(" ", slice(
     split(" ", trimspace(file("${path.module}/../forgejo/keys/nathan/nb-macbook-pro-machine.pub"))),
     0, 2,

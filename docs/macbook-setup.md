@@ -69,8 +69,9 @@ The laptop's wifi MAC holds a UniFi reservation, and the split-horizon record
 laptop on the home LAN. The address lives in `config/lan-addresses.json`; the
 reservation and record are in `terraform/unifi.tf` and
 `terraform/dns_unifi_split_horizon.tf`. A new laptop means a new MAC in
-`unifi.tf` and a Terraform apply. There is no route to the laptop from outside
-the home network.
+`unifi.tf` and a Terraform apply. Every other client reaches the laptop through
+Pomerium's `ssh://<laptop>` route at `ssh.pod.haus`, which the docs tunnel
+carries to its sshd while the laptop is awake and online.
 
 ## Second laptop during a migration
 
@@ -92,19 +93,22 @@ Podhaus carries both:
   regardless of the Private Wi-Fi Address toggle.
 - The docs tunnel runs on one laptop at a time. Terraform issues both a client
   certificate (`terraform/tunnel.tf`), but `tunnel/numbat/restrictions.yaml`
-  gives each listener exactly one rule, so `mac.docs.pod.haus` belongs to the
-  laptop that rule names. Cutover stops the tunnel on the old laptop, moves the
-  rule to the new laptop's name, and makes the new laptop a Podhaus operator in
-  the dotfiles. Push the rule change on its own: Numbat's Periphery reaches
+  gives each listener exactly one rule, so `mac.docs.pod.haus` and the SSH
+  listener belong to the laptop that rule names. Cutover stops the tunnel on
+  the old laptop, moves the rule to the new laptop's name, renames the
+  `ssh://<laptop>` route in `pomerium/config.yaml`, and makes the new laptop
+  a Podhaus operator in the dotfiles. Push the rule change on its own:
+  Numbat's Periphery reaches
   Core through Pomerium, so a push that also redeploys Pomerium loses the
   tunnel server's deploy to a timeout and the rule change does not land until
   the next push. The new laptop's client is refused with HTTP 400 until the
   tunnel server restarts; Numbat's `tunnel-server` log in HyperDX shows
   "Tunnel accepted due to matched restriction: <laptop>" once it has.
 - Retirement removes the old laptop's fleet entry, address, reservation,
-  record and tunnel client, renames the key file and its GitHub resource in
-  place (`moved` block, title unchanged), and leaves one Komodo variable
-  (`LAN_<OLD>_IPV4`) to delete by hand, because the sync is additive.
+  record and tunnel client, renames the key file, renames its GitHub resource
+  in place (`moved` block) along with its title, which makes Terraform
+  recreate the GitHub key, and leaves one Komodo variable (`LAN_<OLD>_IPV4`)
+  to delete by hand, because the sync is additive.
 
 ## After the first apply
 
@@ -140,8 +144,9 @@ Podhaus carries both:
 
 Chezmoi writes `~/.ssh/authorized_keys`: the personal key and each development
 host's machine key. sshd's own settings are root-owned, so they are set once by
-hand. These are the only root steps the laptop takes, and nothing changes them
-after:
+hand, after the first apply, whose `docs-tunnel-update` places Pomerium's SSH
+user CA public key at `~/.config/docs-tunnel/pomerium-user-ca.pub`. These are
+the only root steps the laptop takes:
 
 ```sh
 sudo systemsetup -setremotelogin on
@@ -151,12 +156,18 @@ KbdInteractiveAuthentication no
 PermitRootLogin no
 AllowUsers nathan
 EOF
+sudo cp ~/.config/docs-tunnel/pomerium-user-ca.pub /etc/ssh/pomerium-user-ca.pub
+sudo tee /etc/ssh/sshd_config.d/001-pomerium-ca.conf >/dev/null <<'EOF'
+TrustedUserCAKeys /etc/ssh/pomerium-user-ca.pub
+EOF
 sudo sshd -t
 ```
 
-The file sorts before Apple's `100-macos.conf`, and sshd takes the first value
-it reads for each setting. Without it macOS accepts the account password over
-SSH. sshd starts per connection on macOS, so nothing needs reloading.
+Both files sort before Apple's `100-macos.conf`, and sshd takes the first
+value it reads for each setting. Without the first, macOS accepts the account
+password over SSH. The second admits the short-lived certificate Pomerium
+presents on its `ssh://<laptop>` route; a replaced Pomerium CA means repeating
+the copy. sshd starts per connection on macOS, so nothing needs reloading.
 
 ## Checking the result
 
@@ -164,8 +175,10 @@ SSH. sshd starts per connection on macOS, so nothing needs reloading.
 - `ssh-machine -T git@git.pod.haus` authenticates as LogicWolfe with the
   machine key alone.
 - `op-vault dev -- op vault list` lists `Dev`.
-- `sudo sshd -T | grep -iE '^(authorizedkeysfile|passwordauthentication|allowusers) '`
-  shows `.ssh/authorized_keys`, `no` and `nathan`.
+- `sudo sshd -T | grep -iE '^(authorizedkeysfile|passwordauthentication|allowusers|trustedusercakeys) '`
+  shows `.ssh/authorized_keys`, `no`, `nathan` and `/etc/ssh/pomerium-user-ca.pub`.
+- `ssh nathan@<laptop>@ssh.pod.haus true` from another machine succeeds
+  through Pomerium.
 - `docs-url ~/repos/podhaus/docs/macbook-setup.md` prints a localhost link that
   opens this page, and `https://mac.docs.pod.haus/podhaus/macbook-setup.md`
   opens it through Pomerium. The second needs the laptop to be a Podhaus

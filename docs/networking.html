@@ -97,8 +97,8 @@ networks:
         ingestion, <code>paperless-api.pod.haus</code>, Komodo's outbound connection, and
         mTLS log ingestion. Forgejo uses Pomerium for HTTPS and the application address on
         port 22 for ordinary <code>git@git.pod.haus</code> SSH. Managed devices use the
-        canonical <code>&lt;host&gt;.pod.haus</code> name for host SSH. Chezmoi sends Bilby, Bandicoot, Quokka
-        and Fractal directly through split DNS and Kangaroo directly to its active LAN
+        canonical <code>&lt;host&gt;.pod.haus</code> name for host SSH. Chezmoi sends Bilby, Bandicoot, Quokka,
+        Fractal and Nathan's MacBook directly through split DNS and Kangaroo directly to its active LAN
         address while preserving the canonical host-key identity. Fractal's split-horizon
         record resolves to the LAN address its WSL guest shares with the Windows host under
         mirrored networking (UniFi-reserved, both in Terraform) and is safe precisely
@@ -109,12 +109,13 @@ networks:
         <code>nathan@ssh.pod.haus</code> and choose a route from Pomerium's portal. Routes are
         named <code>bilby</code>, <code>fractal</code>, <code>numbat</code>,
         <code>voltaire</code>, <code>kangaroo</code>, <code>bandicoot</code>,
-        <code>pinelake</code>, and <code>quokka</code>.
+        <code>pinelake</code>, <code>quokka</code>, and <code>nb-macbook-pro</code>.
         CA trust on Ansible-managed hosts comes from the
         <code>sshd_pomerium_ca</code> role; on kangaroo (which Ansible cannot
         reach — QTS has no Python) <code>kangaroo_bootstrap</code> installs a
         boot-persistent <code>start.sh</code> that re-applies the trust after QTS
-        regenerates <code>sshd_config</code>. Every host's outbound tunnel is a
+        regenerates <code>sshd_config</code>; the MacBook trusts it through a one-time root
+        step in <a href="macbook-setup.md#ssh-into-the-laptop">MacBook setup</a>. Every host's outbound tunnel is a
         Komodo-managed wstunnel container (<code>tunnel/&lt;host&gt;</code>); kangaroo's runs on
         host networking so that it reaches the QTS sshd on its own loopback. Kangaroo's canonical route
         maps to QTS's real UID 0 account, <code>admin</code>. Tailscale recovery keeps separate
@@ -144,7 +145,7 @@ networks:
           <tr><td>Relay address <code>:443</code></td><td>Caddy <code>:4444</code> (public TLS)</td><td>bilby</td></tr>
           <tr><td>Application address <code>:22</code></td><td>Forgejo SSH <code>forgejo:2222</code></td><td>bilby</td></tr>
           <tr><td><code>127.0.0.1:8543</code></td><td>Caddy <code>:4443</code> (protected origin)</td><td>bilby</td></tr>
-          <tr><td><code>127.0.0.1:2301</code> to <code>2307</code></td><td>Host sshd: bilby 2301, voltaire 2302, kangaroo 2303, fractal 2304, pinelake 2305, bandicoot 2306, quokka 2307</td><td>that host</td></tr>
+          <tr><td><code>127.0.0.1:2301</code> to <code>2308</code></td><td>Host sshd: bilby 2301, voltaire 2302, kangaroo 2303, fractal 2304, pinelake 2305, bandicoot 2306, quokka 2307, nb-macbook-pro 2308</td><td>that host</td></tr>
           <tr><td><code>127.0.0.1:8544</code> to <code>8548</code></td><td>The host's Caddy mTLS origin on <code>:4443</code>: fractal 8544, voltaire 8545, pinelake 8546, bandicoot 8547, quokka 8548</td><td>that host</td></tr>
           <tr><td><code>127.0.0.1:8449</code></td><td>Nathan's MacBook docs origin, for <code>mac.docs.pod.haus</code></td><td>the MacBook</td></tr>
         </tbody>
@@ -188,10 +189,12 @@ networks:
       <p>
         Nathan's MacBook runs its own client and docs origin as chezmoi-managed
         LaunchAgents (<code>com.podhaus.docs-origin</code> and
-        <code>com.podhaus.docs-tunnel</code> in the dotfiles repo), publishing its docs at
-        <code>mac.docs.pod.haus</code> through Numbat's <code>127.0.0.1:8449</code>. While
-        the laptop sleeps or is off the network, that route answers with Pomerium's upstream
-        error. <a href="macbook-setup.md">MacBook setup</a> covers the laptop side.
+        <code>com.podhaus.docs-tunnel</code> in the dotfiles repo). The client publishes its
+        docs origin on Numbat's <code>127.0.0.1:8449</code> for <code>mac.docs.pod.haus</code>
+        and its sshd on <code>127.0.0.1:2308</code> for Pomerium's
+        <code>ssh://nb-macbook-pro</code> route. While the laptop sleeps or is offline, both
+        routes answer with Pomerium's upstream error.
+        <a href="macbook-setup.md">MacBook setup</a> covers the laptop side.
       </p>
 
       <h2 id="ssh-auth-notify">SSH sign-in links over Signal</h2>
