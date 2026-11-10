@@ -8,7 +8,7 @@
 # become Numbat's public addresses when the server starts (run-wstunnel).
 restrictions:
   - name: nb-macbook-pro
-    description: Nathan's MacBook's docs origin, for mac.docs.pod.haus
+    description: Nathan's MacBook's SSH (ssh://nb-macbook-pro) and its docs origin (mac.docs.pod.haus)
     match:
       - !PathPrefix "^nb-macbook-pro$"
     allow:
@@ -16,6 +16,7 @@ restrictions:
         protocol:
           - Tcp
         port:
+          - 2308
           - 8449
         cidr:
           - 127.0.0.1/32
