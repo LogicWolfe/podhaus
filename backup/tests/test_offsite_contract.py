@@ -78,45 +78,54 @@ class OffsiteContractTest(unittest.TestCase):
         fail_copy: bool = False,
         fail_rclone: bool = False,
     ) -> SyncRun:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "source"
-            destination = root / "destination"
-            source.mkdir()
-            destination.mkdir()
-            (source / ".podhaus-share-mounted").touch()
-            (destination / ".podhaus-share-mounted").touch()
-            log = root / "calls"
-            commands = root / "commands"
-            commands.mkdir()
-            self.write_fake_commands(commands, log)
-            copy = root / "sync-bandicoot-copy"
-            copy.write_text(
-                (ROOT / "backup/bilby/scripts/sync-bandicoot-copy").read_text()
-                .replace("/repos/podhaus-bandicoot", str(source))
-                .replace("/repos/podhaus", str(destination))
-            )
-            copy.chmod(0o755)
-            executable = root / "sync"
-            executable.write_text(
-                (ROOT / "backup/bilby/scripts/sync-bandicoot-repository").read_text()
-                .replace("/repos/podhaus", str(destination))
-                .replace("/hooks/sync-bandicoot-copy", str(copy))
-            )
-            executable.chmod(0o755)
-            result = subprocess.run(
-                [executable],
-                env=os.environ | {
-                    "PATH": f"{commands}:{os.environ['PATH']}",
-                    "MISSING_PLAN": missing_plan,
-                    "STALE_PLAN": stale_plan,
-                    "FAIL_COPY": str(fail_copy).lower(),
-                    "FAIL_RCLONE": str(fail_rclone).lower(),
-                    "CALL_LOG": str(log),
-                },
-                check=False,
-            )
-            return SyncRun(result.returncode, log.read_text().splitlines())
+        self.log.unlink(missing_ok=True)
+        result = subprocess.run(
+            [self.executable],
+            env=os.environ | {
+                "PATH": f"{self.commands}:{os.environ['PATH']}",
+                "MISSING_PLAN": missing_plan,
+                "STALE_PLAN": stale_plan,
+                "FAIL_COPY": str(fail_copy).lower(),
+                "FAIL_RCLONE": str(fail_rclone).lower(),
+                "CALL_LOG": str(self.log),
+            },
+            check=False,
+        )
+        return SyncRun(result.returncode, self.log.read_text().splitlines())
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        # macOS scans each newly written executable on its first run, which
+        # costs far more than the scripts do. The fixtures are written once and
+        # reused, so only the first test pays it; each test still gets a fresh
+        # call log.
+        temporary = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        source = root / "source"
+        destination = root / "destination"
+        source.mkdir()
+        destination.mkdir()
+        (source / ".podhaus-share-mounted").touch()
+        (destination / ".podhaus-share-mounted").touch()
+        cls.log = root / "calls"
+        cls.commands = root / "commands"
+        cls.commands.mkdir()
+        cls.write_fake_commands(cls.commands, cls.log)
+        copy = root / "sync-bandicoot-copy"
+        copy.write_text(
+            (ROOT / "backup/bilby/scripts/sync-bandicoot-copy").read_text()
+            .replace("/repos/podhaus-bandicoot", str(source))
+            .replace("/repos/podhaus", str(destination))
+        )
+        copy.chmod(0o755)
+        cls.executable = root / "sync"
+        cls.executable.write_text(
+            (ROOT / "backup/bilby/scripts/sync-bandicoot-repository").read_text()
+            .replace("/repos/podhaus", str(destination))
+            .replace("/hooks/sync-bandicoot-copy", str(copy))
+        )
+        cls.executable.chmod(0o755)
 
     @staticmethod
     def write_fake_commands(commands: Path, log: Path) -> None:

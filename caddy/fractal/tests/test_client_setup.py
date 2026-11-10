@@ -95,7 +95,7 @@ class StandInSetup:
                 pass
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+        threading.Thread(target=self._server.serve_forever, args=(0.01,), daemon=True).start()
         return self
 
     def __exit__(self, *exc: object) -> None:

@@ -66,7 +66,7 @@ class StandIn:
 
         self._server = ThreadingHTTPServer((LOOPBACK, 0), Handler)
         self.address = f"{LOOPBACK}:{self._server.server_address[1]}"
-        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+        threading.Thread(target=self._server.serve_forever, args=(0.01,), daemon=True).start()
 
     def paths(self) -> list[str]:
         return [r.path for r in self.received]

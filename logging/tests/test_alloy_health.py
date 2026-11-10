@@ -52,10 +52,11 @@ otelcol.exporter.debug "drop" {
 }
 """
 
-# The ship module's self-scrape and exporter, scraping every second instead of
-# every minute so each case takes seconds, inside a module called the way every
-# host calls podhaus.ship: the check matches the exporter's component_id, which
-# must hold for an exporter running inside a module.
+# The ship module's self-scrape and exporter, scraping every quarter second
+# instead of every minute so each case takes about a second, inside a module
+# called the way every host calls podhaus.ship: the check matches the
+# exporter's component_id, which must hold for an exporter running inside a
+# module.
 # TIMEOUT is empty for the hosts' default 30 s request timeout, or
 # `timeout = "0s"` for none: the only way to make a request never return on
 # purpose.
@@ -65,8 +66,8 @@ declare "ship" {
 
   prometheus.scrape "alloy_self" {
     targets         = prometheus.exporter.self.alloy.targets
-    scrape_interval = "1s"
-    scrape_timeout  = "1s"
+    scrape_interval = "250ms"
+    scrape_timeout  = "250ms"
     forward_to     = [otelcol.receiver.prometheus.alloy_self.receiver]
   }
 
@@ -99,6 +100,11 @@ declare "ship" {
 ship "run" { }
 """
 NO_TIMEOUT = 'timeout = "0s"'
+# The time between two checks. The healthcheck compares request counts, so the
+# gap must hold several scrapes (four a second) for a healthy exporter to be
+# seen rising; it cannot be polled away, since each check overwrites the count
+# the next one compares with.
+GAP = 1.0
 
 # Collectors that never answer, in the Alloy image's own perl. HOLD accepts
 # every connection and keeps it open unanswered. STOPS_ANSWERING resets its
@@ -232,7 +238,7 @@ class AlloyHealthTest(unittest.TestCase):
             code, output = self.check(name)
             if not any(text in output for text in waiting_on):
                 return code, output
-            time.sleep(1)
+            time.sleep(0.25)
         self.fail(f"{name} still waiting on {waiting_on}; last check said: {output}")
 
     def first_completion(self, name: str) -> tuple[int, str]:
@@ -240,9 +246,9 @@ class AlloyHealthTest(unittest.TestCase):
         return self.check_until(name, (NOT_LISTENING, ABSENT))
 
     def assert_rising(self, name: str, checks: int) -> None:
-        """Each of `checks` checks three seconds apart passes with a higher count."""
+        """Each of `checks` checks a second apart passes with a higher count."""
         for _ in range(checks):
-            time.sleep(3)
+            time.sleep(GAP)
             code, output = self.check(name)
             match = COMPLETED.search(output)
             self.assertIsNotNone(match, output)
@@ -272,9 +278,9 @@ class AlloyHealthTest(unittest.TestCase):
 
     def test_requests_that_stop_returning_make_it_unhealthy(self) -> None:
         self.assert_first_check_passes("wedging")
-        time.sleep(3)
+        time.sleep(GAP)
         self.check("wedging")
-        time.sleep(3)
+        time.sleep(GAP)
         code, output = self.check("wedging")
         match = COMPLETED.search(output)
         self.assertIsNotNone(match, output)
@@ -283,7 +289,7 @@ class AlloyHealthTest(unittest.TestCase):
 
     def test_requests_that_never_returned_make_it_unhealthy(self) -> None:
         self.check_until("never-returning", (NOT_LISTENING,))
-        time.sleep(3)
+        time.sleep(GAP)
         code, output = self.check("never-returning")
         self.assertEqual((code, output), (1, ABSENT))
 

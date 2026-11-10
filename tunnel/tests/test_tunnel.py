@@ -127,7 +127,10 @@ class TunnelContractTests(unittest.TestCase):
              "--entrypoint", "/etc/tunnel/launcher/run-wstunnel"],
             *server_service()["command"],
         )
-        time.sleep(2)
+        cls.prober = cls.start(
+            "prober", BUSYBOX, ["--network", f"container:{cls.server}"], "sleep", "3600",
+        )
+        cls.wait_for_log(cls.server, "listening on")
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -139,9 +142,30 @@ class TunnelContractTests(unittest.TestCase):
     @classmethod
     def start(cls, role: str, image: str, options: list[str], *command: str) -> str:
         name = f"tunnel-test-{cls.run_id}-{role}"
-        docker("run", "-d", "--name", name, "--network", cls.network, *options, image, *command)
+        network = ["--network", cls.network] if "--network" not in options else []
+        docker("run", "-d", "--name", name, *network, *options, image, *command)
         cls.containers.append(name)
         return name
+
+    @staticmethod
+    def logs(container: str) -> str:
+        result = docker("logs", container, check=False)
+        return result.stdout + result.stderr
+
+    @classmethod
+    def wait_for_log(cls, container: str, *needles: str, timeout: float = 15) -> str:
+        """The first log line holding every needle. Refusals are proved by the
+        log line that records them, so the wait ends as soon as the refusal has
+        happened and fails, naming the log, if it never does."""
+        deadline = time.monotonic() + timeout
+        while True:
+            logs = cls.logs(container)
+            for line in logs.splitlines():
+                if all(needle in line for needle in needles):
+                    return line
+            if time.monotonic() > deadline:
+                raise AssertionError(f"no log line with {needles} in {container}:\n{logs}")
+            time.sleep(0.2)
 
     def client(self, role: str, trusted_ca: Path, cert: tuple[Path, Path], *listeners: str) -> str:
         tunnels = [arg for listener in listeners for arg in ("-R", f"tcp://{listener}:origin:9000")]
@@ -159,30 +183,31 @@ class TunnelContractTests(unittest.TestCase):
             f"wss://{SERVER_NAME}:2334",
         )
 
+    def probe(self, port: int, address: str = "127.0.0.1") -> str:
+        """What one connection to the port on the server's address receives."""
+        result = docker(
+            "exec", self.prober,
+            # Input held open briefly: nc hangs up on end of input,
+            # before the reply has come back through the tunnel.
+            "sh", "-c", f"sleep 1 | nc -w 3 {address} {port}", check=False,
+        )
+        return result.stdout.strip()
+
     def read_listener(self, port: int, address: str = "127.0.0.1") -> str:
-        """What a connection to the port on the server's address receives."""
+        """What the port receives once its listener is up, or "" if it never is."""
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            result = docker(
-                "run", "--rm", "--network", f"container:{self.server}", BUSYBOX,
-                # Input held open briefly: nc hangs up on end of input,
-                # before the reply has come back through the tunnel.
-                "sh", "-c", f"sleep 2 | nc -w 3 {address} {port}", check=False,
-            )
-            if "tunnel-ok" in result.stdout:
-                return result.stdout.strip()
-            time.sleep(1)
+            reply = self.probe(port, address)
+            if "tunnel-ok" in reply:
+                return reply
+            time.sleep(0.2)
         return ""
 
-    def server_address(self) -> str:
+    def address_of(self, container: str) -> str:
         return docker(
-            "inspect", self.server, "--format",
+            "inspect", container, "--format",
             "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
         ).stdout.strip()
-
-    def server_log(self) -> str:
-        result = docker("logs", self.server, check=False)
-        return result.stdout + result.stderr
 
     def test_a_client_opens_the_listener_its_rule_grants(self):
         self.client("mac-granted", self.relay.cert, self.mac, "127.0.0.1:8449")
@@ -195,7 +220,7 @@ class TunnelContractTests(unittest.TestCase):
             "bilby-public", self.relay.cert, self.bilby,
             "@RELAY_IPV4@:443", "@APPLICATION_IPV4@:22",
         )
-        address = self.server_address()
+        address = self.address_of(self.server)
         self.assertEqual(self.read_listener(443, address), "tunnel-ok")
         self.assertEqual(self.read_listener(22, address), "tunnel-ok")
 
@@ -206,28 +231,29 @@ class TunnelContractTests(unittest.TestCase):
                BUSYBOX, "nc", "-lk", "-s", "127.0.0.1", "-p", "2301", "-e", "true")
         self.containers.append(holder)
         self.client("bilby-waiting", self.relay.cert, self.bilby, "127.0.0.1:2301")
-        self.assertEqual(self.read_listener(2301), "")
+        self.wait_for_log(self.server, 'remote="127.0.0.1:2301"', "Cannot start TCP server")
+        self.assertEqual(self.probe(2301), "")
         docker("rm", "-f", holder)
         self.assertEqual(self.read_listener(2301), "tunnel-ok")
 
     def test_a_client_is_refused_a_listener_its_rule_does_not_grant(self):
         self.client("mac-other-port", self.relay.cert, self.mac, "127.0.0.1:8450")
-        time.sleep(5)
-        self.assertEqual(self.read_listener(8450), "")
-        self.assertIn("8450", self.server_log())
+        self.wait_for_log(self.server, "Rejecting connection with not allowed destination", "port: 8450")
+        self.assertEqual(self.probe(8450), "")
 
     def test_a_client_that_trusts_another_ca_never_connects(self):
         name = self.client("mac-wrong-ca", self.rogue.cert, self.mac, "127.0.0.1:8451")
-        time.sleep(5)
-        logs = docker("logs", name, check=False)
-        self.assertRegex((logs.stdout + logs.stderr).lower(), "certificate|tls|unknown")
-        self.assertEqual(self.read_listener(8451), "")
+        peer = f'peer="{self.address_of(name)}:'
+        self.wait_for_log(self.server, peer, "error while accepting TLS connection")
+        self.assertRegex(self.logs(name).lower(), "certificate|tls|unknown")
+        self.assertEqual(self.probe(8451), "")
 
     def test_a_certificate_from_another_ca_is_refused_by_the_server(self):
         rogue_mac = self.rogue.issue("nb-macbook-pro")
-        self.client("rogue-cert", self.relay.cert, rogue_mac, "127.0.0.1:8452")
-        time.sleep(5)
-        self.assertEqual(self.read_listener(8452), "")
+        name = self.client("rogue-cert", self.relay.cert, rogue_mac, "127.0.0.1:8452")
+        peer = f'peer="{self.address_of(name)}:'
+        self.wait_for_log(self.server, peer, "error while accepting TLS connection")
+        self.assertEqual(self.probe(8452), "")
 
 
 if __name__ == "__main__":

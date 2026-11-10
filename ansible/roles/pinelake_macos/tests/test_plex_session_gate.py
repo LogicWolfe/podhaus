@@ -49,7 +49,7 @@ class PlexSessionGateTest(unittest.TestCase):
         PlexHandler.body = b'<MediaContainer size="0"></MediaContainer>'
         PlexHandler.received_token = None
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), PlexHandler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread = threading.Thread(target=self.server.serve_forever, args=(0.01,), daemon=True)
         self.thread.start()
 
     def tearDown(self) -> None:

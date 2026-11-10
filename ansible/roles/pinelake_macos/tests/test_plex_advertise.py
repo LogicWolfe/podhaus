@@ -74,7 +74,7 @@ class PlexAdvertiseTest(unittest.TestCase):
         PlexHandler.received_token = None
         PlexHandler.puts = []
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), PlexHandler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread = threading.Thread(target=self.server.serve_forever, args=(0.01,), daemon=True)
         self.thread.start()
         self.base_url = f"http://127.0.0.1:{self.server.server_port}"
 

@@ -1166,8 +1166,13 @@ class LogSchemaTest(unittest.TestCase):
             run.wait_for_rows(len([f for f in kept if f.name not in LATE]), deadline)
             append_late(workdir / "fixtures", FIXTURES)
             run.wait_for_rows(len(kept), deadline)
+            kept_arrived = time.monotonic()
             run.wait_for_metrics_and_spans(deadline)
-            time.sleep(4)  # a dropped line that was not dropped arrives alongside the rest
+            # A dropped line that was not dropped arrives alongside the rest,
+            # so every kept row must have been in for 4 s before the dropped
+            # fixtures are judged. Alloy's once-a-minute self-scrape wait above
+            # usually covers that, in which case this waits no longer.
+            time.sleep(max(0.0, kept_arrived + 4 - time.monotonic()))
             cls.tailers = {name: run.component(component_id) for name, component_id in TAILERS.items()}
             cls.health = run.run_healthcheck()
         finally:

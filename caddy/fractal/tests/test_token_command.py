@@ -93,6 +93,30 @@ def refusal(error: str, status: int = 400) -> Reply:
     return Reply(status, {"error": error, "error_description": f"The {error} description."})
 
 
+SHARED_STUBS = Path()
+
+
+def write_stub(directory: Path, name: str, script: str) -> None:
+    directory.mkdir(exist_ok=True)
+    path = directory / name
+    path.write_text(script)
+    path.chmod(0o755)
+
+
+def setUpModule() -> None:
+    # macOS scans each newly written executable on its first run, which costs
+    # more than the command under test. The stand-ins every test uses are
+    # written once, so only the first run pays it.
+    global SHARED_STUBS
+    directory = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(directory.cleanup)
+    SHARED_STUBS = Path(directory.name)
+    write_stub(SHARED_STUBS, "curl", STAND_IN_CURL)
+    write_stub(SHARED_STUBS, "sleep", STAND_IN_SLEEP)
+    write_stub(SHARED_STUBS, "open", STAND_IN_OPENER)
+    write_stub(SHARED_STUBS, "xdg-open", STAND_IN_OPENER)
+
+
 class TokenCommandTest(unittest.TestCase):
     def setUp(self) -> None:
         directory = tempfile.TemporaryDirectory()
@@ -106,17 +130,11 @@ class TokenCommandTest(unittest.TestCase):
         self.calls_file = self.root / "calls"
         self.sleeps_file = self.root / "sleeps"
         self.opened_file = self.root / "opened"
-        self.stub("curl", STAND_IN_CURL)
-        self.stub("sleep", STAND_IN_SLEEP)
-        self.stub("open", STAND_IN_OPENER)
-        self.stub("xdg-open", STAND_IN_OPENER)
         self.cache_file = self.home / ".local" / "state" / "llm-token" / "token.json"
 
     def stub(self, name: str, script: str) -> None:
-        self.stubs.mkdir(exist_ok=True)
-        path = self.stubs / name
-        path.write_text(script)
-        path.chmod(0o755)
+        """A stand-in only this test needs, ahead of the shared ones on PATH."""
+        write_stub(self.stubs, name, script)
 
     def run_command(self, *replies: Reply, **environment: str) -> subprocess.CompletedProcess[str]:
         """One run; what earlier runs recorded is cleared first."""
@@ -126,7 +144,7 @@ class TokenCommandTest(unittest.TestCase):
             (self.replies / str(number)).write_text(reply.text())
         env = {
             "HOME": str(self.home),
-            "PATH": os.pathsep.join([str(self.stubs), os.environ["PATH"]]),
+            "PATH": os.pathsep.join([str(self.stubs), str(SHARED_STUBS), os.environ["PATH"]]),
             "CURL_CALLS": str(self.calls_file),
             "CURL_REPLIES": str(self.replies),
             "SLEEPS": str(self.sleeps_file),
@@ -320,19 +338,27 @@ class LinkOpenerTest(TokenCommandTest):
     def opened(self) -> list[str]:
         return self.opened_file.read_text().splitlines() if self.opened_file.exists() else []
 
+    def opened_by_the_background_opener(self) -> list[str]:
+        """The opener runs detached, so it may record the link just after the
+        command returns."""
+        deadline = time.monotonic() + 5
+        while not self.opened() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return self.opened()
+
     def test_opens_the_link_on_a_linux_desktop_without_waiting_for_the_browser(self) -> None:
         self.stub("uname", "#!/bin/sh\necho Linux\n")
         started = time.monotonic()
         result = self.sign_in(DISPLAY=":0")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertLess(time.monotonic() - started, 10)
-        self.assertEqual(self.opened(), [LINK])
+        self.assertEqual(self.opened_by_the_background_opener(), [LINK])
         self.assertEqual(result.stderr, f"{LINK}\n")
 
     def test_opens_the_link_on_a_mac(self) -> None:
         self.stub("uname", "#!/bin/sh\necho Darwin\n")
         self.assertEqual(self.sign_in().returncode, 0)
-        self.assertEqual(self.opened(), [LINK])
+        self.assertEqual(self.opened_by_the_background_opener(), [LINK])
 
     def test_only_prints_the_link_over_ssh_or_without_a_screen(self) -> None:
         for environment in (
