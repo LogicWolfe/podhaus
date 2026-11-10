@@ -1,174 +1,49 @@
 #!/bin/bash
-# Reference copy of podhaus's pre-commit hook. Install via symlink so
-# future edits to this file are picked up automatically:
+# podhaus's pre-commit hook: the static lints, which read the working tree and
+# finish in a second or two. Install via symlink so edits here are live:
 #
 #   ln -sf ../../tools/pre-commit .git/hooks/pre-commit
 #
-# Checks run:
-#   - lint-stack-env.py:           catches stack.toml env declarations
-#                                   that no compose service references
-#                                   (silent empty-var footgun).
-#   - lint-stack-content-hash.py:  catches services that don't depend on
+# The test suites and the Alloy config lint, which needs Docker, run in CI
+# through tools/check, and a push deploys only once CI is green
+# (.github/workflows/check.yml). Run tools/check locally for the same result
+# before pushing.
+#
+#   - lint-stack-env.py:           stack.toml env declarations that no compose
+#                                   service references (silent empty-var
+#                                   footgun).
+#   - lint-stack-content-hash.py:  services that don't depend on
 #                                   STACK_CONTENT_HASH (label + build-arg
 #                                   pattern), so content changes wouldn't
 #                                   actually recreate the container.
-#   - lint-stack-toml.py:          rejects `deploy = true` on podhaus
-#                                   stacks — Komodo's Sync Deploy sub-
-#                                   stage duplicates Stage 2 and breaks
-#                                   on transient linked-repo timeouts.
-#   - lint-alloy-timestamps.py:    rejects `stage.timestamp` outside the
-#                                   file-source Alloy modules (a container
-#                                   row keeps Docker's receive time) and any
-#                                   time zone pinned in a logging config.
-#   - lint-alloy-config.py:        every host config and shared Alloy module
-#                                   formatted exactly as `alloy fmt` prints
-#                                   it, the modules passing `alloy validate`,
-#                                   and each host config, unmodified,
-#                                   starting in Alloy against them with no
-#                                   network, in a short-lived grafana/alloy
-#                                   container. Needs Docker; without it the
-#                                   lint is skipped with the reason printed.
+#   - lint-stack-toml.py:          `deploy = true` on podhaus stacks; Komodo's
+#                                   Sync Deploy sub-stage duplicates Stage 2
+#                                   and breaks on transient linked-repo
+#                                   timeouts.
+#   - lint-alloy-timestamps.py:    `stage.timestamp` outside the file-source
+#                                   Alloy modules (a container row keeps
+#                                   Docker's receive time) and any time zone
+#                                   pinned in a logging config.
 #   - render-pomerium-keys.py --verify:
-#                                   catches pomerium/config.yaml or
-#                                   stack.toml key material that no longer
-#                                   matches the Ansible inventory (the one
-#                                   authoritative home for SSH keys).
-#   - storage_binds role tests:     the reconciler's behaviour, and an
-#                                   automount pair hardened on BOTH halves
-#                                   in the inventory. The .mount half being
-#                                   missed is what let the 2026-05-30 mount
-#                                   wedge recur on 2026-08-30.
-#   - docker role tests:           daemon.json is valid JSON with and without
-#                                   the GPU switch, which adds the nvidia
-#                                   runtime and changes nothing else (a drift
-#                                   would restart Docker on every host).
-#   - docs_sources role tests:      the reconciler keeps source slots isolated,
-#                                   mounting, withdrawing and remounting each
-#                                   source on its own.
-#   - backup heartbeat tests:       every configured push endpoint exists
-#                                   in Gatus, including per-plan hooks.
-#   - metube plexify tests:        the Sonarr-naming hook's title-matching
-#                                   confidence rule (containment, difflib
-#                                   ratio+margin, the 59-title Skillsville
-#                                   fixture) runs with no network.
-#   - tunnel tests:                 the relay tunnel's security contract in
-#                                   the real wstunnel image: a client opens
-#                                   only the listeners its certificate's rule
-#                                   grants, and never connects to a server its
-#                                   pinned CA did not sign. Needs Docker;
-#                                   skipped with the reason without it.
-#   - pinelake tests:               no Pine Lake stack binds a relative
-#                                   path, every TerraMaster bind refuses to
-#                                   create its folder when the volume is
-#                                   missing, the Plex label sync names
-#                                   torrents by a path Plex mounts, and Plex's
-#                                   preferences carry the identity the deploy
-#                                   gates require and leave the advertised
-#                                   address to the launch daemon.
-#   - Pine Lake host tests:         the deploy gates refuse a stack while the
-#                                   TerraMaster volume or Plex identity is
-#                                   wrong, the mount guard, Plex address
-#                                   advertising and playback session gate
-#                                   scripts, and Flood's Syncthing ignore file.
-#   - forgejo-runner tests:         Docker's stop grace period outlasts the
-#                                   runner's job drain, and a changed
-#                                   registration recreates the runner.
-#   - llm tests:                    the watcher's handoff rules replayed
-#                                   against a recorded game session, the
-#                                   model-server log parsing against real
-#                                   log lines, and the sign-in token command
-#                                   against a stand-in Pocket ID.
-#   - setup page tests:             the install scripts and claude-podhaus
-#                                   against a stand-in llm.pod.haus, the
-#                                   public Pomerium route, and, under node,
-#                                   the page's sign-in script with stand-in
-#                                   browser objects and the pi extension's
-#                                   device sign-in against a stand-in
-#                                   Pocket ID.
-#   - fractal Caddy listener tests: the real Caddyfile's loopback and LAN
-#                                   listeners run under the mise-installed
-#                                   caddy, with stand-in upstreams.
-#   - bilby Caddy access-log tests  (in tools/tests): bilby's Caddyfile
-#                                   compiled by the mise-installed caddy;
-#                                   every site's requests are written by one
-#                                   logger that deletes the request object,
-#                                   with only the chosen fields appended, and
-#                                   Caddy's own lines lose the query and every
-#                                   credential header.
-#   - log schema tests:             one captured line per Alloy parser
-#                                   module run through the real modules
-#                                   and enrich step in a short-lived
-#                                   grafana/alloy container; each row's
-#                                   resource, attribute names, body and
-#                                   severity must match docs/logging.md.
-#                                   Alongside them, Alloy's exporter-stall
-#                                   healthcheck from the shared compose file
-#                                   runs against a delivering exporter, a
-#                                   refusing collector, a collector stopped
-#                                   mid-run, requests that stop returning,
-#                                   requests that never returned, and no
-#                                   state directory.
-#                                   Needs Docker; without it the tests are
-#                                   skipped with the reason printed.
-set -e
+#                                   pomerium/config.yaml or stack.toml key
+#                                   material that no longer matches the
+#                                   Ansible inventory.
+#   - render-lan-addresses.py --verify:
+#                                   Komodo LAN address variables that differ
+#                                   from config/lan-addresses.json.
+set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
 
-if ! command -v mise >/dev/null 2>&1; then
-  echo "podhaus hooks require mise; install it, then follow the Python setup in README.md" >&2
+python="$root/.venv/bin/python"
+if [ ! -x "$python" ]; then
+  echo "podhaus's Python environment is missing; follow the Python setup in README.md" >&2
   exit 1
 fi
 
-if ! mise exec -- pipenv --venv >/dev/null 2>&1; then
-  echo "podhaus Pipenv is not installed; follow the Python setup in README.md" >&2
-  exit 1
-fi
-
-if ! mise exec -- node --version >/dev/null 2>&1; then
-  echo "podhaus hooks require Node from mise.toml; run mise install" >&2
-  exit 1
-fi
-
-mise exec -- pipenv run python "$root/tools/lint-stack-env.py"
-mise exec -- pipenv run python "$root/tools/lint-stack-content-hash.py"
-mise exec -- pipenv run python "$root/tools/lint-stack-toml.py"
-mise exec -- pipenv run python "$root/tools/lint-alloy-timestamps.py"
-mise exec -- pipenv run python "$root/tools/lint-alloy-config.py"
-mise exec -- pipenv run python "$root/tools/render-pomerium-keys.py" --verify
-mise exec -- pipenv run python "$root/tools/render-lan-addresses.py" --verify
-# These tests create repositories whose git commands need their own index.
-unset GIT_INDEX_FILE
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/tools/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/ansible/roles/storage_binds/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/ansible/roles/docs_sources/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/ansible/roles/docker/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/metube/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/forgejo-runner/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/pinelake/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/pinelake/periphery/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/ansible/roles/pinelake_macos/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/flood/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/tunnel/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/lumen/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/backup/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/llm/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/caddy/fractal/tests"
-mise exec -- pipenv run python -m unittest discover \
-  --start-directory "$root/logging/tests"
-mise exec -- node --test "$root/caddy/fractal/tests/podhaus.test.ts"
-mise exec -- node --test "$root/caddy/fractal/tests/setup-page.test.ts"
+"$python" tools/lint-stack-env.py
+"$python" tools/lint-stack-content-hash.py
+"$python" tools/lint-stack-toml.py
+"$python" tools/lint-alloy-timestamps.py
+"$python" tools/render-pomerium-keys.py --verify
+"$python" tools/render-lan-addresses.py --verify

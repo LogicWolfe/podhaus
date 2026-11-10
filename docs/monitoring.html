@@ -440,7 +440,7 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         Which containers, files and journal entries are collected, how each service is
         named, the parser rules and the schema every row follows are in
         <a href="logging.md">Logging</a>. <code>tools/lint-alloy-config.py</code>, run by
-        <code>tools/pre-commit</code>, checks that every host config and module is formatted
+        <code>tools/check</code> in CI, checks that every host config and module is formatted
         as <code>alloy fmt</code> prints it, that the modules pass <code>alloy validate</code>,
         and that each host config starts in Alloy against the modules it imports.
       </p>
@@ -516,11 +516,12 @@ WHERE Timestamp &gt; now() - INTERVAL &lt;N&gt; MINUTE AND ResourceAttributes['h
         heartbeats stay green, and no Alloy stays unhealthy long enough for the
         <em>Komodo stacks</em> check. Each restart drops the queue and reads every stopped
         container's log again. <code>logging/tests/test_alloy_health.py</code>, run by
-        <code>tools/pre-commit</code>, runs the exact command from the compose file against a
-        delivering, a refusing, a stopping and a never-answering collector, but in the
-        <code>grafana/alloy</code> image cached on the machine that commits, which changes
-        only when someone pulls it, while hosts pull the current image on every deploy. A
-        rename can therefore reach the hosts before any test sees it; an alert on repeated
+        <code>tools/check</code>, runs the exact command from the compose file against a
+        delivering, a refusing, a stopping and a never-answering collector, in the
+        <code>grafana/alloy</code> image CI pulls at the start of each run. Hosts pull the
+        current image whenever they deploy, so a release published after CI pulled, or an
+        Alloy recreated outside a push, can still reach the hosts before any test sees a
+        rename; an alert on repeated
         Alloy restarts is a decision in the structured-logging plan.
       </p>
 

@@ -1,35 +1,24 @@
-# Single GitHub push webhook for Komodo push-to-deploy.
+# Podhaus push-to-deploy: CI, not a webhook, starts the deploy.
 #
-# Komodo's webhook contract is per-resource:
+# A push to main runs .github/workflows/check.yml. Its deploy job, which
+# runs only after every check passes, calls the `podhaus-push-deploy`
+# Procedure's Komodo listener with the signed body a GitHub push webhook
+# would send:
 #
-#   https://<HOST>/listener/<auth>/<resource_type>/<id_or_name>/<seg>
+#   https://komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main
 #
-# We do NOT register one webhook per Stack: GitHub hard-caps a repo at
-# 20 `push` webhooks ("the push event cannot have more than 20 hooks")
-# and the fleet is past 20. Instead ONE webhook targets the
-# `podhaus-push-deploy` Procedure's listener (resource_type
-# `procedure`; the final path segment is the branch filter, not an
-# execution verb; see Komodo's listener router
-# "/procedure/{id}/{branch}"). The procedure fans out internally:
-#   - Stage 0 RunSync reconciles TOML definitions
-#   - Stage 1 injects content hashes and directly reconciles stale
-#     config/build-context consumers whose compose text did not change
-#   - Stage 2 BatchDeployStackIfChanged "*" owns compose-text changes
-#     and brand-new stacks
-#   - Stage 3 restarts Ofelia so it re-reads scheduling labels
-# Defined config-as-code in komodo/sync/procedures.toml. New stacks
-# are covered automatically by the "*" pattern — no edit here, ever.
-#
-# GitHub fires on every push to `main`; the `/main` branch segment
-# makes Komodo act only on main pushes. `webhook_enabled` defaults
-# true on the procedure (pinned true in procedures.toml).
+# Komodo checks only the X-Hub-Signature-256 HMAC over the body, against
+# KOMODO_WEBHOOK_SECRET (the procedure's own webhook_secret is empty, so
+# the global one applies), and the branch in the body's `ref`. The final
+# path segment is that branch filter. The procedure fans out internally
+# (komodo/sync/procedures.toml), so new stacks need no edit here.
 #
 # Pomerium allows only the path-scoped /listener/github prefix without
-# browser auth. Komodo validates
-# the X-Hub-Signature-256 HMAC against KOMODO_WEBHOOK_SECRET itself
-# (the procedure's webhook_secret is empty → global secret is used).
+# browser auth.
 #
 # Reference docs:
+#   - github_actions_secret (integrations/github v6):
+#     https://registry.terraform.io/providers/integrations/github/latest/docs/resources/actions_secret
 #   - github_repository_webhook (integrations/github v6):
 #     https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_webhook
 #
@@ -44,17 +33,10 @@ variable "komodo_webhook_secret" {
   sensitive   = true
 }
 
-resource "github_repository_webhook" "komodo_deploy" {
-  repository = "podhaus"
-  events     = ["push"]
-  active     = true
-
-  configuration {
-    url          = "https://komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main"
-    content_type = "json"
-    insecure_ssl = false
-    secret       = var.komodo_webhook_secret
-  }
+resource "github_actions_secret" "komodo_webhook_secret" {
+  repository  = "podhaus"
+  secret_name = "KOMODO_WEBHOOK_SECRET"
+  value       = var.komodo_webhook_secret
 }
 
 # Fenwick and nathanbaxter live on Forgejo; their push webhooks are

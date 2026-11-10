@@ -46,10 +46,10 @@ On bandicoot:
 ```
 
 `komodo-start` is the bootstrap path. Normal deployments are commit and push.
-The GitHub webhook runs `podhaus-push-deploy`, which reconciles definitions,
-stamps content hashes, recreates stacks whose committed content changed,
-deploys compose changes and new stacks, then restarts Ofelia so it re-reads
-job labels.
+Once CI passes on `main`, its deploy job runs `podhaus-push-deploy`, which
+reconciles definitions, stamps content hashes, recreates stacks whose committed
+content changed, and deploys compose changes and new stacks. A red CI run
+deploys nothing.
 
 A push that edits `podhaus-push-deploy` in
 `komodo/sync/procedures.toml` cannot apply that edit itself: run the `podhaus`
@@ -64,8 +64,9 @@ mise upgrade --local
 mise exec -- pipenv install --dev --python "$(mise which python)"
 ```
 
-The pre-commit hook runs the linters through that environment, and two tests
-under the current Node release that `mise install` also provides. No lock file is
+The pre-commit hook runs the static lints through that environment.
+`tools/check` runs everything CI runs: those lints, the Alloy config lint and
+every test suite, the Node ones under the release `mise install` provides. No lock file is
 kept. Running those commands again upgrades mise's rolling `latest` aliases;
 use `mise exec -- pipenv remove` first when Python itself has changed.
 

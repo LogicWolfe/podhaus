@@ -3,7 +3,7 @@
       <h1>Terraform</h1>
       <p class="lead text-lg text-text-muted">
         Declarative config for the public edge, DNS, identity integrations, cloud hosts,
-        RustFS IAM, and the GitHub webhook that drives push-to-deploy.
+        RustFS IAM, and the GitHub Actions secret CI uses to start push-to-deploy.
         Single TF root at <code>terraform/</code>, state in RustFS via the public
         <code>storage.pod.haus</code>, run with <strong>stock <code>terraform</code></strong>
         from any machine — no wrapper.
@@ -236,8 +236,8 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
       <ul>
         <li><a href="/networking.html">Networking</a> — how DNS, Access, and the tunnel
           fit together end-to-end.</li>
-        <li><a href="/komodo.html">Komodo</a> — push-to-deploy flow; the GitHub webhook
-          configured here is what triggers redeploys.</li>
+        <li><a href="/komodo.html">Komodo</a> — push-to-deploy flow; CI's deploy job starts
+          redeploys, signed with the Actions secret configured here.</li>
         <li><a href="/monitoring.html">Monitoring</a> — Gatus checks and alert
           routing.</li>
         <li><a href="/disaster-recovery.html">Disaster recovery</a> — RustFS rebuild

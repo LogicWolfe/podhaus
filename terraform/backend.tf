@@ -27,7 +27,7 @@ terraform {
       version = "~> 0.53.0"
     }
     github = {
-      # Used only for the Komodo deploy webhook on LogicWolfe/podhaus.
+      # Komodo deploy webhooks, the podhaus CI deploy secret and machine SSH keys.
       # Docs: https://registry.terraform.io/providers/integrations/github/latest/docs
       source  = "integrations/github"
       version = "~> 6.0"

@@ -105,14 +105,14 @@
               (Repo resource <code>podhaus-deploy</code>) — bind-mounted
               into bilby's Periphery. bilby's own working checkout
               (<code>~/repos/podhaus</code>) is never read by the
-              pipeline; the deploy tree is fed by the push webhook's
-              pull stage.</td>
+              pipeline; the deploy tree is fed by
+              <code>podhaus-push-deploy</code>'s pull stage.</td>
             <td>Komodo clones via HTTPS + a GitHub PAT, stored at
               <code>/etc/komodo/repos/&lt;repo-name&gt;/</code> inside the Periphery container</td>
           </tr>
           <tr>
             <td>Deploy workflow</td>
-            <td>Commit + push → the single webhook runs
+            <td>Commit + push → once CI passes, its deploy job runs
               <code>podhaus-push-deploy</code>, which force-pulls the
               deploy tree to <code>origin/main</code> and then deploys
               it. Its Stage 1
@@ -265,7 +265,7 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           tree</strong> on bandicoot (the one Komodo's own deploy
           decisions read), and <code>podhaus-deploy</code>, bilby's own
           Komodo-managed tree feeding its outbound Periphery and
-          files_on_host stacks. The push webhook force-pulls each to
+          files_on_host stacks. <code>podhaus-push-deploy</code> force-pulls each to
           <code>origin/main</code> (<code>on_pull</code> runs
           <code>git clean -fd</code> on both to clear untracked strays
           without touching gitignored files like the deploy-written
@@ -280,8 +280,8 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
           <code>[[variable]]</code> blocks in the relevant
           <code>&lt;stack&gt;/stack.toml</code> instead.</li>
         <li><code>komodo/sync/procedures.toml</code> —
-          <code>podhaus-push-deploy</code>, the GitHub webhook
-          entrypoint (pulls the deploy tree to <code>origin/main</code>,
+          <code>podhaus-push-deploy</code>, the entrypoint CI's
+          deploy job calls (pulls the deploy tree to <code>origin/main</code>,
           then syncs and deploys it — see the Auto-deploy note below),
           plus one push-deploy procedure per service repo that holds its
           own stack. <code>fenwick-push-deploy</code> names its three
@@ -378,22 +378,24 @@ POSTMARK_SERVER_TOKEN=[[OP__KOMODO__POSTMARK_SMTP__CREDENTIAL]]
         once a single <code>CloneRepo</code> had run.
       </blockquote>
       <blockquote>
-        <p><strong>Auto-deploy on push (one webhook → one procedure)</strong></p>
-        Komodo's webhook contract is per-resource:
-        <code>https://&lt;host&gt;/listener/&lt;auth&gt;/&lt;resource_type&gt;/&lt;id&gt;/&lt;seg&gt;</code>.
-        podhaus uses one webhook per <em>repo</em>, not per stack:
-        GitHub hard-caps a repo at <strong>20 <code>push</code>
-        webhooks</strong>, and the procedure-level fan-out scales past
-        that ceiling.
-        <code>terraform/github.tf</code> creates <strong>one</strong>
-        webhook → <code>komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main</code>
-        (resource_type <code>procedure</code>; the trailing
-        <code>/main</code> is the branch filter, not a verb — Komodo
-        <code>router.rs</code> <code>"/procedure/{id}/{branch}"</code>).
+        <p><strong>Auto-deploy on push (CI → one procedure)</strong></p>
+        A push to <code>main</code> deploys only once CI is green.
+        <code>.github/workflows/check.yml</code> runs <code>tools/check</code>;
+        its deploy job then calls
+        <code>komodo.pod.haus/listener/github/procedure/podhaus-push-deploy/main</code>
+        with the signed body a GitHub push webhook would send (resource_type
+        <code>procedure</code>; the trailing <code>/main</code> is the branch
+        filter, not a verb — Komodo <code>router.rs</code>
+        <code>"/procedure/{id}/{branch}"</code>). No webhook calls it. The job
+        deploys only when its commit is still the tip of <code>main</code>,
+        because the procedure deploys whatever <code>main</code> holds; a newer
+        commit's own run deploys it. One procedure per repo, not one trigger
+        per stack, also keeps clear of GitHub's 20-webhook cap.
         Access bypass is path-scoped to <code>/listener/github</code>;
         Komodo HMAC-validates with <code>KOMODO_WEBHOOK_SECRET</code>
         (the procedure's <code>webhook_secret</code> is empty → the global
-        secret applies).
+        secret applies), which <code>terraform/github.tf</code> also stores
+        as the repository's <code>KOMODO_WEBHOOK_SECRET</code> Actions secret.
         <br><br>
         <code>podhaus-push-deploy</code>'s first stage force-pulls both
         Komodo-managed <strong>deploy trees</strong> to

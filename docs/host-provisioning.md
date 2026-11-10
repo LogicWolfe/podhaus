@@ -209,7 +209,7 @@ machine's `dev` service account. Keeping every playbook inside the same
 explicit boundary avoids a second invocation pattern for plays that do not
 currently read a secret.
 
-> **Ansible is not wired into push-to-deploy.** The GitHub webhook fires
+> **Ansible is not wired into push-to-deploy.** CI's deploy job fires
 > `podhaus-push-deploy`, which touches Komodo stacks only. Host state
 > changes when a human runs a playbook, deliberately. Pushing a role
 > edit deploys nothing.

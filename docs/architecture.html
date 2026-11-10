@@ -60,8 +60,8 @@
           kangaroo is provisioned from <code>ansible/</code> instead.</li>
         <li><code>terraform/</code> is the ONE consolidated Terraform root for everything
           outside Docker: BinaryLane and Numbat edge material, Cloudflare DNS, CDN, AOP, and
-          Pine Lake DNS, UniFi LAN DNS, the GitHub webhook
-          that drives Komodo auto-deploy, Tailscale recovery auth-key rotation, and RustFS IAM for
+          Pine Lake DNS, UniFi LAN DNS, the GitHub Actions secret
+          CI signs Komodo auto-deploy with, Tailscale recovery auth-key rotation, and RustFS IAM for
           Publii tenants. State at <code>s3://terraform-state/podhaus.tfstate</code> in
           RustFS (backend via <code>https://storage.pod.haus</code>). Stock
           <code>terraform</code> runs from any machine — no wrapper. See
@@ -221,7 +221,7 @@
       </p>
       <ol>
         <li>Edit the stack, its committed config, or its build context.</li>
-        <li>Commit and push. The GitHub webhook starts <code>podhaus-push-deploy</code>.</li>
+        <li>Commit and push. Once CI passes, its deploy job starts <code>podhaus-push-deploy</code>.</li>
         <li>Stage 0 reconciles definitions and TOML variables. Stage 1 stamps content hashes and
           recreates running stacks whose committed content is stale.</li>
         <li>Stage 2 deploys compose-text changes and new stacks. Ofelia follows the resulting

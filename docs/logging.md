@@ -249,8 +249,8 @@ change applies on that recreate and never inside a running Alloy.
   (`podhaus.docker_logs.run/loki.source.docker.containers/positions.yml`), so a
   rename loses every position and re-reads every retained log. The harness
   pins the Docker rule list, the Docker discovery settings, the Docker tailer's
-  arguments and every tailer's labels, so a change fails `tools/pre-commit`
-  until its pin is updated with it.
+  arguments and every tailer's labels, so a change fails `tools/check` in CI,
+  and blocks the deploy, until its pin is updated with it.
 - **A parser never drops a field.** It sets the level (the `detected_level`
   label) and nothing else about a line it keeps: it does not rewrite or shorten
   the body, does not delete a label, and does not parse JSON itself (enrich
@@ -306,13 +306,13 @@ change applies on that recreate and never inside a running Alloy.
   labels back through Alloy's HTTP API. The same run checks that every metric
   and span the module ships carries the host's name with its other resource
   attributes intact, and that the compose file's healthcheck passes against
-  that Alloy. `tools/pre-commit` runs it; it needs Docker, and without Docker the
+  that Alloy. `tools/check` runs it in CI; it needs Docker, and without Docker the
   whole test class is skipped with the reason printed.
 - **Every module and host config is formatted, valid and loads.** Each file
   must be exactly what `alloy fmt` prints, `alloy validate` must pass on the
   module directory, and each host config, unmodified, must start in Alloy
   against the modules with no network. `tools/lint-alloy-config.py` checks all
-  three in a `grafana/alloy` container from `tools/pre-commit`, prints the
+  three in a `grafana/alloy` container from `tools/check`, prints the
   Alloy version it ran, and is skipped with the reason printed without Docker.
   Starting the config is the check that reaches into the modules a host config
   imports: `alloy validate` on a host config does not open them, so a wrong
@@ -481,8 +481,8 @@ source.
 | `logging/alloy-modules/enrich.alloy` | The schema: resource, namespaced attributes, severity, JSON, credential removal |
 | `logging/alloy-modules/ship.alloy` | The Loki → OTLP bridge, enrich, batch, the exporter and Alloy's own metrics, the same on every host |
 | `logging/<host>/alloy-conf/config.alloy` | Which sources a host runs, its own scrapes, and its values for the ship module |
-| `logging/tests/test_log_schema.py` | The fixture harness, run by `tools/pre-commit` |
-| `logging/tests/test_alloy_health.py` | The exporter-stall healthcheck run against live exporters, run by `tools/pre-commit` |
-| `tools/lint-alloy-timestamps.py` | The time-parsing rule, run by `tools/pre-commit` |
-| `tools/lint-alloy-config.py` | Every host config and module formatted as `alloy fmt` prints it, the module directory validated, and every host config loaded unmodified beside the modules, run by `tools/pre-commit` |
+| `logging/tests/test_log_schema.py` | The fixture harness, run by `tools/check` |
+| `logging/tests/test_alloy_health.py` | The exporter-stall healthcheck run against live exporters, run by `tools/check` |
+| `tools/lint-alloy-timestamps.py` | The time-parsing rule, run by `tools/pre-commit` and `tools/check` |
+| `tools/lint-alloy-config.py` | Every host config and module formatted as `alloy fmt` prints it, the module directory validated, and every host config loaded unmodified beside the modules, run by `tools/check` |
 | `llm/tests/` | The model server parser's own tests |

@@ -38,7 +38,7 @@ Terms used below:
 | Model server settings and the chat templates | `llm/server/models.ini`, `llm/server/*.jinja` |
 | Watcher | `llm/watcher/` (standard-library Python; start with `state.py`) |
 | Setup page, `llm-token` sign-in command, install scripts, `claude-podhaus` launcher, pi extension | `caddy/fractal/llm-setup/` (served at `/setup/`; part of the `fractal-caddy` stack) |
-| Tests | `llm/tests/` for the service; `caddy/fractal/tests/test_caddyfile.py` for the loopback and LAN listeners, running the real Caddyfile with stand-in upstreams; `caddy/fractal/tests/` for the setup page: `test_client_setup.py` (the install scripts and `claude-podhaus` against a stand-in `llm.pod.haus`, the page's contents, the public Pomerium route), `setup-page.test.ts` (the page's sign-in script under Node, with stand-in browser objects) and `podhaus.test.ts` (the pi extension's sign-in under Node). All run by `tools/pre-commit`. |
+| Tests | `llm/tests/` for the service; `caddy/fractal/tests/test_caddyfile.py` for the loopback and LAN listeners, running the real Caddyfile with stand-in upstreams; `caddy/fractal/tests/` for the setup page: `test_client_setup.py` (the install scripts and `claude-podhaus` against a stand-in `llm.pod.haus`, the page's contents, the public Pomerium route), `setup-page.test.ts` (the page's sign-in script under Node, with stand-in browser objects) and `podhaus.test.ts` (the pi extension's sign-in under Node). All run by `tools/check`. |
 | Listeners, exposed paths, the `/setup/` files, request log | `caddy/fractal/Caddyfile`, `caddy/fractal/compose.yaml` |
 | The three `llm.pod.haus` routes (setup, control, model) | `pomerium/config.yaml` |
 | DNS record and Pocket ID client | `terraform/services_pod_haus.tf`, `terraform/pocket_id.tf` (`pocketid_client.llm_token`, whose one callback is the setup page) |
@@ -603,7 +603,7 @@ Values that must change together:
 
 Constants listed under "What changes state" need a code change in
 `llm/watcher/`; the tests in `llm/tests/` pin the behaviour and are run by
-`tools/pre-commit`.
+`tools/check`.
 
 ### What a push to `main` does
 

@@ -101,7 +101,7 @@ services:
     volumes:
       - ${COMPOSE_KOMODO_BACKUPS_PATH}:/backups
       # Deploy tree: the Core host's Komodo-managed clone (Repo resource
-      # "podhaus-bandicoot"), pulled to origin/main by the push webhook.
+      # "podhaus-bandicoot"), pulled to origin/main by podhaus-push-deploy.
       # ResourceSync and the hash-injection action both read this path. bilby's own tree
       # (Repo "podhaus-deploy") still feeds bilby's files_on_host stacks.
       - ${COMPOSE_KOMODO_SYNC_TREE}:/syncs/podhaus

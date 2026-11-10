@@ -1,0 +1,45 @@
+#!/bin/bash
+# Everything CI runs before a push to main may deploy: the pre-commit lints,
+# the Alloy config lint, every Python test suite (each tracked directory that
+# holds test_*.py files) and every Node test file (*.test.ts). A new suite runs
+# here as soon as it is committed. Suites that need Docker skip with the reason
+# printed when it is unavailable; CI has Docker, so there they run.
+#
+# Every step runs even after one fails, so a CI log shows every failure at
+# once; the exit status is non-zero if any step failed.
+set -uo pipefail
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+python="$root/.venv/bin/python"
+# The suites run tools as `python3`, meaning the project's environment, as
+# under `pipenv run`.
+export VIRTUAL_ENV="$root/.venv"
+export PATH="$VIRTUAL_ENV/bin:$PATH"
+failed=()
+
+step() {
+  echo "::group::$1"
+  shift
+  "$@" || failed+=("$*")
+  echo "::endgroup::"
+}
+
+step "pre-commit lints" tools/pre-commit
+step "Alloy config lint" "$python" tools/lint-alloy-config.py
+
+# These tests create repositories whose git commands need their own index.
+unset GIT_INDEX_FILE
+while read -r suite; do
+  # mise puts the caddy and node from mise.toml on PATH for the tests that run them.
+  step "$suite" mise exec -- "$python" -m unittest discover --start-directory "$root/$suite"
+done < <(git ls-files '*test_*.py' | xargs -n1 dirname | sort -u)
+
+while read -r test; do
+  step "$test" mise exec -- node --test "$test"
+done < <(git ls-files '*.test.ts')
+
+if [ ${#failed[@]} -gt 0 ]; then
+  printf 'Failed: %s\n' "${failed[@]}" >&2
+  exit 1
+fi
