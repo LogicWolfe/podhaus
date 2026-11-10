@@ -286,7 +286,8 @@ exact commands are in the [settings appendix](macbook-pro-migration/settings.md)
 | Menu bar | Items shown: Wi-Fi, Sound, Focus, Clock, Control Centre | On | `killall ControlCenter` |
 | Menu bar | Items hidden: Battery, Spotlight, Now Playing, fast user switching | Hidden (codes uncertain; set in GUI if the write misbehaves) | `killall ControlCenter` or GUI |
 | Menu bar | Siri icon | Hidden | `killall SystemUIServer` |
-| Power | Sleep on power adapter | Never | `pmset`, sudo |
+| Power | Sleep on power adapter | 30 minutes; Adrafinil holds it awake during agent turns | `pmset`, sudo |
+| Power | Sleep on battery | 10 minutes; Adrafinil holds it awake during agent turns | `pmset`, sudo |
 | Power | Display sleep on battery | 10 minutes | `pmset`, sudo |
 | Lock | Require password after sleep or screen saver | Immediately | GUI or interactive password |
 | Apps | Default browser | Firefox | Confirmation click |
