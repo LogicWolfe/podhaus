@@ -26,7 +26,7 @@ The first `chezmoi apply` needs these in place.
 
 Then bootstrap chezmoi with the command in the dotfiles README, checking
 Forgejo's host-key fingerprint it gives. The first apply installs Homebrew, the
-command-line toolchain, OrbStack, Zed, Adrafinil, the 1Password CLI and Codex.
+command-line toolchain, OrbStack, Adrafinil, the 1Password CLI and Codex.
 
 ## Identities
 

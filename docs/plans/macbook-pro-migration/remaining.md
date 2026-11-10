@@ -76,7 +76,7 @@ the Air), Lunar, Stay, Magnet, DaisyDisk, NordVPN, Tailscale (`tailscale up`),
 Syncthing (pair the Pro and add the "Leftover Words" folder at
 `~/Documents/Publii/sites/leftover-words`; never copy the Air's `key.pem`),
 OneDrive and iCloud Drive, the chat apps, Plex, Steam, Microsoft 365, Orion,
-Brave sync, StreamFab, Zed, the Safari extensions, the four iPhone apps from
+Brave sync, StreamFab, the Safari extensions, the four iPhone apps from
 the App Store, Claude Code `/login` for the Switch account and `/mcp` for
 Notion.
 
@@ -96,7 +96,6 @@ next plugged in.
 | wattsworth `docs-timesheets-reorg` | The branch is now in the Pro's clone. Push it to origin so it survives the Air (`git -C ~/repos/wattsworth push origin docs-timesheets-reorg`) or drop it if the timesheets docs reorganisation is no longer wanted |
 | Graphite (`gt`) and Bun | Both on the Air as tapped formulae with no Keep or Drop row. `brew install withgraphite/tap/graphite`, `brew install oven-sh/bun/bun`, or treat as dropped |
 | Bartender 6 | On the Air, not installed on the Pro, no decision recorded. The native menu bar settings already match; install it or drop it |
-| Zed settings | The Air's `~/.config/zed/settings.json` carries theme, font sizes, unified diff view, new-window CLI behaviour, agent model and permissions and the `codex-acp` registry entry that the chezmoi-managed file lacks, plus a `keymap.json`. Fold them into the dotfiles source (a plain copy is overwritten on the next apply) or start fresh |
 | `~/.cursor/hooks.json` | Seed it in chezmoi with only Adrafinil's entries, or leave the app to write it; it still carries retired CodeIsland entries |
 | Codex sessions | `~/.codex/sessions` (443 MB) exists only on the Air. Codex is skipped on the Pro; copy it only if you want to resume those threads |
 | Switch work Claude profile | `~/.claude-switch` is 92 MB on the Air (86 MB of transcripts) and 4 KB on the Pro; the state inventory said memory only, and the copy script carried none of it. Copy `~/.claude-switch/projects` the way the personal transcripts were copied, or start that profile fresh |
