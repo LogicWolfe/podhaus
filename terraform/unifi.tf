@@ -115,14 +115,14 @@ resource "unifi_client" "bandicoot" {
   # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
 
-# Nathan's MacBook Pro, pinned like Bandicoot above, by the MAC
-# its wifi presents on the home network (ifconfig en0). That is a locally
-# administered address even with Private Wi-Fi Address off; the hardware MAC
-# is 7c:d6:2c:5f:05:7a, should the presented one ever change. If the
+# Nathan's MacBook Pro, pinned like Bandicoot above, by its wifi's hardware
+# MAC, which is what it presents with Private Wi-Fi Address off for the home
+# network. Read the presented address from another LAN host's neighbour table
+# (`ip neigh show <address>`); macOS hides it from `ifconfig en0`. If the
 # controller already lists this MAC when the first apply runs, the provider
 # adopts that client (allow_existing defaults to true) rather than failing.
 resource "unifi_client" "nb_macbook_pro" {
-  mac      = "42:81:37:89:e8:5c"
+  mac      = "7c:d6:2c:5f:05:7a"
   name     = "Nathans MacBook Pro"
   fixed_ip = local.nb_macbook_pro_ip
   # No network_id: Default LAN, same constraint as the kangaroo clients.
