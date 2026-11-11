@@ -174,6 +174,31 @@ resource "forgejo_repository" "dash" {
   }
 }
 
+# terraform-providers: the provider mirror for providers the public registry
+# can no longer serve (docs/terraform.html#provider-mirror). Chezmoi clones it
+# on every Podhaus operator. Created empty with the Forgejo CLI and imported,
+# as dash was.
+resource "forgejo_repository" "terraform_providers" {
+  owner       = "LogicWolfe"
+  name        = "terraform-providers"
+  description = "Terraform provider mirror for providers the public registry can no longer serve"
+  private     = true
+
+  default_branch     = "main"
+  has_actions        = true
+  has_issues         = false
+  has_packages       = false
+  has_projects       = false
+  has_pull_requests  = false
+  has_releases       = false
+  has_wiki           = false
+  archive_on_destroy = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 # Read-only deploy key for the nathanbaxter-deploy builder container.
 # The builder clones over dockernet SSH (git@forgejo:2222); HTTP git is
 # disabled instance-wide.

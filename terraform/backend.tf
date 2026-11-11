@@ -103,7 +103,9 @@ terraform {
       source = "Trozz/pocketid"
       # 2.4.2 and later leave client settings the provider does not expose
       # (the token lifetimes) as Pocket ID has them when updating a client.
-      version = "~> 2.4.2"
+      # Installed from Podhaus's provider mirror, not the public registry:
+      # see docs/terraform.html.
+      version = "~> 2.5.0"
     }
     restapi = {
       # Pocket ID's per-client token lifetimes have no attribute in the

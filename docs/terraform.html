@@ -34,7 +34,7 @@
             <td><code>terraform/unifi.tf</code> and <code>terraform/dns_unifi_split_horizon.tf</code></td>
           </tr>
           <tr>
-            <td><a href="https://registry.terraform.io/providers/Trozz/pocketid/latest/docs"><code>Trozz/pocketid</code></a> ~> 2.1.0</td>
+            <td><a href="https://registry.terraform.io/providers/Trozz/pocketid/latest/docs"><code>Trozz/pocketid</code></a> ~> 2.5.0, from the <a href="#provider-mirror">provider mirror</a></td>
             <td>Pocket ID users, groups, memberships, custom OIDC claims, and the Forgejo client</td>
             <td><code>terraform/pocket_id.tf</code></td>
           </tr>
@@ -125,6 +125,38 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
         <code>.terraform.lock.hcl</code> is <strong>not</strong> committed;
         each machine self-locks within the <code>~&gt;</code> version
         constraints (no cross-platform hash drift, zero maintenance).
+      </p>
+      <h3 id="provider-mirror">Provider mirror</h3>
+      <p>
+        Providers the public registry can no longer serve install from
+        <code>LogicWolfe/terraform-providers</code> on git.pod.haus instead.
+        Chezmoi clones that repository on every Podhaus operator to
+        <code>~/.local/share/terraform-providers</code>, pulls it hourly, and
+        its managed <code>~/.terraformrc</code> sends only the listed providers
+        to the clone's <code>mirror/</code> directory as a filesystem mirror;
+        every other provider still installs directly from the registry. The
+        provider keeps its registry address, so state and configuration name
+        it as before.
+      </p>
+      <p>
+        <code>trozz/pocketid</code> is the one mirrored provider. Its author
+        moved the repository to <code>pocket-id/terraform-provider</code>,
+        and a new fork now sits at the old name, so the registry's download
+        links return 404 for every version (upstream issue
+        <a href="https://github.com/pocket-id/terraform-provider/issues/127">pocket-id/terraform-provider#127</a>).
+        Once the registry serves it again, drop its block from the chezmoi
+        <code>dot_terraformrc.tmpl</code>.
+      </p>
+      <p>
+        To add a release, run
+        <code>./mirror-release trozz/pocketid &lt;version&gt; pocket-id/terraform-provider</code>
+        in a checkout of the mirror repository and push. The script refuses a
+        release whose checksum file lacks a valid signature from the key pinned
+        in its <code>keys/</code> directory, or whose archives do not match
+        their checksums. Terraform reports mirrored packages as
+        <em>unauthenticated</em> because a filesystem mirror carries no
+        signature; that check happened when the release was mirrored. Raise
+        the version pin only after operators have pulled the new release.
       </p>
       <blockquote>
         <p><strong>Tailscale policy, DNS, and auth keys live in this root</strong></p>
