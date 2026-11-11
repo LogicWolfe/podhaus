@@ -89,6 +89,14 @@
       </p>
 
       <p>
+        Development environments use CI-approved chezmoi revisions, reconciled by native
+        user schedulers at startup and every five minutes. An explicit rollout reaches
+        connected peers through Herdr; offline machines catch up independently. Herdr also
+        carries messages between Pi, Claude Code and Codex over existing SSH routes.
+        See <a href="/host-provisioning.md#development-environment-deployment">Development
+        environment deployment</a> and <a href="/host-provisioning.md#agent-sessions">Agent sessions</a>.
+      </p>
+      <p>
         Komodo manages Lumen's embedding service and tooling image on Bilby,
         Bandicoot, Fractal, Voltaire and Quokka. Each host's Ofelia refreshes its indexes;
         chezmoi exposes local search to Claude and Codex. See

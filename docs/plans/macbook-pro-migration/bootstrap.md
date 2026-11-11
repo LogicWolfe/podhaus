@@ -1,5 +1,7 @@
 # Bootstrapping nb-macbook-pro from the dotfiles
 
+> Historical migration snapshot, retained as evidence of the Air-to-Pro move. Its script names and rollout recommendations are not current operating instructions. Use [development environment deployment](../../host-provisioning.md#development-environment-deployment) and [agent sessions](../../host-provisioning.md#agent-sessions) for the deployed fleet.
+
 > Investigation report gathered read-only on 2026-11-09 by a subagent; it feeds [the migration plan](../macbook-pro-migration.md). Where a recommendation here differs from the plan, the plan is authoritative.
 
 Source: `~/.local/share/chezmoi` at `b7e4793`, chezmoi v2.70.0. Line references

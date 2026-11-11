@@ -1,5 +1,7 @@
 # Coding agents on nb-macbook-air, for the move to the MacBook Pro
 
+> Historical migration snapshot, retained as evidence of the Air-to-Pro move. Its script names and rollout recommendations are not current operating instructions. Use [development environment deployment](../../host-provisioning.md#development-environment-deployment) and [agent sessions](../../host-provisioning.md#agent-sessions) for the deployed fleet.
+
 > Investigation report gathered read-only on 2026-11-09 by a subagent; it feeds [the migration plan](../macbook-pro-migration.md). Where a recommendation here differs from the plan, the plan is authoritative.
 
 Snapshot taken 2026-11-09 10:40 local time (UTC+8), read-only. Nothing was

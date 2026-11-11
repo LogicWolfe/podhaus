@@ -38,6 +38,54 @@ and `playbooks/fractal.yml` deliberately does **not** invoke chezmoi:
 that would put user state under root's control and dissolve the boundary
 the layer exists to draw.
 
+## Development environment deployment
+
+On Linux development hosts, Ansible's `agent_host` role owns system packages,
+hardware-key provider packages, smartcard access and user-service linger.
+Run the host playbook with `--tags agent-host` from Bandicoot, inspect
+`--check --diff` first, then apply and verify a second run reports no changes.
+Chezmoi owns the machine-key agent and development tools inside `$HOME`.
+
+Dotfiles main-branch CI publishes the tested commit to the `fleet-deploy`
+reference. Active development machines reconcile it at user-service startup
+and every five minutes. Opening a terminal runs no chezmoi update. Membership
+comes from the dotfiles `.chezmoidata/fleet.toml` flags `development` and
+`parked`; an unavailable host catches up when it returns.
+
+| Command | Effect |
+|---|---|
+| `chezmoi-deploy rollout` | Apply the approved revision locally and through existing Herdr connections to each active peer; report each host separately |
+| `chezmoi-deploy reconcile` | Bring this machine to the approved revision |
+| `chezmoi-deploy status` | Read desired revision, last successfully applied revision, outcome and failure reason |
+| `chezmoi-deploy reconcile --reapply` | Recheck and reapply the same approved revision, retaining conflict checks |
+| `chezmoi-deploy maintenance` | Reconcile Herdr membership and, on the Mac, refresh the docs server and tunnel certificates |
+
+The deployment checkout is `~/.local/state/chezmoi-deploy/source`. The editable
+checkout at `~/.local/share/chezmoi` is left untouched. Before an apply, dirty
+source, an unfinished Git operation, a branch other than main, commits outside
+approved history or conflicting managed-file edits block that host. Resolve
+those edits deliberately and retry; deployment never stashes or forces them.
+A successful same-revision check skips the apply. Use the deployment command
+for routine updates: plain `chezmoi apply` reads the editable checkout, which
+can be older than the deployed revision.
+
+Deployment and hourly maintenance share a local operating-system lock. A
+second job reports `deployment busy`; it can be retried after the first ends.
+The lock does not coordinate editors or manual chezmoi commands. Remote
+rollout has a ten-minute execution limit; native scheduled applies can finish
+longer installs. Failed hosts do not prevent rollout from trying the others.
+
+Linux uses user timers `chezmoi-deploy.timer` and `chezmoi-maintenance.timer`;
+inspect their services with `systemctl --user status` and the user journal.
+macOS uses LaunchAgents `com.podhaus.chezmoi-deploy` and
+`com.podhaus.chezmoi-maintenance`, with logs in `~/Library/Logs/`. Both appear
+as `chezmoi-deploy` in Background Items because they run the same executable.
+Results live in `~/.local/state/chezmoi-deploy/status.json` and
+`maintenance.json`. The
+[dotfiles deployment instructions](https://git.pod.haus/LogicWolfe/dotfiles/src/branch/main/README.md#fleet-deployment)
+cover bootstrap, the Mac checkout's machine-key Git setting and scheduler
+definition changes.
+
 ## Shared configuration and generated state
 
 Authored, non-secret LAN addresses live in `config/lan-addresses.json` and
@@ -128,7 +176,8 @@ ansible/
     disk_tmp/              Root-filesystem /tmp policy, activated at host restart
     wsl/                   /etc/wsl.conf, hostname, no guest NTP daemon (Windows owns the clock)
     docker/                engine (where managed), daemon.json, host networks
-    devbox/                the root-requiring half of a developer machine
+    agent_host/            development packages, hardware-key access and user-service linger
+    devbox/                additional tools and SELinux forwarding permissions
     docs_sources/          Read-only repository source slots for docs-server
     gnome_on_demand/       GDM follows the shared lid/display policy (bandicoot, quokka)
     komodo_periphery/      keys, compose, and a wait-for-Ok gate
@@ -545,8 +594,23 @@ Development work on these hosts runs inside coding-agent sessions that must
 outlive the SSH connection that started them and the laptop's sleep. Two
 pieces provide that, both `$HOME` state and so chezmoi's: a per-host agent
 runtime, today herdr-core (tmux stays installed and usable), and an operator
-interface on Nathan's Mac, today the Herdr desktop app, which holds one
-connection to each host's runtime. The host-side consequences are the ones
+interface on Nathan's Mac, today the Herdr desktop app. Every active development
+machine's runtime connects to every other through existing SSH routes, so
+Pi, Claude Code and Codex can exchange messages independently of the Mac.
+`herdr-fleet status` checks those connections; `herdr-fleet reconcile` applies
+the non-parked development membership from the dotfiles fleet table. Unavailable
+new peers remain pending and hourly maintenance retries them. No additional
+public listener or firewall port is required.
+
+Use `hc ls --json` to discover agents and `hc get <host>/<terminal>` to verify
+the current recipient before `hc send <host>/<terminal> '<message>'`. Ask for
+an explicit reply when a result matters: submission does not mean the work is
+complete. The shared `herdr-communication` skill describes the full procedure.
+Routine reconnects suppress interactive sign-in. When authentication expires,
+run `ssh-machine <host>.pod.haus true` once on the sending machine and complete
+the normal Fenwick notification before retrying.
+
+The host-side consequences are the ones
 above: the out-of-memory order that spends agents before the runtime and the
 services, and `sshd_liveness` clearing the dead connections a sleeping laptop
 leaves. The dotfiles README's Herdr section describes the runtime and the

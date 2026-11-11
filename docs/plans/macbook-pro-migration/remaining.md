@@ -108,11 +108,12 @@ next plugged in.
 
 ## Closed after the cutover
 
-- Stages F and G are done; the Air is erased. bandicoot, bilby and fractal
-  ran `chezmoi update` and now route SSH to `nb-macbook-pro.pod.haus` with no
-  trace of the Air; voltaire is off the LAN and picks the change up at its
-  next interactive login (its route needs a Pomerium sign-in nobody could
-  approve).
+- ✅ Stages F and G completed; the Air was erased. The MacBook Pro,
+  bandicoot, bilby, fractal and voltaire all applied dotfiles `26e0fa3` on
+  2026-11-11. All 20 directed Herdr connections worked, and the native
+  deployment and maintenance jobs passed. Catch-up runs independently of
+  interactive login; Quokka remains parked and excluded. See
+  [development environment deployment](../../host-provisioning.md#development-environment-deployment).
 - `config.fish` tests for Homebrew by path, so a non-interactive fish over
   SSH no longer fails on starship (dotfiles `94d871b`).
 - The MacBook setup page carries the lessons: Full Disk Access and Local
@@ -135,9 +136,11 @@ commits). Stage G (retire the Air) follows F.
 
 ## Improvements surfaced by the audit
 
-- The Mac branch of `core.sshCommand` in the dotfiles git config should set
-  `-o IdentityAgent=none -o IdentitiesOnly=yes` like `ssh-machine` does, so
-  git never waits on 1Password.
+- ✅ The Mac's editable chezmoi checkout now has a repository-local
+  `core.sshCommand` pointing to `~/.local/bin/ssh-machine`. Native deployment
+  completed through launchd with exit 0. Background dotfiles fetches no longer
+  depend on the interactive 1Password agent. The separate decision about
+  changing Git authentication for all other Mac repositories remains above.
 - rsync 3.5 treats a quoted multi-path remote argument as one path; the copy
   scripts should pass one `host:path` argument per source.
 - `mas` was never installed on the Air, so its App Store list had to be

@@ -241,8 +241,15 @@ edge's.
    which also covers anything step 4 missed. If Periphery itself is not
    running after the Ansible run, `docker start komodo-periphery` first.
 6. **Link quokka into Herdr.** In the dotfiles repo, set `parked = false` on
-   quokka in `.chezmoidata/fleet.toml` and push. Run `chezmoi-update` on quokka,
-   then `chezmoi apply` on the Mac, which adds it. Not before step 2: herdr-core
+   quokka in `.chezmoidata/fleet.toml` and push. Wait for dotfiles main CI to
+   publish that commit to `fleet-deploy`. On quokka, inspect Nathan's editable
+   chezmoi checkout for uncommitted work, fast-forward its clean main branch to
+   that approved commit, then run `chezmoi init` and `chezmoi apply` as Nathan.
+   This bootstraps the deployment command and enables its native timers;
+   a parked host cannot enable its own scheduler through polling.
+   Run `chezmoi-deploy rollout` on an active host and check
+   `herdr-fleet status` and `chezmoi-deploy status` on quokka.
+   Not before step 2: herdr-core
    turns linger on for the login it runs as, and linger stays off while Sky has
    the machine.
 7. **Check for the old herdr terminal app.** It was removed from every other
