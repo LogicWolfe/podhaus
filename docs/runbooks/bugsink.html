@@ -104,15 +104,16 @@
 
       <h2 id="push-to-deploy">Push-to-deploy</h2>
       <p>
-        No per-stack webhook. The fleet's single GitHub <code>push</code>
-        webhook drives the <code>podhaus-push-deploy</code> Komodo Procedure
+        No per-stack webhook. A push to <code>main</code> deploys once CI's
+        checks pass: the deploy job in <code>.github/workflows/check.yml</code>
+        starts the <code>podhaus-push-deploy</code> Komodo Procedure
         (<code>komodo/sync/procedures.toml</code>): Stage 0
         <code>RunSync</code> reconciles stack defs + TOML-declared
         variables from disk (config reconcile only); Stage 1 handles
         config-only and build-context hash drift; Stage 2 handles compose
         changes and new stacks; Ofelia follows the target container's Docker events. The wildcard covers
         Bugsink automatically, so adding or removing the stack needs no
-        <code>terraform/github.tf</code> edit. See
+        deploy wiring of its own. See
         <a href="/komodo.html#operating-models">Komodo → auto-deploy</a>.
         First push of a brand-new stack registers it via Stage 0 and
         deploys it via Stage 2 through the
