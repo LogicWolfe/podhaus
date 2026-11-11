@@ -140,12 +140,55 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
       </p>
       <p>
         <code>trozz/pocketid</code> is the one mirrored provider. Its author
-        moved the repository to <code>pocket-id/terraform-provider</code>,
-        and a new fork now sits at the old name, so the registry's download
-        links return 404 for every version (upstream issue
-        <a href="https://github.com/pocket-id/terraform-provider/issues/127">pocket-id/terraform-provider#127</a>).
-        Once the registry serves it again, drop its block from the chezmoi
-        <code>dot_terraformrc.tmpl</code>.
+        moved the GitHub repository from
+        <code>Trozz/terraform-provider-pocketid</code> to
+        <code>pocket-id/terraform-provider</code>, releases included, and
+        GitHub redirected the old name until a new fork was created there on
+        2026-11-10. The registry still downloads from the old name, so every
+        version returns 404, while the signed releases are intact in the new
+        repository. The registry cannot list the new repository as it stands,
+        because registry providers must live in a repository named
+        <code>terraform-provider-&lt;name&gt;</code>. Upstream issue
+        <a href="https://github.com/pocket-id/terraform-provider/issues/127">pocket-id/terraform-provider#127</a>
+        tracks the fix.
+      </p>
+      <p>
+        Retire the mirror when upstream lands one of the two fixes discussed
+        there:
+      </p>
+      <ul>
+        <li>
+          <strong>The fork at the old name is removed or renamed</strong>, so
+          GitHub's redirect returns and <code>trozz/pocketid</code> installs
+          from the registry again. Confirm that
+          <code>https://github.com/trozz/terraform-provider-pocketid/releases/download/v2.5.0/terraform-provider-pocketid_2.5.0_SHA256SUMS</code>
+          answers 200 rather than 404. Nothing in Podhaus changes; go
+          straight to the clean-up below.
+        </li>
+        <li>
+          <strong>The repository is renamed to
+          <code>terraform-provider-pocketid</code> and published under a new
+          registry address</strong>, such as <code>pocket-id/pocketid</code>.
+          Change the provider's <code>source</code> in
+          <code>terraform/backend.tf</code>, run
+          <code>terraform state replace-provider registry.terraform.io/trozz/pocketid registry.terraform.io/&lt;new address&gt;</code>
+          once from any operator (the state is shared), then run
+          <code>terraform init</code> on each operator and confirm the plan
+          reports no changes.
+        </li>
+      </ul>
+      <p>
+        Clean-up after either fix: in the dotfiles repository, return
+        <code>dot_terraformrc.tmpl</code>'s <code>provider_installation</code>
+        block to a plain <code>direct {}</code> and remove the
+        <code>terraform-providers</code> entries from
+        <code>.chezmoiexternal.toml</code> and <code>.chezmoiignore</code>.
+        In Podhaus, drop the "installed from the provider mirror" comment in
+        <code>terraform/backend.tf</code> and this section. Remove the
+        <code>forgejo_repository.terraform_providers</code> block's
+        <code>prevent_destroy</code> and then the block itself; its
+        <code>archive_on_destroy</code> archives the repository rather than
+        deleting it.
       </p>
       <p>
         To add a release, run
@@ -153,7 +196,11 @@ op-vault dev -- op run --env-file=terraform/terraform.env.op -- \
         in a checkout of the mirror repository and push. The script refuses a
         release whose checksum file lacks a valid signature from the key pinned
         in its <code>keys/</code> directory, or whose archives do not match
-        their checksums. Terraform reports mirrored packages as
+        their checksums. A refusal after upstream changes its signing key
+        needs the new public key, taken from the registry's
+        <code>signing_keys</code> for the release, committed under
+        <code>keys/</code> once it is confirmed to belong to the provider's
+        maintainers. Terraform reports mirrored packages as
         <em>unauthenticated</em> because a filesystem mirror carries no
         signature; that check happened when the release was mirrored. Raise
         the version pin only after operators have pulled the new release.
