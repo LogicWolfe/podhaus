@@ -1,0 +1,8 @@
+// Permit the operator to access PC/SC over SSH.
+polkit.addRule(function(action, subject) {
+    if ((action.id == "org.debian.pcsc-lite.access_pcsc" ||
+         action.id == "org.debian.pcsc-lite.access_card") &&
+        subject.user == {{ podhaus_operator | to_json }}) {
+        return polkit.Result.YES;
+    }
+});

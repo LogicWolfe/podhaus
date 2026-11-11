@@ -1,39 +1,4 @@
-# System packages for a host that is also a development machine.
-#
-# This is the root-requiring half of chezmoi's run_onchange_04-packages.sh:
-# vendor repositories and dnf installs. Under the Ansible/chezmoi boundary
-# those are machine state. What stays in chezmoi is everything user-scoped —
-# mise, cargo-binstall, starship, lefthook, zellij, the claude and codex
-# installers — none of which needs root.
-#
-# During the transition both run. chezmoi's checks are `command -v` guards,
-# so once these are present its sudo branches short-circuit to no-ops. That
-# is the point: fractal proves this role is a superset before anything is
-# removed from chezmoi.
-#
-# Deliberately absent: the TPM (tpm2-pkcs11) and YubiKey (opensc/pcsc-lite)
-# provider stacks. Those stay chezmoi-owned and hardware-gated there — the
-# machine key is user state, and chezmoi's probe installs the right provider
-# only where the hardware exists (voltaire has a TPM; fractal has neither a
-# TPM device nor USB passthrough into the WSL guest).
 ---
-- name: Import the 1Password signing key
-  tags: [package-repositories]
-  ansible.builtin.get_url:
-    url: https://downloads.1password.com/linux/keys/1password.asc
-    dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-1password
-    mode: "0644"
-
-- name: Add the 1Password repository
-  tags: [package-repositories]
-  ansible.builtin.yum_repository:
-    name: 1password
-    description: 1Password Stable Channel
-    baseurl: https://downloads.1password.com/linux/rpm/stable/$basearch
-    gpgcheck: true
-    repo_gpgcheck: true
-    gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-1password
-
 - name: Add the HashiCorp repository
   tags: [package-repositories]
   # Not Fedora's repos (Terraform was dropped after the 2023 BSL relicense)
@@ -47,43 +12,11 @@
 - name: Install development packages
   ansible.builtin.dnf:
     name:
-      # Shell and terminal
-      - fish
-      - tmux
-      - micro
-      # Search and file tools
-      - ripgrep
-      - fd-find
-      - bat
-      - eza
-      - zoxide
-      - uutils-coreutils
-      # Git and forge access
-      - git-lfs
-      - git-delta
-      - gh
-      # Toolchains and build deps
       - golang
       - nodejs
-      - gcc
-      - make
-      - pkgconf-pkg-config
-      - openssl-devel
-      # Cloud and infra CLIs
-      - 1password-cli
       - terraform
-      - awscli2
-      # Misc
-      - direnv
       - glow
-      - htop
-      - fortune-mod
     state: present
-
-- name: Verify the 1Password CLI is usable
-  # op-vault supplies the selected machine service account at execution time.
-  ansible.builtin.command: op --version
-  changed_when: false
 
 - name: Permit the clipboard SSH reverse tunnel under SELinux
   tags: [clipboard-tunnel]

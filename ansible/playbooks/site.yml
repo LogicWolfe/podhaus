@@ -40,6 +40,9 @@
     - role: numbat_edge
       when: inventory_hostname in groups['edge_hosts']
       tags: [edge]
+    - role: agent_host
+      when: inventory_hostname in groups['agent_hosts']
+      tags: [agent-host]
     - role: authorized_keys
       when: inventory_hostname in groups['linux_hosts']
       tags: [ssh]

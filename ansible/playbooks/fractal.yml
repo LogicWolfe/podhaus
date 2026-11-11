@@ -30,6 +30,8 @@
       tags: [storage]
     - role: devbox
       tags: [devbox]
+    - role: agent_host
+      tags: [agent-host]
     - role: authorized_keys
       tags: [ssh]
     - role: sshd_pomerium_ca

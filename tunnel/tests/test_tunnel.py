@@ -85,7 +85,7 @@ class Authority:
         openssl("ecparam", "-name", "prime256v1", "-genkey", "-noout", "-out", str(key))
         openssl("req", "-new", "-key", str(key), "-subj", f"/CN={common_name}", "-out", str(request))
         openssl(
-            "x509", "-req", "-in", str(request), "-CA", str(self.cert), "-CAkey", str(self.key),
+            "x509", "-req", "-sha256", "-in", str(request), "-CA", str(self.cert), "-CAkey", str(self.key),
             "-CAcreateserial", "-days", "1", "-extfile", str(extensions), "-out", str(cert),
         )
         return cert, key

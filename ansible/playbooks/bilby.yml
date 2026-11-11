@@ -27,6 +27,8 @@
       tags: [docs-sources]
     - role: docker
       tags: [docker]
+    - role: agent_host
+      tags: [agent-host]
     - role: authorized_keys
       tags: [ssh]
     - role: sshd_pomerium_ca

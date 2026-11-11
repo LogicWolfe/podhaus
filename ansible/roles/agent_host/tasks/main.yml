@@ -1,0 +1,108 @@
+---
+- name: Import the 1Password signing key
+  tags: [package-repositories]
+  ansible.builtin.get_url:
+    url: https://downloads.1password.com/linux/keys/1password.asc
+    dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-1password
+    mode: "0644"
+
+- name: Add the 1Password repository
+  tags: [package-repositories]
+  ansible.builtin.yum_repository:
+    name: 1password
+    description: 1Password Stable Channel
+    baseurl: https://downloads.1password.com/linux/rpm/stable/$basearch
+    gpgcheck: true
+    repo_gpgcheck: true
+    gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-1password
+
+- name: Add the GitHub CLI repository
+  ansible.builtin.get_url:
+    url: https://cli.github.com/packages/rpm/gh-cli.repo
+    dest: /etc/yum.repos.d/gh-cli.repo
+    mode: "0644"
+
+- name: Install development and hardware provider packages
+  ansible.builtin.dnf:
+    name:
+      - 1password-cli
+      - azure-cli
+      - fish
+      - git-lfs
+      - jq
+      - fortune-mod
+      - unzip
+      - tmux
+      - htop
+      - ripgrep
+      - fd-find
+      - bat
+      - eza
+      - zoxide
+      - uutils-coreutils
+      - micro
+      - pkgconf-pkg-config
+      - openssl-devel
+      - gcc
+      - make
+      - git-delta
+      - direnv
+      - awscli2
+      - tpm2-pkcs11
+      - tpm2-pkcs11-tools
+      - tpm2-tools
+      - opensc
+      - pcsc-lite
+      - pcsc-lite-ccid
+      - yubikey-manager
+    state: present
+
+- name: Verify the 1Password CLI is usable
+  ansible.builtin.command: op --version
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Install or update GitHub CLI from its official repository
+  ansible.builtin.dnf:
+    name: gh
+    state: latest
+    enablerepo: gh-cli
+    disablerepo: "*"
+
+- name: Check for a TPM resource manager
+  ansible.builtin.stat:
+    path: /dev/tpmrm0
+  register: agent_host_tpm
+
+- name: Grant TPM access to the operator
+  ansible.builtin.user:
+    name: "{{ podhaus_operator }}"
+    groups: tss
+    append: true
+  when: agent_host_tpm.stat.exists
+
+- name: Check whether the smartcard socket unit is installed
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/pcscd.socket
+  register: agent_host_pcscd_socket
+  when: ansible_check_mode
+
+- name: Enable smartcard reader socket
+  ansible.builtin.systemd_service:
+    name: pcscd.socket
+    enabled: true
+    state: started
+  when: not ansible_check_mode or agent_host_pcscd_socket.stat.exists
+
+- name: Permit the operator to use smartcards over SSH
+  ansible.builtin.template:
+    src: 50-pcsc-machine-ssh.rules.j2
+    dest: /etc/polkit-1/rules.d/50-pcsc-machine-ssh.rules
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Keep the operator's user services running without a login
+  ansible.builtin.command:
+    argv: [loginctl, enable-linger, "{{ podhaus_operator }}"]
+    creates: "/var/lib/systemd/linger/{{ podhaus_operator }}"
