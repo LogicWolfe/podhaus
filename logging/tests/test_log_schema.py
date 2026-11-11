@@ -841,8 +841,10 @@ podhaus.chain "run" {{
 }}
 
 podhaus.ship "run" {{
-  host     = "{HOST}"
-  endpoint = "http://{COLLECTOR}"
+  host                 = "{HOST}"
+  endpoint             = "http://{COLLECTOR}"
+  self_scrape_interval = "1s"
+  self_scrape_timeout  = "1s"
 }}
 
 // Alloy's own spans, written to the module's input export as on every host;
@@ -860,7 +862,8 @@ tracing {{
 prometheus.scrape "host_scrape" {{
   targets         = [{{"__address__" = "127.0.0.1:{API_PORT}"}}]
   job_name        = "{HOST_SCRAPE}"
-  scrape_interval = "10s"
+  scrape_interval = "1s"
+  scrape_timeout  = "1s"
   forward_to      = [otelcol.receiver.prometheus.host_scrape.receiver]
 }}
 
@@ -1082,7 +1085,7 @@ class AlloyRun:
         self.wait_until(lambda: len(read_rows(self.workdir / "out" / "logs.jsonl")) >= count, deadline)
 
     def wait_for_metrics_and_spans(self, deadline: float) -> None:
-        """Alloy scrapes itself once a minute, at an offset within the minute that varies by run."""
+        """Both scrapes run every second here, at an offset within the second that varies by run."""
         self.wait_until(lambda: bool(alloys_own(self.metrics()) and alloys_own(self.spans())
                                      and host_scrapes(self.metrics())), deadline)
 
@@ -1170,8 +1173,7 @@ class LogSchemaTest(unittest.TestCase):
             run.wait_for_metrics_and_spans(deadline)
             # A dropped line that was not dropped arrives alongside the rest,
             # so every kept row must have been in for 4 s before the dropped
-            # fixtures are judged. Alloy's once-a-minute self-scrape wait above
-            # usually covers that, in which case this waits no longer.
+            # fixtures are judged.
             time.sleep(max(0.0, kept_arrived + 4 - time.monotonic()))
             cls.tailers = {name: run.component(component_id) for name, component_id in TAILERS.items()}
             cls.health = run.run_healthcheck()

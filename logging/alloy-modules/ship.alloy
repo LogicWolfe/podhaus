@@ -19,6 +19,13 @@
 //                     both; the hosts that send in plaintext give neither,
 //                     and an https host that left them out would have every
 //                     request refused by Caddy.
+//   self_scrape_interval, self_scrape_timeout
+//                     How often Alloy scrapes its own metrics, and how long
+//                     one scrape may take, which Alloy requires to be no
+//                     longer than the interval. Hosts leave them at a minute
+//                     and Alloy's default 10 s; the log schema harness
+//                     (logging/tests/test_log_schema.py) shortens both so a
+//                     run need not wait up to a minute for the first scrape.
 //
 // The collector is clickstack-otel on bandicoot, which publishes port 4318
 // on the LAN. Bandicoot's own Alloy sends to it by container name on
@@ -52,6 +59,16 @@ declare "ship" {
 		default  = ""
 	}
 
+	argument "self_scrape_interval" {
+		optional = true
+		default  = "60s"
+	}
+
+	argument "self_scrape_timeout" {
+		optional = true
+		default  = "10s"
+	}
+
 	otelcol.receiver.loki "clickstack" {
 		output {
 			logs = [enrich.run.input]
@@ -63,7 +80,7 @@ declare "ship" {
 		output = [otelcol.processor.batch.clickstack.input]
 	}
 
-	// Alloy's own metrics every 60 s, through the same exporter as the logs.
+	// Alloy's own metrics every minute, through the same exporter as the logs.
 	// They are the host's pipeline heartbeat: a Gatus check looks for one in
 	// the last 15 minutes by host.name. And they make the exporter complete a
 	// request every minute however quiet the host's logs are, which is what
@@ -72,7 +89,8 @@ declare "ship" {
 
 	prometheus.scrape "alloy_self" {
 		targets         = prometheus.exporter.self.alloy.targets
-		scrape_interval = "60s"
+		scrape_interval = argument.self_scrape_interval.value
+		scrape_timeout  = argument.self_scrape_timeout.value
 		forward_to      = [otelcol.receiver.prometheus.alloy_self.receiver]
 	}
 
