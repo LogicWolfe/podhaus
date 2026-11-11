@@ -9,10 +9,10 @@
 # and DNS record; other hosts and Peripheries reach bandicoot by this name.
 # Off-LAN the name does not resolve, so those connections
 # are LAN-only by construction, as fractal's are. The adapter is a
-# Realtek RTL8153 (1 GbE; Asahi has no Thunderbolt) named enu1u4 after
-# its USB port, so it must stay in that port. Wi-Fi is left connected but
-# is not a management path: its MAC is randomised and nothing is
-# reserved for it.
+# Realtek RTL8156B (2.5 GbE; Asahi has no Thunderbolt) plugged straight
+# into the Mac and named enu1 after its USB port, so it must stay in that
+# port. Wi-Fi is left connected but is not a management path: its MAC is
+# randomised and nothing is reserved for it.
 ansible_user: nathan
 podhaus_hostname: bandicoot
 
@@ -32,17 +32,14 @@ ansible_python_interpreter: /usr/bin/python3
 # accepted cost of a laptop being a runtime host.
 podhaus_is_laptop: true
 
-# The USB Ethernet adapter and the dock hub it hangs off are pinned out of
-# USB runtime suspend; a suspended link is an unplugged one for a host
-# whose management path and fixed IP live on that adapter. Vendor/product
-# IDs from the USB tree, so the rule follows the device across ports.
+# The USB Ethernet adapter is pinned out of USB runtime suspend; a
+# suspended link is an unplugged one for a host whose management path and
+# fixed IP live on that adapter. Vendor/product IDs from the USB tree, so
+# the rule follows the device across ports.
 podhaus_usb_autosuspend_exempt:
   - vendor: 0bda
-    product: "8153"
-    comment: Realtek RTL8153 USB gigabit Ethernet
-  - vendor: 05e3
-    product: "0626"
-    comment: Genesys Logic USB 3.1 hub in the dock
+    product: "8156"
+    comment: Realtek RTL8156B USB 2.5 GbE Ethernet
 
 # Fresh engine, live-restore from day one. SELinux remains enforcing;
 # the bind-mount stacks explicitly carry label=disable.

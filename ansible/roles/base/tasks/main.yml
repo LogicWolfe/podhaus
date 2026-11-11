@@ -116,8 +116,8 @@
 
 - name: Keep connectivity-critical USB devices out of autosuspend
   # Declared per host as podhaus_usb_autosuspend_exempt (vendor/product
-  # pairs). bandicoot's only wired link is a USB Ethernet adapter on a USB
-  # hub, so neither may ever be runtime-suspended. A rule rather than the
+  # pairs). bandicoot's only wired link is a USB Ethernet adapter, so it
+  # may never be runtime-suspended. A rule rather than the
   # global usbcore.autosuspend=-1: only the listed devices change.
   ansible.builtin.template:
     src: 50-podhaus-usb-autosuspend.rules.j2

@@ -109,7 +109,7 @@ resource "unifi_client" "fractal_windows" {
 # would strand every direct path at once. The wifi interface is deliberately
 # not reserved: it uses a randomised MAC and is not a management path.
 resource "unifi_client" "bandicoot" {
-  mac      = "00:e0:4c:68:07:fe"
+  mac      = "6c:1f:f7:d3:6e:f7"
   name     = "Bandicoot"
   fixed_ip = local.bandicoot_ip
   # No network_id: Default LAN, same constraint as the kangaroo clients.
