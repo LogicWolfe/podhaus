@@ -93,9 +93,8 @@ resource "unifi_client" "bilby" {
 # The Windows desktop hosting the fractal WSL guest. Pinned because the
 # split-horizon fractal.pod.haus record (dns_unifi_split_horizon.tf) and
 # fractal's Ansible connection both name this address; a DHCP drift would
-# strand every direct path at once. Imported 2026-08-08 by MAC — the
-# v0.53 provider imports clients by MAC, not by the controller id the
-# kangaroo notes above describe.
+# strand every direct path at once. The provider imports clients by MAC,
+# not by the controller id the kangaroo notes above describe.
 resource "unifi_client" "fractal_windows" {
   mac      = "60:cf:84:e7:4e:c4"
   name     = "Fractal"
