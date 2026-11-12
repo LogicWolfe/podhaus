@@ -12,4 +12,5 @@ locals {
   pizero_ip                = local.lan_addresses.pizero_ipv4
   nb_macbook_pro_ip        = local.lan_addresses.nb_macbook_pro_ipv4
   quokka_ip                = local.lan_addresses.quokka_ipv4
+  rainmachine_ip           = local.lan_addresses.rainmachine_ipv4
 }

@@ -114,8 +114,8 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
           jobs/scripts POST to with <code>success=true|false&amp;error=...</code>. Kept only
           where the window is short enough that a restart's deferral does not matter: Sky cache
           invalidation (3 m), StreamFab Publish (5 m), the Plex label sync and pinelake stignore
-          ticks (30 m), the Sky Restic repository check (2 h), and MeTube's event-only plexify
-          verdict.</li>
+          ticks (30 m), the Sky Restic repository check and the garden watering check (2 h
+          each), and MeTube's event-only plexify verdict.</li>
         <li><strong>Komodo-API check</strong> — Gatus calls Komodo Core's <code>/read</code>
           API and asserts a downstream state. Periphery checks cover every Komodo
           host through <code>GetServerState</code>. Remote-container checks use
@@ -281,6 +281,21 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         of each paired camera's last smart detection and Gatus reads the verdict over its REST
         API. See the
         <a href="runbooks/home-assistant.md#camera-detection-health">Home Assistant runbook</a>.
+      </p>
+      <p>
+        The <code>Irrigation</code> group watches the RainMachine garden controller, a LAN
+        device with a reserved address. <strong>RainMachine</strong> probes its sign-in-free
+        <code>/api/4/diag</code> page every five minutes and alerts after an hour offline.
+        <strong>Watering</strong> is a push check: the hourly <code>watering-monitor</code>
+        job in the Gatus stack signs in to the controller, reads its watering log for the
+        most recent watering day and reports whether a program ran and every zone delivered
+        what the controller set for it. The watering days, the months with no watering and
+        the time a run must be finished by are settings on that service in
+        <code>gatus/compose.yaml</code>, deliberately not read from the controller's own
+        program, so a program that is edited, switched off or lost counts as a missed day. A
+        manual run does not count. When the monitor cannot sign in, it
+        reports nothing and the two-hour heartbeat window raises the alert. The controller
+        password is the 1Password Homelab item <strong>RainMachine</strong>.
       </p>
 
       <h2 id="ingest-staleness">Ingest-staleness alerts</h2>

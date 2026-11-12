@@ -102,7 +102,8 @@ class LanAddressDistributionTests(unittest.TestCase):
                 "led_strip_grasshopper_ipv4=local.led_strip_grasshopper_ip,"
                 "pizero_ipv4=local.pizero_ip,"
                 "nb_macbook_pro_ipv4=local.nb_macbook_pro_ip,"
-                "quokka_ipv4=local.quokka_ip})\n"
+                "quokka_ipv4=local.quokka_ip,"
+                "rainmachine_ipv4=local.rainmachine_ip})\n"
             ),
             capture_output=True,
             text=True,

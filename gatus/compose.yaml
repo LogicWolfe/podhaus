@@ -17,6 +17,7 @@ services:
       # The shared values come from config/lan-addresses.json.
       BANDICOOT_LAN_IPV4: ${BANDICOOT_LAN_IPV4}
       KANGAROO_LAN_IPV4: ${KANGAROO_LAN_IPV4}
+      RAINMACHINE_LAN_IPV4: ${RAINMACHINE_LAN_IPV4}
       # Postmark SMTP credential — now used only by the `email` alerter
       # (the Fenwick-health backstop), not the default `custom` alerter.
       POSTMARK_SERVER_TOKEN: ${POSTMARK_SERVER_TOKEN}
@@ -115,6 +116,42 @@ services:
       # catches a stopped monitor or two consecutive query failures.
       ofelia.job-exec.sky-backups-monitor.schedule: "0 15 * * * *"
       ofelia.job-exec.sky-backups-monitor.command: "/usr/local/bin/check-sky-backups"
+
+  watering-monitor:
+    container_name: watering-monitor
+    build:
+      context: .
+      dockerfile: Dockerfile.watering
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_WATERING_MONITOR:-unset}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["exec sleep infinity"]
+    environment:
+      # The controller's plain-HTTP local API; its HTTPS port serves a
+      # self-signed certificate.
+      RAINMACHINE_URL: http://${RAINMACHINE_LAN_IPV4}:8081
+      RAINMACHINE_PASSWORD: ${RAINMACHINE_PASSWORD}
+      # The household's watering roster, fixed here on purpose and not read
+      # from the controller's program, so a program that is edited, switched
+      # off or lost shows up as a missed day. June to August is Perth's winter
+      # sprinkler ban. A run counts from WATERING_DONE_BY on its day; the
+      # program finishes at sunrise.
+      WATERING_DAYS: tue,sat
+      NO_WATERING_MONTHS: jun,jul,aug
+      WATERING_DONE_BY: "08:00"
+      GATUS_BASE_URL: http://gatus:8080
+      GATUS_HEARTBEAT_PUSH_TOKEN: ${GATUS_HEARTBEAT_PUSH_TOKEN}
+    networks:
+      - dockernet
+    labels:
+      podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
+      ofelia.enabled: "true"
+      # One read of the controller's watering log per hour. Gatus's 2h
+      # heartbeat window also catches a stopped monitor or a controller the
+      # monitor cannot sign in to.
+      ofelia.job-exec.watering-monitor.schedule: "0 20 * * * *"
+      ofelia.job-exec.watering-monitor.command: "/usr/local/bin/check-watering"
 
 networks:
   dockernet:

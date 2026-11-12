@@ -8,5 +8,6 @@
   "led_strip_grasshopper_ipv4": "10.0.0.44",
   "pizero_ipv4": "10.0.0.77",
   "nb_macbook_pro_ipv4": "10.0.0.203",
-  "quokka_ipv4": "10.0.0.199"
+  "quokka_ipv4": "10.0.0.199",
+  "rainmachine_ipv4": "10.0.0.71"
 }

@@ -20,6 +20,7 @@ class LanAddresses:
     pizero_ipv4: str
     nb_macbook_pro_ipv4: str
     quokka_ipv4: str
+    rainmachine_ipv4: str
 
     def __post_init__(self) -> None:
         for field in fields(self):

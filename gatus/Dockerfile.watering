@@ -1,0 +1,9 @@
+FROM python:alpine
+
+COPY scripts/check-watering.py /usr/local/bin/check-watering
+RUN chmod 0755 /usr/local/bin/check-watering
+
+# Content-hash build arg from the podhaus mechanism. The image contains the
+# check script, so a gatus/ build-context change must rebuild the image.
+ARG STACK_CONTENT_HASH=unset
+ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}

@@ -168,6 +168,19 @@ resource "unifi_client" "led_strip_grasshopper" {
   # No network_id: Default LAN, same constraint as the kangaroo clients.
 }
 
+# The RainMachine irrigation controller. Pinned because Gatus probes it and the
+# watering monitor reads its log by address (gatus/conf/config.yaml,
+# gatus/compose.yaml); it announces itself only as an android-* hostname. This
+# client already exists in the controller as a DHCP lease, so import before the
+# first apply:
+#   terraform import unifi_client.rainmachine d4:6e:0e:0a:86:b7
+resource "unifi_client" "rainmachine" {
+  mac      = "d4:6e:0e:0a:86:b7"
+  name     = "RainMachine"
+  fixed_ip = local.rainmachine_ip
+  # No network_id: Default LAN, same constraint as the kangaroo clients.
+}
+
 resource "unifi_client" "quokka" {
   mac      = "58:ef:68:7c:9b:73"
   name     = "Quokka"

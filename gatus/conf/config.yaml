@@ -185,6 +185,23 @@ endpoints:
     client:
       insecure: true
 
+  # The RainMachine irrigation controller on the LAN. `/api/4/diag` needs no
+  # sign-in. Twelve failures at five minutes is an hour offline, long enough
+  # to ride out a Wi-Fi drop or a restart.
+  - name: RainMachine
+    url: http://${RAINMACHINE_LAN_IPV4}:8081/api/4/diag
+    group: Irrigation
+    interval: 5m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].bootCompleted == true"
+    alerts:
+      - type: custom
+        description: "The RainMachine irrigation controller has been unreachable on the home network for an hour. It keeps its schedule while offline as long as it has power, but nothing can confirm that it watered. Check that it has power and that its touchscreen shows it joined to the PodHaus Wi-Fi."
+        failure-threshold: 12
+        success-threshold: 2
+        send-on-resolved: true
+
   # Komodo Core's HTTP API, reached over the LAN since Core moved to
   # bandicoot. `/version` is auth-free and returns 200 when Core is up.
   # The Periphery/Alerts checks below exercise the API more deeply.
@@ -1784,6 +1801,23 @@ external-endpoints:
     alerts:
       - type: custom
         description: "Sky's Restic repository has no snapshot committed within the last 14 days, or the hourly RustFS snapshot check has stopped reporting. Check the laptop's backup scheduler and Restic logs, then inspect sky-backups/personal-laptop/snapshots/ at pouch.pod.haus. The client must not use --skip-if-unchanged."
+        failure-threshold: 1
+        success-threshold: 1
+        send-on-resolved: true
+
+  # An hourly monitor signs in to the RainMachine and reads its watering log
+  # for the most recent watering day (the roster is set on the watering-monitor
+  # service in gatus/compose.yaml). A day passes when a program ran and every
+  # zone delivered what the controller set for it.
+  # Endpoint key: `irrigation_watering`.
+  - name: Watering
+    group: Irrigation
+    token: ${GATUS_HEARTBEAT_PUSH_TOKEN}
+    heartbeat:
+      interval: 2h
+    alerts:
+      - type: custom
+        description: "The garden was not watered in full on its most recent watering day, or the hourly check of the RainMachine's watering log has stopped reporting. The error names the day and what was missing. Open the RainMachine at its local web interface, check that the Regular Watering program is switched on, and look at the watering history for that day."
         failure-threshold: 1
         success-threshold: 1
         send-on-resolved: true

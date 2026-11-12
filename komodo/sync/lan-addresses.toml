@@ -49,3 +49,8 @@ description = "Shared LAN address from config/lan-addresses.json"
 name = "LAN_QUOKKA_IPV4"
 value = "10.0.0.199"
 description = "Shared LAN address from config/lan-addresses.json"
+
+[[variable]]
+name = "LAN_RAINMACHINE_IPV4"
+value = "10.0.0.71"
+description = "Shared LAN address from config/lan-addresses.json"
