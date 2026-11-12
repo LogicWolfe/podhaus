@@ -127,10 +127,10 @@ class WateringMonitorTests(unittest.TestCase):
                 if shipped["name"] == metric
                 for point in shipped["gauge"]["dataPoints"]
             ),
-            key=lambda point: (point.get("day", ""), point.get("zone", ""), point.get("run", "")),
+            key=lambda point: (point.get("day", ""), point.get("zone", ""), point["at"]),
         )
 
-    def test_the_weeks_watering_is_shipped_per_day_zone_and_kind_of_run(self):
+    def test_each_cycle_of_the_week_is_shipped_at_its_own_start(self):
         controller = Controller(
             log=[
                 logged_day("2026-11-08", program=1, zones=[zone_run(4, intended=3600, delivered=3600)]),
@@ -148,18 +148,19 @@ class WateringMonitorTests(unittest.TestCase):
         )
         result = self.ship(controller)
         self.assertEqual(result.returncode, 0, result.stderr)
-        at = str(STARTED * 1_000_000_000)
+        first, second = str(STARTED * 1_000_000_000), str((STARTED + 3600) * 1_000_000_000)
         self.assertEqual(
-            self.points(controller, "rainmachine.zone.watered"),
+            self.points(controller, "rainmachine.cycle.watered"),
             [
-                {"day": "2026-11-14", "zone": "Back Fence", "run": "program", "value": 1200, "at": at},
-                {"day": "2026-11-14", "zone": "Front Lawn", "run": "program", "value": 1800, "at": at},
-                {"day": "2026-11-15", "zone": "Back Fence", "run": "manual", "value": 60, "at": at},
+                {"day": "2026-11-14", "zone": "Back Fence", "run": "program", "value": 1200, "at": first},
+                {"day": "2026-11-14", "zone": "Front Lawn", "run": "program", "value": 1200, "at": first},
+                {"day": "2026-11-14", "zone": "Front Lawn", "run": "program", "value": 600, "at": second},
+                {"day": "2026-11-15", "zone": "Back Fence", "run": "manual", "value": 60, "at": first},
             ],
         )
         self.assertEqual(
-            [point["value"] for point in self.points(controller, "rainmachine.zone.intended")],
-            [1200, 2400, 60],
+            [point["value"] for point in self.points(controller, "rainmachine.cycle.intended")],
+            [1200, 1200, 1200, 60],
         )
 
     def test_an_answering_controller_ships_its_uptime(self):
@@ -173,7 +174,7 @@ class WateringMonitorTests(unittest.TestCase):
     def test_a_week_without_watering_ships_no_amounts(self):
         controller = Controller()
         self.ship(controller)
-        self.assertEqual(self.points(controller, "rainmachine.zone.watered"), [])
+        self.assertEqual(self.points(controller, "rainmachine.cycle.watered"), [])
 
     def test_an_unreachable_controller_ships_nothing(self):
         controller = Controller()
@@ -188,7 +189,7 @@ class WateringMonitorTests(unittest.TestCase):
         result = self.ship(controller, password="wrong")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(len(self.points(controller, "rainmachine.uptime")), 1)
-        self.assertEqual(self.points(controller, "rainmachine.zone.watered"), [])
+        self.assertEqual(self.points(controller, "rainmachine.cycle.watered"), [])
 
 
 if __name__ == "__main__":

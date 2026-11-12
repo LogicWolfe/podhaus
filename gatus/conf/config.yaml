@@ -1311,15 +1311,15 @@ endpoints:
       ' was cut short: ', toString(round(watered / 60)), ' of ', toString(round(intended / 60)), ' minutes'),
       'ok') AS why
       FROM (SELECT sum(w) AS watered, sum(i) AS intended FROM (
-      SELECT Attributes['zone'] AS zone,
-      maxIf(Value, MetricName = 'rainmachine.zone.watered') AS w,
-      maxIf(Value, MetricName = 'rainmachine.zone.intended') AS i
+      SELECT TimeUnix, Attributes['zone'] AS zone,
+      maxIf(Value, MetricName = 'rainmachine.cycle.watered') AS w,
+      maxIf(Value, MetricName = 'rainmachine.cycle.intended') AS i
       FROM default.otel_metrics_gauge
       WHERE ServiceName = 'rainmachine'
-      AND MetricName IN ('rainmachine.zone.watered', 'rainmachine.zone.intended')
+      AND MetricName IN ('rainmachine.cycle.watered', 'rainmachine.cycle.intended')
       AND TimeUnix > now() - INTERVAL 8 DAY
       AND Attributes['run'] = 'program' AND Attributes['day'] = toString(day)
-      GROUP BY zone))
+      GROUP BY TimeUnix, zone))
       FORMAT JSONEachRow
     conditions:
       - "[STATUS] == 200"

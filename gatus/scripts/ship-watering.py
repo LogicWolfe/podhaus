@@ -4,16 +4,17 @@
 Gauges under service.name `rainmachine`, read by the Gatus Irrigation checks
 and the dash watering page:
 
-  rainmachine.uptime         The controller's uptime in seconds, stamped now.
-                             Sent first and only when the controller answered,
-                             so a gap means the controller or this job is down.
-  rainmachine.zone.watered   Seconds one zone ran on one day.
-  rainmachine.zone.intended  Seconds the controller set that zone to run.
+  rainmachine.uptime          The controller's uptime in seconds, stamped now.
+                              Sent first and only when the controller answered,
+                              so a gap means the controller or this job is down.
+  rainmachine.cycle.watered   Seconds a zone ran in one unbroken stretch.
+  rainmachine.cycle.intended  Seconds the controller set that stretch to run.
 
-The two zone gauges carry `day` (the controller's local date), `zone` (its
-name) and `run` (`program` or `manual`), stamped at the zone's first start that
-day. Every run sends the trailing week again, so an outage shorter than that
-loses nothing; a reader takes the largest value for each day, zone and run.
+The two cycle gauges are stamped at the moment the stretch started and carry
+`day` (the controller's local date), `zone` (its name) and `run` (`program` or
+`manual`). Every run sends the trailing week again, so an outage shorter than
+that loses nothing; a reader takes the largest value for each timestamp, zone
+and run, then adds those up.
 """
 
 import json
@@ -49,20 +50,8 @@ class Point:
 
 
 @dataclass(frozen=True)
-class ZoneRun:
-    """What one zone was set to run and what it ran, in one program or manual run."""
-
-    day: date
-    zone: int
-    manual: bool
-    started_epoch: int
-    intended_seconds: int
-    delivered_seconds: int
-
-
-@dataclass(frozen=True)
-class DailyAmount:
-    """What one zone ran on one day, by program or by hand."""
+class Cycle:
+    """One unbroken stretch a zone ran, in a program or manual run."""
 
     day: date
     zone_name: str
@@ -78,8 +67,8 @@ class DailyAmount:
             "run": "manual" if self.manual else "program",
         }
         return [
-            Point("rainmachine.zone.watered", self.started_epoch, self.delivered_seconds, labels),
-            Point("rainmachine.zone.intended", self.started_epoch, self.intended_seconds, labels),
+            Point("rainmachine.cycle.watered", self.started_epoch, self.delivered_seconds, labels),
+            Point("rainmachine.cycle.intended", self.started_epoch, self.intended_seconds, labels),
         ]
 
 
@@ -98,24 +87,24 @@ class Session:
     def today(self) -> date:
         return datetime.fromisoformat(self._get("machine/time")["appDate"]).date()
 
-    def zone_names(self) -> dict[int, str]:
-        return {entry["uid"]: entry["name"] for entry in self._get("zone")["zones"]}
-
-    def zone_runs(self, first_day: date, days: int) -> list[ZoneRun]:
-        """Every zone run the log holds for the days from first_day on."""
+    def cycles(self, first_day: date, days: int) -> list[Cycle]:
+        """Every cycle the log holds for the days from first_day on."""
+        zones = self._get("zone")["zones"]
+        names = {entry["uid"]: entry["name"] for entry in zones}
         log = self._get(f"watering/log/details/{first_day.isoformat()}/{days}")["waterLog"]
         return [
-            ZoneRun(
+            Cycle(
                 day=date.fromisoformat(logged["date"]),
-                zone=zone["uid"],
+                zone_name=names[zone["uid"]],
                 manual=program["id"] == MANUAL_RUN,
-                started_epoch=min(c["startTimestamp"] for c in zone["cycles"]),
-                intended_seconds=sum(c["machineDuration"] for c in zone["cycles"]),
-                delivered_seconds=sum(c["realDuration"] for c in zone["cycles"]),
+                started_epoch=cycle["startTimestamp"],
+                intended_seconds=cycle["machineDuration"],
+                delivered_seconds=cycle["realDuration"],
             )
             for logged in log["days"]
             for program in logged["programs"]
             for zone in program["zones"]
+            for cycle in zone["cycles"]
         ]
 
 
@@ -136,23 +125,6 @@ class RainMachine:
         )
         with urllib.request.urlopen(request, timeout=20) as response:
             return Session(self._api, json.load(response)["access_token"])
-
-
-def daily_amounts(runs: list[ZoneRun], zone_names: dict[int, str]) -> list[DailyAmount]:
-    grouped: dict[tuple[date, int, bool], list[ZoneRun]] = defaultdict(list)
-    for run in runs:
-        grouped[(run.day, run.zone, run.manual)].append(run)
-    return [
-        DailyAmount(
-            day=day,
-            zone_name=zone_names[zone],
-            manual=manual,
-            started_epoch=min(run.started_epoch for run in group),
-            intended_seconds=sum(run.intended_seconds for run in group),
-            delivered_seconds=sum(run.delivered_seconds for run in group),
-        )
-        for (day, zone, manual), group in grouped.items()
-    ]
 
 
 def ship(points: list[Point]) -> None:
@@ -185,9 +157,9 @@ def main() -> None:
     ship([Point("rainmachine.uptime", int(time.time()), controller.uptime_seconds(), {})])
     session = controller.sign_in(os.environ["RAINMACHINE_PASSWORD"])
     first_day = session.today() - timedelta(days=SHIPPED_DAYS - 1)
-    amounts = daily_amounts(session.zone_runs(first_day, SHIPPED_DAYS), session.zone_names())
-    if amounts:
-        ship([point for amount in amounts for point in amount.points()])
+    cycles = session.cycles(first_day, SHIPPED_DAYS)
+    if cycles:
+        ship([point for cycle in cycles for point in cycle.points()])
 
 
 if __name__ == "__main__":

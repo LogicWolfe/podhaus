@@ -289,11 +289,12 @@ Gatus fenwick-health    ──► Postmark SMTP   ──► nathan@nathanbaxter.
         (<code>gatus/scripts/ship-watering.py</code>) reads the controller and ships gauges
         to ClickStack under <code>ServiceName = 'rainmachine'</code>:
         <code>rainmachine.uptime</code>, sent only when the controller answered, and
-        <code>rainmachine.zone.watered</code> and <code>rainmachine.zone.intended</code>,
-        the seconds each zone ran and was set to run on each of the past seven days, with
-        <code>day</code>, <code>zone</code> and <code>run</code> (<code>program</code> or
-        <code>manual</code>) attributes. The same days are sent again on every run, so a
-        reader takes the largest value for each day, zone and run. Both checks are
+        <code>rainmachine.cycle.watered</code> and <code>rainmachine.cycle.intended</code>,
+        the seconds a zone ran and was set to run in each unbroken stretch over the past
+        seven days, stamped at the stretch's start with <code>day</code>,
+        <code>zone</code> and <code>run</code> (<code>program</code> or
+        <code>manual</code>) attributes. The same stretches are sent again on every run, so a
+        reader takes the largest value for each timestamp, zone and run and adds those up. Both checks are
         ClickStack-backed queries. <strong>RainMachine</strong> fails when no uptime
         reading has arrived for an hour. <strong>Watering</strong> puts the newest due
         watering day on trial and fails when no program ran or it delivered less than nine
