@@ -5,21 +5,26 @@ import sys
 import threading
 import unittest
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 
 REPO = Path(__file__).resolve().parents[2]
-SCRIPT = REPO / "gatus/scripts/check-watering.py"
+SCRIPT = REPO / "gatus/scripts/ship-watering.py"
 PASSWORD = "controller-password"
 TOKEN = "session-token"
+INGESTION_KEY = "ingestion-key"
+STARTED = 1794600000
 
 
-def zone_run(zone, *, intended, delivered):
+def zone_run(zone, *, intended, delivered, started=STARTED):
     return {
         "uid": zone,
-        "cycles": [{"machineDuration": intended, "realDuration": delivered}],
+        "cycles": [
+            {"startTimestamp": started, "machineDuration": intended, "realDuration": delivered}
+        ],
     }
 
 
@@ -29,14 +34,12 @@ def logged_day(day, *, program, zones):
 
 @dataclass
 class Controller:
-    """What the fake RainMachine answers with, and what Gatus was told."""
+    """What the fake RainMachine answers with, and what the collector was sent."""
 
-    clock: str
-    programs: list = field(
-        default_factory=lambda: [{"active": True, "startDate": "2026-01-01"}]
-    )
+    today: str = "2026-11-15"
+    uptime: int = 4242
     log: list = field(default_factory=list)
-    reports: list = field(default_factory=list)
+    shipped: list = field(default_factory=list)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -51,138 +54,141 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(body).encode())
 
     def do_POST(self):
-        url = urlsplit(self.path)
-        length = int(self.headers.get("Content-Length", 0))
-        if url.path == "/api/4/auth/login":
-            signed_in = json.loads(self.rfile.read(length))["pwd"] == PASSWORD
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path == "/api/4/auth/login":
+            signed_in = body["pwd"] == PASSWORD
             self.reply(200, {"access_token": TOKEN}) if signed_in else self.reply(401, {})
-        elif url.path == "/api/v1/endpoints/irrigation_watering/external":
-            self.controller.reports.append(
-                {k: v[0] for k, v in parse_qs(url.query, keep_blank_values=True).items()}
-                | {"authorization": self.headers["Authorization"]}
-            )
+        elif self.path == "/v1/metrics":
+            if self.headers["Authorization"] != INGESTION_KEY:
+                return self.reply(401, {})
+            self.controller.shipped.append(body)
             self.reply(200, {})
         else:
             self.reply(404, {})
 
     def do_GET(self):
         url = urlsplit(self.path)
+        path = url.path.removeprefix("/api/4/")
+        if path == "diag":
+            return self.reply(200, {"uptimeSeconds": self.controller.uptime})
         if parse_qs(url.query).get("access_token") != [TOKEN]:
             return self.reply(401, {})
-        path = url.path.removeprefix("/api/4/")
         if path == "machine/time":
-            self.reply(200, {"appDate": self.controller.clock})
-        elif path == "program":
-            self.reply(200, {"programs": self.controller.programs})
+            self.reply(200, {"appDate": f"{self.controller.today} 10:00:00"})
         elif path == "zone":
-            self.reply(200, {"zones": [{"uid": 4, "name": "Front Lawn"}]})
+            zones = [{"uid": 4, "name": "Front Lawn"}, {"uid": 5, "name": "Back Fence"}]
+            self.reply(200, {"zones": zones})
         elif path.startswith("watering/log/details/"):
-            day = path.split("/")[3]
-            days = [entry for entry in self.controller.log if entry["date"] == day]
+            first = date.fromisoformat(path.split("/")[3])
+            last = first + timedelta(days=int(path.split("/")[4]) - 1)
+            days = [
+                entry
+                for entry in self.controller.log
+                if first <= date.fromisoformat(entry["date"]) <= last
+            ]
             self.reply(200, {"waterLog": {"days": days}})
         else:
             self.reply(404, {})
 
 
 class WateringMonitorTests(unittest.TestCase):
-    def check(self, controller, *, password=PASSWORD):
+    def serve(self, controller):
         handler = type("BoundHandler", (Handler,), {"controller": controller})
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
-        address = f"http://127.0.0.1:{server.server_port}"
+        return f"http://127.0.0.1:{server.server_port}"
+
+    def ship(self, controller, *, password=PASSWORD, controller_url=None):
+        address = self.serve(controller)
         return subprocess.run(
             [sys.executable, str(SCRIPT)],
             env=os.environ
             | {
-                "RAINMACHINE_URL": address,
+                "RAINMACHINE_URL": controller_url or address,
                 "RAINMACHINE_PASSWORD": password,
-                "WATERING_DAYS": "tue,sat",
-                "NO_WATERING_MONTHS": "jun,jul,aug",
-                "WATERING_DONE_BY": "08:00",
-                "GATUS_BASE_URL": address,
-                "GATUS_HEARTBEAT_PUSH_TOKEN": "push-token",
+                "OTEL_EXPORTER_OTLP_ENDPOINT": address,
+                "CLICKSTACK_INGESTION_KEY": INGESTION_KEY,
             },
             capture_output=True,
             text=True,
         )
 
-    def test_a_full_run_on_the_latest_watering_day_reports_success(self):
-        # 2026-11-14 is a Saturday.
-        controller = Controller(
-            clock="2026-11-15 10:00:00",
-            log=[logged_day("2026-11-14", program=1, zones=[zone_run(4, intended=3600, delivered=3600)])],
+    def points(self, controller, metric):
+        return sorted(
+            (
+                {a["key"]: a["value"]["stringValue"] for a in point["attributes"]}
+                | {"value": point["asDouble"], "at": point["timeUnixNano"]}
+                for body in controller.shipped
+                for resource in body["resourceMetrics"]
+                for scope in resource["scopeMetrics"]
+                for shipped in scope["metrics"]
+                if shipped["name"] == metric
+                for point in shipped["gauge"]["dataPoints"]
+            ),
+            key=lambda point: (point.get("day", ""), point.get("zone", ""), point.get("run", "")),
         )
-        result = self.check(controller)
+
+    def test_the_weeks_watering_is_shipped_per_day_zone_and_kind_of_run(self):
+        controller = Controller(
+            log=[
+                logged_day("2026-11-08", program=1, zones=[zone_run(4, intended=3600, delivered=3600)]),
+                logged_day(
+                    "2026-11-14",
+                    program=1,
+                    zones=[
+                        zone_run(4, intended=1200, delivered=1200),
+                        zone_run(4, intended=1200, delivered=600, started=STARTED + 3600),
+                        zone_run(5, intended=1200, delivered=1200),
+                    ],
+                ),
+                logged_day("2026-11-15", program=0, zones=[zone_run(5, intended=60, delivered=60)]),
+            ],
+        )
+        result = self.ship(controller)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        at = str(STARTED * 1_000_000_000)
+        self.assertEqual(
+            self.points(controller, "rainmachine.zone.watered"),
+            [
+                {"day": "2026-11-14", "zone": "Back Fence", "run": "program", "value": 1200, "at": at},
+                {"day": "2026-11-14", "zone": "Front Lawn", "run": "program", "value": 1800, "at": at},
+                {"day": "2026-11-15", "zone": "Back Fence", "run": "manual", "value": 60, "at": at},
+            ],
+        )
+        self.assertEqual(
+            [point["value"] for point in self.points(controller, "rainmachine.zone.intended")],
+            [1200, 2400, 60],
+        )
+
+    def test_an_answering_controller_ships_its_uptime(self):
+        controller = Controller(uptime=4242)
+        result = self.ship(controller)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
-            controller.reports,
-            [{"success": "true", "error": "", "authorization": "Bearer push-token"}],
+            [point["value"] for point in self.points(controller, "rainmachine.uptime")], [4242]
         )
 
-    def test_a_watering_day_with_no_program_run_is_reported_as_missed(self):
-        controller = Controller(clock="2026-11-15 10:00:00")
-        result = self.check(controller)
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(controller.reports[0]["success"], "false")
-        self.assertIn("Saturday 14 November", controller.reports[0]["error"])
+    def test_a_week_without_watering_ships_no_amounts(self):
+        controller = Controller()
+        self.ship(controller)
+        self.assertEqual(self.points(controller, "rainmachine.zone.watered"), [])
 
-    def test_a_manual_run_does_not_count_as_the_days_watering(self):
-        controller = Controller(
-            clock="2026-11-15 10:00:00",
-            log=[logged_day("2026-11-14", program=0, zones=[zone_run(4, intended=60, delivered=60)])],
-        )
-        self.check(controller)
-        self.assertEqual(controller.reports[0]["success"], "false")
-
-    def test_a_zone_cut_short_is_reported_by_name(self):
-        controller = Controller(
-            clock="2026-11-15 10:00:00",
-            log=[logged_day("2026-11-14", program=1, zones=[zone_run(4, intended=3600, delivered=720)])],
-        )
-        self.check(controller)
-        self.assertEqual(controller.reports[0]["success"], "false")
-        self.assertIn("Front Lawn ran 12 of 60 minutes", controller.reports[0]["error"])
-
-    def test_a_run_still_in_progress_is_not_judged_yet(self):
-        # Saturday morning before the done-by time: Tuesday is the day on trial.
-        controller = Controller(
-            clock="2026-11-14 05:00:00",
-            log=[logged_day("2026-11-10", program=1, zones=[zone_run(4, intended=3600, delivered=3600)])],
-        )
-        self.check(controller)
-        self.assertEqual(controller.reports[0]["success"], "true")
-
-    def test_no_run_is_expected_in_the_months_without_watering(self):
-        # 2026-07-14 is a Tuesday.
-        controller = Controller(clock="2026-07-15 10:00:00")
-        self.check(controller)
-        self.assertEqual(controller.reports[0]["success"], "true")
-
-    def test_no_run_is_expected_before_the_program_starts(self):
-        controller = Controller(
-            clock="2026-11-12 10:00:00",
-            programs=[{"active": True, "startDate": "2026-11-12"}],
-        )
-        self.check(controller)
-        self.assertEqual(controller.reports[0]["success"], "true")
-
-    def test_a_switched_off_program_is_reported(self):
-        controller = Controller(
-            clock="2026-11-15 10:00:00",
-            programs=[{"active": False, "startDate": "2026-01-01"}],
-            log=[logged_day("2026-11-14", program=1, zones=[zone_run(4, intended=3600, delivered=3600)])],
-        )
-        self.check(controller)
-        self.assertEqual(controller.reports[0]["success"], "false")
-        self.assertIn("switched on", controller.reports[0]["error"])
-
-    def test_a_refused_sign_in_reports_nothing(self):
-        controller = Controller(clock="2026-11-15 10:00:00")
-        result = self.check(controller, password="wrong")
+    def test_an_unreachable_controller_ships_nothing(self):
+        controller = Controller()
+        result = self.ship(controller, controller_url="http://127.0.0.1:9")
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(controller.reports, [])
+        self.assertEqual(controller.shipped, [])
+
+    def test_a_refused_sign_in_still_ships_the_uptime(self):
+        controller = Controller(
+            log=[logged_day("2026-11-14", program=1, zones=[zone_run(4, intended=60, delivered=60)])]
+        )
+        result = self.ship(controller, password="wrong")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(self.points(controller, "rainmachine.uptime")), 1)
+        self.assertEqual(self.points(controller, "rainmachine.zone.watered"), [])
 
 
 if __name__ == "__main__":
