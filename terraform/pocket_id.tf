@@ -12,6 +12,7 @@ locals {
   forgejo_ssh_key_files = {
     nathan = sort(tolist(fileset("${path.module}/../forgejo/keys/nathan", "*.pub")))
     sky    = sort(tolist(fileset("${path.module}/../forgejo/keys/sky", "*.pub")))
+    indigo = sort(tolist(fileset("${path.module}/../forgejo/keys/indigo", "*.pub")))
   }
 
   forgejo_ssh_keys = {
@@ -108,8 +109,8 @@ resource "pocketid_user" "sky" {
   }
 }
 
-# Indigo's identity exists for the family Pomerium routes and nothing else:
-# no Forgejo account, so no `ssh_keys` claim and no forgejo-users membership.
+# Indigo's identity covers the family Pomerium routes and a Forgejo account
+# for her own repositories.
 # `last_name` is set because Pocket ID answers with an empty string for an
 # unset surname, which the provider reports as an inconsistent apply result
 # when the attribute is absent from config.
@@ -124,8 +125,13 @@ resource "pocketid_user" "indigo" {
 
   groups = [
     pocketid_group.family.id,
+    pocketid_group.forgejo_users.id,
     pocketid_group.pomerium_users.id,
   ]
+
+  custom_claims = {
+    ssh_keys = jsonencode(local.forgejo_ssh_keys.indigo)
+  }
 }
 
 # A friend: the friends routes and a Forgejo account. No `ssh_keys` claim,

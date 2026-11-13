@@ -173,7 +173,9 @@ gh api users/LogicWolfe/keys --paginate \
 
 Commit the resulting public keys as
 `forgejo/keys/nathan/github-<id>.pub`. Sky's current source key is
-`~/.ssh/id_ed25519_sky_access.pub`. Run Terraform after changing a key claim;
+`~/.ssh/id_ed25519_sky_access.pub`. Indigo's is `~/.ssh/id_ed25519.pub` on her
+laptop, shadow, committed as `forgejo/keys/indigo/shadow.pub`. Run Terraform
+after changing a key claim;
 the affected user then logs in once to make Forgejo synchronize it.
 
 ## Checks
