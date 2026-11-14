@@ -773,6 +773,16 @@ $DK restart alloy backrest                           # reattach by name + rebuil
         has wedged and leaves one whose collector is unreachable running with its queue
         (<a href="#exporter-stall">exporter-stall healthcheck</a>).
       </p>
+      <p>
+        Pomerium's healthcheck makes a real HTTPS request to its own front door
+        (<code>https://authenticate.pod.haus/ping</code>) rather than running
+        <code>pomerium health</code>. When the container reaches 95% of its memory limit, Envoy
+        inside it stops accepting connections while the Pomerium process stays up and reports
+        itself healthy, and the kernel never kills it, so nothing else restarts it. The front-door
+        request fails in that state, and Numbat's autoheal restarts the container about three
+        minutes later. The upstream image has no shell or HTTP client, so
+        <code>pomerium/gateway/Dockerfile</code> adds a static busybox for the request.
+      </p>
 
       <h2 id="alerting-flow">Alerting flow</h2>
       <p>

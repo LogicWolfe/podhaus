@@ -40,15 +40,34 @@ services:
 
   pomerium:
     container_name: pomerium
-    image: pomerium/pomerium:latest
+    # pull: true keeps every deploy taking the current upstream release, as
+    # the plain image reference did.
+    build:
+      context: ./gateway
+      pull: true
+      args:
+        STACK_CONTENT_HASH: ${BUILD_HASH_POMERIUM:-unset}
+    image: pomerium-gateway:local
+    pull_policy: never
     restart: unless-stopped
     network_mode: host
-    # Containment for memory exhaustion under scan floods (CVE-2026-50285
-    # was a pre-auth zstd bomb on /.pomerium/callback, fixed in 0.32.8;
-    # the box was exhausted twice in 2026-08). Normal pomerium+envoy sits
-    # well under this; a runaway gets cgroup-OOM-killed and unless-stopped
-    # brings it back in seconds instead of taking the 1.5 GB host down.
+    # Keeps a runaway from taking the 1.5 GB host down (CVE-2026-50285 was a
+    # pre-auth zstd bomb on /.pomerium/callback, fixed in 0.32.8; the box was
+    # exhausted twice in 2026-08). The kernel never kills Pomerium at this
+    # limit: Envoy watches the cgroup's usage and stops accepting connections
+    # at 95% of it, so a full container sits there refusing traffic. The
+    # healthcheck below is what brings it back.
     mem_limit: 640m
+    # A real request through the front door, because that is the only place
+    # the refusing state shows. Four misses then autoheal's 30 s poll: a
+    # stuck gateway is restarted in about three minutes. Sign-ins survive a
+    # restart; open SSH sessions through it do not.
+    healthcheck:
+      test: ["CMD", "/bin/busybox", "wget", "-q", "-T", "8", "-O", "/dev/null", "https://authenticate.pod.haus/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 4
+      start_period: 60s
     cap_drop:
       - ALL
     cap_add:
@@ -70,6 +89,7 @@ services:
       - pomerium-autocert:/data/autocert
       - pomerium-databroker:/data/databroker
     labels:
+      autoheal: "true"
       podhaus.depends-on-pomerium-secrets-init: ${BUILD_HASH_POMERIUM_SECRETS_INIT:-unset}
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
@@ -99,6 +119,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     labels:
+      podhaus.depends-on-pomerium: ${BUILD_HASH_POMERIUM:-unset}
       podhaus.stack-content-hash: ${STACK_CONTENT_HASH:-unset}
 
 volumes:
