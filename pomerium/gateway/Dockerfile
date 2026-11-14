@@ -5,7 +5,12 @@
 # connection.
 FROM busybox:stable-musl AS probe
 
-FROM pomerium/pomerium:latest
+# Pinned: releases from 0.34.0 leak one connection to their bundled Envoy every
+# 30 seconds, about 110 MB a day, until the container fills its memory limit
+# and stops answering. This is the last release that does not. The cause and
+# the check a newer release has to pass before this pin comes off are in
+# docs/networking.html#pomerium-pin.
+FROM pomerium/pomerium:v0.33.6
 
 ARG STACK_CONTENT_HASH=unset
 ENV STACK_CONTENT_HASH=${STACK_CONTENT_HASH}

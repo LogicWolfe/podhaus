@@ -78,6 +78,32 @@ networks:
         connections (10/minute, burst 20); established sessions are never touched, and
         over-limit sources are dropped before they reach Pomerium or the Forgejo tunnel.
       </p>
+      <p id="pomerium-pin">
+        <strong>Pomerium's version is pinned</strong> in
+        <code>pomerium/gateway/Dockerfile</code>, to the last release built with Go 1.26.
+        Releases from 0.34.0, the first built with Go 1.27, leak memory at about 110 MB a
+        day whether or not anyone uses the gateway, until the container reaches its
+        memory limit. At 95% of that limit Envoy stops accepting connections and every
+        protected name and gateway SSH route goes dark. The cause is Pomerium's own
+        readiness check. Every 30 seconds it asks its bundled Envoy whether it is ready,
+        building a new HTTP client for each request (<code>envoyAdminClient</code> in
+        Pomerium's <code>pkg/envoy/envoy.go</code>) and closing the reply without reading
+        it. Go 1.26 closed the connection at that point. Go 1.27 keeps it open for
+        reuse, and a client that is never used again never closes it. Go has no runtime
+        switch for this, so the fix has to come from Pomerium: a release is fixed when
+        that function reuses one client or sets <code>DisableKeepAlives</code>.
+      </p>
+      <p>
+        Take the pin off when a release passes this check. Deploy it, then on Numbat
+        count the local connections the Pomerium process holds, twice, five minutes apart:
+      </p>
+      <pre><code>sudo ss -xpH | grep -c '"pomerium"'</code></pre>
+      <p>
+        A fixed release gives the same number both times. A leaking one gains two a
+        minute. The healthcheck restarts a gateway that has filled up
+        (<a href="monitoring.html#autoheal">Autoheal</a>), so a leaking release shows as a
+        short outage every few days, not a permanent one.
+      </p>
       <p>
         Protected browser names resolve to the application address. Pomerium authenticates
         with Pocket ID, then reaches Caddy's private <code>:4443</code> listener through a

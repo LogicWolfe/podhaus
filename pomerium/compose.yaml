@@ -40,8 +40,8 @@ services:
 
   pomerium:
     container_name: pomerium
-    # pull: true keeps every deploy taking the current upstream release, as
-    # the plain image reference did.
+    # pull: true refreshes both base images on every deploy. Pomerium's
+    # version is pinned in gateway/Dockerfile, which says why.
     build:
       context: ./gateway
       pull: true
